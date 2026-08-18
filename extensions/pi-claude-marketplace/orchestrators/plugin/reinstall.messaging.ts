@@ -31,8 +31,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * reinstall's private status set: a success `reinstalled` row, a `skipped` row
  * (benign no-op), a `failed` row, or a `manual recovery` anchor row.
  */
-export const REINSTALL_STATUSES = ["reinstalled", "skipped", "failed", "manual recovery"] as const;
-export type ReinstallStatus = (typeof REINSTALL_STATUSES)[number];
+type ReinstallStatus = "reinstalled" | "skipped" | "failed" | "manual recovery";
 
 /**
  * reinstall's row message union. `dependencies` stays REQUIRED on the

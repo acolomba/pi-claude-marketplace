@@ -54,7 +54,7 @@ import type { Scope } from "../shared/types.ts";
 // consumer asserts the structural shape it needs).
 // ---------------------------------------------------------------------------
 
-interface MarketplaceStateRecordLike {
+export interface MarketplaceStateRecordLike {
   readonly manifestPath?: string;
   readonly plugins?: Record<string, unknown>;
 }

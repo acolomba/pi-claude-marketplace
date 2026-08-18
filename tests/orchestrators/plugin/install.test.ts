@@ -121,6 +121,112 @@ interface SeededPlugin {
 }
 
 /**
+ * Write the plugin's component sources. Skills are directories carrying a
+ * `SKILL.md`; commands and agents are single `.md` files; mcp is a
+ * `.mcp.json` at the plugin root.
+ *
+ * WR-03: the hooks fixture seeds `<pluginRoot>/hooks/hooks.json` so the
+ * resolver populates `installable.hooksConfigPath` and the install ledger's
+ * cache-plus-rebuild path actually executes.
+ */
+async function writePluginComponents(
+  pluginRoot: string,
+  opts: {
+    skills?: { sourceName: string; frontmatterName?: string; body?: string }[];
+    commands?: { sourceName: string; body?: string }[];
+    agents?: { sourceName: string; frontmatterName?: string; tools?: string; body?: string }[];
+    mcpServers?: Record<string, unknown>;
+    hooksJson?: object;
+  },
+): Promise<void> {
+  for (const skill of opts.skills ?? []) {
+    const skillDir = path.join(pluginRoot, "skills", skill.sourceName);
+    await mkdir(skillDir, { recursive: true });
+    const name = skill.frontmatterName ?? skill.sourceName;
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---\nname: ${name}\n---\n\n${skill.body ?? "Body.\n"}`,
+    );
+  }
+
+  for (const command of opts.commands ?? []) {
+    const commandsDir = path.join(pluginRoot, "commands");
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(
+      path.join(commandsDir, `${command.sourceName}.md`),
+      command.body ?? `# ${command.sourceName}\nBody.\n`,
+    );
+  }
+
+  for (const agent of opts.agents ?? []) {
+    const agentsDir = path.join(pluginRoot, "agents");
+    await mkdir(agentsDir, { recursive: true });
+    const name = agent.frontmatterName ?? agent.sourceName;
+    const tools = agent.tools ?? "Read,Grep";
+    await writeFile(
+      path.join(agentsDir, `${agent.sourceName}.md`),
+      `---\nname: ${name}\ntools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
+    );
+  }
+
+  if (opts.mcpServers !== undefined) {
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: opts.mcpServers }),
+    );
+  }
+
+  if (opts.hooksJson !== undefined) {
+    const hooksDir = path.join(pluginRoot, "hooks");
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
+  }
+}
+
+/**
+ * PI-6 fixture: a SECOND marketplace whose installed plugin already owns one
+ * of the generated names the plugin under test would produce, so the
+ * cross-plugin conflict guard has something to collide with.
+ */
+function conflictingMarketplaceRecord(
+  cp: {
+    marketplace: string;
+    plugin: string;
+    skillName?: string;
+    commandName?: string;
+    agentName?: string;
+  },
+  scope: "user" | "project",
+  cwd: string,
+): ExtensionState["marketplaces"][string] {
+  return {
+    name: cp.marketplace,
+    scope,
+    source: pathSource("./other-mp"),
+    addedFromCwd: cwd,
+    manifestPath: path.join(cwd, "other-mp.json"),
+    marketplaceRoot: path.join(cwd, "other-mp"),
+    plugins: {
+      [cp.plugin]: {
+        version: "0.0.1",
+        resolvedSource: "/dev/null",
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        resources: {
+          skills: cp.skillName === undefined ? [] : [cp.skillName],
+          prompts: cp.commandName === undefined ? [] : [cp.commandName],
+          agents: cp.agentName === undefined ? [] : [cp.agentName],
+          mcpServers: [],
+          hooks: [],
+        },
+        enabled: true,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    },
+  };
+}
+
+/**
  * Build a plugin source tree on disk and seed a path-source marketplace
  * pointing at it. Returns the absolute paths for downstream assertions.
  *
@@ -211,53 +317,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
     JSON.stringify(pluginManifest),
   );
 
-  // Skills
-  for (const skill of opts.skills ?? []) {
-    const skillDir = path.join(pluginRoot, "skills", skill.sourceName);
-    await mkdir(skillDir, { recursive: true });
-    const name = skill.frontmatterName ?? skill.sourceName;
-    const body = skill.body ?? "Body.\n";
-    await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${name}\n---\n\n${body}`);
-  }
-
-  // Commands
-  for (const command of opts.commands ?? []) {
-    const commandsDir = path.join(pluginRoot, "commands");
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(
-      path.join(commandsDir, `${command.sourceName}.md`),
-      command.body ?? `# ${command.sourceName}\nBody.\n`,
-    );
-  }
-
-  // Agents
-  for (const agent of opts.agents ?? []) {
-    const agentsDir = path.join(pluginRoot, "agents");
-    await mkdir(agentsDir, { recursive: true });
-    const name = agent.frontmatterName ?? agent.sourceName;
-    const tools = agent.tools ?? "Read,Grep";
-    await writeFile(
-      path.join(agentsDir, `${agent.sourceName}.md`),
-      `---\nname: ${name}\ntools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
-    );
-  }
-
-  // MCP servers
-  if (opts.mcpServers !== undefined) {
-    await writeFile(
-      path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ mcpServers: opts.mcpServers }),
-    );
-  }
-
-  // Hooks (WR-03): seed `<pluginRoot>/hooks/hooks.json` so the resolver
-  // populates `installable.hooksConfigPath` and the install ledger's
-  // cache+rebuild path actually executes.
-  if (opts.hooksJson !== undefined) {
-    const hooksDir = path.join(pluginRoot, "hooks");
-    await mkdir(hooksDir, { recursive: true });
-    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
-  }
+  await writePluginComponents(pluginRoot, opts);
 
   // Marketplace manifest
   const entry: Record<string, unknown> = {
@@ -317,37 +377,11 @@ async function seedPathMarketplaceWithPlugin(opts: {
   };
 
   if (opts.conflictingPriorPlugin !== undefined) {
-    const cp = opts.conflictingPriorPlugin;
-    state.marketplaces[cp.marketplace] = {
-      name: cp.marketplace,
+    state.marketplaces[opts.conflictingPriorPlugin.marketplace] = conflictingMarketplaceRecord(
+      opts.conflictingPriorPlugin,
       scope,
-      source: pathSource("./other-mp"),
-      addedFromCwd: cwd,
-      manifestPath: path.join(cwd, "other-mp.json"),
-      marketplaceRoot: path.join(cwd, "other-mp"),
-      plugins: {
-        [cp.plugin]: {
-          version: "0.0.1",
-          resolvedSource: "/dev/null",
-          compatibility: {
-            installable: true,
-            notes: [],
-            supported: [],
-            unsupported: [],
-          },
-          resources: {
-            skills: cp.skillName === undefined ? [] : [cp.skillName],
-            prompts: cp.commandName === undefined ? [] : [cp.commandName],
-            agents: cp.agentName === undefined ? [] : [cp.agentName],
-            mcpServers: [],
-            hooks: [],
-          },
-          enabled: true,
-          installedAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
-      },
-    };
+      cwd,
+    );
   }
 
   await saveState(locations.extensionRoot, state);
@@ -3347,8 +3381,10 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  const { _resetForTest, getRoutingBucket } =
+  const { _resetForTest } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));

@@ -6,15 +6,11 @@ import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  _resetSpawnForTest,
-  _setSpawnForTest,
-  dispatchHookExec,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
+import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
-import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
@@ -126,15 +122,14 @@ interface SpawnSpy {
   readonly calls: SpawnCall[];
   /** Synchronously available after dispatchHookExec invocation. */
   readonly handles: MockChildHandle[];
+  /** Pass to `dispatchHookExec` as its `spawnImpl` argument. */
+  readonly spawnImpl: typeof import("node:child_process").spawn;
 }
 
-function installSpawnSpy(
-  t: import("node:test").TestContext,
-  configure?: (handle: MockChildHandle) => void,
-): SpawnSpy {
+function installSpawnSpy(configure?: (handle: MockChildHandle) => void): SpawnSpy {
   const calls: SpawnCall[] = [];
   const handles: MockChildHandle[] = [];
-  _setSpawnForTest(((
+  const spawnImpl = ((
     command: string,
     args: readonly string[],
     options: SpawnOptions,
@@ -152,13 +147,9 @@ function installSpawnSpy(
     }
 
     return handle.child;
-  }) as unknown as typeof import("node:child_process").spawn);
+  }) as unknown as typeof import("node:child_process").spawn;
 
-  t.after(() => {
-    _resetSpawnForTest();
-  });
-
-  return { calls, handles };
+  return { calls, handles, spawnImpl };
 }
 
 function makeEntry(input: {
@@ -214,7 +205,7 @@ function makeCtx(cwd: string): ExtensionContext {
 
 test("dispatchHookExec: stub fixture path -- returns {kind:'noop'} when spawn errors", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitError(new Error("ENOENT"));
   });
 
@@ -222,6 +213,8 @@ test("dispatchHookExec: stub fixture path -- returns {kind:'noop'} when spawn er
     makeEntry({}),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.deepEqual(result, { kind: "noop" });
@@ -230,13 +223,17 @@ test("dispatchHookExec: stub fixture path -- returns {kind:'noop'} when spawn er
 
 test("dispatchHookExec: tolerates arbitrary event shapes (never throws)", async (t) => {
   relocateAgentDir(t);
-  installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
   const fixtures: unknown[] = [{}, { isError: true }, { toolName: "bash" }, null];
   for (const event of fixtures) {
-    await assert.doesNotReject(() => dispatchHookExec(makeEntry({}), event, makeCtx("/tmp/proj")));
+    await assert.doesNotReject(() =>
+      dispatchHookExec(makeEntry({}), event, makeCtx("/tmp/proj"), undefined, {
+        spawnImpl: spy.spawnImpl,
+      }),
+    );
   }
 });
 
@@ -246,11 +243,17 @@ test("dispatchHookExec: tolerates arbitrary event shapes (never throws)", async 
 
 test("EXEC-01: spawn called with cwd === ctx.cwd", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
-  await dispatchHookExec(makeEntry({}), { toolName: "bash", input: {} }, makeCtx("/tmp/proj"));
+  await dispatchHookExec(
+    makeEntry({}),
+    { toolName: "bash", input: {} },
+    makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
+  );
 
   assert.equal(spy.calls.length, 1);
   assert.equal(spy.calls[0]?.options.cwd, "/tmp/proj");
@@ -258,7 +261,7 @@ test("EXEC-01: spawn called with cwd === ctx.cwd", async (t) => {
 
 test("EXEC-01 + HOOK-05: env contains process.env + CLAUDE_PROJECT_DIR + CLAUDE_PLUGIN_ROOT + CLAUDE_PLUGIN_DATA; CLAUDE_CODE_REMOTE unset", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -271,6 +274,8 @@ test("EXEC-01 + HOOK-05: env contains process.env + CLAUDE_PROJECT_DIR + CLAUDE_
     makeEntry({ claudeEvent: "PreToolUse" }),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   const env = spy.calls[0]?.options.env ?? {};
@@ -295,7 +300,7 @@ test("EXEC-01 + HOOK-05: env contains process.env + CLAUDE_PROJECT_DIR + CLAUDE_
 
 test("HENV-01 / D-91-02: session id keys read from the ctx snapshot win over a divergent process.env value", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -313,6 +318,8 @@ test("HENV-01 / D-91-02: session id keys read from the ctx snapshot win over a d
     makeEntry({ claudeEvent: "PreToolUse" }),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   const env = spy.calls[0]?.options.env ?? {};
@@ -326,7 +333,7 @@ test("HENV-01 / D-91-02: session id keys read from the ctx snapshot win over a d
 
 test("HOOK-05 / D-60-06: CLAUDE_ENV_FILE set for SessionStart and matches /_shared/claude-env-<sid>.env scheme", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -334,6 +341,8 @@ test("HOOK-05 / D-60-06: CLAUDE_ENV_FILE set for SessionStart and matches /_shar
     makeEntry({ claudeEvent: "SessionStart" }),
     { reason: "startup" },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   const env = spy.calls[0]?.options.env ?? {};
@@ -355,7 +364,7 @@ test("HOOK-05: CLAUDE_ENV_FILE absent for the other 7 events", async (t) => {
   ];
 
   for (const claudeEvent of otherEvents) {
-    const spy = installSpawnSpy(t, (h) => {
+    const spy = installSpawnSpy((h) => {
       h.emitClose(0);
     });
 
@@ -363,11 +372,12 @@ test("HOOK-05: CLAUDE_ENV_FILE absent for the other 7 events", async (t) => {
       makeEntry({ claudeEvent }),
       { toolName: "bash", input: {}, content: [], reason: "quit", text: "x" },
       makeCtx("/tmp/proj"),
+      undefined,
+      { spawnImpl: spy.spawnImpl },
     );
 
     const env = spy.calls[0]?.options.env ?? {};
     assert.equal(env.CLAUDE_ENV_FILE, undefined, `${claudeEvent} must not set CLAUDE_ENV_FILE`);
-    _resetSpawnForTest();
   }
 });
 
@@ -377,7 +387,7 @@ test("HOOK-05: CLAUDE_ENV_FILE absent for the other 7 events", async (t) => {
 
 test("EXEC-04: args=[arg1, arg2] -> exec-form (shell:false)", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -385,6 +395,8 @@ test("EXEC-04: args=[arg1, arg2] -> exec-form (shell:false)", async (t) => {
     makeEntry({ args: ["arg1", "arg2"] }),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.deepEqual(spy.calls[0]?.args, ["arg1", "arg2"]);
@@ -393,11 +405,17 @@ test("EXEC-04: args=[arg1, arg2] -> exec-form (shell:false)", async (t) => {
 
 test("EXEC-04: args undefined -> shell-form (shell:true, args:[])", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
-  await dispatchHookExec(makeEntry({}), { toolName: "bash", input: {} }, makeCtx("/tmp/proj"));
+  await dispatchHookExec(
+    makeEntry({}),
+    { toolName: "bash", input: {} },
+    makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
+  );
 
   assert.deepEqual(spy.calls[0]?.args, []);
   assert.equal(spy.calls[0]?.options.shell, true);
@@ -405,7 +423,7 @@ test("EXEC-04: args undefined -> shell-form (shell:true, args:[])", async (t) =>
 
 test("EXEC-04: shell: '/bin/bash' + no args -> shell binary set", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -413,6 +431,8 @@ test("EXEC-04: shell: '/bin/bash' + no args -> shell binary set", async (t) => {
     makeEntry({ shell: "/bin/bash" }),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.equal(spy.calls[0]?.options.shell, "/bin/bash");
@@ -420,7 +440,7 @@ test("EXEC-04: shell: '/bin/bash' + no args -> shell binary set", async (t) => {
 
 test("EXEC-04: args=[] (empty array) -> exec-form (args!==undefined discriminator)", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -428,6 +448,8 @@ test("EXEC-04: args=[] (empty array) -> exec-form (args!==undefined discriminato
     makeEntry({ args: [] }),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.equal(spy.calls[0]?.options.shell, false, "args=[] must be exec-form, not shell-form");
@@ -439,7 +461,7 @@ test("EXEC-04: args=[] (empty array) -> exec-form (args!==undefined discriminato
 
 test("EXEC-02: stdin > 256KB injects top-level _truncated:true marker", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -449,6 +471,8 @@ test("EXEC-02: stdin > 256KB injects top-level _truncated:true marker", async (t
     makeEntry({ claudeEvent: "UserPromptSubmit" }),
     { text: hugeText },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   // Wait one tick for the stdin chunk to flush.
@@ -463,7 +487,7 @@ test("EXEC-02: stdin > 256KB injects top-level _truncated:true marker", async (t
 
 test("EXEC-03: stderr emits route through hookDebugLog; result is parsed (noop)", async (t) => {
   relocateAgentDir(t);
-  installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitStderr("hook failed\n");
     setImmediate(() => {
       h.emitClose(0);
@@ -474,6 +498,8 @@ test("EXEC-03: stderr emits route through hookDebugLog; result is parsed (noop)"
     makeEntry({}),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   // Empty stdout + exit 0 = noop.
@@ -486,7 +512,7 @@ test("EXEC-03: stderr emits route through hookDebugLog; result is parsed (noop)"
 
 test("wire-protocol integration: exit 2 + stderr -> {kind:'block', reason}", async (t) => {
   relocateAgentDir(t);
-  installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitStderr("denied");
     // setImmediate (not queueMicrotask) so the Readable stream's `data` event
     // delivery, which itself queues via the event loop, lands BEFORE `close`.
@@ -499,6 +525,8 @@ test("wire-protocol integration: exit 2 + stderr -> {kind:'block', reason}", asy
     makeEntry({}),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.deepEqual(result, { kind: "block", reason: "denied" });
@@ -506,7 +534,7 @@ test("wire-protocol integration: exit 2 + stderr -> {kind:'block', reason}", asy
 
 test("wire-protocol integration: exit 0 + JSON {continue:false,stopReason:'X'} -> stop", async (t) => {
   relocateAgentDir(t);
-  installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitStdout('{"continue":false,"stopReason":"X"}');
     setImmediate(() => {
       h.emitClose(0);
@@ -517,6 +545,8 @@ test("wire-protocol integration: exit 0 + JSON {continue:false,stopReason:'X'} -
     makeEntry({}),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.deepEqual(result, { kind: "stop", stopReason: "X" });
@@ -528,7 +558,7 @@ test("wire-protocol integration: exit 0 + JSON {continue:false,stopReason:'X'} -
 
 test("PAYL-01: PreToolUse stdin carries hook_event_name + capitalized tool_name", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -536,6 +566,8 @@ test("PAYL-01: PreToolUse stdin carries hook_event_name + capitalized tool_name"
     makeEntry({ claudeEvent: "PreToolUse" }),
     { toolName: "bash", input: { cmd: "ls" } },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   await new Promise((r) => setImmediate(r));
@@ -552,7 +584,7 @@ test("PAYL-01: PreToolUse stdin carries hook_event_name + capitalized tool_name"
 
 test("D-87-04: an admitted-but-not-dispatchable event noops without spawning", async (t) => {
   relocateAgentDir(t);
-  const spy = installSpawnSpy(t);
+  const spy = installSpawnSpy();
 
   // Every current bucket-A admission is dispatchable, so the guard is a
   // defensive belt against a future admission outrunning its translator;
@@ -562,6 +594,8 @@ test("D-87-04: an admitted-but-not-dispatchable event noops without spawning", a
     makeEntry({ claudeEvent: "SubagentStop" as unknown as BucketAEvent }),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.deepEqual(result, { kind: "noop" });

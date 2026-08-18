@@ -13,7 +13,7 @@
 //     forces the call-site to live INSIDE the same per-plugin lock body
 //     rather than in an entirely different code path.
 //   - Block E: WR-01 clear-cache prefix on `hydrateProjectScopeForCwd` --
-//     a `parsedConfigCache.delete` (or `cache.delete`) call must appear
+//     a `deleteParsedConfig` call must appear
 //     INSIDE the function body BEFORE any other significant statement, so
 //     phantom project-arm entries cannot leak past the re-hydrate path.
 //   - Block F: negative pin. Iterate every `orchestrators/plugin/*.ts`
@@ -246,7 +246,7 @@ test("WR-03 Block D: update.ts wires remove + add + rebuildRoutingTables in its 
 // calls so the rebuild never observes stale entries.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwd opens with a parsedConfigCache.delete prefix", async () => {
+test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwd opens with a deleteParsedConfig prefix", async () => {
   const raw = await readFile(EVENT_ROUTER_PATH, "utf8");
 
   // Locate the function body. The function is declared as
@@ -266,24 +266,21 @@ test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwd opens with a par
   // The WR-01 prefix must contain a delete-from-the-cache call.
   assert.match(
     body,
-    /parsedConfigCache\.delete\b|cache\.delete\b/,
-    "WR-01: hydrateProjectScopeForCwd must call parsedConfigCache.delete (or equivalent) to drop phantom entries",
+    /deleteParsedConfig\b/,
+    "WR-01: hydrateProjectScopeForCwd must call deleteParsedConfig to drop phantom entries",
   );
 
   // The delete call must precede the load-state-then-rehydrate calls so
   // the phantom entries cannot leak past the re-hydrate path. Find the
   // first occurrence of each token and assert the delete comes first.
-  const deleteIdx = body.search(/parsedConfigCache\.delete\b|cache\.delete\b/);
+  const deleteIdx = body.search(/deleteParsedConfig\b/);
   const loadIdx = body.search(/loadState\(/);
   const hydrateIdx = body.search(/hydrateScopeFromState\(/);
   assert.ok(deleteIdx >= 0, "WR-01: delete call missing from function body");
-  assert.ok(
-    loadIdx < 0 || deleteIdx < loadIdx,
-    "WR-01: parsedConfigCache.delete must precede loadState",
-  );
+  assert.ok(loadIdx < 0 || deleteIdx < loadIdx, "WR-01: deleteParsedConfig must precede loadState");
   assert.ok(
     hydrateIdx < 0 || deleteIdx < hydrateIdx,
-    "WR-01: parsedConfigCache.delete must precede hydrateScopeFromState",
+    "WR-01: deleteParsedConfig must precede hydrateScopeFromState",
   );
 });
 

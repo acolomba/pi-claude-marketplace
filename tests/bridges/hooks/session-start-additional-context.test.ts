@@ -34,8 +34,8 @@ import {
   _peekPendingSessionStartContextForTest,
   _resetForTest,
   beforeAgentStartHandlerFor,
-  currentEpoch,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { currentEpoch } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 
 import type {
   BeforeAgentStartEvent,

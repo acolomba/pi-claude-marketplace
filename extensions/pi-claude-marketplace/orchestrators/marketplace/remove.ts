@@ -102,8 +102,7 @@ export type RemoveMarketplaceNotifications =
  * per-row `(uninstalled)` plugin lines. Cleanup-leak warnings are dropped
  * per D-18-01 -- the orchestrated outcome surface mirrors standalone's
  * silence on post-state cleanup hiccups.
- */
-/**
+ *
  * `reason` is typed as `Reason` (not `ContentReason`) so the orchestrated
  * `"not added"` arm (missing marketplace, MarketplaceNotFoundError) can
  * surface its structural sentinel through the same field. Mirrors the
@@ -629,6 +628,70 @@ function surfaceCfgInvalid(args: {
 }
 
 /**
+ * POST-STATE cleanup (MR-5 / MR-6 / MR-7), run OUTSIDE the guard once
+ * state.json has already saved. Every arm is hygienic, never a contract: per
+ * D-18-01 individual failures are swallowed by `removePath` and the `rm()`
+ * calls themselves still run, because there is no notification shape for a
+ * cache or cleanup failure AFTER a successful state mutation.
+ *
+ * D-03-INV: the marketplace-names cache and the per-marketplace plugin cache
+ * file are unlinked because the marketplace set changed and this marketplace
+ * is gone.
+ *
+ * MR-7: the marketplace data dir and clone dirs are retained when ANY plugin
+ * failed, so they are only reclaimed on the all-unstaged arm. MURL-04 / NFR-3:
+ * both github and url sources have a `sources/<name>/` clone, and a url clone
+ * left behind would permanently trip MA-6 `{stale clone}` on re-add; path
+ * sources never have one.
+ *
+ * PURL-05 / PURL-06 / D-78-01: the plugin-clone GC reclaims any
+ * `plugin-clones/<key>/` dir the cascade-uninstalled plugins no longer
+ * reference. It runs post-commit, so it derives live clone keys from the
+ * just-committed state -- the removed plugins' records are gone, so their
+ * clones are unreferenced and swept, while a clone still referenced by a
+ * surviving marketplace's plugin survives. The helper is fs-only, so no git
+ * surface widens (NFR-5), and NFR-3 holds: a crash before this leaves an
+ * orphan the next idempotent pass removes.
+ */
+async function runPostRemoveCleanup(args: {
+  readonly locations: ScopedLocations;
+  readonly name: string;
+  readonly scope: Scope;
+  readonly successfullyUnstaged: readonly string[];
+  readonly allPluginsUnstaged: boolean;
+  readonly sourceKindAtRecord: RecordedSourceKind | undefined;
+}): Promise<void> {
+  const { locations, name, scope } = args;
+
+  try {
+    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, scope);
+    await dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
+  } catch {
+    // D-18-01: cache hygiene is never the primary user-facing path.
+  }
+
+  for (const cleaned of args.successfullyUnstaged) {
+    await removePath(locations.pluginDataDir(name, cleaned));
+  }
+
+  if (!args.allPluginsUnstaged) {
+    return;
+  }
+
+  await removePath(locations.marketplaceDataDir(name));
+
+  if (args.sourceKindAtRecord === "github" || args.sourceKindAtRecord === "url") {
+    await removePath(locations.sourceCloneDir(name));
+  }
+
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+  }
+}
+
+/**
  * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
  * `undefined` in standalone mode.
  */
@@ -705,60 +768,14 @@ export async function removeMarketplace(
     });
   }
 
-  // D-03-INV: post-state-commit completion-cache cleanup.
-  // The marketplace-names cache and per-marketplace plugin cache file must be
-  // unlinked because the marketplace set changed and this marketplace is gone.
-  // Cache cleanup is a hygienic concern, not a contract.
-  //
-  // Cache-refresh failures are swallowed. The underlying calls still run;
-  // there is no notification shape for "cache failure after a successful
-  // state mutation".
-  try {
-    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, resolved.scope);
-    const cachePath = await locations.pluginCacheFile(opts.name);
-    await dropMarketplaceCache(cachePath, resolved.scope, opts.name);
-  } catch {
-    // Per D-18-01: cache cleanup hygiene never the primary user-facing path.
-  }
-
-  // POST-STATE cleanup (MR-5/MR-6/MR-7). Runs OUTSIDE the guard;
-  // state.json already saved. Per D-18-01, individual cleanup failures
-  // are swallowed by `removePath` (correctness of the `rm()` calls is
-  // preserved; aggregation into a second `notifyWarning` is dropped).
-  for (const cleaned of successfullyUnstaged) {
-    await removePath(locations.pluginDataDir(opts.name, cleaned));
-  }
-
-  if (failedPlugins.length === 0) {
-    await removePath(locations.marketplaceDataDir(opts.name));
-
-    // MR-7: clone dirs retained when any plugin failed; here failedPlugins.length === 0.
-    // MURL-04 / NFR-3: both github and url sources have a sources/<name>/ clone;
-    // a url clone left behind would permanently trip MA-6 {stale clone} on re-add.
-    // path sources never have a clone dir.
-    if (sourceKindAtRecord === "github" || sourceKindAtRecord === "url") {
-      await removePath(locations.sourceCloneDir(opts.name));
-    }
-
-    // PURL-05 / PURL-06 / D-78-01: reclaim any git-source plugin-clones/<key>/
-    // dir the cascade-uninstalled plugins no longer reference. Runs post-commit
-    // (after withLockedStateTransaction saved), so the GC derives live clone
-    // keys from the just-committed state where the removed plugins' records are
-    // gone -> their clones are unreferenced -> swept; a clone still referenced
-    // by a surviving marketplace's plugin survives. fs-only helper: no git
-    // surface (NFR-5). NFR-3: a crash before this leaves an orphan the next
-    // idempotent pass removes.
-    //
-    // Per D-19-01 this hygienic cleanup never becomes the primary user-facing
-    // path. The GC helper already swallows per-dir rm leaks into a returned
-    // string[] rather than throwing; the try/catch is belt-and-braces so a
-    // GC-internal throw can never fail the user-visible remove.
-    try {
-      await garbageCollectPluginClones(locations);
-    } catch {
-      // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
-    }
-  }
+  await runPostRemoveCleanup({
+    locations,
+    name: opts.name,
+    scope: resolved.scope,
+    successfullyUnstaged,
+    allPluginsUnstaged: failedPlugins.length === 0,
+    sourceKindAtRecord,
+  });
 
   // One MarketplaceNotificationMessage per outcome, emitted via one
   // notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one

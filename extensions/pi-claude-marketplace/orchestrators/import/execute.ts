@@ -12,7 +12,12 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
-import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  assertNever,
+  ConcurrentInstallError,
+  errorMessage,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -155,7 +160,7 @@ interface MutableImportResult {
   changedResources: boolean;
 }
 
-interface ImportDeps {
+export interface ImportDeps {
   readonly loadSettings?: (
     scope: Scope,
     opts: { cwd: string },
@@ -533,17 +538,204 @@ function recordMarketplaceAddFailure(
   }
 }
 
-// The import workflow is intentionally linear: ensure marketplaces, record diagnostics,
-// then install plugins while preserving per-item continuation semantics.
-// eslint-disable-next-line sonarjs/cognitive-complexity
+type PlannedMarketplace = ScopedImportPlan["marketplacesToEnsure"][number];
+type PlannedPlugin = ScopedImportPlan["pluginsToInstall"][number];
+
+/**
+ * Classify an ALREADY-PRESENT marketplace against the Claude-settings source.
+ * Returns true when the marketplace is settled (skip or block) and the
+ * ensure-loop should move on without calling `addMarketplace`.
+ */
+function reconcileExistingMarketplace(
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+  existingSource: unknown,
+): void {
+  switch (samePlannedSource(existingSource, marketplace.source)) {
+    case "unknown-stored":
+      // The stored source record is in an unrecognized format (e.g. a
+      // hand-edited state.json). Block dependent plugins and emit a clear
+      // diagnostic rather than a misleading source-mismatch message.
+      blockedMarketplaces.add(marketplace.marketplace);
+      pushDiagnostic(
+        result,
+        marketplace.scope,
+        "unrecognized-stored-source",
+        `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
+        { marketplace: marketplace.marketplace },
+      );
+      break;
+    case "same":
+      result.skippedExistingMarketplaces.push({
+        kind: "marketplace-skip",
+        scope: marketplace.scope,
+        marketplace: marketplace.marketplace,
+        reason: "already-present",
+      });
+      break;
+    case "different": {
+      blockedMarketplaces.add(marketplace.marketplace);
+      const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existingSource))} does not match Claude settings source ${marketplace.source}.`;
+      for (const plugin of pluginsForMarketplace(
+        scopePlan.pluginsToInstall,
+        marketplace.marketplace,
+      )) {
+        result.sourceMismatches.push({
+          kind: "source-mismatch",
+          scope: plugin.scope,
+          plugin: plugin.ref.plugin,
+          marketplace: plugin.ref.marketplace,
+          ref: refLabel(plugin),
+          reason: "source-mismatch",
+          cause,
+        });
+      }
+
+      break;
+    }
+  }
+}
+
+/**
+ * Record the outcome of installing ONE planned plugin.
+ *
+ * WR-02: an unexpected `installPlugin` throw routes to
+ * `result.unexpectedPluginFailures` in `dispatchFailedOutcome`'s shape, so the
+ * per-scope loop continues and the terminal `notify()` still fires.
+ */
+async function installOnePlannedPlugin(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  plugin: PlannedPlugin,
+): Promise<void> {
+  const installPlugin = installPluginFn(opts.deps);
+  let outcome: InstallPluginOutcome;
+  try {
+    outcome = await installPlugin({
+      ctx: opts.ctx,
+      pi: opts.pi,
+      scope: plugin.scope,
+      cwd: opts.cwd,
+      marketplace: plugin.ref.marketplace,
+      plugin: plugin.ref.plugin,
+      notifications: { mode: "orchestrated" },
+    });
+  } catch (err) {
+    result.unexpectedPluginFailures.push({
+      kind: "plugin-failure",
+      scope: plugin.scope,
+      plugin: plugin.ref.plugin,
+      marketplace: plugin.ref.marketplace,
+      ref: refLabel(plugin),
+      reason: "unexpected-failure",
+      cause: errorMessage(err),
+    });
+    return;
+  }
+
+  // Switch rather than an `if (failed) ... return` fall-through: a third
+  // `InstallPluginOutcome` arm must become a compile error at `assertNever`,
+  // not get counted as a successful install in the cascade totals.
+  switch (outcome.status) {
+    case "failed":
+      // The collapsed `failed` status carries the typed Error directly. Narrow
+      // on `instanceof PluginShapeError` plus `.kind` to recover the specific
+      // failure class; everything else falls through to the unexpected bucket.
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      return;
+    case "installed":
+      result.installedPlugins.push({
+        kind: "plugin-installed",
+        scope: plugin.scope,
+        plugin: plugin.ref.plugin,
+        marketplace: plugin.ref.marketplace,
+        ref: refLabel(plugin),
+        reason: "installed",
+        resourcesChanged: outcome.resourcesChanged,
+        declaresAgents: outcome.declaresAgents,
+        declaresMcp: outcome.declaresMcp,
+      });
+      result.changedResources ||= outcome.resourcesChanged;
+      for (const w of outcome.postCommitWarnings ?? []) {
+        pushDiagnostic(result, plugin.scope, "post-install-warning", w, { ref: refLabel(plugin) });
+      }
+
+      return;
+    default:
+      assertNever(outcome);
+  }
+}
+
+/**
+ * WR-07: add ONE planned marketplace in ORCHESTRATED mode and dispatch on the
+ * typed outcome.
+ *
+ * Standalone mode is wrong here: a classified precondition failure (duplicate
+ * name, stale clone, invalid manifest, unsupported source, source missing)
+ * does NOT throw there -- it fires its own standalone notify, which breaks
+ * import's one-cascade-per-command discipline, and returns undefined. The
+ * import then recorded the marketplace as (added), never blocked its
+ * dependent plugins, and every install failed with a misleading reason.
+ */
+async function addOnePlannedMarketplace(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+): Promise<void> {
+  const addMarketplace = addMarketplaceFn(opts.deps);
+  try {
+    const outcome = await addMarketplace({
+      ctx: opts.ctx,
+      pi: opts.pi,
+      scope: marketplace.scope,
+      cwd: opts.cwd,
+      rawSource: marketplace.source,
+      notifications: { mode: "orchestrated" },
+      ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
+    });
+    if (outcome?.status === "added") {
+      result.addedMarketplaces.push({
+        kind: "marketplace-added",
+        scope: marketplace.scope,
+        marketplace: marketplace.marketplace,
+        reason: "added",
+      });
+      return;
+    }
+
+    recordMarketplaceAddFailure(
+      result,
+      blockedMarketplaces,
+      scopePlan,
+      marketplace,
+      outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
+    );
+  } catch (err) {
+    // Defensive: orchestrated mode coerces classified failures into typed
+    // outcomes, so only a genuinely unexpected throw lands here.
+    recordMarketplaceAddFailure(
+      result,
+      blockedMarketplaces,
+      scopePlan,
+      marketplace,
+      errorMessage(err),
+    );
+  }
+}
+
+// The import workflow is intentionally linear: ensure marketplaces, record
+// diagnostics, then install plugins while preserving per-item continuation
+// semantics.
 async function executeScopedPlan(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
-  scopePlan: ReturnType<typeof buildClaudeImportPlan>["scopes"][number],
+  scopePlan: ScopedImportPlan,
 ): Promise<void> {
   const loadState = stateLoader(opts.deps);
-  const addMarketplace = addMarketplaceFn(opts.deps);
-  const installPlugin = installPluginFn(opts.deps);
 
   let state: ExtensionState;
   try {
@@ -563,100 +755,17 @@ async function executeScopedPlan(
   for (const marketplace of scopePlan.marketplacesToEnsure) {
     const existing = state.marketplaces[marketplace.marketplace];
     if (existing !== undefined) {
-      const sourceMatch = samePlannedSource(existing.source, marketplace.source);
-      switch (sourceMatch) {
-        case "unknown-stored":
-          // The stored source record is in an unrecognized format (e.g.
-          // manually edited state.json). Block dependent plugins and emit a
-          // clear diagnostic rather than a misleading source-mismatch
-          // message.
-          blockedMarketplaces.add(marketplace.marketplace);
-          pushDiagnostic(
-            result,
-            marketplace.scope,
-            "unrecognized-stored-source",
-            `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
-            { marketplace: marketplace.marketplace },
-          );
-          break;
-        case "same":
-          result.skippedExistingMarketplaces.push({
-            kind: "marketplace-skip",
-            scope: marketplace.scope,
-            marketplace: marketplace.marketplace,
-            reason: "already-present",
-          });
-          break;
-        case "different": {
-          blockedMarketplaces.add(marketplace.marketplace);
-          const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existing.source))} does not match Claude settings source ${marketplace.source}.`;
-          for (const plugin of pluginsForMarketplace(
-            scopePlan.pluginsToInstall,
-            marketplace.marketplace,
-          )) {
-            result.sourceMismatches.push({
-              kind: "source-mismatch",
-              scope: plugin.scope,
-              plugin: plugin.ref.plugin,
-              marketplace: plugin.ref.marketplace,
-              ref: refLabel(plugin),
-              reason: "source-mismatch",
-              cause,
-            });
-          }
-
-          break;
-        }
-      }
-
-      continue;
-    }
-
-    // WR-07: drive the add in ORCHESTRATED mode and
-    // dispatch on the typed outcome. In standalone mode a classified
-    // precondition failure (duplicate name, stale clone, invalid manifest,
-    // unsupported source, source missing) does NOT throw -- it fires its own
-    // standalone notify (breaking import's one-cascade-per-command
-    // discipline) and returns undefined, so the import recorded the
-    // marketplace as (added), never blocked its dependent plugins, and each
-    // install then failed with a misleading reason.
-    try {
-      const outcome = await addMarketplace({
-        ctx: opts.ctx,
-        pi: opts.pi,
-        scope: marketplace.scope,
-        cwd: opts.cwd,
-        rawSource: marketplace.source,
-        notifications: { mode: "orchestrated" },
-        ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
-      });
-      if (outcome?.status === "added") {
-        result.addedMarketplaces.push({
-          kind: "marketplace-added",
-          scope: marketplace.scope,
-          marketplace: marketplace.marketplace,
-          reason: "added",
-        });
-      } else {
-        recordMarketplaceAddFailure(
-          result,
-          blockedMarketplaces,
-          scopePlan,
-          marketplace,
-          outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
-        );
-      }
-    } catch (err) {
-      // Defensive: orchestrated mode coerces classified failures into typed
-      // outcomes, so only a genuinely unexpected throw lands here.
-      recordMarketplaceAddFailure(
+      reconcileExistingMarketplace(
         result,
         blockedMarketplaces,
         scopePlan,
         marketplace,
-        errorMessage(err),
+        existing.source,
       );
+      continue;
     }
+
+    await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
   }
 
   for (const skipped of scopePlan.skippedPlugins) {
@@ -686,64 +795,7 @@ async function executeScopedPlan(
       continue;
     }
 
-    // WR-02: catch unexpected installPlugin throws
-    // and route them to result.unexpectedPluginFailures matching
-    // dispatchFailedOutcome's shape; per-scope loop continues and the final
-    // notify() at the end of importClaudeSettings still fires.
-    let outcome: InstallPluginOutcome;
-    try {
-      outcome = await installPlugin({
-        ctx: opts.ctx,
-        pi: opts.pi,
-        scope: plugin.scope,
-        cwd: opts.cwd,
-        marketplace: plugin.ref.marketplace,
-        plugin: plugin.ref.plugin,
-        notifications: { mode: "orchestrated" },
-      });
-    } catch (err) {
-      result.unexpectedPluginFailures.push({
-        kind: "plugin-failure",
-        scope: plugin.scope,
-        plugin: plugin.ref.plugin,
-        marketplace: plugin.ref.marketplace,
-        ref: refLabel(plugin),
-        reason: "unexpected-failure",
-        cause: errorMessage(err),
-      });
-      continue;
-    }
-
-    switch (outcome.status) {
-      case "installed":
-        result.installedPlugins.push({
-          kind: "plugin-installed",
-          scope: plugin.scope,
-          plugin: plugin.ref.plugin,
-          marketplace: plugin.ref.marketplace,
-          ref: refLabel(plugin),
-          reason: "installed",
-          resourcesChanged: outcome.resourcesChanged,
-          declaresAgents: outcome.declaresAgents,
-          declaresMcp: outcome.declaresMcp,
-        });
-        result.changedResources ||= outcome.resourcesChanged;
-        // Surface any post-commit warnings collected in orchestrated mode.
-        for (const w of outcome.postCommitWarnings ?? []) {
-          pushDiagnostic(result, plugin.scope, "post-install-warning", w, {
-            ref: refLabel(plugin),
-          });
-        }
-
-        break;
-      case "failed":
-        // Collapsed `status: "failed"` carries the typed Error directly.
-        // Narrow on `instanceof PluginShapeError` + `.kind` to recover
-        // the specific failure class; everything else falls through to
-        // the unexpected-failure bucket.
-        dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
-        break;
-    }
+    await installOnePlannedPlugin(opts, result, plugin);
   }
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace

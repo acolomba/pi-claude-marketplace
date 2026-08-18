@@ -2,6 +2,43 @@
 
 ## Idea
 
+### Hooks circular-dependency removal
+
+- The `bridges/hooks/` cycle knot is removable, and the cure is leaf
+  extraction of shared state, not dependency inversion (Spikes 019a/019b).
+- Any module-state relocation MUST convert every reassignment site to a
+  named mutator: ESM imported bindings are read-only, so a `let` cell
+  cannot move without its writes moving too (Spike 018).
+- A leaf state module owns the state AND its pure accessors. Leaving a
+  one-line reader like `getRoutingBucket` behind in the hub just re-creates
+  the edge (Spike 019a).
+- `--circular-deps` may only join the local gate in the same change that
+  removes the cycles. Added alone it fails on the 8 inherited cycles at the
+  first commit (Spike 020).
+- The local gate MUST pass `--re-export-cycles` alongside `--circular-deps`.
+  They are separate isolating flags, so a gate carrying only the latter
+  leaves re-export cycles unchecked. Free to add today at 0 findings
+  (Spike 020).
+- Do not reach for `rules.<name>` severity to control the gate.
+  `--fail-on-issues` exits 1 on warn-severity findings too; the flag, not
+  the severity, decides what the gate sees (Spike 020).
+- A captured spike diff is not the change. 019a's and 020's diffs swap
+  module specifiers in place, which breaks `import-x/order` because
+  `routing-state` sorts after the `event-router` it replaces, and neither
+  diff creates the leaf module its own imports depend on. Run `eslint --fix`
+  on the repointed importers and create the leaf first (implementation run,
+  `cee12150`).
+- Verify a new gate is non-vacuous, not merely green. The combined fallow
+  gate was confirmed to exit non-zero with `8 circular dependencies` against
+  the pre-change commit before its exit-0 on the fixed tree was believed
+  (implementation run, `cee12150`).
+
+**Shipped:** 018/019a/020 landed as `cee12150` on
+`features/hooks-cycle-removal` -- cycles 8 -> 0, `npm run check` green, zero
+test files touched. The green-check status recorded in the 019a and 020
+rows below was **not** reproducible as captured; see each README's
+Correction note and the blueprint's "Corrections to the spike record."
+
 ### GitLab plugin-marketplace parity (spikes 008-009)
 
 Upstream Claude Code shipped a plugin-marketplace changelog entry: "bare
@@ -298,3 +335,7 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | ⚠ VALIDATED (gap)    | fallow, static-analysis, security, tooling                               |
 | 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | ⚠ VALIDATED (gap)    | fallow, static-analysis, autofix, tooling                                |
 | 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | ✓ VALIDATED          | fallow, static-analysis, ci, tooling                                     |
+| 018  | hooks-module-state-portability      | standard   | Given 4 module-level mutable cells in event-router.ts and 17 test files reaching its _*ForTest seams, when that state moves to a leaf module re-exported from the hub, then every seam still observes the same live state and the full check stays green | ✓ VALIDATED          | hooks, circular-deps, refactor, module-state, esm                        |
+| 019a | hooks-cycle-leaf-extraction         | comparison | Given the 8-cycle bridges/hooks knot, when shared state and RoutingEntry move to a leaf and the five importers point at it, then all 8 cycles disappear and the full check stays green                                                                  | ✓ WINNER             | hooks, circular-deps, refactor, comparison                               |
+| 019b | hooks-cycle-inversion               | comparison | Given the same knot, when event-router stops importing dispatch/settle/registry and they register handlers instead, then all 8 cycles disappear -- and at what cost relative to 019a                                                                    | ✗ LOSES              | hooks, circular-deps, refactor, comparison, dependency-inversion         |
+| 020  | hooks-cycle-gate-closure            | standard   | Given zero cycles after 019a, when --circular-deps joins the local fallow gate, then boundary detection survives, cycles are newly caught, and npm run check stays green -- closing FLOW-02                                                             | ✓ VALIDATED          | hooks, circular-deps, tooling, gate, fallow                              |

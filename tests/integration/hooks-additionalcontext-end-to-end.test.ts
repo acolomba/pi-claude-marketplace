@@ -30,9 +30,9 @@ import {
   _peekPendingSessionStartContextForTest,
   _resetForTest,
   beforeAgentStartHandlerFor,
-  currentEpoch,
   registerHooksBridge,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { currentEpoch } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";

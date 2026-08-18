@@ -197,7 +197,7 @@ export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>
  * so classifier output and matcher vocabulary cannot drift apart without a
  * compile error.
  */
-export const STOP_FAILURE_ERROR_TYPES = [
+const STOP_FAILURE_ERROR_TYPES = [
   "rate_limit",
   "overloaded",
   "authentication_failed",

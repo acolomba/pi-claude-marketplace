@@ -1,8 +1,7 @@
 /**
  * shared/concerns/hooks.ts -- the hooks-summary concern (D-01). Owns the hook
- * summary types (`ClaudeHookEvent`, the file-private `_ToolEvent`,
- * `HookSummaryEntry`, `HookSummary`) and the pure `appendHooksBlock` block
- * renderer. The info renderer (`appendResolvedComponentLines`, which stays in
+ * summary types (`ClaudeHookEvent`, `ToolEvent`, `HookSummaryEntry`) and the
+ * pure `appendHooksBlock` block renderer. The info renderer (`appendResolvedComponentLines`, which stays in
  * `notify.ts`) imports and calls `appendHooksBlock`; `COMPONENT_KINDS` also
  * stays in `notify.ts` (only the `kind === "hooks"` arm dispatches here).
  *
@@ -48,11 +47,11 @@
 // renderer branches on `"kind" in entry` first, then on `"matcher" in
 // entry` for the tool/non-tool split.
 //
-// `HookSummary` is the public wrapper interface. The payload boundary uses
-// the raw `readonly HookSummaryEntry[]` shape (see
-// `PluginInfoComponentsResolved.components.hooks?` in notify.ts);
-// `HookSummary` exists as a labelled handle for consumers that want the
-// named wrapper.
+// The payload boundary carries the raw `readonly HookSummaryEntry[]` shape
+// directly (see `PluginInfoComponentsResolved.components.hooks?` in
+// notify.ts). A `HookSummary` wrapper interface used to sit alongside it as a
+// labelled handle, but no consumer ever named the wrapper, so it is gone and
+// the raw array is the only summary shape.
 // ---------------------------------------------------------------------------
 
 export type ClaudeHookEvent =
@@ -67,21 +66,29 @@ export type ClaudeHookEvent =
   | "Stop"
   | "StopFailure";
 
-type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
+/**
+ * The tool-event subset of `ClaudeHookEvent` -- the events that statically
+ * carry a matcher. Exported, not file-private: the exported
+ * `HookSummaryEntry` names it in two arms, so a caller that spells out an
+ * entry needs to be able to name it too.
+ *
+ * `domain/components/hook-events.ts` declares its own `ToolEvent`, derived
+ * from the runtime `TOOL_EVENTS` tuple. The two are kept in step by that
+ * file's `satisfies readonly ClaudeHookEvent[]` pins; `shared/` cannot import
+ * from `domain/` (the import-direction fence), which is why the literal union
+ * is restated here.
+ */
+export type ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
 
 export type HookSummaryEntry =
-  | { readonly event: _ToolEvent; readonly matcher: string }
-  | { readonly event: Exclude<ClaudeHookEvent, _ToolEvent> }
+  | { readonly event: ToolEvent; readonly matcher: string }
+  | { readonly event: Exclude<ClaudeHookEvent, ToolEvent> }
   | {
       readonly kind: "lenient";
       readonly event: string;
       readonly supported: boolean;
       readonly matcher?: string;
     };
-
-export interface HookSummary {
-  readonly entries: readonly HookSummaryEntry[];
-}
 
 /**
  * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row

@@ -12,10 +12,11 @@
 //   3. delegates to `listPlugins` with the parsed bag.
 
 import { listPlugins } from "../../../orchestrators/plugin/list.ts";
-import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";
+
+import { withParsedArgs } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -37,15 +38,7 @@ const BOOLEAN_FLAGS = parseFlagNames("list");
 export function makeListHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    let parsed;
-    try {
-      parsed = parseArgs(args);
-    } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
-      return;
-    }
-
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
     // Data-driven scan: a token in BOOLEAN_FLAGS is a recognized filter flag;
     // any other `--` token is an unknown long flag; everything else is a
     // positional. Driving the recognized set from BOOLEAN_FLAGS keeps each new
@@ -82,7 +75,7 @@ export function makeListHandler(
       ...(filterFlags.has("--partial") && { partial: true }),
       ...(filterFlags.has("--remote") && { remote: true }),
     });
-  };
+  });
 }
 
 // Export for potential reuse by completions provider.

@@ -220,3 +220,59 @@
   seconds, negligible against this project's ~3m11s `npm run check`, and
   `fallow audit`'s new-vs-inherited attribution correctly excludes
   pre-existing findings from a PR's gate verdict.
+
+## Session: 2026-08-15 (Hooks circular-dependency removal)
+
+**Date:** 2026-08-15
+**Spikes processed:** 4
+**Feature areas:** Hooks circular-dependency removal
+**Skill output:** `./.claude/skills/spike-findings-pi-claude-marketplace/`
+
+### Processed Spikes
+
+| #    | Name                           | Type       | Verdict      | Feature Area          |
+| ---- | ------------------------------ | ---------- | ------------ | --------------------- |
+| 018  | hooks-module-state-portability | standard   | ✓ VALIDATED  | Hooks cycle removal   |
+| 019a | hooks-cycle-leaf-extraction    | comparison | ✓ WINNER     | Hooks cycle removal   |
+| 019b | hooks-cycle-inversion          | comparison | ✗ LOSES      | Hooks cycle removal   |
+| 020  | hooks-cycle-gate-closure       | standard   | ✓ VALIDATED  | Hooks cycle removal   |
+
+### Key Findings
+
+- The `bridges/hooks/` cycle knot comes out for **five one-line import
+  swaps**, taking cycles 8 -> 0 with zero test files modified.
+  `ARCHITECTURE.md` accepts the knot, Spike 011 recommended accepting it,
+  and `BACKLOG.md` FLOW-02 judged untangling it "out of proportion to the
+  gap." That judgment was wrong, and this series is the measurement that
+  says so. Shipped as `cee12150`.
+
+  This bullet used to read "...with a green `npm run check`." The swaps do
+  need an `eslint --fix` pass for `import-x/order`, because `routing-state`
+  sorts after the `event-router` it replaces -- five mechanical line moves,
+  but the spike record's green-check claim was not reproducible as captured.
+- The knot was never about orchestration. `event-router.ts` owned both the
+  shared state and the handler wiring; moving the state down to a leaf turns
+  the bidirectional edges one-directional, and the hub keeps importing
+  `dispatch`/`settle`/`registry` untouched.
+- ESM read-only imported bindings split the work cleanly and safely: the two
+  `const` Maps cross a module boundary for free, the two `let` cells need
+  their 6 reassignment sites converted to mutators, and every way the
+  refactor can go wrong is a `tsc` error.
+- Dependency inversion is not wrong, just more expensive. It reaches 0
+  cycles too (graph-shape probe), but `compositeHandlerFor` is generic over
+  three conditional types that are module-private to `dispatch.ts`, so a
+  typed registry needs them exported and relocated -- 019a's work plus a
+  registry plus a side-effect import barrel -- and it converts compile-time
+  failures into load-order-dependent runtime ones on a Pi lifecycle event.
+- FLOW-02 closes. `--circular-deps` and `--re-export-cycles` are separate
+  isolating flags and must both join the gate; they union with
+  `--boundary-violations` rather than override it. `.fallowrc.json` needs no
+  change at all -- the `bridges-hooks` zone already covers the new leaf, and
+  rule severity does not gate anything, since `--fail-on-issues` exits 1 on
+  warn-severity findings too.
+- Method finding worth more than any single result: **two false results this
+  series came from probes that never modified the tree** -- a mangled regex
+  that left imports in place and reported "8 cycles, unchanged", and a
+  boundary probe run from the wrong directory that reported "No issues
+  found". Neither surfaced as a failing command; both were caught by
+  internal inconsistency. Recorded in CONVENTIONS.md as a standing check.

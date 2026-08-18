@@ -26,20 +26,21 @@ import test from "node:test";
 import {
   compositeHandlerFor,
   toolResultCompositeHandler,
-  _resetExecutorForTest,
-  _setExecutorForTest,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
-  currentEpoch,
   _resetForTest,
   _setRoutingBucketForTest,
-  type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  currentEpoch,
+  type RoutingEntry,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { type BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
+import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type {
   ExtensionContext,
@@ -125,25 +126,21 @@ function makeSpy(results: Record<string, HookExecResult>): {
 // Block A: D-60-02 first-block-wins
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-60-02 first-block-wins: entry-1 blocks; entries 2-3 executor NOT invoked", async (t) => {
+test("D-60-02 first-block-wins: entry-1 blocks; entries 2-3 executor NOT invoked", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "block", reason: "denied" },
     p2: { kind: "noop" },
     p3: { kind: "noop" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
   ]);
 
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   const out = await handler(makeToolCallEvent(), stubCtx);
 
   assert.deepEqual(
@@ -158,24 +155,20 @@ test("D-60-02 first-block-wins: entry-1 blocks; entries 2-3 executor NOT invoked
 // Block B: D-60-02 mutate composition (left-to-right)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-60-02 mutate composition: entry-2 sees entry-1's in-place mutation", async (t) => {
+test("D-60-02 mutate composition: entry-2 sees entry-1's in-place mutation", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "mutate", updatedInput: { extraField: "x" } },
     p2: { kind: "noop" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
   ]);
 
   const event = makeToolCallEvent({ original: "y" });
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   const out = await handler(event, stubCtx);
 
   assert.equal(spy.calls.length, 2, "both entries must run on noop final outcome");
@@ -194,24 +187,20 @@ test("D-60-02 mutate composition: entry-2 sees entry-1's in-place mutation", asy
   assert.equal(out, undefined, "mutate is not terminal; adapter returns undefined for noop final");
 });
 
-test("D-60-02 mutate composition: two mutates compose left-to-right (entry-2 patch overlays entry-1)", async (t) => {
+test("D-60-02 mutate composition: two mutates compose left-to-right (entry-2 patch overlays entry-1)", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "mutate", updatedInput: { a: 1, shared: "from-p1" } },
     p2: { kind: "mutate", updatedInput: { b: 2, shared: "from-p2" } },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
   ]);
 
   const event = makeToolCallEvent();
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   await handler(event, stubCtx);
 
   const final = event.input as unknown as Record<string, unknown>;
@@ -224,25 +213,21 @@ test("D-60-02 mutate composition: two mutates compose left-to-right (entry-2 pat
 // Block C: D-60-02 stop is terminal
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-60-02 stop terminal: entry-1 stops; entries 2-3 executor NOT invoked", async (t) => {
+test("D-60-02 stop terminal: entry-1 stops; entries 2-3 executor NOT invoked", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "stop", stopReason: "halt" },
     p2: { kind: "noop" },
     p3: { kind: "noop" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
   ]);
 
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   const out = await handler(makeToolCallEvent(), stubCtx);
 
   assert.deepEqual(
@@ -259,21 +244,17 @@ test("D-60-02 stop terminal: entry-1 stops; entries 2-3 executor NOT invoked", a
 // Block D: full noop chain
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-60-02 noop chain: all entries run; composite handler returns undefined", async (t) => {
+test("D-60-02 noop chain: all entries run; composite handler returns undefined", async () => {
   _resetForTest();
   const spy = makeSpy({});
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
   ]);
 
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   const out = await handler(makeToolCallEvent(), stubCtx);
 
   assert.deepEqual(
@@ -288,21 +269,17 @@ test("D-60-02 noop chain: all entries run; composite handler returns undefined",
 // Block E: D-59-01 event.isError split survives the reducer rewrite
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-59-01 + D-60-02: toolResult isError=true reduces only PostToolUseFailure bucket", async (t) => {
+test("D-59-01 + D-60-02: toolResult isError=true reduces only PostToolUseFailure bucket", async () => {
   _resetForTest();
   const spy = makeSpy({
     "p-failure": { kind: "noop" },
     "p-success": { kind: "noop" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(makeToolResultEvent(true), stubCtx);
 
   assert.deepEqual(
@@ -312,21 +289,17 @@ test("D-59-01 + D-60-02: toolResult isError=true reduces only PostToolUseFailure
   );
 });
 
-test("D-59-01 + D-60-02: toolResult isError=false reduces only PostToolUse bucket", async (t) => {
+test("D-59-01 + D-60-02: toolResult isError=false reduces only PostToolUse bucket", async () => {
   _resetForTest();
   const spy = makeSpy({
     "p-failure": { kind: "noop" },
     "p-success": { kind: "noop" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(makeToolResultEvent(false), stubCtx);
 
   assert.deepEqual(
@@ -336,23 +309,19 @@ test("D-59-01 + D-60-02: toolResult isError=false reduces only PostToolUse bucke
   );
 });
 
-test("D-59-01 + D-60-02: toolResult bucket reduces first-block-wins", async (t) => {
+test("D-59-01 + D-60-02: toolResult bucket reduces first-block-wins", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "block", reason: "tool-blocked" },
     p2: { kind: "noop" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PostToolUse", [
     makeEntry({ pluginId: "p1", claudeEvent: "PostToolUse", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", claudeEvent: "PostToolUse", declarationIndex: 1 }),
   ]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   const out = await handler(makeToolResultEvent(false), stubCtx);
 
   assert.deepEqual(
@@ -370,64 +339,58 @@ test("D-59-01 + D-60-02: toolResult bucket reduces first-block-wins", async (t) 
 // Block F: D-60-03 per-event adapter return-shape pinning
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-60-03 PreToolUse: block returns { block: true, reason }", async (t) => {
+test("D-60-03 PreToolUse: block returns { block: true, reason }", async () => {
   _resetForTest();
   const spy = makeSpy({ p1: { kind: "block", reason: "x" } });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   const out = await handler(makeToolCallEvent(), stubCtx);
   assert.deepEqual(out, { block: true, reason: "x" });
 });
 
-test("D-60-03 UserPromptSubmit: block returns { action: 'handled' }", async (t) => {
+test("D-60-03 UserPromptSubmit: block returns { action: 'handled' }", async () => {
   _resetForTest();
   const spy = makeSpy({ p1: { kind: "block", reason: "x" } });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("UserPromptSubmit", [
     makeEntry({ pluginId: "p1", claudeEvent: "UserPromptSubmit" }),
   ]);
-  const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch());
+  const handler = compositeHandlerFor(
+    "UserPromptSubmit",
+    currentEpoch(),
+    undefined,
+    injectedExecutor,
+  );
   const out = await handler({ type: "input", text: "hello", source: "interactive" }, stubCtx);
   assert.deepEqual(out, { action: "handled" });
 });
 
-test("D-60-03 UserPromptSubmit: mutate.additionalContext returns { action: 'transform', text }", async (t) => {
+test("D-60-03 UserPromptSubmit: mutate.additionalContext returns { action: 'transform', text }", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "mutate", additionalContext: "more" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   _setRoutingBucketForTest("UserPromptSubmit", [
     makeEntry({ pluginId: "p1", claudeEvent: "UserPromptSubmit" }),
   ]);
-  const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch());
+  const handler = compositeHandlerFor(
+    "UserPromptSubmit",
+    currentEpoch(),
+    undefined,
+    injectedExecutor,
+  );
   const out = await handler({ type: "input", text: "hello", source: "interactive" }, stubCtx);
   assert.deepEqual(out, { action: "transform", text: "more" });
 });
 
-test("D-60-03 observation events: always return undefined (SessionStart / SessionEnd / PreCompact / PostCompact)", async (t) => {
+test("D-60-03 observation events: always return undefined (SessionStart / SessionEnd / PreCompact / PostCompact)", async () => {
   _resetForTest();
   const spy = makeSpy({
     p1: { kind: "block", reason: "drop-me" },
   });
-  _setExecutorForTest(spy.impl);
-  t.after(() => {
-    _resetExecutorForTest();
-  });
-
+  const injectedExecutor: HookExecutor = spy.impl;
   // SessionStart bucket: a block outcome MUST be debug-logged + dropped.
   // Composite handler return type is `Promise<undefined>` for the
   // observation events; the per-event adapter is invoked for the
@@ -436,14 +399,19 @@ test("D-60-03 observation events: always return undefined (SessionStart / Sessio
   _setRoutingBucketForTest("SessionStart", [
     makeEntry({ pluginId: "p1", claudeEvent: "SessionStart", rawMatcher: "" }),
   ]);
-  const ssHandler = compositeHandlerFor("SessionStart", currentEpoch());
+  const ssHandler = compositeHandlerFor(
+    "SessionStart",
+    currentEpoch(),
+    undefined,
+    injectedExecutor,
+  );
   await ssHandler({ type: "session_start", reason: "startup" }, stubCtx);
 
   // SessionEnd / PreCompact / PostCompact: same drop-to-undefined behavior.
   _setRoutingBucketForTest("SessionEnd", [
     makeEntry({ pluginId: "p1", claudeEvent: "SessionEnd" }),
   ]);
-  const seHandler = compositeHandlerFor("SessionEnd", currentEpoch());
+  const seHandler = compositeHandlerFor("SessionEnd", currentEpoch(), undefined, injectedExecutor);
   await seHandler({ type: "session_shutdown" } as never, stubCtx);
 
   // No assertion on return value: the adapter return type is

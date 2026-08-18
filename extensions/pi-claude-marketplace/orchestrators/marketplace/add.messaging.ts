@@ -2,8 +2,7 @@
 //
 // The `marketplace add` command's co-located notification vocabulary: its
 // `CommandContext` (carrying `Messaging.label` and a render map over the
-// plugin-child-row statuses it emits), the mp-status set it owns, and its
-// command-private failure reasons.
+// plugin-child-row statuses it emits) and its command-private failure reasons.
 //
 // D-01 / MOD-01: each command owns the statuses, reasons, and render map of its
 // own notifications. The shared spine in `shared/notify-context.ts` dispatches
@@ -12,21 +11,12 @@
 // `renderMpHeader` seam that `notifyWithContext` -> `emitContextCascade` reuses,
 // so the header bytes stay byte-identical to the legacy path. `marketplace add`
 // always emits `plugins: []` (the marketplace block carries no child rows), so
-// this command's render map is over the empty plugin-status set; the mp-statuses
-// it owns are declared below for the localized vocabulary and route through the
-// central header seam.
+// this command's render map is over the empty plugin-status set; its `(added)`
+// and `(failed) {<reason>}` header forms carry no local status declaration and
+// route through the central header seam.
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Reason } from "../../shared/notify.ts";
-
-/**
- * D-01 / MOD-01: the marketplace-statuses `marketplace add` owns. The success
- * flip records `(added)`; an enumerated precondition failure records
- * `(failed) {<reason>}` on the marketplace subject (no child plugin rows). Both
- * header forms render via the central `renderMpHeader` seam the spine reuses.
- */
-export const ADD_MP_STATUSES = ["added", "failed"] as const;
-export type AddMpStatus = (typeof ADD_MP_STATUSES)[number];
 
 /**
  * D-09 / MOD-01: command-private reasons owned by `marketplace add`. These two
@@ -37,14 +27,13 @@ export type AddMpStatus = (typeof ADD_MP_STATUSES)[number];
  * `lock held`) are referenced from `shared/notify-reasons.ts`, not redeclared
  * here.
  */
-export const ADD_PRIVATE_REASONS = ["duplicate name", "stale clone"] as const;
 // `_ReasonInSet<R extends Reason> = R` pins each private reason to the closed
 // `Reason` set as it derives `AddPrivateReason`: a typo or out-of-set literal
 // makes the tuple violate the `extends Reason` constraint -- a TS2344 compile
 // error here, with no runtime footprint.
 type _ReasonInSet<R extends Reason> = R;
-export type AddPrivateReason = _ReasonInSet<(typeof ADD_PRIVATE_REASONS)[number]>;
-
+// fallow-ignore-next-line unused-type, private-type-leak -- compile-time pin, not a consumed alias: deriving it is what asserts the add-private reasons are members of the closed Reason set. `_ReasonInSet` is the pin helper and has no caller-facing meaning.
+export type AddPrivateReason = _ReasonInSet<"duplicate name" | "stale clone">;
 /**
  * D-04 / D-05 / MOD-01: the `marketplace add` command context. `marketplace add`
  * emits no plugin child rows (the marketplace block is always `plugins: []`), so

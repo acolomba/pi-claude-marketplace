@@ -87,11 +87,40 @@ export interface MockGitOpsHandle {
 }
 
 /**
- * Build a fresh mock GitOps + bookkeeping state. Tests pass `state`
- * to assertions and mutate it between orchestrator calls.
+ * The optional behavior knobs a caller may seed. They are carried as DATA so
+ * the copy below stays one loop instead of one conditional spread per knob.
  */
-export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandle {
-  const state: MockGitState = {
+const OPTIONAL_MOCK_GIT_KEYS = [
+  "fixtureSourceDir",
+  "remoteHead",
+  "cloneThrows",
+  "fetchThrows",
+  "checkoutThrows",
+  "resolveRemoteRefThrows",
+  "currentBranchOverride",
+] as const;
+
+/**
+ * Copy only the knobs the caller actually set. Under
+ * `exactOptionalPropertyTypes` an unset knob must stay ABSENT rather than
+ * present-and-undefined, because that is exactly what the `!== undefined`
+ * guards inside the ops key off.
+ */
+function pickSeededMockGitKnobs(initial?: Partial<MockGitState>): Partial<MockGitState> {
+  const picked: Record<string, unknown> = {};
+  for (const key of OPTIONAL_MOCK_GIT_KEYS) {
+    const value = initial?.[key];
+    if (value !== undefined) {
+      picked[key] = value;
+    }
+  }
+
+  return picked;
+}
+
+/** Seed the mock's mutable state, including the call-recording arrays. */
+function buildMockGitState(initial?: Partial<MockGitState>): MockGitState {
+  return {
     remoteRefs: { ...(initial?.remoteRefs ?? {}) },
     localRefs: { ...(initial?.localRefs ?? {}) },
     head: initial?.head ?? "",
@@ -103,18 +132,16 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
     currentBranchCalls: [],
     resolveRemoteRefCalls: [],
     remoteResolveMap: { ...(initial?.remoteResolveMap ?? {}) },
-    ...(initial?.fixtureSourceDir !== undefined && { fixtureSourceDir: initial.fixtureSourceDir }),
-    ...(initial?.remoteHead !== undefined && { remoteHead: initial.remoteHead }),
-    ...(initial?.cloneThrows !== undefined && { cloneThrows: initial.cloneThrows }),
-    ...(initial?.fetchThrows !== undefined && { fetchThrows: initial.fetchThrows }),
-    ...(initial?.checkoutThrows !== undefined && { checkoutThrows: initial.checkoutThrows }),
-    ...(initial?.resolveRemoteRefThrows !== undefined && {
-      resolveRemoteRefThrows: initial.resolveRemoteRefThrows,
-    }),
-    ...(initial?.currentBranchOverride !== undefined && {
-      currentBranchOverride: initial.currentBranchOverride,
-    }),
+    ...pickSeededMockGitKnobs(initial),
   };
+}
+
+/**
+ * Build a fresh mock GitOps + bookkeeping state. Tests pass `state`
+ * to assertions and mutate it between orchestrator calls.
+ */
+export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandle {
+  const state = buildMockGitState(initial);
 
   const gitOps: GitOps = {
     async clone(opts): Promise<void> {

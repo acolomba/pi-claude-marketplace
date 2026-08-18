@@ -35,21 +35,21 @@ import test from "node:test";
 import {
   compositeHandlerFor,
   toolResultCompositeHandler,
-  _resetExecutorForTest,
-  _setExecutorForTest,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
   addPluginConfigToCache,
-  currentEpoch,
   rebuildRoutingTables,
   registerHooksBridge,
   _bumpEpochForTest,
   _resetForTest,
   _routingTableForTest,
   _setRoutingBucketForTest,
-  type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  currentEpoch,
+  type RoutingEntry,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
   BUCKET_A_EVENTS,
   type BucketAEvent,
@@ -57,6 +57,7 @@ import {
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
+import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type {
   ExtensionAPI,
@@ -375,17 +376,14 @@ test("DISP-04: within-plugin declaration order preserved via monotonic declarati
 // Block 4: DISP-03 -- epoch mismatch causes composite handler to no-op
 // ──────────────────────────────────────────────────────────────────────────
 
-test("DISP-03: composite handler with stale capturedEpoch no-ops without invoking dispatchHookExec", async (t) => {
+test("DISP-03: composite handler with stale capturedEpoch no-ops without invoking dispatchHookExec", async () => {
   _resetForTest();
 
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
 
@@ -400,7 +398,7 @@ test("DISP-03: composite handler with stale capturedEpoch no-ops without invokin
   _bumpEpochForTest();
   assert.notEqual(stale, currentEpoch(), "epoch must advance to simulate reload");
 
-  const handler = compositeHandlerFor("PreToolUse", stale);
+  const handler = compositeHandlerFor("PreToolUse", stale, undefined, injectedExecutor);
   await handler(
     { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
     stubCtx,
@@ -414,24 +412,21 @@ test("DISP-03: composite handler with stale capturedEpoch no-ops without invokin
 // and dispatches to the correct bucket
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFailure bucket", async (t) => {
+test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFailure bucket", async () => {
   _resetForTest();
 
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   // Pre-populate BOTH buckets so the test pins which one is selected by
   // event.isError truthy, not coincidental empty-bucket fall-through.
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
     {
       type: "tool_result",
@@ -448,22 +443,19 @@ test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFail
   assert.deepEqual(fired, ["p-failure"], "isError=true must route to PostToolUseFailure");
 });
 
-test("D-59-01: toolResultCompositeHandler routes isError=false to PostToolUse bucket", async (t) => {
+test("D-59-01: toolResultCompositeHandler routes isError=false to PostToolUse bucket", async () => {
   _resetForTest();
 
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
     {
       type: "tool_result",

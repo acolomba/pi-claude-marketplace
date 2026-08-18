@@ -232,43 +232,6 @@ function pushMarketplaceRemoveCascade(
 }
 
 /**
- * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
- * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
- * statically pinned to the pending render map's status set -- the consumer
- * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
- *
- * Every plan action is folded into its `(scope, marketplace)` block. The
- * mapping is:
- *
- *   - marketplacesToAdd     -> dropped; marketplace add is immediate (WILL-01 /
- *                              D-65.1-02). Child installs still build a
- *                              bare-header block via pluginsToInstall.
- *   - marketplacesToRemove  -> per-recorded-plugin child row
- *                              { status: "will uninstall" } under a bare
- *                              list-arm header (status undefined). De-
- *                              registration is immediate; only the plugin-
- *                              uninstall cascade is reload-deferred (WILL-03 /
- *                              D-65.1-03). Names come from the plan DTO's
- *                              `plugins` field, NOT pluginsToUninstall (which
- *                              deliberately omits removed-marketplace plugins
- *                              to avoid double-billing the apply cascade).
- *   - sourceMismatches      -> block.status = "failed", reasons:
- *                              ["dangling reference"] for the dangling-reference
- *                              cause (PURL-06), ["source mismatch"] for the
- *                              other three causes
- *   - pluginsToInstall      -> child row { status: "will install" }
- *   - pluginsToUninstall    -> child row { status: "will uninstall" }
- *   - pluginsToDisable      -> child row { status: "will disable" }
- *   - pluginsToEnable       -> child row { status: "will enable" }
- *                              (recorded-but-disabled detection via the
- *                              empty-resources marker)
- *
- * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
- * case-insensitive, project-before-user secondary). Plugin rows within a
- * block preserve insertion order per their owning bucket -- the apply path
- * will re-order at execution time if needed.
- */
-/**
  * FSTAT-06 / D-66-04: the no-network resolve inputs for a planned install
  * candidate -- the candidate manifest entry plus the marketplace clone root it
  * resolves against. Located by the caller (`pendingReconcile`) from the
@@ -348,6 +311,43 @@ export async function resolvePendingForceInstalls(
   return keys;
 }
 
+/**
+ * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
+ * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
+ * statically pinned to the pending render map's status set -- the consumer
+ * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
+ *
+ * Every plan action is folded into its `(scope, marketplace)` block. The
+ * mapping is:
+ *
+ *   - marketplacesToAdd     -> dropped; marketplace add is immediate (WILL-01 /
+ *                              D-65.1-02). Child installs still build a
+ *                              bare-header block via pluginsToInstall.
+ *   - marketplacesToRemove  -> per-recorded-plugin child row
+ *                              { status: "will uninstall" } under a bare
+ *                              list-arm header (status undefined). De-
+ *                              registration is immediate; only the plugin-
+ *                              uninstall cascade is reload-deferred (WILL-03 /
+ *                              D-65.1-03). Names come from the plan DTO's
+ *                              `plugins` field, NOT pluginsToUninstall (which
+ *                              deliberately omits removed-marketplace plugins
+ *                              to avoid double-billing the apply cascade).
+ *   - sourceMismatches      -> block.status = "failed", reasons:
+ *                              ["dangling reference"] for the dangling-reference
+ *                              cause (PURL-06), ["source mismatch"] for the
+ *                              other three causes
+ *   - pluginsToInstall      -> child row { status: "will install" }
+ *   - pluginsToUninstall    -> child row { status: "will uninstall" }
+ *   - pluginsToDisable      -> child row { status: "will disable" }
+ *   - pluginsToEnable       -> child row { status: "will enable" }
+ *                              (recorded-but-disabled detection via the
+ *                              empty-resources marker)
+ *
+ * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
+ * case-insensitive, project-before-user secondary). Plugin rows within a
+ * block preserve insertion order per their owning bucket -- the apply path
+ * will re-order at execution time if needed.
+ */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),
@@ -471,16 +471,18 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
 // Raw `error.message` is NEVER read into a row's reasons field or anywhere
 // else in the rendered output. The catch ladders in `apply.ts` translate
 // orchestrator throws into typed outcomes BEFORE they reach this projection.
+//
+// `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
+// successful enable re-materializes the plugin via installPlugin, so the
+// projection emits the `installed` row, deriving its `dependencies` from the
+// ledger's staged-count signals exactly as the install arm derives its own
+// (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
+// `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES. This
+// belongs to the token mapping above rather than to either row builder below:
+// it is the asymmetry BETWEEN them, and as a `/** */` block stacked above
+// `installedRowFromOutcome` it documented neither.
 // ---------------------------------------------------------------------------
 
-/**
- * `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
- * successful enable re-materializes the plugin via installPlugin, so the
- * projection emits the `installed` row, deriving its `dependencies` from the
- * ledger's staged-count signals exactly as the install arm derives its own
- * (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
- * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
- */
 /**
  * Build the `(installed)` row for a realized reconcile install.
  *
@@ -634,9 +636,25 @@ function backfilledRowFromOutcome(
   };
 }
 
-function applyOutcomeToBlock(
+/**
+ * Apply a MARKETPLACE-subject outcome: the block header's own status and
+ * reasons, plus the two arms that also push a synthetic plugin child.
+ */
+function applyMarketplaceOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
-  outcome: PerEntryOutcome,
+  outcome: Extract<
+    PerEntryOutcome,
+    {
+      kind:
+        | "mp-added"
+        | "mp-removed"
+        | "mp-add-failed"
+        | "mp-remove-failed"
+        | "mp-remove-partial"
+        | "source-mismatch"
+        | "invalid-block";
+    }
+  >,
 ): void {
   switch (outcome.kind) {
     case "mp-added":
@@ -657,6 +675,82 @@ function applyOutcomeToBlock(
       // collapses to `⊘ <name> [<scope>] (failed)` when reasons is absent.
       block.status = "failed";
       return;
+    case "source-mismatch":
+      block.status = "failed";
+      if (outcome.cause === "dangling-reference") {
+        // PURL-06: name the real problem -- an orphaned plugin declaration whose
+        // marketplace is undeclared reads as `dangling reference` on both the mp
+        // row and the plugin child, NOT `source mismatch`.
+        block.reasons = ["dangling reference"];
+        block.plugins.push({
+          status: "failed",
+          name: outcome.plugin,
+          reasons: ["dangling reference"],
+          // D-03/D-06: a dangling-reference diagnostic -> error, no reload.
+          severity: "error",
+          needsReload: false,
+        });
+      } else {
+        block.reasons = ["source mismatch"];
+      }
+
+      return;
+    case "invalid-block":
+      // CFG-03 row: the row subject IS the file basename (T-55-02-01).
+      // The block is keyed by (scope, basename) so multiple invalid files in
+      // the same scope render as distinct rows.
+      block.status = "failed";
+      block.reasons = [outcome.reason];
+      // I5 / PR #51: when loadConfig's diagnostic detail was threaded in
+      // (EACCES vs JSON parse vs schema key), surface it via a synthetic
+      // PluginFailedMessage child carrying the cause -- mirrors the SNM-10
+      // pattern used by autoupdateFailedRow. The MarketplaceNotificationMessage
+      // header itself cannot carry a cause (SNM-10 confines causes to
+      // plugin-row + manual-recovery surfaces), so the synthetic child is the
+      // only IL-2-compatible channel that drives the depth-5 cause-chain
+      // trailer below the row. Path tokens were already stripped at the apply
+      // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
+      if (outcome.cause !== undefined) {
+        block.plugins.push({
+          status: "failed",
+          name: outcome.basename,
+          reasons: [outcome.reason],
+          cause: outcome.cause,
+          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
+          severity: "error",
+          needsReload: false,
+        });
+      }
+
+      return;
+    default:
+      // The caller's own `assertNever` only proves the OUTER union is fully
+      // routed; without this arm a newly-added marketplace-subject kind would
+      // be widened into the `Extract<>` above and silently no-op the row.
+      assertNever(outcome);
+  }
+}
+
+/** Apply a PLUGIN-subject outcome: one row pushed onto the block's children. */
+function applyPluginOutcomeToBlock(
+  block: MarketplaceBlock<ReconcileAppliedMsg>,
+  outcome: Extract<
+    PerEntryOutcome,
+    {
+      kind:
+        | "plugin-installed"
+        | "plugin-backfilled"
+        | "plugin-uninstalled"
+        | "plugin-enabled"
+        | "plugin-disabled"
+        | "plugin-install-failed"
+        | "plugin-uninstall-failed"
+        | "plugin-enable-failed"
+        | "plugin-disable-failed";
+    }
+  >,
+): void {
+  switch (outcome.kind) {
     case "plugin-installed":
       // D-03/D-06 realized install row; WARN-01 / D-86-03 raises it to warning
       // with the failure-class token when the outcome carries degradedKinds.
@@ -731,53 +825,38 @@ function applyOutcomeToBlock(
         needsReload: false,
       });
       return;
+    default:
+      // The caller's own `assertNever` only proves the OUTER union is fully
+      // routed; without this arm a newly-added plugin-subject kind would be
+      // widened into the `Extract<>` above and silently drop the row.
+      assertNever(outcome);
+  }
+}
+
+function applyOutcomeToBlock(
+  block: MarketplaceBlock<ReconcileAppliedMsg>,
+  outcome: PerEntryOutcome,
+): void {
+  switch (outcome.kind) {
+    case "mp-added":
+    case "mp-removed":
+    case "mp-add-failed":
+    case "mp-remove-failed":
+    case "mp-remove-partial":
     case "source-mismatch":
-      block.status = "failed";
-      if (outcome.cause === "dangling-reference") {
-        // PURL-06: name the real problem -- an orphaned plugin declaration whose
-        // marketplace is undeclared reads as `dangling reference` on both the mp
-        // row and the plugin child, NOT `source mismatch`.
-        block.reasons = ["dangling reference"];
-        block.plugins.push({
-          status: "failed",
-          name: outcome.plugin,
-          reasons: ["dangling reference"],
-          // D-03/D-06: a dangling-reference diagnostic -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        });
-      } else {
-        block.reasons = ["source mismatch"];
-      }
-
-      return;
     case "invalid-block":
-      // CFG-03 row: the row subject IS the file basename (T-55-02-01).
-      // The block is keyed by (scope, basename) so multiple invalid files in
-      // the same scope render as distinct rows.
-      block.status = "failed";
-      block.reasons = [outcome.reason];
-      // I5 / PR #51: when loadConfig's diagnostic detail was threaded in
-      // (EACCES vs JSON parse vs schema key), surface it via a synthetic
-      // PluginFailedMessage child carrying the cause -- mirrors the SNM-10
-      // pattern used by autoupdateFailedRow. The MarketplaceNotificationMessage
-      // header itself cannot carry a cause (SNM-10 confines causes to
-      // plugin-row + manual-recovery surfaces), so the synthetic child is the
-      // only IL-2-compatible channel that drives the depth-5 cause-chain
-      // trailer below the row. Path tokens were already stripped at the apply
-      // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
-      if (outcome.cause !== undefined) {
-        block.plugins.push({
-          status: "failed",
-          name: outcome.basename,
-          reasons: [outcome.reason],
-          cause: outcome.cause,
-          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        });
-      }
-
+      applyMarketplaceOutcomeToBlock(block, outcome);
+      return;
+    case "plugin-installed":
+    case "plugin-backfilled":
+    case "plugin-uninstalled":
+    case "plugin-enabled":
+    case "plugin-disabled":
+    case "plugin-install-failed":
+    case "plugin-uninstall-failed":
+    case "plugin-enable-failed":
+    case "plugin-disable-failed":
+      applyPluginOutcomeToBlock(block, outcome);
       return;
     default:
       assertNever(outcome);

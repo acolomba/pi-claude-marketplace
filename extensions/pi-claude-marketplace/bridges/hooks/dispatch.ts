@@ -10,7 +10,7 @@
 //     session_shutdown, session_before_compact, session_compact, input,
 //     tool_call). Each closure: epoch-checks, looks up the bucket for
 //     `claudeEvent`, applies the per-event matcher-fires predicate, runs
-//     the D-60-02 reducer over `await activeExecutor(...)` calls, then
+//     the D-60-02 reducer over `await executor(...)` calls, then
 //     hands the folded `HookExecResult` to the per-Pi-event adapter
 //     (D-60-03) which converts it to the Pi-side handler return shape.
 //
@@ -49,9 +49,9 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "./event-adapters.ts";
-import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./event-router.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
+import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./routing-state.ts";
 
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
@@ -71,42 +71,29 @@ import type {
 } from "../../platform/pi-api.ts";
 
 /**
- * Indirection seam: tests swap in a spy via `_setExecutorForTest` while
- * production code keeps the imported `dispatchHookExec` reference. The
- * indirection exists because ESM imports are read-only bindings -- a unit
- * test cannot mock the imported symbol directly. The seam is bridge-internal
- * and not re-exported via index.ts.
+ * The per-entry executor the bucket runners below take as a parameter. Every
+ * runner defaults it to the imported `dispatchHookExec`, so production never
+ * passes one; a test passes a spy and observes exactly which entries ran, in
+ * what order, and with what event.
  *
- * D-59-04 signature evolution: the executor now returns
- * `Promise<HookExecResult>` so the reducer below can fold outcomes across
- * a bucket. The DISP-04 stub previously returned `Promise<void>`; spy
- * fixtures in the existing test files have already been updated to
- * resolve `{ kind: "noop" }` per the evolved seam.
+ * Injected rather than swapped in module scope. ESM imports are read-only
+ * bindings, so mocking `dispatchHookExec` in place is impossible -- that used
+ * to be answered with a mutable module cell behind `_setExecutorForTest`.
+ * Threading the executor through the signature removes the need for the cell
+ * AND the reason for the export: there is no module state to reset between
+ * tests, and CONVENTIONS.md names injection as the sanctioned form (it makes
+ * the dependency part of the public interface instead of reaching inside).
+ * The type is bridge-internal and not re-exported via index.ts.
+ *
+ * D-59-04 signature evolution: the executor returns `Promise<HookExecResult>`
+ * so the reducer below can fold outcomes across a bucket.
  */
-type HookExecutor = (
+export type HookExecutor = (
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
   pi?: ExtensionAPI,
 ) => Promise<HookExecResult>;
-
-let activeExecutor: HookExecutor = dispatchHookExec;
-
-/**
- * Inject a spy executor for the duration of one unit test. Not part of
- * the public surface.
- */
-export function _setExecutorForTest(executor: HookExecutor): void {
-  activeExecutor = executor;
-}
-
-/**
- * Reset the executor seam back to the production `dispatchHookExec`. Used
- * by tests to undo their spy injection in cleanup.
- */
-export function _resetExecutorForTest(): void {
-  activeExecutor = dispatchHookExec;
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Matcher-fires predicates
@@ -182,6 +169,7 @@ async function reduceBucket(
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
   matcherFires: (entry: RoutingEntry) => boolean,
 ): Promise<ReducedBucket> {
   let finalResult: HookExecResult = { kind: "noop" };
@@ -197,7 +185,7 @@ async function reduceBucket(
       continue;
     }
 
-    const r = await activeExecutor(entry, event, ctx, pi);
+    const r = await executor(entry, event, ctx, pi);
     switch (r.kind) {
       case "block":
       case "stop":
@@ -257,8 +245,8 @@ export interface BucketOutcome {
  * observable. Mutations are NOT applied in place: the settle
  * synthetic event carries no mutable input/output surface.
  *
- * Reuses the same `activeExecutor` seam as `reduceBucket`, so the
- * `_setExecutorForTest` spy drives this path too.
+ * Takes the same injected executor as `reduceBucket`, so one spy drives both
+ * paths.
  */
 export async function collectBucketOutcomes(
   bucket: ReadonlyArray<RoutingEntry>,
@@ -266,6 +254,7 @@ export async function collectBucketOutcomes(
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
   matcherFires: (entry: RoutingEntry) => boolean,
+  executor: HookExecutor = dispatchHookExec,
 ): Promise<BucketOutcome[]> {
   const outcomes: BucketOutcome[] = [];
   for (const entry of bucket) {
@@ -285,7 +274,7 @@ export async function collectBucketOutcomes(
       continue;
     }
 
-    const result = await activeExecutor(entry, event, ctx, pi);
+    const result = await executor(entry, event, ctx, pi);
     outcomes.push({ entry, result });
   }
 
@@ -303,7 +292,7 @@ export async function collectBucketOutcomes(
  * in `settle.ts`). Declared once so the exclusion set cannot drift between
  * the factory constraint and its private helpers.
  */
-type CompositeDispatchEvent = Exclude<
+export type CompositeDispatchEvent = Exclude<
   DispatchableEvent,
   "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
 >;
@@ -321,11 +310,17 @@ type CompositeDispatchEvent = Exclude<
  * shape selected by the adapter table (tool_call returns
  * `ToolCallEventResult | undefined`; input returns `InputEventResult |
  * undefined`; observation events return `undefined`).
+ *
+ * `executor` defaults to `dispatchHookExec` and is forwarded straight to
+ * `reduceBucket`. `registerHooksBridge` threads its own optional `executor`
+ * into every call here, so a test can register the real bridge against a spy
+ * and assert on dispatch without spawning a child (see `HookExecutor`).
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   claudeEvent: E,
   capturedEpoch: number,
   pi?: ExtensionAPI,
+  executor: HookExecutor = dispatchHookExec,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -337,7 +332,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const reduced = await reduceBucket(bucket, event, ctx, pi, (entry) =>
+    const reduced = await reduceBucket(bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
 
@@ -354,10 +349,14 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  *
  * Returns `ToolResultEventResult | undefined` via
  * `adaptToolResultResult` (D-60-03).
+ *
+ * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
+ * and forwarded identically.
  */
 export function toolResultCompositeHandler(
   capturedEpoch: number,
   pi?: ExtensionAPI,
+  executor: HookExecutor = dispatchHookExec,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -370,7 +369,7 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const reduced = await reduceBucket(bucket, event, ctx, pi, (entry) =>
+    const reduced = await reduceBucket(bucket, event, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
 
@@ -435,7 +434,7 @@ function adaptForEvent(
  * filter logic accesses; the other four are typed as their own Pi
  * interfaces for forward-compat.
  */
-type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
+export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
   ? SessionStartEvent
   : E extends "SessionEnd"
     ? SessionShutdownEvent
@@ -456,7 +455,7 @@ type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
  * UserPromptSubmit -> InputEventResult; the four observation events ->
  * undefined (Pi handler return slot is void for those).
  */
-type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
+export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
   ? ToolCallEventResult | undefined
   : E extends "UserPromptSubmit"
     ? InputEventResult | undefined

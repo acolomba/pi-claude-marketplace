@@ -77,9 +77,29 @@ original carrier. Their uncovered remainder is the same shape the bounded sweep
 worked -- rare-failure and cascade-diagnostic arms. Decide whether they get a
 follow-on bounded sweep or are accepted as-is. Do not decide it by exclusion.
 
-## FLOW-01: unzoned files are boundary-unchecked and nothing says so
+## FLOW-01: unzoned files are boundary-unchecked and nothing says so (CLOSED)
 
 Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+**CLOSED 2026-08-16** (quick task 260816-qov). `.fallowrc.json` now sets
+`boundaries.coverage.requireAllFiles: true`, so zone coverage is complete by
+construction rather than by accident of the current tree. Both questions the
+item asked are settled: the failure names the unzoned path
+(`extensions/.../probe.ts:1 no matching boundary zone`), and `tests/**` plus
+`eslint.config.js` are explicitly out of scope through `allowUnmatched`, which
+records them as unmatched by design rather than by oversight.
+
+Two zones were added so no file under `extensions/` is unzoned: `entry` for
+`index.ts` and `bridges-barrel` for the aggregate `bridges/index.ts`, bringing
+the total to 14. `bridges-barrel` is deliberately on no other zone's allow
+list -- it re-exports across all five bridge kinds, so any zone permitted to
+import it would gain a laundering route around the no-cross-bridge-imports
+rule. `orchestrators/plugin/discover-names.ts` was repointed at the three
+per-kind barrels for exactly that reason.
+
+Verified as the item asked: a throwaway directory outside every zone pattern
+took `npm run fallow` to exit 1 naming the path, and deleting it returned the
+gate to exit 0.
 
 `.fallowrc.json`'s `boundaries` block names 12 zones, one per layer plus one
 per bridge kind. Every file under `extensions/pi-claude-marketplace/` matches
@@ -103,9 +123,16 @@ confirming `npm run fallow` fails on it, then deleting it. A clean run against
 the current tree proves nothing here, because the current tree has no unzoned
 files.
 
-## FLOW-02: circular dependencies are gated in CI but not locally
+## FLOW-02: circular dependencies are gated in CI but not locally (CLOSED)
 
 Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+**CLOSED 2026-08-15:** `npm run fallow` now runs `--boundary-violations
+--circular-deps --re-export-cycles`, so the local gate and the pull-request
+gate see the same finding classes. The 8 inherited cycles described below are
+gone -- the `bridges/hooks/` knot was untangled by extracting its shared module
+state into the `bridges/hooks/routing-state.ts` leaf, so the gate could adopt
+`--circular-deps` in the same change rather than suppress or baseline it.
 
 `npm run fallow` passes `--boundary-violations`, which isolates the run to
 boundary violations. Cycles are computed and discarded. The full report on the
@@ -133,6 +160,569 @@ the gap.
 
 Note the asymmetry this leaves today: a green local `npm run check` does not
 imply the pull-request gate will pass.
+
+## ~~FLOW-03: should `import-x/no-cycle` widen past `orchestrators/` now?~~ -- CLOSED
+
+Closed 2026-08-17: the question is moot because the rule is gone.
+
+Following this item's own verification recipe surfaced something larger
+than the glob question. Widening the glob was free -- lint stayed clean
+and took 19.23s against a 19.37s baseline, so the type-aware cost this
+item worried about is measurably zero. But the planted two-file cycle
+the recipe calls for was never reported, at ANY glob, including inside
+`orchestrators/` where the rule already applied.
+
+Six probes: the original config, a real `platform/` <-> `shared/` cycle,
+`createNodeResolver` with `.ts` extensions, the vendor's whole
+`flatConfigs.typescript` preset, that preset's parsers with the node
+resolver, and `eslint-import-resolver-typescript` via
+`createTypeScriptImportResolver`. Only the fourth made the rule emit
+anything, and only a resolve error from the missing dependency. A
+control unused-var error proved eslint was linting the files, and
+`import-x/no-unresolved` firing on a bogus specifier while staying
+silent on the real one proved resolution worked. The failure is in the
+graph traversal, on eslint-plugin-import-x@4.17.1. Untested hypothesis:
+this repository writes explicit `.ts` extensions in import specifiers,
+which is not the convention import-x is built around.
+
+The rule and its pinning test are removed. Cycles are gated by the bare
+`fallow dead-code` run, which was measured catching the identical cycle
+and exiting 1, and the replacement test pins that the invocation stays
+unfiltered.
+
+Original report follows.
+
+Filed 2026-08-15 alongside the FLOW-02 closure (quick task 260815-p25).
+
+`import-x/no-cycle` (BLOCK C-2 of `eslint.config.js`) is scoped to
+`extensions/pi-claude-marketplace/orchestrators/**/*.ts`. The stated reason it
+stops there was the `bridges/hooks/` cycle knot, which no longer exists. The
+question the knot was masking is now askable: should the glob cover
+`extensions/pi-claude-marketplace/**` instead?
+
+It is not a free win. `npm run fallow --circular-deps` already covers the whole
+repo, so the ESLint rule would be defense in depth rather than new coverage --
+it buys editor-time feedback and a second opinion on the graph, at the cost of
+a type-aware rule running over the full extension tree. Weigh the lint-time
+cost against that.
+
+`tests/architecture/import-boundaries.test.ts` pins both the current glob and
+the `import-x/extensions` setting the rule depends on (without `.ts` in that
+setting the rule walks a one-node graph and greens on any cycle). Widening the
+glob means updating that test in the same change, and the test is the thing
+that would otherwise let a silently-broken rule pass for a wide tree.
+
+Verify by widening the glob against the current tree and confirming a clean
+`npm run lint`, then planting a two-file cycle outside `orchestrators/` and
+confirming the rule -- not just fallow -- fails on it.
+
+## FLOW-04: converge the local and pull-request fallow gates on whole-repo, all-checks (CLOSED)
+
+Filed 2026-08-15 alongside the FLOW-02 closure (quick task 260815-p25).
+
+**CLOSED 2026-08-16** (quick task 260816-qov). The two gates are now one
+command. `npm run fallow` is three explicit invocations --
+`fallow dead-code --fail-on-issues`, `fallow health --fail-on-issues` and
+`fallow dupes --fail-on-issues` -- and that identical command runs in
+`npm run check`, in the `.pre-commit-config.yaml` `npm-fallow` hook, and in
+`.github/workflows/lint.yml`. `fallow:audit`, `--changed-since` and the
+new-only verdict are gone from the repository, so a green local run and a green
+pull request now mean the same thing.
+
+The sequence the item prescribed was followed: each class was driven to zero
+BEFORE its invocation joined the gate, never the reverse.
+
+| Check | At filing | At closure |
+|-------|-----------|------------|
+| Dead code | 156 findings | 0 |
+| Complexity (`fallow health`) | 439 above threshold | 0 |
+| Duplication (`fallow dupes`) | 3.5% | 2.12%, gated at a 3% threshold |
+
+The `production` question the item called "the unlock" was settled as
+`production: false`. That admits tests to the reachability graph, which retires
+the ~130 false positives the `_*ForTest` seam convention manufactured and let
+the one existing suppression in the tree -- on the load-bearing `currentEpoch`
+and `getRoutingBucket` re-exports -- be deleted rather than kept.
+
+Complexity and duplication were NOT closed by threshold tuning. The health
+profile is fallow's own default (cyclomatic 20, cognitive 15) and all 36
+findings were decomposed; duplication was consolidated from 66 clone groups to
+41, measured at 2.12%.
+
+The duplication threshold is set at 3%, deliberately above the measured figure.
+A near-zero margin was rejected as too brittle for routine work: it would fail
+CI on a single moderate copy-paste mid-refactor. 3% still enforces, because it
+sits below the 3.62% the branch started at -- regressing to the pre-cleanup
+level fails the gate -- while leaving room to consolidate within a PR rather
+than being blocked on the first duplicated block.
+
+One caveat worth carrying forward, recorded in STACK.md: under
+`production: false` fallow promotes every discovered file to an entry point, so
+the unused-file and unused-export classes are close to vacuous. Boundary,
+coverage and cycle enforcement are unaffected and were each verified by a
+planted violation. See the new FLOW-05 for the reckoning.
+
+FLOW-02 closed the specific hole where a new cycle failed CI but not the local
+gate. The two gates still answer different questions, and neither is a superset
+of the other:
+
+| | local `npm run fallow` | CI `fallow:audit` |
+|---|---|---|
+| Subcommand | `dead-code` | `audit` |
+| Scope | whole repo | changed files only |
+| Classes | boundary violations, circular deps, re-export cycles | dead-code + complexity + duplication + styling |
+| Verdict | any finding, inherited or new | only newly-introduced findings |
+
+A green local run therefore does not imply a green pull-request gate -- add a
+complex or duplicated function and CI fails on something local never examines.
+The delta-scoping in CI exists only because of inherited findings; drive those
+to zero and `--changed-since` can become `--gate all`, at which point the two
+gates converge and the asymmetry is gone for good.
+
+**Why this is not a flag flip.** Whole-repo counts as of this filing:
+
+| Check | Findings |
+|-------|----------|
+| Dead code (`--no-production --include-entry-exports`) | 156 -- 2 files, 62 exports, 91 types, 1 stale suppression |
+| Complexity (`fallow health`) | 439 above threshold of 1517 analyzed, maintainability 87.5 (good) |
+| Duplication (`fallow dupes`) | 2,104 lines (3.5%) across 55 files |
+
+**Do the config fix first -- it is the unlock.** `.fallowrc.json` sets
+`production: true`, which excludes tests from the reachability graph. Against
+this project's deliberate `_*ForTest` seam convention that manufactures roughly
+130 false positives: unisolated dead-code reports 294 findings under
+`production: true` versus 156 under `--no-production --include-entry-exports`.
+Until that is settled, "suppress the false positives" means ~130 suppression
+comments, and no dead-code finding can be trusted on sight. This is not
+hypothetical -- it is exactly why fallow flagged the load-bearing `currentEpoch`
+and `getRoutingBucket` re-exports in `event-router.ts`, which now carry an
+inline suppression rather than a removal.
+
+The tradeoff to decide: `production: true` is designed to catch production code
+whose only consumer is its own test, which is real dead weight. This project's
+seam convention makes that same signal overwhelmingly false. Pick deliberately.
+
+**Sequence.** Same clean-then-gate pattern that landed `--circular-deps`: get a
+class to zero, then add its flag in that same change. Never add a flag first --
+it fails on the inherited findings at the first commit.
+
+1. Settle the `production` question; re-baseline the dead-code count.
+2. Triage the resulting dead-code findings; gate dead-code whole-repo at zero.
+3. Then, and only then, switch CI from `--changed-since` to `--gate all`.
+
+**Complexity and duplication are threshold tuning, not a defect list.** 439
+findings against maintainability 87.5 ("good") says the default thresholds are
+stricter than this codebase's norm. Gating them means choosing thresholds
+first; otherwise the options are raising them until green (cosmetic -- and the
+spike series already caught one cosmetic-lever trap in `rules.<name>` severity)
+or a large refactor. Advisory in CI is the honest posture for these two until
+someone decides what the thresholds should be.
+
+Related: FLOW-01 (unzoned files are boundary-unchecked) is the same class of
+problem -- a gate that is complete by accident of the current tree rather than
+by construction.
+
+## FLOW-05: revisit CRAP and real coverage in the fallow health gate
+
+Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+`health.maxCrap` is set to `0`, which fallow documents as "disable CRAP
+enforcement entirely: no findings, nothing counts above threshold." That is the
+current posture and it is deliberate, not an oversight: complexity is gated
+directly (cyclomatic 20, cognitive 15), coverage is gated by SonarCloud, and
+CRAP is a product of the two, so it would be a third opinion about facts two
+gates already own.
+
+Record these so a future attempt does not rediscover them:
+
+- Fallow needs Istanbul `coverage-final.json` and rejects lcov. This project
+  emits lcov (`coverage/{unit,integration,e2e}.lcov`) for SonarCloud, so wiring
+  real coverage is a conversion step, not a flag.
+- `c8` emits `-1` branchMap columns that fallow's parser rejects outright.
+- Naively clamping those columns is UNSAFE. One `c8` flag change silently
+  zeroed 119 files and swung the `extensions/` CRAP figure from 25 to 238 --
+  the metric moved by an order of magnitude with no code change, which means a
+  gate built on it would have been enforcing the coverage pipeline's
+  configuration rather than the code's risk.
+
+Picking this up means owning the coverage-format conversion first. Until then
+`maxCrap: 0` is the honest setting, because a CRAP number this project cannot
+compute reliably is worse than no CRAP number.
+
+## FLOW-06: `production: false` makes the dead-code classes nearly vacuous (CLOSED)
+
+Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+**CLOSED 2026-08-16**, same quick task. The fix was `includeEntryExports: true`
+rather than reverting `production`. Fallow documents it as making "exports of
+entry-point files subject to unused-export detection instead of being
+auto-credited as used", which is exactly the arm the entry-point promotion was
+short-circuiting. `production` stays `false`, so the ~130 false positives from
+the `_*ForTest` seam convention do not return.
+
+Enabling it surfaced 154 real findings. All 154 are resolved, and the
+resolution mix is the evidence they were genuine rather than noise:
+
+| Resolution | Count |
+|---|---|
+| Export used only inside its own file -> dropped the `export` keyword | 60 |
+| Dead name removed from a re-export list | 32 |
+| Unreferenced declaration deleted, plus what it solely supported | 27 |
+| `as const` tuple whose only consumer was a derived type -> direct union | 13 |
+| Dead barrel FILE deleted (`orchestrators/{plugin,marketplace}/index.ts`) | 2 |
+| Suppressed with a written justification | 6 |
+
+The two deleted barrels had no production consumer at all; each one's only
+consumer was a test asserting that the barrel re-exports. Those two tests went
+with them.
+
+All six suppressions are compile-time assertions, not unused code:
+`_DroppedHookDriftCheck`, `_DroppedHookArmKeysCheck` and
+`_ReasonsCoverageProof` fail the BUILD on drift and their `export` is
+load-bearing (dropping it was observed failing typecheck with TS6196);
+`AddPrivateReason` and `RemovePrivateReason` derive through `_ReasonInSet`,
+which is what asserts their literals are members of the closed `Reason` set;
+and `ResolvedPluginSchema` is the canonical typebox definition of the NFR-7
+union, where un-exporting trips `no-unused-vars` and deleting would orphan all
+three arm schemas.
+
+Method note worth keeping: textual grep could not classify these. Symbols
+appeared elsewhere only in comments, in string literals, or as same-named local
+declarations -- `FETCH_STATUSES` and `INSTALL_STATUSES` each collide with an
+unrelated local const in `edge/completions/data.ts`. Typecheck was the decisive
+test, and it caught two real importers a comment-stripped census missed,
+including dynamic `await import()` call sites.
+
+`.fallowrc.json` sets `production: false` so tests join the reachability graph.
+That was the right call for the reason FLOW-04 gives -- it retires roughly 130
+false positives from the `_*ForTest` seam convention -- but it has a cost that
+was measured, not assumed:
+
+Under `production: false`, fallow reports "439 entry points detected (437
+plugin, 1 manual entry, 1 package.json)" against 440 discovered files. It is
+promoting essentially every file to its own entry point. An orphan file planted
+at `shared/zz-orphan.ts` was NOT reported as unused. Under `production: true`
+the same tree reports 2 entry points and 289 findings, almost all false.
+
+So today the `dead-code` invocation earns its place through boundary
+violations, boundary coverage and circular dependencies -- each verified by a
+planted violation -- while `unused_files` and `unused_exports` are close to
+no-ops. The `adoption` skill's warning about a high plugin-entry-point count
+being "a red flag, not a healthy signal" applies here.
+
+Worth investigating whether the per-analysis form
+`production: { deadCode: true, health: false, dupes: false }` (supported, and
+verified working) plus a small number of individually justified suppressions
+can recover real unused-code detection without reintroducing the false-positive
+wall. Measured at filing: that form yields 4 unused files, 192 unused exports,
+93 unused types and 4 duplicate pairs, so it is not a small triage.
+
+## FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?
+
+Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+Deliberately NOT acted on in 260816-qov, which left the rule and its three
+pinning tests untouched.
+
+Fallow's 14-zone model is a finer-grained superset of the ESLint 8-zone matrix,
+and it is the only thing enforcing that cross-bridge imports are forbidden.
+That invites the question of whether the ESLint rule still earns its keep.
+
+Two reasons it might. Fallow's boundary checking is reachability-gated, so a
+violation in a file unreachable from `entry` is invisible to it, while ESLint's
+glob-based rule is reachability-blind and would still catch it. And the three
+architecture tests pin the ESLint rule's CONFIGURATION -- deleting them while
+keeping the rule would leave a silently-misconfigured lint rule undetected,
+which is the exact failure mode the `import-x/no-cycle` test was written to
+catch.
+
+Settle whether the reachability gap is real on this codebase before removing
+anything.
+
+## ~~FLOW-08: barrel re-export hygiene is unenforced~~ -- CLOSED
+
+Filed 2026-08-16 alongside the barrel prune (quick task 260816-qov). CLOSED the
+same day: the cause was found and removed rather than tracked.
+
+**The diagnosis below was wrong**, and is kept because the correction is the
+useful part. The gate was never blind to "barrel re-exports" as a class. It was
+blind to exactly five files, and the reason was an `export *`.
+
+`bridges/index.ts` did `export * from "./agents/index.ts"` and the same for the
+other four per-kind barrels. A star re-export consumes EVERY export in its
+target, so all five barrels had their exports auto-credited as used. Removing
+the single `export *` line for agents made a planted dead export in
+`bridges/agents/index.ts` report immediately.
+
+It was not about re-exports -- a plain `export const` in those files was missed
+identically. It was not about the `index.ts` filename --
+`bridges/hooks/if-field/index.ts` and `bridges/index.ts` itself were both
+caught. Exactly the five `export *` targets were blind, nothing else.
+
+Resolution: the aggregate `bridges/index.ts` was deleted. Its only consumer was
+the ESLint boundary canary fixture, via a bare side-effect import taking no
+symbols; that fixture now points at `bridges/agents/index.ts`. All five barrels
+were then verified enforced by planting a dead export in each. The same file was
+independently an architectural laundering route across bridge kinds, so one
+deletion closed both problems. See ARCHITECTURE.md.
+
+Carry-forward rule, now in CONVENTIONS.md: never write an `export *` barrel; it
+suppresses unused-export detection for everything it re-exports.
+
+---
+
+Original entry, retained for the record:
+
+The five per-kind bridge barrels were pruned from 115 declared symbols to 49 --
+the 66 removed were re-exported by the barrel and imported through it by
+nobody. Before the prune `bridges/agents/index.ts` declared 36 symbols public
+while 12 were consumed, publishing internals such as `convertAgent`,
+`MODEL_MAP`, `TOOL_MAP`, `parseFrontmatter`, `emitYamlScalar` and
+`sanitizeProvenanceValue` as public API when only the bridge itself used them.
+That contradicted each barrel's own header, which declares the module's public
+surface and cites D-01 opaque-handle discipline.
+
+~~**The shipping gate does NOT catch this class, and that is the point of this
+item.** Measured directly: re-adding `export { convertAgent } from
+"./convert.ts"` to the agents barrel leaves `npm run fallow` at exit 0. The
+findings were only ever visible under `production: true`, which is rejected for
+the reasons in FLOW-04 and FLOW-06. So the prune is a one-time cleanup with no
+ongoing protection -- a new dead barrel line can be added tomorrow and nothing
+will notice.~~
+
+The exit-0 measurement was real; the attribution was not. It was the `export *`
+in the aggregate barrel, not the shipping config, and not re-exports as a
+class. No architecture test is needed -- deleting the aggregate restored native
+fallow coverage on all five barrels.
+
+Distinct from FLOW-09: that one is about internals exported for TESTS, a
+different cause with a different fix.
+
+## FLOW-09: internals exported only for tests
+
+**Status 2026-08-17: the type-leak half is done; the seams remain.**
+
+All ten `private-type-leak` suppressions that cited this item are gone,
+and no code references FLOW-09 any more. They came off four different
+ways, and the split is the useful part of the record:
+
+- Two were not a seam problem at all. `list.ts` re-exported
+  `narrowProbeError` / `narrowListFailReason` to reach a ladder that
+  `shared/probe-classifiers.ts` already exports publicly and already has
+  a test file for. The tests moved to that file; the seams went.
+- Two were a type in the wrong module. `EntityErrorRow` is a message-row
+  shape and now lives beside `InstallMsg` in `install.messaging.ts`.
+- One was a redundant alias. `reinstall.ts`'s `PluginRecord` duplicated
+  `PluginInstallRecord`, already exported by `persistence/state-io.ts`.
+- Five were contracts that were private for no reason. `HookExecutor`,
+  `OrphanProbes`, `RefreshOneArgs`, `RefreshSnapshot`, `ScopeReadResult`
+  and `FilterBucket` are the parameter and return types of functions the
+  module already exports. A type you cannot name is not injectable, so
+  exporting the contract is the honest shape.
+
+What is NOT done is the thing this item is actually named after. The
+`__test_`-prefixed re-exports and the `_set*ForTest` module-global
+mutators still exist in `install.ts`, `update.ts`, `apply.ts`,
+`list.ts`, `dispatch.ts` and `registry.ts`. They no longer leak private
+types, so fallow is quiet about them, which makes this item HARDER to
+find rather than closed. `registry.ts` alone carries eight seams.
+
+The remaining work is dependency injection proper: pass the executor,
+the probe bundle and the spawn function in, after which the seams
+disappear rather than moving. Note `__test_availableRowMessage` is
+different in kind -- it feeds a real cross-surface drift guard in
+`tests/orchestrators/edge-deps.test.ts`, so it wants a public contract,
+not deletion.
+
+**Update 2026-08-18: the "fallow is quiet about them" claim above is only
+half true, and the half that is false matters.**
+
+Measured with three planted probes under the committed config:
+
+| probe | shape | verdict |
+| --- | --- | --- |
+| exported, referenced by nothing | orphan | REPORTED |
+| exported, referenced only by a module-PRIVATE function | internal-only | REPORTED |
+| exported, named in an EXPORTED function's signature | contract | not reported |
+
+So `unused-types` (default severity `error`, active) does catch an export
+whose only consumer is its own file -- row 2 is exactly the shape this item
+worried was invisible. `ignoreExportsUsedInFile` defaults to `false`
+("suppress nothing"), not true. What fallow does NOT flag is row 3, and that
+is correct rather than a hole: a type named in an exported signature is
+genuinely public API, because a caller needs the name to call the function.
+
+The consequence for this item: a seam is invisible to fallow only while it is
+reachable through an exported signature. That makes the fix directional --
+narrow the signature and the type goes private as a side effect, with no
+suppression and no new gate. `runInstallLedger` is the worked example: it
+returned its mutable `InstallCtx` scratchpad (25 fields, 11 mutable, including
+the four rollback prep handles and a live `stateSnapshot`), which is what
+forced the export. Returning a readonly `InstallLedgerSummary` projection of
+the four fields that actually cross the module boundary made `InstallCtx`
+module-private again (PR #132).
+
+An export-surface pin test was considered and rejected: it would restate what
+`unused-types` already enforces for rows 1-2 and cannot judge row 3.
+
+
+Filed 2026-08-16 alongside the routing-state test repointing (quick task
+260816-qov).
+
+CONVENTIONS.md now states the principle: tests are written against the public
+interface; pressure to reach inside is signal that a module wants to exist; and
+exporting inner code for a test is the anti-pattern that relieves the pressure
+without doing the design work.
+
+Roughly 84 internal helpers are currently exported only so a test can reach
+them, plus roughly 39 explicit test seams (`_setSpawnForTest`,
+`_resetSpawnForTest`, `_setDispatchIdGeneratorForTest` and the like).
+
+**This is NOT an item to perform 84 extractions.** Each site is a decision with
+two legitimate outcomes:
+
+  (a) the inner code is a semantically coherent unit -> promote it to a module
+      with its own public interface and its own test; or
+  (b) it is not -> delete the export and rewrite the test against the public
+      interface.
+
+Outcome (b) is a real and expected result, not a failure to extract. An attempt
+that mechanically converted all 84 into modules would be applying the principle
+wrongly and would leave the codebase worse -- 84 modules that exist only because
+a test asked for them are the same defect in a new shape.
+
+For the ~39 seams the answer is dependency injection, which is the same
+principle rather than an exception: pass the dependency in, and it becomes part
+of the public interface the test legitimately exercises. Relocating the state
+holder does not help -- `routing-state.ts` is the proof, since production still
+never calls the setter.
+
+**The measured payoff, which is the actual reason to do this.** These exports
+are precisely why `production: true` was unusable, because it flags every
+test-only export as dead:
+
+| Configuration | Findings |
+|---|---|
+| `production: true` | 288 |
+| `production: false` + `includeEntryExports: true` (shipping) | 154 |
+| Exclusively an artifact of the difference | 196 |
+
+Applied fully there would be no test-only exports left, so `production: true`
+becomes viable and yields genuine orphan-file and unused-export detection
+WITHOUT the `includeEntryExports` workaround.
+
+Distinct from FLOW-08: that one is dead re-export lines in the bridge barrels,
+a different cause with a different fix.
+
+## ~~FLOW-10: duplication is gated by one repo-wide percentage and nothing else~~ -- CLOSED
+
+Closed 2026-08-17 as accepted, same day it was filed. Up to 3% duplication
+is the deliberate posture: `duplicates.threshold` is the gate, one
+whole-repo percentage, and the headroom between the current 2.1% and
+that ceiling is budget rather than leak. Audit's warn-not-fail verdict
+on introduced duplication is consistent with that and needs no change.
+
+Reopen only if the intent changes, i.e. if introduced clones should be
+blocked independently of the repo-wide total. Original report follows.
+
+Filed 2026-08-17 while measuring the audit job's real behaviour on PR #132.
+
+`fallow audit` reports introduced duplication but does not fail on it. The
+verdict is `warn` and the exit code is 0, and this holds under BOTH gate
+modes -- `--gate all` was measured exiting 0 on a branch carrying 3
+introduced and 26 inherited clone groups, exactly as `new-only` did. So the
+PR-time job contributes attribution, not enforcement, for this one class.
+
+That leaves `duplicates.threshold` in `npm run fallow` as the only real
+duplication gate, and it is a whole-repo percentage. The repository sits at
+2.1% against a threshold of 3, so roughly 0.9 points of headroom can be
+spent by any pull request without either job objecting. At the current
+62,170 analysed lines that is on the order of 500 duplicated lines.
+
+This is the direct consequence of raising the threshold from 2.2 to 3
+earlier on the same branch, which was the right call at the time: 2.2 was
+set against a tree that had just been cleaned and left no room to work.
+The question is whether the headroom should be ratcheted back down as the
+number settles, or whether a percentage is simply the wrong instrument and
+introduced-clone-count wants its own gate.
+
+Not urgent. It is a slow leak, not a hole -- but it is invisible until
+someone reads the exit code rather than the red `✗ 1,321 lines (2.1%)`
+line, which prints on a passing run.
+
+Code seams: `.fallowrc.json` (`duplicates.threshold`), `package.json`
+(`npm run fallow`), `.github/workflows/lint.yml` (`fallow-audit`).
+
+## ~~FLOW-11: PR annotations are capped below the finding count~~ -- CLOSED (not as first attempted)
+
+Closed 2026-08-17, but NOT the way this item proposed. The premise was
+partly wrong and the proposed fix does not work.
+
+The premise: the job log was said to be the only uncapped view. It is
+not. The action runs a `Job summary` step in addition to the annotation
+step, on every run, independent of `format`:
+
+```text
+Emit inline annotations -> rendered via native github-annotations
+Job summary             -> rendered via native github-summary
+```
+
+So a complete, uncapped report already renders on the run page. The
+10-per-type-per-step ceiling only ever truncated the INLINE markers on
+the diff, which is a presentation limit rather than lost data.
+
+The proposed fix: `sarif: true` was tried and reverted the same day. It
+fails the job outright, and not for want of permission --
+`security-events: write` was granted at job scope and the audit's own
+verdict was `warn`:
+
+```text
+##[error]The CodeQL Action does not support uploading multiple SARIF runs
+with the same category. Please update your workflow to upload a single
+run per category.
+```
+
+Fallow emits one SARIF run per analysis (dead-code, health, dupes,
+styling) under a single `fallow` category, and Code Scanning stopped
+combining those in July 2025. That is inside the action's SARIF
+generation, so no workflow-level setting reaches it. Reopen only if the
+action starts emitting one run per category, and note the fork caveat
+still stands: forks never get `security-events: write`, so a
+SARIF-only reporting path would go dark on fork pull requests, which
+log-based annotations do not.
+
+Original report follows.
+
+Filed 2026-08-17 from the first `fallow-rs/fallow@v3` run on PR #132.
+
+The audit job reports through `--format github-annotations`, which emits
+log-based `::warning` lines the runner turns into inline markers. The format
+was chosen because it renders on fork pull requests without a write token,
+unlike the PR-comment and review formats. That reasoning still holds.
+
+The limit is GitHub's, and the action states it in the job log:
+
+```text
+##[notice]fallow emitted 8 annotations; GitHub shows at most 10 per type per step
+```
+
+Eight is under the cap, so nothing was lost on that run. But the count
+scales with the diff, and a hand-rolled whole-repo variant of the same
+command emitted 59 locally. A larger pull request will cross 10 silently.
+Findings on lines outside the diff also fall back to the check summary
+rather than rendering inline.
+
+Two ways out, neither taken. The action exposes `sarif: true`, which
+uploads to GitHub Code Scanning -- free on public repositories, no
+per-step cap, findings persist across runs -- at the cost of a
+`security-events: write` permission. Or `github-summary`, which renders the
+full markdown report in the job summary and also survives fork pull
+requests without a token.
+
+The job log always carries the complete list, so nothing is unreachable
+today; it is a discoverability ceiling, not a data loss.
+
+Code seams: `.github/workflows/lint.yml` (`fallow-audit`).
 
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
@@ -927,7 +1517,22 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
 
-## HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable
+## ~~HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable~~ -- CLOSED
+
+Closed 2026-08-17 by the routingTable encapsulation, which removed both
+`?? []` call sites as a side effect rather than as a targeted fix. The
+`routingTable` cell is module-private now, so the two reads go through
+`getRoutingBucket("SessionStart")` and the nullish arms this item named no
+longer exist. The fix note asked for both sites together; both went.
+
+NOT closed by the same change: the single `?? []` inside `getRoutingBucket`
+itself, which predates this item and has four other callers in dispatch.ts
+and settle.ts. Whether that arm is covered was not measured. And HKDIR-01,
+which merely QUOTED the same idiom, is untouched -- its defect is the
+cross-scope gate, and rewriting the expression preserved that semantics
+exactly.
+
+Original report follows.
 
 Surfaced 2026-08-14 measuring branch coverage on PR #127. Cosmetic; the
 only cost is a branch that can never go green.

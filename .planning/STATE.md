@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 status: Awaiting next milestone
-stopped_at: Milestone v1.18 closed and archived (2026-08-12)
-last_updated: "2026-08-12T21:00:00.000Z"
-last_activity: 2026-08-12
-last_activity_desc: Milestone v1.18 completed and archived
+stopped_at: "PR #132 (features/fallow-full-gate) green and awaiting squash-merge; codebase map regenerated 2026-08-18"
+last_updated: "2026-08-18T10:37:21.451Z"
+last_activity: 2026-08-16
+last_activity_desc: "Completed quick task 260816-qov: Make fallow a full uniform static-analysis gate with zero categorical exclusions"
+current_phase: 100
+current_phase_name: disabled-plugin-information-retention
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 29
   completed_plans: 29
   percent: 100
-current_phase: 100
-current_phase_name: disabled-plugin-information-retention
 ---
 
 # Project State
@@ -27,9 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-12 after v1.18 close)
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Planning next milestone. v1.18 shipped 2026-08-12; PR #120
-(`features/manifest-independent-plugin-info`) carries the milestone and awaits
-merge; npm 0.14.0 releases via the v-tag CI publish path after the squash-merge.
+**Current focus:** Planning next milestone. v1.18 shipped 2026-08-12 (PR #120
+squash-merged 2026-08-12, npm 0.14.0 released). Post-milestone work has run as
+quick tasks; PR #132 (`features/fallow-full-gate`) carries the fallow gate and
+is green awaiting squash-merge.
 
 ## Current Position
 
@@ -37,7 +38,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-15 - Completed quick task 260815-h7g: Adopt fallow static analysis as a linting gate
+Last activity: 2026-08-16 - Completed quick task 260816-qov: Make fallow a full uniform static-analysis gate with zero categorical exclusions
 
 ## Milestone Summary
 
@@ -76,6 +77,8 @@ remain uncovered, each with its unreachability reason recorded in
 | 260814-fqf | Withdraw SRCP-01 backlog item -- upstream rejects bare GitLab shorthand too | 2026-08-14 | 7bbefc4a | [260814-fqf-correct-backlog-md-item-srcp-01-based-on](./quick/260814-fqf-correct-backlog-md-item-srcp-01-based-on/) |
 | 260814-hdc | Fix GitLab (and any non-GitHub url-kind) clone .git-suffix bug | 2026-08-14 | 82aa35cb | [260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non](./quick/260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non/) |
 | 260815-h7g | Adopt fallow static analysis as a linting gate | 2026-08-15 | 1d4f478b..a93d2be9 | [260815-h7g-adopt-fallow-static-analysis-as-a-lintin](./quick/260815-h7g-adopt-fallow-static-analysis-as-a-lintin/) |
+| 260815-p25 | Remove the bridges/hooks circular-dependency knot and gate cycles locally | 2026-08-15 | cee12150 | [260815-p25-implement-hooks-cycle-removal-from-spike](./quick/260815-p25-implement-hooks-cycle-removal-from-spike/) |
+| 260816-qov | Make fallow a full uniform static-analysis gate with zero categorical exclusions | 2026-08-16 | 345b325e..HEAD (PR #132) | [260816-qov-make-fallow-a-full-uniform-static-analys](./quick/260816-qov-make-fallow-a-full-uniform-static-analys/) |
 
 ## Decisions
 
@@ -109,8 +112,12 @@ from 16/18 to 18/18 with no source change.
 
 ## Operator Next Steps
 
-- Merge PR #120 (`gh pr merge --squash`) once review completes; npm 0.14.0
-  releases via the v-tag CI publish path.
+- Merge PR #132 (`gh pr merge --squash`) -- the fallow whole-repo gate. Green
+  on all 8 checks with a passing SonarQube gate and 0 open issues.
+- Then work the open PR queue: #130 (`defaultEnabled`, 1 check failing) and the
+  dependabot set #133/#134/#135 (green, merge serially), #136 (2 failing).
+  #95 (typescript 7.0.2) is the known skip.
+
 - Start the next milestone with /gsd-new-milestone. BACKLOG.md carries two
   promoted candidates: RSTA/FTCH (remote plugin status + fetch verb, a
   ready-made 13-requirement set) and COV-01 (coverage exclusion policy plus the
@@ -121,3 +128,9 @@ from 16/18 to 18/18 with no source change.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+
+## Session
+
+**Last session:** 2026-08-18T10:37:21.444Z
+**Stopped at:** PR #132 (features/fallow-full-gate) green and awaiting squash-merge; codebase map regenerated 2026-08-18
+**Resume file:** None

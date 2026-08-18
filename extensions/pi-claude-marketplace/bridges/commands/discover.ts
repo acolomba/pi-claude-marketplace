@@ -18,42 +18,18 @@
 // commands directory itself is the resolver's job (it called
 // `assertPathInside(pluginRoot, ...)` when populating componentPaths).
 
-import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName, generatedCommandName } from "../../domain/name.ts";
+import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
-import type { Dirent } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginCommandsResult {
   readonly discovered: readonly DiscoveredCommand[];
   readonly warnings: readonly string[];
-}
-
-async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true });
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return [];
-    }
-
-    throw err;
-  }
-}
-
-async function isCommandFile(dir: string, entry: Dirent): Promise<boolean> {
-  if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {
-    return false;
-  }
-
-  const stat = await lstat(path.join(dir, entry.name));
-  return !stat.isSymbolicLink();
 }
 
 function duplicateWarning(sourceName: string, commandsDir: string, generatedName: string): string {
@@ -82,7 +58,7 @@ export async function discoverPluginCommands(input: {
       ? commandsRel
       : path.resolve(input.resolved.pluginRoot, commandsRel);
 
-    const entries = await readEntriesGracefully(commandsDir);
+    const entries = await readDirEntriesTolerant(commandsDir);
 
     // Deterministic ordering for stable warning messages and test assertions.
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
@@ -91,7 +67,7 @@ export async function discoverPluginCommands(input: {
       const full = path.join(commandsDir, entry.name);
       // Refuse symlinked `.md` entries. Even if the link target lives inside
       // the plugin root, the bridge does not honor symlinks (D-14 / PS-1).
-      if (!(await isCommandFile(commandsDir, entry))) {
+      if (!(await isPlainMarkdownFile(commandsDir, entry))) {
         continue;
       }
 

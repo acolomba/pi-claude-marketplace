@@ -85,7 +85,7 @@ export type ParseResult =
  * asymmetry. `code.claude.com/docs/en/permissions` § "Process wrappers"
  * is the authority.
  */
-export const WRAPPER_STRIP: ReadonlySet<string> = new Set<string>([
+const WRAPPER_STRIP: ReadonlySet<string> = new Set<string>([
   "timeout",
   "time",
   "nice",
@@ -246,17 +246,6 @@ function splitOnCompoundSeparators(command: string): string[] {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Scan `text` for `$(...)` and backtick `` `...` `` command-substitution
- * bodies, parse each body recursively, and push every discovered
- * subcommand (including the bodies themselves and their nested splits)
- * into `out`. Depth-capped at `MAX_RECURSION_DEPTH` to bound pathological
- * input.
- *
- * `<(...)` and `>(...)` (process substitution) are NOT recursed -- their
- * bodies are treated as literal text in the surrounding subcommand per
- * D-61-04.
- */
-/**
  * Split `inner` into pieces, push each piece into `out`, and recurse
  * one level deeper to handle nested `$(...)` / backtick bodies.
  */
@@ -268,6 +257,17 @@ function emitInner(inner: string, out: string[], depth: number): void {
   }
 }
 
+/**
+ * Scan `text` for `$(...)` and backtick `` `...` `` command-substitution
+ * bodies, parse each body recursively, and push every discovered
+ * subcommand (including the bodies themselves and their nested splits)
+ * into `out`. Depth-capped at `MAX_RECURSION_DEPTH` to bound pathological
+ * input.
+ *
+ * `<(...)` and `>(...)` (process substitution) are NOT recursed -- their
+ * bodies are treated as literal text in the surrounding subcommand per
+ * D-61-04.
+ */
 function pushRecursed(text: string, out: string[], depth: number): void {
   if (depth >= MAX_RECURSION_DEPTH) {
     throw new Error("max recursion depth exceeded");

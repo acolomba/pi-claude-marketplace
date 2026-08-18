@@ -7,14 +7,19 @@ on:
   push:
     branches:
       - main
-      - features/**
-    # Denylist, not an allowlist. Docs-only changes never affect the npm
-    # jobs (Prettier checks js/json/ts only; no test reads repo markdown),
-    # but package.json, the lockfile, tsconfig, and lint config live
-    # outside extensions/ + tests/ and MUST still trigger CI.
+    # Denylist, not an allowlist: package.json, the lockfile, tsconfig and
+    # the lint config live outside extensions/ + tests/ and MUST still
+    # trigger CI.
+    #
+    # `**/*.md` and `docs/**` were removed from this list. They rested on
+    # "no test reads repo markdown", which is false:
+    # tests/architecture/catalog-uat.test.ts reads `docs/output-catalog.md`
+    # and byte-compares 166 annotated examples against notify() output. A
+    # docs-only edit that broke that contract skipped the only gate that
+    # would catch it. `paths-ignore` cannot negate a single path, so the
+    # whole markdown ignore goes: over-running CI costs minutes, while
+    # under-running it is indistinguishable from a pass.
     paths-ignore:
-      - "**/*.md"
-      - "docs/**"
       - "images/**"
       - "demos/**"
       - ".planning/**"
@@ -22,9 +27,9 @@ on:
   pull_request:
     branches:
       - main
+    # Same reasoning as the push trigger above: docs/output-catalog.md is
+    # test-examined, so markdown cannot be ignored wholesale.
     paths-ignore:
-      - "**/*.md"
-      - "docs/**"
       - "images/**"
       - "demos/**"
       - ".planning/**"

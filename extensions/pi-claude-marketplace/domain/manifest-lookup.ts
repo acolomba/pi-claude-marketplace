@@ -12,7 +12,7 @@
 import type { MarketplaceManifest } from "./manifest.ts";
 
 /** One validated `plugins[]` element of a marketplace manifest. */
-type ManifestPluginEntry = MarketplaceManifest["plugins"][number];
+export type ManifestPluginEntry = MarketplaceManifest["plugins"][number];
 
 /**
  * An installed record's resolution against the manifest its own marketplace

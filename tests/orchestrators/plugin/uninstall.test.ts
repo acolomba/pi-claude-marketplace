@@ -362,6 +362,59 @@ test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak S
   });
 });
 
+// NFR-10 (a containment assertion must never be absorbed by a D-19-01
+// hygiene `catch {}`) ---
+
+test("NFR-10: pluginDataDir containment failure PROPAGATES; it is not swallowed as a cleanup leak", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-nfr10-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      // Mount the plugin data dir as a SYMLINK pointing outside dataRoot.
+      // assertPathInside lstat's every segment from dataRoot down and throws
+      // SymlinkRefusedError on the first symlink, so pluginDataDir("mp",
+      // "hello") -- and ONLY that getter -- fails. uninstall.ts calls it
+      // exactly once, in runPostUninstallCleanup, which isolates this to the
+      // call under test. pluginCacheFile resolves under cacheDir and is
+      // unaffected, so the cleanup step before it still runs normally.
+      const escape = await mkdtemp(path.join(tmpdir(), "uninstall-nfr10-escape-"));
+      const parent = await locations.marketplaceDataDir("mp");
+      await mkdir(parent, { recursive: true });
+      const dataDir = path.join(parent, "hello");
+      await rm(dataDir, { recursive: true, force: true });
+      const { symlink } = await import("node:fs/promises");
+      await symlink(escape, dataDir);
+
+      const { ctx, pi } = makeCtx();
+
+      // Before the fix this rejected NOTHING: the getter sat inside the
+      // D-19-01 try, so a refused symlink was indistinguishable from an rm
+      // leak and uninstall reported plain success while the escape target
+      // survived. D-19-01 sanctions swallowing the cleanup, not the
+      // assertion guarding it.
+      await assert.rejects(
+        uninstallPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        }),
+        (err: unknown) =>
+          err instanceof Error && /symlink|contain/i.test(`${err.name} ${err.message}`),
+        "a refused symlink under dataRoot must reach the caller, not be absorbed by the hygiene catch",
+      );
+
+      await rm(escape, { recursive: true, force: true });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // PU-3 + PU-7 (foreign content -> cascade fails -> state retained, index retained) ---
 
 test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state record retained + agents-index row retained", async () => {
@@ -1887,8 +1940,10 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
-  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache, getRoutingBucket } =
+  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { compileIfPredicate, MATCH_ALL_IF } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
   const { parseHooksConfig, parseMatcher } =

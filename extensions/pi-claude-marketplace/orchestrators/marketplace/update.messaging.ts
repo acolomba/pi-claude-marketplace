@@ -32,17 +32,6 @@ import type {
 } from "../../shared/notify.ts";
 
 /**
- * D-01 / MOD-01: the marketplace-statuses `marketplace update` owns. A change
- * records `(updated)`; a no-op records `(skipped) {up-to-date}`; a refresh
- * failure records `(failed)`. All three header forms render via the central
- * `renderMpHeader` seam the spine reuses. The idempotent reason `up-to-date`
- * and the failure-class reason `network unreachable` are referenced from the
- * shared `shared/notify-reasons.ts` groups, not redeclared here.
- */
-export const UPDATE_MP_STATUSES = ["updated", "skipped", "failed"] as const;
-export type UpdateMpStatus = (typeof UPDATE_MP_STATUSES)[number];
-
-/**
  * The plugin-child-row statuses `marketplace update`'s autoupdate-ON cascade
  * emits: `updated`, `partially-installed`, `skipped`, `failed`. This is the Status
  * set the render map below is total over (D-10: a missing arm is a TS2741

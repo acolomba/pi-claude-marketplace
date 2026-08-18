@@ -1,6 +1,6 @@
 ---
 name: spike-findings-pi-claude-marketplace
-description: Implementation blueprint from spike experiments on pi-claude-marketplace -- backward-compat migration removal, Claude plugin dependency-declaration handling, progress-message UI for long-running operations, GitLab plugin-marketplace parity, and Fallow codebase-intelligence tooling adoption. Requirements, proven patterns, and verified knowledge for all five. Auto-loaded during implementation work on any of them.
+description: Implementation blueprint from spike experiments on pi-claude-marketplace -- backward-compat migration removal, Claude plugin dependency-declaration handling, progress-message UI for long-running operations, GitLab plugin-marketplace parity, Fallow codebase-intelligence tooling adoption, and removal of the bridges/hooks circular-dependency knot. Requirements, proven patterns, and verified knowledge for all six. Auto-loaded during implementation work on any of them.
 ---
 
 <context>
@@ -38,6 +38,13 @@ benefit this project across every free capability -- dead code, circular
 deps, architecture boundaries, duplication, complexity/health, security
 candidates, autofix safety, and CI overhead -- even where those overlap
 this project's existing ESLint/SonarCloud tooling.
+
+**Hooks circular-dependency removal:** investigated whether the 8-cycle
+`bridges/hooks/` knot -- documented in `ARCHITECTURE.md`, re-confirmed by
+the Fallow adoption, and judged not worth untangling in `BACKLOG.md`
+FLOW-02 -- can actually be removed, by what method, and at what cost.
+Compared leaf extraction against dependency inversion head-to-head, then
+tested whether removing the cycles lets the local gate close.
 
 Spike sessions wrapped: 2026-08-13, 2026-08-15
 </context>
@@ -107,6 +114,25 @@ Spike sessions wrapped: 2026-08-13, 2026-08-15
   without a pre-authored `ignoreExports` allowlist for this project's
   `_*ForTest`/`__test_*` test-seam convention -- see
   references/fallow-adoption.md for the full recipe.
+
+### Hooks circular-dependency removal
+
+- The cure is leaf extraction of shared state, NOT dependency inversion.
+  Both reach zero cycles; inversion costs strictly more and regresses the
+  failure mode from compile-time to runtime.
+- Any module-state relocation MUST convert every reassignment site to a
+  named mutator -- ESM imported bindings are read-only, so a `let` cell
+  cannot move unless its writes move with it.
+- The leaf owns the state AND its pure accessors. A one-line reader left
+  behind in the hub re-creates the edge the move was meant to delete.
+- `--circular-deps` and `--re-export-cycles` may only join the local gate
+  in the same change that removes the cycles, and must be added together --
+  they are separate isolating flags (see references/hooks-cycle-removal.md).
+- Removing the knot made `ARCHITECTURE.md`'s passage about
+  `import-x/no-cycle` stopping at `orchestrators/` stale. That rule has since
+  been deleted outright (BACKLOG FLOW-03, CLOSED in PR #132) after it was
+  measured reporting nothing on a planted cycle at any glob; the unfiltered
+  `fallow dead-code` run is the repo-wide cycle gate now.
 </requirements>
 
 <findings_index>
@@ -118,6 +144,7 @@ Spike sessions wrapped: 2026-08-13, 2026-08-15
 | Claude plugin dependency support | references/plugin-dependencies.md | Upstream fully auto-installs declared dependencies (semver, prune, cascades); this repo stays opaque by design, but `info.ts`'s `normalizeDependencies` silently drops the version-pinned object form of a dependency, making it invisible on every command surface |
 | Progress messages | references/progress-messages.md | `ctx.ui.custom()` + `BorderedLoader` behind a ~1s delay helper wins over `setStatus`/`setWidget` for foreground install/update progress -- human-verified head-to-head, backed by `docs/tui.md`'s own naming and competitor precedent |
 | GitLab plugin-marketplace parity | references/gitlab-parity.md | Already at parity for full-scheme URLs and auth architecture (GitLab Device Flow shipped in PR #128); SRCP-01 (bare shorthand) confirmed withdrawn against real upstream CLI behavior; SRCP-02 (git-subdir shorthand) and GAUTH-01 (host-named hints on 4 more call sites) remain open |
+| Hooks circular-dependency removal | references/hooks-cycle-removal.md | SHIPPED in PR #132 via the `bridges/hooks/routing-state.ts` leaf extraction. The knot came out by moving the 4 module-state cells plus their pure accessors to a leaf and repointing the five knot-internal importers, taking cycles 8 -> 0 with zero test files touched. Dependency inversion also reaches 0 but needs three module-private generic types exported and relocated, plus a registry and a side-effect barrel, and trades compile-time failures for load-order-dependent runtime ones. Note the spike's captured diff is neither complete (it never creates the leaf module) nor lint-clean (5 `import-x/order` errors) -- see the reference's Corrections section before reusing any figure from the spike record |
 | Fallow codebase-intelligence adoption | references/fallow-adoption.md | Zero-config is close to a no-op (no recognized entry point); with an explicit config it finds real whole-file dead code and one unlisted 4-file duplicate clone, matches/exceeds ESLint's architecture boundaries, and finds zero new security signal -- but `fallow fix --dry-run` would break the test suite if ever run unattended without a hand-authored allowlist for this project's test-seam convention |
 
 ## Source Files
@@ -159,4 +186,8 @@ configs and reproduction script this project would need to adopt Fallow.
 - 015-fallow-security-candidates
 - 016-fallow-fix-autofix-safety
 - 017-fallow-ci-overhead
+- 018-hooks-module-state-portability
+- 019-a-hooks-cycle-leaf-extraction
+- 019-b-hooks-cycle-inversion
+- 020-hooks-cycle-gate-closure
 </metadata>
