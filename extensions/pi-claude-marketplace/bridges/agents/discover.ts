@@ -19,42 +19,20 @@
 // marketplace ownership).
 
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName, generatedAgentName } from "../../domain/name.ts";
+import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import { parseFrontmatter } from "./frontmatter.ts";
 
 import type { DiscoveredAgent } from "./types.ts";
-import type { Dirent } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginAgentsResult {
   readonly discovered: readonly DiscoveredAgent[];
   readonly warnings: readonly string[];
-}
-
-async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true });
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return [];
-    }
-
-    throw err;
-  }
-}
-
-async function isAgentFile(dir: string, entry: Dirent): Promise<boolean> {
-  if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {
-    return false;
-  }
-
-  const stat = await lstat(path.join(dir, entry.name));
-  return !stat.isSymbolicLink();
 }
 
 function duplicateWarning(sourceName: string, agentsDir: string, generatedName: string): string {
@@ -86,7 +64,7 @@ export async function discoverPluginAgents(input: {
   const warnings: string[] = [];
 
   for (const agentsDir of agentsDirs) {
-    const entries = await readEntriesGracefully(agentsDir);
+    const entries = await readDirEntriesTolerant(agentsDir);
 
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -95,7 +73,7 @@ export async function discoverPluginAgents(input: {
       // T-03-27: refuse symlinks before reading the file. lstat-based check
       // (does NOT follow). Symlinks discovered here are skipped silently;
       // a malicious plugin can't escape via symlink.
-      if (!(await isAgentFile(agentsDir, entry))) {
+      if (!(await isPlainMarkdownFile(agentsDir, entry))) {
         continue;
       }
 

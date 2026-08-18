@@ -70,13 +70,13 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  resolveGitSubdirRoot,
+  resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
@@ -1354,52 +1354,6 @@ interface InfoFetchContext {
 type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
 
 /**
- * FTCH-06 / T-81-08: build the host-keyed auth bundle for a resolved cloneUrl at
- * install parity (PROV-02/03/04): a registered provider host authenticates, a
- * no-provider / public host clones authless. `buildAuthForHost` never
- * interpolates credentials into any surfaced string (AUTH-09). Mirrors
- * `install.ts::buildProbeAuth`.
- */
-function buildFetchAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  fetchCtx: InfoFetchContext,
-) {
-  const host = hostFromCloneUrl(cloneUrl, kind);
-  return buildAuthForHost({
-    host,
-    credentialOps: fetchCtx.credentialOps,
-    ctx: fetchCtx.ctx,
-    ...(fetchCtx.deviceFlowHttp !== undefined && { deviceFlowHttp: fetchCtx.deviceFlowHttp }),
-    ...(fetchCtx.authMemo !== undefined && { authMemo: fetchCtx.authMemo }),
-  });
-}
-
-/**
- * PURL-03 / NFR-10: apply the git-subdir containment tail to a materialized
- * clone/mirror root and stamp the resolved sha. A git-subdir source resolves the
- * pluginRoot under the clone root (escapes / missing-subdir arms propagate);
- * other kinds materialize at the clone root itself. Mirrors
- * `install.ts::resolveGitPluginRootWithSubdir`.
- */
-async function resolveFetchedPluginRoot(
-  gitSource: GitBackedSource,
-  cloneRoot: string,
-  resolvedSha: string,
-): Promise<GitPluginRootResult> {
-  if (gitSource.kind === "git-subdir") {
-    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
-    if (subdirResult.kind !== "materialized") {
-      return subdirResult;
-    }
-
-    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
-  }
-
-  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
-}
-
-/**
  * FTCH-03 / FTCH-04 / D-81-05: build the MATERIALIZING git probe for the
  * `info --fetch` hook. A pinned source (manifest sha) clones once into the
  * per-sha immutable cache (network on cache miss); an unpinned source refreshes
@@ -1413,7 +1367,7 @@ async function resolveFetchedPluginRoot(
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
   const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
     const { pluginRoot: mirrorRoot, resolvedSha } =
       await fetchCtx.seam.materializeOrRefreshPluginMirror({
         locations,
@@ -1421,12 +1375,12 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
         ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
         ...(authBundle !== undefined && { auth: authBundle }),
       });
-    return resolveFetchedPluginRoot(gitSource, mirrorRoot, resolvedSha);
+    return resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
   };
 
   const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
-    const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
       cloneUrl,
@@ -1434,7 +1388,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       ...(ref !== undefined && { ref }),
       ...(authBundle !== undefined && { auth: authBundle }),
     });
-    return resolveFetchedPluginRoot(gitSource, cloneRoot, pin);
+    return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };
 
   return (gitSource) =>
@@ -2346,4 +2300,3 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
 // Test-only re-export of the shared classifier so callers exercising
 // this orchestrator's behavior can verify the closed-set ladder without
 // reaching into `shared/probe-classifiers.ts` directly.
-export { narrowProbeError as __test_narrowProbeError };

@@ -18,11 +18,13 @@
 // callers cannot enter a cleanup retry loop. Bounded by single
 // rm({recursive:true,force:true}) call.
 
-import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { errorMessage } from "./errors.ts";
 import { assertPathInside, PathContainmentError } from "./path-safety.ts";
+
+import type { Dirent } from "node:fs";
 
 /**
  * Best-effort recursive removal of a staging directory. Swallows ENOENT
@@ -261,4 +263,43 @@ export async function resolveGitSubdirRoot(
   }
 
   return { kind: "materialized", pluginRoot };
+}
+
+/**
+ * `readdir` with dirents, tolerant of a directory that is simply not there.
+ *
+ * A declared component directory that does not exist (ENOENT) or that turns
+ * out to be a file (ENOTDIR) is a plugin shape the discovery paths treat as
+ * "this plugin declares none of that kind", not as an error -- other declared
+ * directories still contribute. Every other errno propagates.
+ */
+export async function readDirEntriesTolerant(dir: string): Promise<Dirent[]> {
+  try {
+    return await readdir(dir, { withFileTypes: true, encoding: "utf8" });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return [];
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * T-03-27: whether a dirent is a component source file the bridges will read --
+ * a regular, non-dotfile `.md` file that is not a symlink.
+ *
+ * `readdir`'s `withFileTypes` reports a symlink's TARGET type in some
+ * conditions, so the `lstat` is what actually decides the symlink question.
+ * Shared by the agents and commands bridges, whose file-shaped components ask
+ * exactly the same question.
+ */
+export async function isPlainMarkdownFile(dir: string, entry: Dirent): Promise<boolean> {
+  if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {
+    return false;
+  }
+
+  const stat = await lstat(path.join(dir, entry.name));
+  return !stat.isSymbolicLink();
 }

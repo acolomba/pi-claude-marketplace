@@ -50,18 +50,16 @@
 // docstring header.
 
 import { spawn } from "node:child_process";
-import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
 import { isDispatchableEvent } from "../../domain/components/hook-events.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
-import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
+import { prepareHookEnv } from "./hook-env.ts";
 import { translate as translatePostCompact } from "./payloads/post-compact.ts";
 import { translate as translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translate as translatePostToolUse } from "./payloads/post-tool-use.ts";
@@ -76,8 +74,9 @@ import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
-import type { RoutingEntry } from "./event-router.ts";
+import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookExecResult } from "./exec-result.ts";
+import type { RoutingEntry } from "./routing-state.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
@@ -87,12 +86,13 @@ import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
 /** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
 const DEFAULT_TIMEOUT_MS = 600_000;
-// STDIN_TRUNCATION_BYTES + planSpawn + serializeWithTruncation are shared
-// with `async-rewake/registry.ts` via ./spawn-helpers.ts -- both sites
-// build the same `child_process.spawn` invocation against the same
-// `RoutingEntry` shape and both serialize stdin under the same EXEC-02
-// cap, so a single source of truth keeps the two execution paths from
-// drifting.
+// planSpawn + serializeWithTruncation are shared with
+// `async-rewake/registry.ts` via ./spawn-helpers.ts -- both sites build the
+// same `child_process.spawn` invocation against the same `RoutingEntry` shape
+// and both serialize stdin under the same EXEC-02 cap, so a single source of
+// truth keeps the two execution paths from drifting. The cap itself
+// (`STDIN_TRUNCATION_BYTES`) is module-private to spawn-helpers.ts, applied
+// only inside `serializeWithTruncation`; neither execution site names it.
 /** EXEC-02: hard stdout buffer cap; overflow kills + noop. */
 const STDOUT_MAX_BYTES = 1024 * 1024;
 /** EXEC-02: hard stderr buffer cap; overflow kills + noop. */
@@ -125,28 +125,6 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 };
 
 // ──────────────────────────────────────────────────────────────────────────
-// Test seam (mirrors `_setExecutorForTest` in dispatch.ts)
-// ──────────────────────────────────────────────────────────────────────────
-
-type SpawnImpl = typeof spawn;
-let activeSpawn: SpawnImpl = spawn;
-
-/**
- * Test-only seam: substitute the `spawn` implementation for the duration
- * of a unit test so mock fixtures can pin EXEC-01..04 invariants without
- * touching the real OS. Bridge-internal -- NOT re-exported from
- * `bridges/hooks/index.ts`.
- */
-export function _setSpawnForTest(impl: SpawnImpl): void {
-  activeSpawn = impl;
-}
-
-/** Reset the spawn seam to the production binding. */
-export function _resetSpawnForTest(): void {
-  activeSpawn = spawn;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 // Public surface
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -155,15 +133,25 @@ export function _resetSpawnForTest(): void {
  *
  * NEVER throws. Every error / overflow / timeout / parse failure path
  * resolves to `{ kind: "noop" }` + `hookDebugLog`. The composite handler
- * reducer (lands in a follow-up plan) folds the returned arms across the
- * bucket and dispatches to the per-Pi-event adapter (D-60-03).
+ * reducer folds the returned arms across the bucket and dispatches to the
+ * per-Pi-event adapter (D-60-03).
+ *
+ * `deps` is the spawn injection point, shared verbatim with
+ * `spawnAndRegister` (see `SpawnDeps` in `async-rewake/registry.ts`) and
+ * forwarded to it unchanged on the async branch. Production callers omit it
+ * and take `child_process.spawn` plus `randomUUID`; a test passes a recording
+ * stub so the exec arms are observable without spawning anything. Injection is
+ * deliberate: CONVENTIONS.md rules out a module-global `_set*ForTest` seam,
+ * which is what this parameter replaced.
  */
 export async function dispatchHookExec(
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
   pi?: ExtensionAPI,
+  deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
+  const spawnImpl = deps.spawnImpl ?? spawn;
   // HOOK-06 / EXEC-05 / D-62-01: asyncRewake delegation. Strict `=== true`
   // discriminator (HOOK-03 lenient stance: any non-`true` value -- including
   // a string `"yes"` -- flows to the sync EXEC-01..04 path). The reducer
@@ -189,7 +177,7 @@ export async function dispatchHookExec(
 
     try {
       const loc = locationsFor(entry.scope, ctx.cwd);
-      await spawnAndRegister(entry, event, ctx, pi, loc);
+      await spawnAndRegister(entry, event, ctx, pi, loc, deps);
     } catch (err) {
       hookDebugLog(
         `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
@@ -216,7 +204,7 @@ export async function dispatchHookExec(
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareEnv(entry, transCtx);
-    return await spawnAndCollect(entry, env, stdinJson);
+    return await spawnAndCollect(entry, env, stdinJson, spawnImpl);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     return { kind: "noop" };
@@ -296,42 +284,7 @@ async function prepareEnv(
   entry: RoutingEntry,
   transCtx: TranslationContext,
 ): Promise<NodeJS.ProcessEnv> {
-  const loc = locationsFor(entry.scope, transCtx.cwd);
-
-  // CLAUDE_PLUGIN_ROOT is exported to the spawned hook handler so the
-  // upstream Claude Code `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolves
-  // to the actual plugin source on disk. The value flows from state.json's
-  // `resolvedSource`, hydrated onto RoutingEntry at install + boot. For
-  // GitHub-source marketplaces this is inside `<extensionRoot>/sources/...`;
-  // for path-source marketplaces the user has explicitly pointed at an
-  // external path, so no containment assertion is meaningful here.
-  const pluginRoot = entry.resolvedSource;
-
-  const pluginData = path.join(loc.dataRoot, entry.pluginId);
-  await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_PROJECT_DIR: transCtx.cwd,
-    CLAUDE_PLUGIN_ROOT: pluginRoot,
-    CLAUDE_PLUGIN_DATA: pluginData,
-    // HENV-01: Claude-Code-parity session env from the shared producer so this
-    // sync lane and the async-rewake lane cannot drift (WR-01). Spread AFTER
-    // the `...process.env` spread so the authoritative per-dispatch snapshot
-    // wins over whatever was last written to the live process.env (D-91-02
-    // race-window safety).
-    ...claudeSessionEnvFor(transCtx.sessionId),
-  };
-
-  if (entry.claudeEvent === "SessionStart") {
-    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
-    await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
-    env.CLAUDE_ENV_FILE = envFile;
-  }
-
-  // CLAUDE_CODE_REMOTE is intentionally NOT set (HOOK-05 -- Pi runs
-  // locally; documented absence is the upstream-parity contract).
-  return env;
+  return prepareHookEnv(entry, transCtx, locationsFor(entry.scope, transCtx.cwd));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -342,12 +295,13 @@ async function spawnAndCollect(
   entry: RoutingEntry,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
+  spawnImpl: typeof spawn = spawn,
 ): Promise<HookExecResult> {
   const plan = planSpawn(entry);
   const timeoutMsRaw = entry.handlerDecl.timeout;
   const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
 
-  const child = activeSpawn(plan.command, [...plan.args], {
+  const child = spawnImpl(plan.command, [...plan.args], {
     cwd: env.CLAUDE_PROJECT_DIR,
     env,
     stdio: ["pipe", "pipe", "pipe"],

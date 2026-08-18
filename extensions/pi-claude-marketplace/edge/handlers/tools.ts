@@ -38,6 +38,7 @@ import Type from "typebox";
 import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
+import { isScopeBearingListRow } from "../../shared/notify.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -132,7 +133,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
  * plugin IS installed; the upgrade status is internal to the slash-command
  * surface per MSG-PL-4).
  */
-type ToolPluginStatus = "installed" | "available" | "unavailable";
+export type ToolPluginStatus = "installed" | "available" | "unavailable";
 
 interface PluginRow {
   marketplace: string;
@@ -323,43 +324,7 @@ function pluginScopeOrFallback(
   p: PluginNotificationMessage,
   marketplaceScope: "user" | "project",
 ): "user" | "project" {
-  switch (p.status) {
-    // The `installed` inventory row joins `upgradable` as a scope-bearing
-    // list-surface variant.
-    // FSTAT-02 / FSTAT-04 / D-66-03: the derived partial states are scope-bearing
-    // list-surface variants (each carries the optional `scope?`), so they join
-    // the orphan-fold scope arm.
-    case "installed":
-    case "upgradable":
-    case "disabled":
-    case "partially-installed":
-    case "partially-upgradable":
-      // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` (the
-      // SNM-11 carve-out applies only to `available` / `unavailable`).
-      return p.scope ?? marketplaceScope;
-    case "available":
-    case "remote":
-    case "unavailable":
-    case "partially-available":
-      // USTAT-01 / SNM-11 / RSTA-01: `available` / `remote` / `unavailable` /
-      // `partially-available` carry no `scope` field (the SNM-11 carve-out
-      // family), so they fall back to the marketplace scope.
-      return marketplaceScope;
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      // Unreachable on the list surface; renderer-as-spec guard. The DIFF-02
-      // will-* variants are emitted only by `/claude:plugin pending`, which
-      // does not project through this list-tool surface.
-      return marketplaceScope;
-  }
+  return isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
 }
 
 /**

@@ -26,8 +26,6 @@
 //       into the renderer
 //   (k) dependencies field surfaced as `dependencies: <plugin>@<mp>, ...`
 //       line LAST
-//   (l) barrel re-export: `orchestrators/plugin/index.ts` exposes
-//       `getPluginInfo`
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
@@ -52,12 +50,16 @@ import {
   getPluginInfo,
   type InfoCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import {
+  buildInstalledPluginRecord,
+  materializeMarketplaceTree,
+  mergeMarketplaceIntoState,
+  seedAutoupdateConfig,
+} from "../../helpers/marketplace-seed.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -159,57 +161,18 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
 
-  for (const rel of opts.installablePluginDirs ?? []) {
-    await mkdir(path.join(mpRoot, rel), { recursive: true });
-  }
-
-  for (const [pluginDir, components] of Object.entries(opts.componentDirs ?? {})) {
-    for (const c of components) {
-      await mkdir(path.join(mpRoot, pluginDir, c), { recursive: true });
-    }
-  }
-
-  for (const [pluginDir, files] of Object.entries(opts.componentFiles ?? {})) {
-    for (const rel of files) {
-      const abs = path.join(mpRoot, pluginDir, rel);
-      await mkdir(path.dirname(abs), { recursive: true });
-      await writeFile(abs, "", "utf8");
-    }
-  }
+  await materializeMarketplaceTree(mpRoot, opts);
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
-    // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
-    // resolution dropped components persists `unsupported` (and
-    // `installable: false`). The deriver reads this to render
-    // `(partially-installed)` -- no separate persisted flag.
-    const unsupported = info.unsupported ?? [];
-    plugins[name] = {
-      version: info.version,
-      resolvedSource: "./placeholder",
-      compatibility: {
-        installable: unsupported.length === 0,
-        notes: [],
-        supported: [],
-        unsupported: [...unsupported],
-      },
-      resources:
-        info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
-          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
-      enabled: info.disabled !== true,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
-  }
-
-  const stateJsonPath = path.join(locations.extensionRoot, "state.json");
-  let existing: { marketplaces: Record<string, unknown> } = { marketplaces: {} };
-  try {
-    const raw = await readFile(stateJsonPath, "utf8");
-    existing = JSON.parse(raw) as { marketplaces: Record<string, unknown> };
-  } catch {
-    /* first marketplace in scope */
+    // This suite's inventory contract: a disabled record seeds an EMPTY
+    // inventory, an enabled one seeds a single skill.
+    plugins[name] = buildInstalledPluginRecord(
+      info,
+      info.disabled === true
+        ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+        : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    );
   }
 
   const record: Record<string, unknown> = {
@@ -225,36 +188,10 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     record.autoupdate = opts.autoupdate;
   }
 
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 2,
-    marketplaces: { ...existing.marketplaces, [mpName]: record },
-  } as unknown as Parameters<typeof saveState>[1]);
+  await mergeMarketplaceIntoState(locations.extensionRoot, mpName, record);
 
-  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
-  // config when autoupdate is set so the info orchestrator reads the
-  // autoupdate truth from the new source of truth.
   if (opts.autoupdate !== undefined) {
-    const cfgPath = locations.configJsonPath;
-    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
-      {};
-    try {
-      const raw = await readFile(cfgPath, "utf8");
-      existingCfg = JSON.parse(raw) as typeof existingCfg;
-    } catch {
-      /* first marketplace in scope */
-    }
-
-    await saveConfig(
-      cfgPath,
-      {
-        schemaVersion: 1,
-        marketplaces: {
-          ...(existingCfg.marketplaces ?? {}),
-          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
-        },
-      },
-      locations.scopeRoot,
-    );
+    await seedAutoupdateConfig(locations, mpName, opts.autoupdate);
   }
 
   return mpRoot;
@@ -811,7 +748,9 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
 // `{unparseable}` / `{unreadable}` on the `(installed)` row instead
 // of being silently misled.
 //
-// Unit-tests the ladder via the `__test_narrowProbeError` re-export.
+// The ladder itself is unit-tested in
+// tests/shared/probe-classifiers.test.ts, against the public
+// `narrowProbeError` both surfaces delegate to.
 // An end-to-end integration of the THROW branch through the real
 // resolver requires an FS-level fault injection that is not portable
 // across CI sandboxes; the orchestrator-level `(c) install bucket
@@ -819,60 +758,6 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
 // (the `!installable` path runs through the SAME row-construction
 // code as the throw branch).
 // ---------------------------------------------------------------------------
-
-test("WR-01: narrowProbeError -> EACCES classifies as `permission denied`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  const err = new Error("EACCES: permission denied, open '/foo/plugin.json'");
-  (err as NodeJS.ErrnoException).code = "EACCES";
-  assert.equal(mod.__test_narrowProbeError(err), "permission denied");
-});
-
-test("WR-01: narrowProbeError -> ENOENT classifies as `source missing`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  const err = new Error("ENOENT: no such file");
-  (err as NodeJS.ErrnoException).code = "ENOENT";
-  assert.equal(mod.__test_narrowProbeError(err), "source missing");
-});
-
-test("WR-01: narrowProbeError -> SyntaxError classifies as `unparseable`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  const err = new SyntaxError("Unexpected token");
-  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
-});
-
-test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
-  // surface reports the SAME `{invalid manifest}` reason the write path does.
-  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
-  assert.equal(mod.__test_narrowProbeError(err), "invalid manifest");
-});
-
-test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
-  // into one InvalidMarketplaceManifestError branch must preserve this arm.
-  const err = new InvalidMarketplaceManifestError("bad json", {
-    cause: new SyntaxError("Unexpected token"),
-  });
-  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
-});
-
-test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // The permissive fallback returns `unreadable`, but only AFTER trying
-  // SyntaxError + errno classification first. Hardcoding `unreadable`
-  // would pass this test but FAIL the SyntaxError / EACCES tests
-  // above.
-  const err = new Error("something broke");
-  assert.equal(mod.__test_narrowProbeError(err), "unreadable");
-});
 
 // ---------------------------------------------------------------------------
 // (h-WR-01b) WR-01: an INSTALLED plugin whose manifest declares
@@ -1476,16 +1361,6 @@ test("INFO-02: manifest entry's `dependencies: string[]` field surfaces as `    
 });
 
 // ---------------------------------------------------------------------------
-// (l) Barrel re-export.
-// ---------------------------------------------------------------------------
-
-test("Barrel: orchestrators/plugin/index.ts re-exports getPluginInfo and GetPluginInfoOptions", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/index.ts");
-  assert.equal(typeof mod.getPluginInfo, "function");
-});
-
-// ---------------------------------------------------------------------------
 // Github-source marketplace record: confirm the orchestrator does NOT
 // access the network even when the marketplace record's source is github
 // (the local clone supplies the manifest; the source-kind dispatch only
@@ -2023,63 +1898,6 @@ test("ADMIT-02: a config declaring Stop + StopFailure lists both bare-supported 
       ].join("\n"),
     );
     assert.doesNotMatch(notifications[0]!.message, /\(unsupported\)/);
-  });
-});
-
-test("SURF-01 / Open Question 3: hooks/hooks.json deleted between resolve and info-render surfaces probe-classifier reason via narrowProbeError (POSIX)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
-  await withHermeticHome(async ({ home, cwd }) => {
-    const userRoot = path.join(home, ".pi", "agent");
-    const mpRoot = await seedPathMarketplace({
-      scope: "user",
-      scopeRoot: userRoot,
-      cwd,
-      mpName: "mp",
-      manifest: {
-        name: "mp",
-        plugins: [{ name: "hr", source: "./hr", version: "1.0.0" }],
-      },
-      installed: { hr: { version: "1.0.0" } },
-      installablePluginDirs: ["hr"],
-    });
-
-    // Seed a parseable hooks.json so the resolver records `hooksConfigPath`
-    // (`installable: true`), then chmod 000 the file so the info-time
-    // re-read raises EACCES. The narrowProbeError ladder must classify
-    // the failure as `permission denied` -- the SAME closed-set REASON
-    // the other component-probe failures (e.g. skills dir EACCES) emit.
-    const pluginDir = path.join(mpRoot, "hr");
-    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
-    const hooksFile = path.join(pluginDir, "hooks", "hooks.json");
-    await writeFile(
-      hooksFile,
-      JSON.stringify({
-        SessionStart: [{ hooks: [{ type: "command", command: "echo s" }] }],
-      }),
-      "utf8",
-    );
-
-    const { chmod } = await import("node:fs/promises");
-    await chmod(hooksFile, 0o000);
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "hr", scope: "user", cwd });
-      assert.equal(notifications.length, 1);
-      const msg = notifications[0]!.message;
-      // The closed-set REASON form for unreadable probes flows through
-      // the EXISTING narrowProbeError ladder (Open Question 3: no new
-      // REASON, no new code path). Permission-denied is the expected
-      // classification for an EACCES on the hooks.json read.
-      assert.match(msg, /\(installed\) \{permission denied\}/);
-      // No partial `hooks:` block under a permission-denied row.
-      assert.doesNotMatch(msg, /hooks:/);
-    } finally {
-      await chmod(hooksFile, 0o644).catch(() => undefined);
-    }
   });
 });
 

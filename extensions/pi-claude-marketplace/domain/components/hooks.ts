@@ -287,7 +287,7 @@ export type CompiledIfPredicateMap<P> = ReadonlyMap<string, P>;
  * Compose the side-Map key. Centralized so producers (parseHooksConfig)
  * and consumers (flattenPluginIntoBuckets) cannot drift.
  */
-export function ifPredicateMapKey(
+function ifPredicateMapKey(
   claudeEvent: BucketAEvent,
   groupIndex: number,
   handlerIndex: number,

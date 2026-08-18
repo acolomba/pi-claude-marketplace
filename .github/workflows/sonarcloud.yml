@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+    # Markdown is NOT ignored: this job runs `npm run test:coverage`, whose
+    # unit suite includes tests/architecture/catalog-uat.test.ts, and that
+    # test reads docs/output-catalog.md. Ignoring docs here would skip the
+    # coverage run that executes it. See ci.yml for the full reasoning.
     paths-ignore:
-      - "**/*.md"
-      - "docs/**"
       - "images/**"
       - "demos/**"
       - ".planning/**"
@@ -14,9 +16,11 @@ on:
   pull_request:
     branches:
       - main
+    # Markdown is NOT ignored: this job runs `npm run test:coverage`, whose
+    # unit suite includes tests/architecture/catalog-uat.test.ts, and that
+    # test reads docs/output-catalog.md. Ignoring docs here would skip the
+    # coverage run that executes it. See ci.yml for the full reasoning.
     paths-ignore:
-      - "**/*.md"
-      - "docs/**"
       - "images/**"
       - "demos/**"
       - ".planning/**"

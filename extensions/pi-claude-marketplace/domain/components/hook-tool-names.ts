@@ -50,7 +50,7 @@ import type { ToolCallEvent } from "../../platform/pi-api.ts";
  * the `CustomToolCallEvent` arm preserves the literal `toolName` fields
  * on the seven specific arms.
  */
-type LiteralToolNameArm<T> = T extends { toolName: infer N }
+export type LiteralToolNameArm<T> = T extends { toolName: infer N }
   ? string extends N
     ? never
     : N
@@ -86,13 +86,6 @@ export const PI_TO_CLAUDE_TOOL_NAMES = {
   find: "Glob",
   ls: "LS",
 } as const satisfies Record<PiToolName, string>;
-
-/**
- * The seven Claude-form tool-name literals, derived from
- * `PI_TO_CLAUDE_TOOL_NAMES` value positions via the `CLAUDE_TO_PI_TOOL_NAMES`
- * key set. `Bash` | `Read` | `Edit` | `Write` | `Grep` | `Glob` | `LS`.
- */
-export type ClaudeToolName = keyof typeof CLAUDE_TO_PI_TOOL_NAMES;
 
 /**
  * Inverse of `PI_TO_CLAUDE_TOOL_NAMES`. Keys are the seven Claude-form

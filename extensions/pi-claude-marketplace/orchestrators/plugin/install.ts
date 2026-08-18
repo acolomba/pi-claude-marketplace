@@ -7,15 +7,16 @@
 // D-02, D-05, D-08:
 //
 //   withLockedStateTransaction(locations, async (tx) => {   // D-02 outer guard
-//     runInstallLedger(state, locations, opts, capture)    // guard-FREE body:
+//     runInstallLedgerBody(state, locations, opts, capture)  // guard-FREE body:
 //       PI-15 early sanity:  throw if state.marketplaces[mp].plugins[plugin] != null
 //       PI-3:                throw if marketplace / entry absent
 //       PI-2:                cached manifest read ONLY (no network)
 //       PI-4:                resolveStrict + requireInstallable
 //       PI-6:                assertNoCrossPluginConflicts(scope, names, state)
-//       PI-7:                resolvePluginVersion -- 3-tier precedence
-//                            (plugin.json > entry.version > hash); see
-//                            `shared.ts::resolvePluginVersion`
+//       PI-7:                deriveInstallVersion -- pin override, then the
+//                            git-source sha, then the 3-tier precedence
+//                            (plugin.json > entry.version > hash) delegated
+//                            to `shared.ts::resolvePluginVersion`
 //       runPhases(phases, ctx)                             // D-01 5-phase ledger
 //       capture rollbackPartials, throw raw error          // D-02 PI-14 bypass
 //   })
@@ -24,7 +25,10 @@
 // guard-FREE `runInstallLedger` so `setPluginEnabled`'s enable branch can run
 // it inside ITS OWN `withLockedStateTransaction` -- `proper-lockfile`
 // (`retries: 0`) is not re-entrant, so nesting `installPlugin`'s guard under
-// another guard on the same `stateLockFile` self-deadlocks.
+// another guard on the same `stateLockFile` self-deadlocks. That exported
+// entry returns the outward `InstallLedgerSummary`; `installPlugin` drives the
+// same body directly because its own post-commit composition reads the working
+// `InstallCtx` the summary deliberately withholds.
 //   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir), dropped per D-19-01
 //   Success notify via notify() with PluginInstalledMessage carrying
 //   dependencies: readonly Dependency[] derived from staged content; the
@@ -68,13 +72,11 @@ import path from "node:path";
 
 import {
   commitPreparedAgents,
-  discoverPluginAgents,
   prepareStagePluginAgents,
   unstagePluginAgents,
 } from "../../bridges/agents/index.ts";
 import {
   commitPreparedCommands,
-  discoverPluginCommands,
   prepareStageCommands,
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
@@ -92,7 +94,6 @@ import {
 } from "../../bridges/mcp/index.ts";
 import {
   commitPreparedSkills,
-  discoverPluginSkills,
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
@@ -132,16 +133,17 @@ import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  resolveGitSubdirRoot,
+  resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
-import { INSTALL_CONTEXT, type InstallMsg } from "./install.messaging.ts";
+import { discoverGeneratedNames } from "./discover-names.ts";
+import { INSTALL_CONTEXT, type EntityErrorRow, type InstallMsg } from "./install.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
@@ -172,32 +174,9 @@ import type {
   PluginFailedMessage,
   PluginUnavailableMessage,
   PluginPartiallyAvailableMessage,
-  StatusToken,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-
-/**
- * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
- * classified-error return shape for `classifyEntityShapeError` and the
- * install.ts error-routing path. File-local; this module is the sole
- * consumer.
- *
- * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
- * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
- */
-interface EntityErrorRow {
-  readonly kind: "entity-error";
-  readonly name: string;
-  readonly marketplace?: string;
-  readonly scope?: Scope;
-  readonly status: Extract<StatusToken, "failed" | "unavailable">;
-  readonly reasons: readonly ContentReason[];
-  // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `partialable`
-  // discriminant on the `unavailable` arm -- `true` when the resolver verdict
-  // is partially-available, so the composed row points at `--partial`.
-  readonly partialable?: boolean;
-}
 
 /**
  * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is
@@ -346,7 +325,7 @@ export interface InstallPluginOptions {
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   /**
    * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
-   * The git-source clone probe passes it to `buildAuthForHost` so a provider
+   * The git-source clone probe passes it to `buildCloneAuth` so a provider
    * host authenticates host-keyed; tests inject makeMockCredentialOps().
    */
   readonly credentialOps?: CredentialOps;
@@ -368,6 +347,11 @@ export interface InstallPluginOptions {
  * phases read or mutate. Per D-01 corollary "second-consumer rule" this
  * shape is NOT promoted to `orchestrators/types.ts` until/unless another
  * orchestrator needs it.
+ *
+ * Module-private on purpose: it is the transaction's mutable scratchpad --
+ * the bridge prep handles a rollback reads, the hooks-write flag, and a live
+ * reference to the caller's state snapshot. Callers outside this module get
+ * the fully-`readonly` `InstallLedgerSummary` projection instead.
  */
 interface InstallCtx {
   readonly locations: ScopedLocations;
@@ -467,7 +451,7 @@ export interface InstallCloneCacheSeam {
  */
 export interface InstallLedgerOptions {
   /**
-   * PROV-03: passed to the git-source clone probe's `buildAuthForHost` so a
+   * PROV-03: passed to the git-source clone probe's `buildCloneAuth` so a
    * Device Flow prompt reaches the user's UI. The ledger never notifies success
    * / failure itself (that is the caller's concern); `ctx` is here solely to
    * wire the auth notify seam for the clone probe.
@@ -520,61 +504,49 @@ export interface InstallFailureCapture {
   version: string | undefined;
 }
 
+/**
+ * The outward view of a completed install ledger run.
+ *
+ * The ledger returns this projection rather than its working `InstallCtx`:
+ * the context is a mutable scratchpad whose prep handles, hooks-write flag and
+ * `stateSnapshot` steer the in-flight transaction, and publishing it would make
+ * that mutation surface part of the ledger's API. This shape carries only the
+ * facts a caller needs to compose its own row / outcome, every field `readonly`
+ * down to the array elements, so no consumer can reach back into the run.
+ */
+export interface InstallLedgerSummary {
+  /**
+   * NFR-7 / D-65-03: the LIVE resolution the ledger materialized. Callers read
+   * `state === "partially-available"` / `orphanRewake` off THIS, never off the
+   * persisted `compatibility` block (FSTAT-07 / D-66-04 / SURF-05).
+   */
+  readonly resolved: MaterializablePlugin;
+  /**
+   * SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade
+   * records, read for the `degradedKinds` outcome seam.
+   */
+  readonly frontmatterDegradations: readonly {
+    readonly kind: DegradeKind;
+    readonly generatedName: string;
+    readonly parseError: string;
+  }[];
+  // Staged-name lists, read only for their emptiness (ENBL-07 soft-dep flags).
+  readonly stagedAgentNames: readonly string[];
+  readonly stagedMcpServerNames: readonly string[];
+}
+
 /** Discriminated result of the guard-free install ledger body. */
-type InstallLedgerResult =
-  | { readonly kind: "installed"; readonly installCtx: InstallCtx }
+export type InstallLedgerResult =
+  | { readonly kind: "installed"; readonly summary: InstallLedgerSummary }
   | { readonly kind: "marketplace-absent" };
 
 /**
- * PROV-02/03/04 / T-79-09: build the host-keyed auth bundle for a resolved
- * cloneUrl. Returns a bundle for a registered host (private authenticates) or
- * undefined for a no-provider / public host (clones authless, no cross-host
- * credential leak). D-79-02: the command-scope authMemo caps the flow at once
- * per host. Shared by the pinned and the unpinned (mirror) probe arms.
+ * The same discriminated result carrying the ledger's working context, for
+ * this module's own post-commit composition. Never leaves install.ts.
  */
-function buildProbeAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  auth: {
-    ctx: ExtensionContext;
-    credentialOps: CredentialOps;
-    deviceFlowHttp?: DeviceFlowHttp;
-    authMemo?: Map<string, AuthAttemptResult>;
-  },
-) {
-  const host = hostFromCloneUrl(cloneUrl, kind);
-  return buildAuthForHost({
-    host,
-    credentialOps: auth.credentialOps,
-    ctx: auth.ctx,
-    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-  });
-}
-
-/**
- * PURL-03 / NFR-10: apply the git-subdir containment tail to a materialized
- * clone/mirror root and stamp the resolved sha. For a git-subdir source the
- * pluginRoot resolves under the clone root (escapes / missing-subdir arms
- * propagate unchanged); other kinds materialize at the clone root itself.
- * Shared by the pinned and the unpinned (mirror) probe arms.
- */
-async function resolveGitPluginRootWithSubdir(
-  gitSource: GitBackedSource,
-  cloneRoot: string,
-  resolvedSha: string,
-): Promise<GitPluginRootResult> {
-  if (gitSource.kind === "git-subdir") {
-    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
-    if (subdirResult.kind !== "materialized") {
-      return subdirResult;
-    }
-
-    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
-  }
-
-  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
-}
+type InstallLedgerCtxResult =
+  | { readonly kind: "installed"; readonly installCtx: InstallCtx }
+  | { readonly kind: "marketplace-absent" };
 
 /**
  * PURL-01..04 / PURL-09 / D-77-01..06: build the clone-materializing
@@ -618,7 +590,7 @@ function makeInstallCloneProbe(
   // it reaches the mirror seam only by name.
   const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildProbeAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
     const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
@@ -638,7 +610,7 @@ function makeInstallCloneProbe(
 
   const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await seam.resolvePluginPin({ source: gitSource });
-    const authBundle = buildProbeAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
     const cloneRoot = await seam.materializePluginClone({
       locations,
       cloneUrl,
@@ -697,6 +669,135 @@ async function deriveInstallVersion(args: {
 }
 
 /**
+ * The PI-15 / PI-3 / PI-2 / PI-4 preflight: resolve the source marketplace,
+ * gate on the early-sanity record check, read the cached manifest, validate
+ * the chosen entry, and run `resolveStrict` behind the correct
+ * installability gate. Mutates `state.marketplaces[marketplace]` when the
+ * CMP-3 fallback adopts a user-scope record into the target scope.
+ *
+ * Returns the `marketplace-absent` discriminant rather than throwing when
+ * the precondition misses, so the caller can surface the MARKETPLACE
+ * subject instead of a plugin-row failure.
+ */
+async function preflightInstallResolve(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+): Promise<
+  | { readonly kind: "marketplace-absent" }
+  | {
+      readonly kind: "ready";
+      readonly entry: PluginEntry;
+      readonly installable: MaterializablePlugin;
+      readonly resolvedSha: string | undefined;
+    }
+> {
+  const { scope, cwd, marketplace, plugin } = opts;
+
+  // CMP-2..4 / PI-16: resolve the source marketplace separately from the
+  // target scope being mutated. Project-target installs can fall back to a
+  // user-scope marketplace; user-target installs cannot read project-only
+  // marketplaces.
+  const source = await resolveInstallMarketplaceSource({
+    targetScope: scope,
+    cwd,
+    marketplace,
+    targetState: state,
+  });
+  if (source === undefined) {
+    // M1: the CMP-3 fallback also missed. No state mutation, no plugin-row
+    // `{not in manifest}` throw.
+    return { kind: "marketplace-absent" };
+  }
+
+  // Target container: same scope record when present, or a cloned
+  // project-scope container when CMP-3 fell back to user marketplace.
+  let targetMp = state.marketplaces[marketplace];
+  if (targetMp === undefined) {
+    targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
+    state.marketplaces[marketplace] = targetMp;
+  }
+
+  // PI-15 early-sanity check: an existing record in the target scope throws
+  // BEFORE the ledger runs, avoiding any disk write. Layer (b) re-checks
+  // inside the state-commit phase in case of intra-process re-entry. PI-17:
+  // other-scope installs do not block this target. D-54-01 / ENBL-02:
+  // `allowExistingRecord` skips the throw so the enable path can
+  // re-materialize a KEPT disabled record in place.
+  if (targetMp.plugins[plugin] !== undefined && opts.allowExistingRecord !== true) {
+    // PI-5 (already-installed) and PI-15 (race-at-commit) collapse here;
+    // this site surfaces the PI-5 wording and the state-commit phase's
+    // defensive throw surfaces PI-15.
+    throw new PluginShapeError({ kind: "already-installed", plugin, marketplace });
+  }
+
+  // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: the entry must
+  // exist in the manifest plugins[] array.
+  const sourceMp = source.sourceRecord;
+  const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
+  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
+  if (entryRaw === undefined) {
+    throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
+  }
+
+  // Defense-in-depth: re-run the per-entry validator on the chosen entry so
+  // a corrupted manifest cannot smuggle a malformed entry past the top-level
+  // marketplace check.
+  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
+    throw new Error(
+      `Plugin entry for "${plugin}" in marketplace "${marketplace}" failed schema validation.`,
+    );
+  }
+
+  const entry: PluginEntry = entryRaw;
+
+  // PURL-01..04 / PURL-09 / D-77-01..06: the clone-materializing
+  // resolveGitPluginRoot callback plus its captured resolved sha. The
+  // resolver stays network-free; install injects THIS policy so a git source
+  // clones once into the cache and returns the clone-anchored pluginRoot.
+  // The full sha is read AFTER the resolve for the sha-<12hex> version
+  // (D-77-01) and the full-sha state field (D-77-02).
+  const clone = makeInstallCloneProbe(
+    opts.cloneCacheSeam ?? {
+      resolvePluginPin,
+      materializePluginClone,
+      materializeOrRefreshPluginMirror,
+    },
+    locations,
+    {
+      ctx: opts.ctx,
+      credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+      ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+    },
+  );
+
+  // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the
+  // array-shape componentPaths (D-07 / COMP-01) and either returns an
+  // installable variant or surfaces disqualification notes.
+  const resolved = await resolveStrict(entry, {
+    marketplaceRoot: sourceMp.marketplaceRoot,
+    resolveGitPluginRoot: clone.probe,
+  });
+  // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
+  // partially-available arm; the default gate still blocks it. Both gates
+  // reject `unavailable` (FORCE-05), so `--partial` never bypasses a hard
+  // structural failure.
+  if (opts.partial === true) {
+    requirePartialInstallable(resolved, "install");
+  } else {
+    requireInstallable(resolved, "install");
+  }
+
+  // After the gate `resolved` is narrowed to the materializable union
+  // (`installable | partially-available`); pluginRoot etc. are reachable.
+  // The `partially-available` arm carries only supported kinds in
+  // componentPaths, so the shared materialize phases degrade it naturally
+  // (D-65-02, no partial branch).
+  return { kind: "ready", entry, installable: resolved, resolvedSha: clone.resolvedSha() };
+}
+
+/**
  * CR-01: the guard-FREE install ledger body -- the
  * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
  * sequence that previously lived inline in `installPlugin`'s
@@ -717,6 +818,9 @@ async function deriveInstallVersion(args: {
  * preserved). When `capture` is provided, `capture.rollbackPartials` /
  * `capture.version` are populated BEFORE the rethrow so the caller's catch
  * can compose rollback-partial rows.
+ *
+ * Success returns the outward `InstallLedgerSummary` projection, not the
+ * ledger's working context -- see that type for why.
  */
 export async function runInstallLedger(
   state: ExtensionState,
@@ -724,144 +828,52 @@ export async function runInstallLedger(
   opts: InstallLedgerOptions,
   capture?: InstallFailureCapture,
 ): Promise<InstallLedgerResult> {
+  const result = await runInstallLedgerBody(state, locations, opts, capture);
+  if (result.kind === "marketplace-absent") {
+    return result;
+  }
+
+  return { kind: "installed", summary: toInstallLedgerSummary(result.installCtx) };
+}
+
+/** Project the completed ledger context onto its outward summary. */
+function toInstallLedgerSummary(c: InstallCtx): InstallLedgerSummary {
+  return {
+    resolved: c.resolved,
+    frontmatterDegradations: c.frontmatterDegradations,
+    stagedAgentNames: c.stagedAgentNames,
+    stagedMcpServerNames: c.stagedMcpServerNames,
+  };
+}
+
+/**
+ * The ledger body proper, under the contract documented on `runInstallLedger`.
+ * Hands back the working `InstallCtx` for this module's own post-commit
+ * composition (`collectPostCommitWarnings`, `composeInstalledRow`,
+ * `buildInstalledOutcome`), which reads fields -- `locations`, `marketplace`,
+ * `plugin` -- the outward summary withholds. Module-private: only the
+ * declaring module holds the working context.
+ */
+async function runInstallLedgerBody(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+  capture?: InstallFailureCapture,
+): Promise<InstallLedgerCtxResult> {
   const { scope, cwd, marketplace, plugin } = opts;
 
-  // CMP-2..4 / PI-16: resolve the source marketplace separately from
-  // the target scope being mutated. Project-target installs can fall
-  // back to a user-scope marketplace; user-target installs cannot read
-  // project-only marketplaces.
-  const source = await resolveInstallMarketplaceSource({
-    targetScope: scope,
-    cwd,
-    marketplace,
-    targetState: state,
-  });
-  if (source === undefined) {
-    // M1: marketplace absent (after the CMP-3 fallback also missed). Return
-    // the precondition discriminant cleanly -- no state mutation, no
-    // plugin-row `{not in manifest}` throw. The caller surfaces the
-    // marketplace subject.
+  const preflight = await preflightInstallResolve(state, locations, opts);
+  if (preflight.kind === "marketplace-absent") {
     return { kind: "marketplace-absent" };
   }
 
-  // Target container: same scope record when present, or a cloned
-  // project-scope container when CMP-3 fell back to user marketplace.
-  let targetMp = state.marketplaces[marketplace];
-  if (targetMp === undefined) {
-    targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
-    state.marketplaces[marketplace] = targetMp;
-  }
-
-  // PI-15 early-sanity check: if the record already
-  // exists in the target scope we throw ConcurrentInstallError BEFORE
-  // running the ledger, avoiding any disk write. Layer (b) re-checks
-  // inside the state-commit phase defensively in case of intra-process
-  // re-entry. PI-17: other-scope installs do not block this target.
-  // D-54-01 / ENBL-02: `allowExistingRecord` skips the throw -- the enable
-  // path re-materializes a KEPT disabled record in place.
-  if (targetMp.plugins[plugin] !== undefined && opts.allowExistingRecord !== true) {
-    // PI-5: already-installed AND PI-15 early-sanity collapse onto the same
-    // path here. Surface PI-5 wording at the early-sanity check (the
-    // user-visible message is "already installed"); PI-15 (race-at-commit)
-    // surfaces via the state-commit phase's defensive throw.
-    throw new PluginShapeError({ kind: "already-installed", plugin, marketplace });
-  }
-
-  // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: entry must
-  // exist in the manifest plugins[] array.
-  const sourceMp = source.sourceRecord;
-  const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
-  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
-  if (entryRaw === undefined) {
-    throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
-  }
-
-  // Defense-in-depth: re-run the per-entry validator on the chosen entry
-  // so a corrupted manifest cannot smuggle a malformed entry past the
-  // top-level marketplace check (the array-element validator is the same
-  // schema, but this site enforces it locally).
-  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
-    throw new Error(
-      `Plugin entry for "${plugin}" in marketplace "${marketplace}" failed schema validation.`,
-    );
-  }
-
-  const entry: PluginEntry = entryRaw;
-
-  // PURL-01..04 / PURL-09 / D-77-01..06: the clone-materializing
-  // resolveGitPluginRoot callback + its captured resolved sha (see
-  // makeInstallCloneProbe). The resolver stays network-free; install injects
-  // THIS policy so a git source clones once into the cache and returns the
-  // clone-anchored pluginRoot. The full sha is read AFTER the resolve for the
-  // sha-<12hex> version (D-77-01) and the full-sha state field (D-77-02).
-  const clone = makeInstallCloneProbe(
-    opts.cloneCacheSeam ?? {
-      resolvePluginPin,
-      materializePluginClone,
-      materializeOrRefreshPluginMirror,
-    },
-    locations,
-    {
-      ctx: opts.ctx,
-      credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-      ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-    },
-  );
-
-  // PI-4: resolveStrict + gate. Per D-04, the strict resolver consumes the
-  // array-shape componentPaths (D-07 / COMP-01) and either returns an
-  // installable variant or surfaces disqualification notes. The gate below
-  // branches on `opts.partial`: the default path calls `requireInstallable`
-  // (admits only `installable`); `--partial` calls `requirePartialInstallable`
-  // (also admits the partially-available arm). Both narrow the
-  // discriminated union and throw on the structural `unavailable` variant.
-  const resolved = await resolveStrict(entry, {
-    marketplaceRoot: sourceMp.marketplaceRoot,
-    resolveGitPluginRoot: clone.probe,
-  });
-  // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
-  // partially-available arm; the default gate still blocks it. Both
-  // gates reject `unavailable` (FORCE-05), so `--partial` never bypasses a hard
-  // structural failure.
-  if (opts.partial === true) {
-    requirePartialInstallable(resolved, "install");
-  } else {
-    requireInstallable(resolved, "install");
-  }
-
-  // After the gate, `resolved` is narrowed to the materializable union
-  // (`installable | partially-available`); pluginRoot etc. are reachable. The
-  // `partially-available` arm carries only supported kinds in componentPaths, so the
-  // shared materialize phases degrade it naturally (D-65-02, no partial branch).
-  const installable: MaterializablePlugin = resolved;
+  const { entry, installable, resolvedSha } = preflight;
 
   // Generated-name discovery (PI-6 input). Walks the bridges' discover.ts
   // to enumerate source artifacts under componentPaths, then applies the
   // domain/name.ts generators to produce the names whose collisions the
   // cross-bridge guard checks. No bridge writes happen here.
-  const { discovered: discoveredSkills } = await discoverPluginSkills({
-    pluginName: plugin,
-    resolved: installable,
-  });
-  const { discovered: discoveredCommands } = await discoverPluginCommands({
-    pluginName: plugin,
-    resolved: installable,
-  });
-  const agentsSourceDir = pickAgentsSourceDir(installable);
-  const { discovered: discoveredAgents } =
-    agentsSourceDir === null
-      ? { discovered: [] as readonly { readonly generatedName: string }[] }
-      : await discoverPluginAgents({
-          pluginName: plugin,
-          agentsDirs: [agentsSourceDir],
-        });
-
-  const generatedNames = {
-    skills: discoveredSkills.map((s) => s.generatedName),
-    commands: discoveredCommands.map((c) => c.generatedName),
-    agents: discoveredAgents.map((a) => a.generatedName),
-  };
+  const generatedNames = await discoverGeneratedNames(plugin, installable);
 
   // PI-6 / RN-3: pre-flight cross-bridge conflict guard. Throws
   // CrossPluginConflictError BEFORE any disk write if a generated name
@@ -888,7 +900,6 @@ export async function runInstallLedger(
   //
   // D-77-01 / PURL-09: derive the recorded version (git => sha-<12hex>; path /
   // github-name => the 3-tier ladder). See `deriveInstallVersion`.
-  const resolvedSha = clone.resolvedSha();
   const version = await deriveInstallVersion({
     entry,
     installable,
@@ -1068,7 +1079,8 @@ export async function runInstallLedger(
   // returns. The parse is unconditional (no executor judgement); a fresh
   // parse failure here is a defensive guard (the resolver already validated
   // the file at install-entry under D-57-04) and unwinds the ledger.
-  // Mirrors the post-state-commit hydrate at lines 340-360 of this file.
+  // Mirrors the post-state-commit `readAndCachePluginHooks` hydrate in
+  // `installPlugin`.
   const hooksPhase: Phase<InstallCtx> = {
     name: "hooks",
     do: async (c) => {
@@ -1296,6 +1308,287 @@ function buildInstallLedgerOptions(
 }
 
 /**
+ * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
+ * AS-7 / WARN-01). The state record is already committed, so every arm is
+ * defensive: a failure here must not strand a successful install. Per
+ * D-19-01 the collected strings surface only in orchestrated mode, where
+ * the cascade caller owns a `pushDiagnostic` channel; standalone drops
+ * them because `MarketplaceNotificationMessage` has no field for a soft
+ * warning after a successful state mutation.
+ */
+async function collectPostCommitWarnings(
+  installCtx: InstallCtx,
+  scope: Scope,
+  orchestrated: boolean,
+): Promise<string[]> {
+  const { locations, marketplace, plugin } = installCtx;
+  const warnings: string[] = [];
+  // Collected only in orchestrated mode; the standalone drop is D-19-01.
+  const push = (msg: string): void => {
+    if (orchestrated) {
+      warnings.push(msg);
+    }
+  };
+
+  // AS-6 / D-08: eager per-plugin data dir mkdir.
+  try {
+    await mkdir(installCtx.pluginDataDir, { recursive: true });
+  } catch (mkdirErr) {
+    push(
+      `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`,
+    );
+  }
+
+  // D-03-INV: the plugin moved from "available" to "installed", so drop the
+  // cached plugin index for this marketplace and let the next completion
+  // read rebuild it with the new status.
+  try {
+    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
+  } catch (err) {
+    push(`Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`);
+  }
+
+  // AS-7 / W-08 / B-08: agents-bridge preserved foreign-content rows during
+  // prepare. The NEW agents installed; the preserved rows are a
+  // manual-cleanup hint recorded in agents-index.json regardless.
+  if (installCtx.agentForeignFailures.length > 0) {
+    const detail = installCtx.agentForeignFailures
+      .map((f) => `${f.generatedName}: ${f.reason}`)
+      .join("; ");
+    push(
+      `Plugin "${plugin}" installed; ${installCtx.agentForeignFailures.length.toString()} pre-existing agent file(s) preserved on disk: ${detail}`,
+    );
+  }
+
+  // WARN-01 / D-86-03: skills/commands whose SOURCE frontmatter could not be
+  // parsed were degraded (synthesized / neutralized) but still installed.
+  // The per-component detail rides here; the closed-set reason token rides
+  // the install row.
+  for (const d of installCtx.frontmatterDegradations) {
+    push(`${plugin}/${d.generatedName}: ${d.parseError}`);
+  }
+
+  // Bridge-side soft warnings (e.g. agents-bridge cleanup-leak return values
+  // aggregated during the staged phases).
+  for (const w of installCtx.bridgeWarnings) {
+    push(w);
+  }
+
+  return warnings;
+}
+
+/**
+ * Compose the standalone-mode success row. FSTAT-07 / D-66-04 splits
+ * `(installed)` from `(partially-installed)` on the LIVE resolved state of
+ * the just-completed install -- not the persisted `compatibility.unsupported`
+ * record the `list` / non-path `info` derivers read.
+ */
+function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallMsg {
+  const { plugin } = installCtx;
+  const declaresAgents = installCtx.stagedAgentNames.length > 0;
+  const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
+
+  // The renderer emits the per-row soft-dep markers (`{requires
+  // pi-subagents}`, `{requires pi-mcp}`) from this list automatically.
+  const dependencies: Dependency[] = [];
+  if (declaresAgents) {
+    dependencies.push("agents");
+  }
+
+  if (declaresMcp) {
+    dependencies.push("mcp");
+  }
+
+  // SURF-05 / D-63-08: `{orphan rewake}` fires once per plugin regardless of
+  // how many orphan handlers the resolver saw -- it records a single flag.
+  const reasons: ContentReason[] = [];
+  if (installCtx.resolved.orphanRewake === true) {
+    reasons.push("orphan rewake");
+  }
+
+  // WARN-01 / D-86-03: one `{malformed skill}` / `{malformed command}` token
+  // per plugin regardless of how many components of that kind degraded.
+  reasons.push(...malformedReasonsForKinds(installCtx.frontmatterDegradations.map((d) => d.kind)));
+
+  // SEV-01: a declared-but-unloaded soft-dep companion silently degrades an
+  // otherwise-clean install, so raise info to warning. WARN-01: a
+  // degraded-but-installed component is "carried out but short of ideal" ->
+  // warning independent of companion state, so it decides first.
+  const severity =
+    installCtx.frontmatterDegradations.length > 0
+      ? "warning"
+      : companionSeverity({ declaresAgents, declaresMcp }, softDepStatus(pi));
+
+  // IN-02 / IN-04: `version` passes straight through. Row-level `scope` is
+  // OMITTED -- it always equals the marketplace block's scope here, and
+  // `renderScopeBracket` suppresses the duplicate bracket.
+  if (installCtx.resolved.state === "partially-available") {
+    return {
+      status: "partially-installed",
+      name: plugin,
+      dependencies,
+      version: installCtx.version,
+      reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
+      severity,
+      needsReload: true,
+    };
+  }
+
+  return {
+    status: "installed",
+    name: plugin,
+    dependencies,
+    version: installCtx.version,
+    ...(reasons.length > 0 && { reasons }),
+    // D-03/D-06: a realized install transition reloads Pi resources.
+    severity,
+    needsReload: true,
+  };
+}
+
+/**
+ * The orchestrated-caller outcome for a completed install. Every optional
+ * field is omitted rather than emitted false/empty per NREG-01.
+ */
+function buildInstalledOutcome(
+  installCtx: InstallCtx,
+  postCommitWarnings: readonly string[],
+): InstallPluginOutcome {
+  // PI-9 corollary: `resourcesChanged` is consumed by import/execute.ts as a
+  // structural predicate, so it tracks whether ANY phase staged something.
+  const stagedAny =
+    installCtx.stagedSkillNames.length > 0 ||
+    installCtx.stagedCommandNames.length > 0 ||
+    installCtx.stagedAgentNames.length > 0 ||
+    installCtx.stagedMcpServerNames.length > 0;
+  // WARN-01 / D-86-03: degraded kinds in collection order (skill before
+  // command), deduplicated.
+  const degradedKinds = Array.from(new Set(installCtx.frontmatterDegradations.map((d) => d.kind)));
+
+  return {
+    status: "installed",
+    resourcesChanged: stagedAny,
+    declaresAgents: installCtx.stagedAgentNames.length > 0,
+    declaresMcp: installCtx.stagedMcpServerNames.length > 0,
+    ...(postCommitWarnings.length > 0 && { postCommitWarnings: [...postCommitWarnings] }),
+    // WR-03: the LIVE dropped-component kinds. An install admitted through
+    // the partial gate materializes a degraded plugin, so an outcome that
+    // stayed silent would hand an orchestrated caller the facts for a bare
+    // `(installed)` row over a record whose `list` row reads
+    // `(partially-installed)`.
+    ...(installCtx.resolved.state === "partially-available" && {
+      unsupported: [...installCtx.resolved.unsupported],
+    }),
+    // SURF-05 / D-63-08 / IN-07: the same orphan-rewake fact the standalone
+    // row reports, carried so the orchestrated projection can name it too.
+    ...(installCtx.resolved.orphanRewake === true && { orphanRewake: true }),
+    ...(degradedKinds.length > 0 && { degradedKinds }),
+  };
+}
+
+/**
+ * Emit a single-plugin `(failed)` row and return the matching outcome.
+ * Shared by the CFG-03 invalid-config abort and the defensive
+ * internal-error arm, which differ only in their reason token.
+ *
+ * CR-02: row-level `scope` is OMITTED -- the marketplace block carries the
+ * same scope and `renderScopeBracket` suppresses the duplicate.
+ */
+function failedRowOutcome(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly error: Error;
+  readonly reasons: readonly ContentReason[];
+  readonly orchestrated: boolean;
+}): InstallPluginOutcome {
+  const { ctx, pi, marketplace, scope, plugin, error, reasons, orchestrated } = args;
+  const cause = error.message;
+  if (orchestrated) {
+    return { status: "failed", error, cause };
+  }
+
+  notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [
+        {
+          status: "failed",
+          severity: "error" as const,
+          name: plugin,
+          reasons,
+          cause: error,
+        },
+      ],
+    },
+  ]);
+  return { status: "failed", error, cause };
+}
+
+/**
+ * D-19-03 failure routing for a throw out of the state guard. Priority,
+ * highest first:
+ *
+ *   1. PI-14 PathContainmentError -- bare PluginFailedMessage with
+ *      reasons: [] and cause: err. The renderer surfaces the message via
+ *      the 4-space-indent cause-chain trailer; NO rollback-partial
+ *      children even when partials are present (PI-14 bypass).
+ *   2. Rollback-partial -- PluginFailedMessage with reasons:
+ *      ["rollback partial"] plus the phase-ledger's typed
+ *      `RollbackPartial[]` threaded directly (no synthesis from `.msg`).
+ *   3. Entity-shape errors (PI-3 / PI-4 / PI-5) -- the classifier's
+ *      `status: "failed" | "unavailable"` discriminator is preserved
+ *      verbatim.
+ *   4. Generic runtime error -- reasons: [] and cause: err; the renderer
+ *      suppresses the empty brace per D-15-01.
+ */
+function handleInstallThrow(args: {
+  readonly err: unknown;
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly capture: InstallFailureCapture;
+  readonly orchestrated: boolean;
+}): InstallPluginOutcome {
+  const { err, ctx, pi, marketplace, scope, plugin, capture, orchestrated } = args;
+  const isPathContainment = err instanceof PathContainmentError;
+  const rolledBackPartial = !isPathContainment && capture.rollbackPartials.length > 0;
+  const entityErrorRow = isPathContainment
+    ? undefined
+    : classifyEntityShapeError(err, { plugin, marketplace, scope });
+  const failureMessage = composeInstallFailureMessage({
+    err,
+    plugin,
+    scope,
+    version: capture.version,
+    rolledBackPartial,
+    rollbackPartials: capture.rollbackPartials,
+    entityErrorRow,
+  });
+
+  if (orchestrated) {
+    // The typed Error remains the dispatch surface; `cause` is the formatted
+    // text for callers that render it directly.
+    return classifyInstallFailure(err, formatOrchestratedCause(err));
+  }
+
+  notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [failureMessage],
+    },
+  ]);
+  const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
+  return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
+}
+
+/**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
  * via a single `notify()` call carrying a `PluginFailedMessage`
  * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
@@ -1322,9 +1615,11 @@ function buildInstallLedgerOptions(
  *      Orchestrated-mode collects them in
  *      `InstallOutcome.postCommitWarnings` for the cascade caller.
  */
-// Install sequencing intentionally keeps the state guard, failure routing,
-// and post-commit/notification logic in one audited flow matching PI-1..15.
-// eslint-disable-next-line sonarjs/cognitive-complexity
+// Install sequencing walks the PI-1..15 flow: the state guard, the ledger
+// call, failure routing, and post-commit/notification composition. The
+// order of those steps stays visible here; the step bodies themselves are
+// extracted above (`buildInstallLedgerOptions`, `collectPostCommitWarnings`,
+// `composeInstalledRow`, `buildInstalledOutcome`, `handleInstallThrow`).
 export async function installPlugin(opts: InstallPluginOptions): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
@@ -1341,7 +1636,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // arms and the contrasting "Failure with rollback-partial children" arm
   // in `docs/output-catalog.md`. `capture.version` is the resolved
   // version at throw time (undefined when the throw pre-dated
-  // `resolvePluginVersion`).
+  // `deriveInstallVersion`).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   // ATTR-01 / ATTR-08 / M1: marketplace-existence is a PRECONDITION, not a
   // plugin-row property. When the CMP-2..4 source resolution misses (the
@@ -1389,7 +1684,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         return;
       }
 
-      const result = await runInstallLedger(
+      const result = await runInstallLedgerBody(
         state,
         locations,
         buildInstallLedgerOptions(opts, { scope, cwd, marketplace, plugin }),
@@ -1511,75 +1806,20 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       }
     });
   } catch (err) {
-    // Pattern S-1 single chokepoint for user-visible errors (one
+    // Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, pi, ...) call carrying a per-variant
-    // PluginFailedMessage / PluginUnavailableMessage).
-    //
-    // Failure routing priority (highest first); the renderer composes
-    // the depth-5 cause-chain trailer and per-phase
-    // rollback-child rows automatically. Severity is derived to "error"
-    // structurally; no reload-hint (failed /
-    // unavailable do not trigger the trailer).
-    //
-    //   1. PI-14 PathContainmentError -- emits a bare PluginFailedMessage
-    //      with reasons: [] and cause: err. The renderer surfaces the
-    //      PathContainmentError message via the 4-space-indent cause-chain
-    //      trailer; NO rollback-partial children even when partials are
-    //      present (PI-14 bypass).
-    //   2. Rollback-partial (capture.rollbackPartials.length > 0 AND not
-    //      PathContainmentError) -- PluginFailedMessage with
-    //      reasons: ["rollback partial"] plus rollbackPartial: readonly
-    //      { phase; cause? }[] with the typed Error threaded directly
-    //      from the phase-ledger (RollbackPartial.cause is already typed
-    //      Error -- NO synthesis from the free-form .msg string).
-    //   3. Entity-shape errors (PI-3 / PI-4 / PI-5 via
-    //      `classifyEntityShapeError`) -- the classifier's EntityErrorRow
-    //      carries `status: "failed" | "unavailable"` AND `reasons:
-    //      readonly Reason[]`; install.ts preserves the discriminator
-    //      verbatim (catalog `failure-unsupported-features` uses
-    //      `unavailable`; catalog `failure-rollback-partial` /
-    //      `failure-runtime-with-cause` use `failed`). PluginUnavailable
-    //      has no `cause?` field per D-15-01; the entity-shape reason
-    //      carries the explanation. PluginFailed carries `cause: err`
-    //      for the renderer's 4-space-indent trailer.
-    //   4. Generic runtime error -- PluginFailedMessage with reasons: []
-    //      and cause: err. The renderer suppresses the empty `{...}`
-    //      brace per D-15-01 and surfaces the cause-chain trailer below
-    //      the bare `(failed)` row.
-    const isPathContainment = err instanceof PathContainmentError;
-    const rolledBackPartial = !isPathContainment && capture.rollbackPartials.length > 0;
-    const entityErrorRow = isPathContainment
-      ? undefined
-      : classifyEntityShapeError(err, { plugin, marketplace, scope });
-    const failureMessage = composeInstallFailureMessage({
+    // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
+    // "error" structurally and neither variant triggers the reload hint.
+    return handleInstallThrow({
       err,
-      plugin,
+      ctx,
+      pi,
+      marketplace,
       scope,
-      version: capture.version,
-      rolledBackPartial,
-      rollbackPartials: capture.rollbackPartials,
-      entityErrorRow,
+      plugin,
+      capture,
+      orchestrated,
     });
-
-    if (opts.notifications?.mode === "orchestrated") {
-      // Orchestrated mode: compose the formatted-cause string so callers
-      // reading `outcome.cause` for rendering keep working. The typed
-      // Error remains the dispatch surface; narrow on `instanceof
-      // PluginShapeError` to recover the specific failure kind.
-      return classifyInstallFailure(err, formatOrchestratedCause(err));
-    }
-
-    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [failureMessage],
-      },
-    ]);
-    // Collapsed failure: `error` is the dispatch surface; `cause` is the
-    // formatted text for callers that render it directly.
-    const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
-    return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
   }
 
   // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
@@ -1601,28 +1841,16 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // no write-back -- the closure returned before runInstallLedger ran.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withLockedStateTransaction closure above.
   if (configInvalid) {
-    const cause = `Config file "${configBasename}" failed schema validation.`;
-    const invalidErr = new Error(cause);
-    if (orchestrated) {
-      return { status: "failed", error: invalidErr, cause };
-    }
-
-    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            severity: "error" as const,
-            name: plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: invalidErr,
-          },
-        ],
-      },
-    ]);
-    return { status: "failed", error: invalidErr, cause };
+    return failedRowOutcome({
+      ctx,
+      pi,
+      marketplace,
+      scope,
+      plugin,
+      error: new Error(`Config file "${configBasename}" failed schema validation.`),
+      reasons: ["invalid manifest"],
+      orchestrated,
+    });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `marketplaceAbsent` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
@@ -1643,285 +1871,46 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // Defensive: the success path always populates installCtx; if it did not,
   // surface the inconsistency rather than silently emit a missing message.
   if (installCtx === undefined) {
-    const cause = `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`;
-    const internalErr = new Error(cause);
-    if (opts.notifications?.mode === "orchestrated") {
-      return { status: "failed", error: internalErr, cause };
-    }
-
-    // Internal-error defensive arm: synthesise a PluginFailedMessage
-    // carrying the wrapped internalErr. `reasons: []` -- no closed-set
-    // Reason classifies an internal invariant violation; the renderer
-    // suppresses the empty brace per D-15-01 and surfaces the cause
-    // text via the 4-space-indent trailer.
-    //
-    // CR-02: row-level `scope` is OMITTED -- the marketplace block carries
-    // the same scope, and `shared/notify.ts::renderScopeBracket` suppresses
-    // the per-row bracket in that case. Matches the IN-04 omit convention
-    // used by this file's primary catch path's
-    // `composeInstallFailureMessage` recipe.
-    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            severity: "error" as const,
-            name: plugin,
-            reasons: [] as const,
-            cause: internalErr,
-          },
-        ],
-      },
-    ]);
-    return { status: "failed", error: internalErr, cause };
+    // Defensive arm: `reasons: []` because no closed-set Reason classifies
+    // an internal invariant violation. The renderer suppresses the empty
+    // brace per D-15-01 and surfaces the cause via the indent trailer.
+    return failedRowOutcome({
+      ctx,
+      pi,
+      marketplace,
+      scope,
+      plugin,
+      error: new Error(
+        `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`,
+      ),
+      reasons: [],
+      orchestrated,
+    });
   }
 
-  const postCommitWarnings: string[] = [];
-
-  // POST-state-commit (AS-6 / D-08): eager per-plugin data dir mkdir.
-  // The state record is already committed; the side effect runs inside
-  // a defensive try/catch so a permission error cannot strand the
-  // install. The standalone-mode user-visible warning is DROPPED per
-  // D-19-01: the MarketplaceNotificationMessage type has no field to
-  // surface "data-dir creation deferred after successful state
-  // mutation". The orchestrated-mode collection path is preserved for
-  // the cascade caller's pushDiagnostic channel.
-  try {
-    await mkdir(installCtx.pluginDataDir, { recursive: true });
-  } catch (mkdirErr) {
-    const msg = `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`;
-    if (orchestrated) {
-      postCommitWarnings.push(msg);
-    }
-    // else: D-19-01 -- dropped in standalone mode.
-  }
-
-  // D-03-INV: post-state-commit completion-cache invalidation.
-  // Plugin moved from "available" -> "installed"; drop the cached plugin
-  // index for this marketplace so the next completion read rebuilds with
-  // the new status. Defense-in-depth try/catch.
-  //
-  // Per D-19-01 the cache-refresh failure is swallowed silently. The
-  // cache-refresh side effect still fires; only the user-visible warning
-  // surface is gone. The orchestrated-mode collection path is preserved
-  // for the cascade caller.
-  try {
-    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
-  } catch (err) {
-    const msg = `Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`;
-    if (orchestrated) {
-      postCommitWarnings.push(msg);
-    }
-    // else: D-19-01 -- dropped in standalone mode.
-  }
-
-  // AS-7 / W-08 / B-08: agents-bridge preserved foreign-content rows
-  // during prepare. The install of NEW agents succeeded; the
-  // foreign-preserved rows are a manual-cleanup hint. The standalone-mode
-  // user-visible warning is DROPPED per D-19-01: agent foreign-file
-  // preservation rows have no clean MarketplaceNotificationMessage
-  // representation. The orchestrated-mode collection path is preserved
-  // for the cascade caller; the underlying agents-bridge state still
-  // records the foreign-row preservation in agents-index.json.
-  if (installCtx.agentForeignFailures.length > 0) {
-    const detail = installCtx.agentForeignFailures
-      .map((f) => `${f.generatedName}: ${f.reason}`)
-      .join("; ");
-    const msg = `Plugin "${plugin}" installed; ${installCtx.agentForeignFailures.length.toString()} pre-existing agent file(s) preserved on disk: ${detail}`;
-    if (orchestrated) {
-      postCommitWarnings.push(msg);
-    }
-    // else: D-19-01 -- dropped in standalone mode.
-  }
-
-  // WARN-01 / D-86-03: skills/commands whose SOURCE frontmatter could not be
-  // parsed were degraded (synthesized / neutralized) but still installed. The
-  // per-component `<plugin>/<component>: <parse error>` detail rides
-  // postCommitWarnings (orchestrated only, per D-19-01); the closed-set reason
-  // token rides the install row below. Standalone drops the detail exactly like
-  // agentForeignFailures.
-  for (const d of installCtx.frontmatterDegradations) {
-    const msg = `${plugin}/${d.generatedName}: ${d.parseError}`;
-    if (orchestrated) {
-      postCommitWarnings.push(msg);
-    }
-    // else: D-19-01 -- dropped in standalone mode.
-  }
-
-  // Bridge-side soft warnings (e.g. agents bridge cleanup-leak return
-  // values aggregated during the staged phases). The standalone-mode
-  // user-visible warning is DROPPED per D-19-01: bridge-side soft
-  // warnings have no clean representation. The orchestrated-mode
-  // collection path is preserved.
-  for (const w of installCtx.bridgeWarnings) {
-    if (orchestrated) {
-      postCommitWarnings.push(w);
-    }
-    // else: D-19-01 -- dropped in standalone mode.
-  }
-
-  // PI-9 corollary: track whether anything was actually staged. Preserved
-  // verbatim because `InstallPluginOutcome.resourcesChanged` is consumed
-  // by import/execute.ts as a structural predicate.
-  const stagedAny =
-    installCtx.stagedSkillNames.length > 0 ||
-    installCtx.stagedCommandNames.length > 0 ||
-    installCtx.stagedAgentNames.length > 0 ||
-    installCtx.stagedMcpServerNames.length > 0;
+  const postCommitWarnings = await collectPostCommitWarnings(installCtx, scope, orchestrated);
 
   if (!orchestrated) {
-    // Success: one notify(ctx, pi, ...) call with a
-    // PluginInstalledMessage. The renderer probes companion-loaded
-    // state via softDepStatus(pi) and emits the
-    // per-row soft-dep markers (`{requires pi-subagents, requires
-    // pi-mcp}`) automatically from `dependencies: readonly
-    // Dependency[]`. The "/reload to pick up changes" trailer fires
-    // structurally on the `installed` status; the reload-hint trigger
+    // Success: one notify(ctx, pi, ...) call with a PluginInstalledMessage.
+    // The renderer probes companion-loaded state via softDepStatus(pi) and
+    // emits the per-row soft-dep markers automatically. The "/reload to pick
+    // up changes" trailer fires structurally on the status; the trigger
     // ladder is per-variant, not per-resource-count (RH-1, PU-8 (b)).
     //
-    // The PI-13 dependencies-declaration note is DROPPED per D-19-01:
-    // the PR-5 free-form prose has no clean
-    // MarketplaceNotificationMessage representation; the resolver still
-    // appends the note to `installable.notes` so downstream surfaces
-    // (e.g. `/claude:plugin list` rendering) can continue to consume it.
-    const dependencies: Dependency[] = [];
-    if (installCtx.stagedAgentNames.length > 0) {
-      dependencies.push("agents");
-    }
-
-    if (installCtx.stagedMcpServerNames.length > 0) {
-      dependencies.push("mcp");
-    }
-
-    // IN-02 / IN-04: pass `version` straight through (`resolvePluginVersion`
-    // in `shared.ts::resolvePluginVersion` always returns a non-empty
-    // string, and the renderer's version-slot composer suppresses
-    // `v<version>` on undefined or empty regardless). Row-level `scope` is
-    // OMITTED: the single-plugin install surface's row scope always equals
-    // the marketplace block's scope, and `shared/notify.ts::renderScopeBracket`
-    // suppresses the per-row bracket in that case -- matching the same
-    // omit convention used by `uninstall.ts::uninstallPlugin` and
-    // `reinstall.ts::reinstallPlugin`.
-    // SURF-05 / D-63-08: surface `(installed) {orphan rewake}` when the
-    // resolver flagged a handler with `rewakeMessage` / `rewakeSummary` but
-    // no `asyncRewake: true`. One-per-plugin -- the resolver records a
-    // single flag, the install row emits a single reason regardless of N
-    // orphan handlers. Reasons share the brace block with any companion
-    // soft-dep markers per MSG-GR-4.
-    const reasons: ContentReason[] = [];
-    if (installCtx.resolved.orphanRewake === true) {
-      reasons.push("orphan rewake");
-    }
-
-    // WARN-01 / D-86-03: one `{malformed skill}` / `{malformed command}` token
-    // per plugin regardless of how many components of that kind degraded
-    // (mirrors orphan rewake's one-row-per-plugin). The free-text parse-error
-    // detail rode postCommitWarnings above (orchestrated only). Reasons share
-    // the brace block with any companion soft-dep markers per MSG-GR-4.
-    reasons.push(
-      ...malformedReasonsForKinds(installCtx.frontmatterDegradations.map((d) => d.kind)),
-    );
-
-    // FSTAT-07 / D-66-04: when the live resolved state is `partially-available`, the
-    // install was partially completed with one or more components dropped -- the
-    // success row reports `(partially-installed)` carrying the dropped-component
-    // detail via the shared `narrowUnsupportedKinds` helper. This reads the
-    // LIVE resolved state of the just-completed install -- NOT the persisted
-    // `compatibility.unsupported` record the `list` / non-path `info` derivers
-    // read; the two agree here only because the install just wrote that record.
-    // A fully-supported install stays `(installed)` (FSTAT-03 -- no lingering
-    // partial state). partially-installed is a realized transition
-    // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload as
-    // installed. WR-03: the partially-available arm still stages the
-    // SUPPORTED components, so the row threads `dependencies` -- the soft-dep
-    // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a degraded
-    // install exactly as on a clean one (where the signal is most relevant).
-    // SEV-01: an otherwise-successful install whose DECLARED soft-dep companion
-    // is unloaded silently degrades a clean install -> raise the desired-state
-    // severity from info to warning. A staged agent declares a `pi-subagents`
-    // companion; a staged mcp server declares `pi-mcp-adapter`. `softDepStatus`
-    // is the single sanctioned companion probe -- the same one the renderer uses
-    // for the `{requires pi-...}` marker that already renders the detail, so this
-    // is a metadata-only stamp (the per-row bytes do not change; the cascade
-    // gains the warning summary line). A loaded companion -- or no declared
-    // companion -- keeps the info stamp. Applies to BOTH the clean `installed`
-    // and degraded `partially-installed` success arms.
-    // SEV-01 / WARN-01: a degraded-but-installed component (synthesized skill /
-    // neutralized command) is "carried out but short of ideal" -> warning,
-    // independent of companion state. Otherwise the companion probe decides.
-    const successSeverity =
-      installCtx.frontmatterDegradations.length > 0
-        ? "warning"
-        : companionSeverity(
-            {
-              declaresAgents: installCtx.stagedAgentNames.length > 0,
-              declaresMcp: installCtx.stagedMcpServerNames.length > 0,
-            },
-            softDepStatus(pi),
-          );
-    const installedRow: InstallMsg =
-      installCtx.resolved.state === "partially-available"
-        ? {
-            status: "partially-installed",
-            name: plugin,
-            dependencies,
-            version: installCtx.version,
-            reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
-            severity: successSeverity,
-            needsReload: true,
-          }
-        : {
-            status: "installed",
-            name: plugin,
-            dependencies,
-            version: installCtx.version,
-            ...(reasons.length > 0 && { reasons }),
-            // D-03/D-06: realized install transition -> reloads Pi resources.
-            // SEV-01: info, raised to warning above on a missing companion.
-            severity: successSeverity,
-            needsReload: true,
-          };
-    // notify() call mirrors the recipe at
-    // orchestrators/plugin/uninstall.ts; install.ts substitutes
-    // "installed" + dependencies[] + per-D-19-03 failure branches
-    // (D-19-02 + D-19-03).
+    // The PI-13 dependencies-declaration note is DROPPED per D-19-01: the
+    // PR-5 free-form prose has no clean MarketplaceNotificationMessage
+    // representation. The resolver still appends it to `installable.notes`
+    // so downstream surfaces can continue to consume it.
     notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
       {
         name: marketplace,
         scope,
-        plugins: [installedRow],
+        plugins: [composeInstalledRow(installCtx, pi)],
       },
     ]);
   }
 
-  // WARN-01 / D-86-03: the inert seam the orchestrated reconcile composer reads
-  // to push the row token. Set of degraded kinds (skill before command by
-  // collection order), omitted when nothing degraded.
-  const degradedKinds = Array.from(new Set(installCtx.frontmatterDegradations.map((d) => d.kind)));
-
-  return {
-    status: "installed",
-    resourcesChanged: stagedAny,
-    declaresAgents: installCtx.stagedAgentNames.length > 0,
-    declaresMcp: installCtx.stagedMcpServerNames.length > 0,
-    ...(postCommitWarnings.length > 0 && { postCommitWarnings }),
-    // WR-03: the LIVE dropped-component kinds, read off the ledger's own
-    // resolution exactly as the standalone row above reads them. An install
-    // admitted through the partial gate materializes a degraded plugin, so an
-    // outcome that stayed silent about it would hand an orchestrated caller the
-    // facts for a bare `(installed)` row over a record whose `list` row reads
-    // `(partially-installed)`. Omitted on a clean install (NREG-01).
-    ...(installCtx.resolved.state === "partially-available" && {
-      unsupported: [...installCtx.resolved.unsupported],
-    }),
-    // SURF-05 / D-63-08 / IN-07: the same orphan-rewake fact the standalone row
-    // above reports, carried on the outcome so the orchestrated reconcile
-    // projection can name it too. Omitted when false (NREG-01).
-    ...(installCtx.resolved.orphanRewake === true && { orphanRewake: true }),
-    ...(degradedKinds.length > 0 && { degradedKinds }),
-  };
+  return buildInstalledOutcome(installCtx, postCommitWarnings);
 }
 
 // D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
@@ -2274,6 +2263,101 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
 }
 
 /**
+ * Cross-surface parity with `shared/probe-classifiers.ts::narrowResolverNotes`.
+ * The resolver emits four `hooks.json`-prefix families when `parseHooksConfig`
+ * rejects an on-disk hooks config (HOOK-03 / LIFE-01); both this install-side
+ * classifier and the read-only probe classifier MUST emit the same
+ * `unsupported hooks` token for the same on-disk condition (SURF-01). Mirrors
+ * the probe-side prefix set verbatim -- if a prefix is added or renamed on one
+ * side, the other side MUST follow in lockstep (pinned by
+ * tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
+ */
+function isHooksResolverNote(reason: string): boolean {
+  return (
+    reason.startsWith("hooks.json is not valid JSON:") ||
+    reason.startsWith("hooks.json failed schema validation:") ||
+    reason.startsWith("unsupported hooks:") ||
+    reason.startsWith("malformed hooks.json:")
+  );
+}
+
+/**
+ * Defensive errno-substring fallback for notes already serialised by deeper
+ * helpers. The preferred path is typed errno-bearing Errors dispatched at the
+ * orchestrator catch site via `.code`, so this only catches what slipped
+ * through as prose. Returns undefined when nothing matches.
+ */
+function errnoReasonFromNote(reason: string): ContentReason | undefined {
+  if (reason.includes("EACCES") || reason.includes("EPERM")) {
+    return "permission denied";
+  }
+
+  if (reason.includes("ENOENT") || reason.includes("ENOTDIR")) {
+    return "source missing";
+  }
+
+  if (reason.includes("SyntaxError") || reason.includes("Unexpected token")) {
+    return "unparseable";
+  }
+
+  return undefined;
+}
+
+/**
+ * Map ONE resolver note to its closed-set reason tokens. Arm order is
+ * load-bearing and documented on `narrowResolverReasons`; returns an empty
+ * list for a note that classifies to nothing.
+ */
+function classifyResolverReason(reason: string, partialable: boolean): readonly ContentReason[] {
+  if (reason === "") {
+    return [];
+  }
+
+  if (isHooksResolverNote(reason)) {
+    return ["unsupported hooks"];
+  }
+
+  // The resolver emits `"contains hooks"` / `"contains lspServers"` -- extract
+  // the bare token via the typed helper for the MSG-GR-4 carve-out.
+  const manifestFieldToken = manifestFieldTokenFromNote(reason);
+  if (manifestFieldToken !== undefined) {
+    return [manifestFieldToken];
+  }
+
+  // SURF-01 / WR-01 / D-64-07: a `contains <kind>` note for a kind OTHER than
+  // the `lspServers` carve-out (e.g. `monitors`, `themes`) is arm-dependent.
+  // On the partially-available arm it is a per-kind COMPONENT marker, routed
+  // through the SAME shared helper `list`/`info` consume so a multi-kind
+  // plugin emits a byte-identical marker set on every surface (CR-01 /
+  // D-64-02 / D-90-05). On the structural `unavailable` arm the note stays on
+  // the SOURCE axis, mirroring `narrowResolverNotes`'s permissive catch-all.
+  // The component axis belongs to the partially-available arm ONLY (D-64-07
+  // structural precedence); leaking it onto the structural arm was the
+  // SURF-01 divergence.
+  if (reason.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
+    return partialable
+      ? narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)])
+      : ["unsupported source"];
+  }
+
+  // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
+  // `mcpServers` string reference renders `{malformed mcp}` here too. Placed
+  // BEFORE the `Unexpected token` arm so a JSON-parse-error reference maps to
+  // `malformed mcp` rather than `{unparseable}`, and before the
+  // `includes("source")` catch-all.
+  if (reason.startsWith("malformed mcp reference")) {
+    return ["malformed mcp"];
+  }
+
+  if (reason.includes("source")) {
+    return ["unsupported source"];
+  }
+
+  const errnoReason = errnoReasonFromNote(reason);
+  return errnoReason === undefined ? [] : [errnoReason];
+}
+
+/**
  * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
  * for renderer consumption. Classification order:
  *   0. four `hooks.json` prefix families
@@ -2313,7 +2397,6 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-// eslint-disable-next-line sonarjs/cognitive-complexity
 function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
@@ -2321,88 +2404,7 @@ function narrowResolverReasons(
 ): readonly ContentReason[] {
   const out: ContentReason[] = [...narrowUnsupportedKinds(unsupportedKinds)];
   for (const reason of reasons) {
-    if (reason === "") {
-      continue;
-    }
-
-    // Cross-surface parity with `shared/probe-classifiers.ts::narrowResolverNotes`.
-    // The resolver emits four `hooks.json`-prefix families when `parseHooksConfig`
-    // rejects an on-disk hooks config (HOOK-03 / LIFE-01); both this install-side
-    // classifier and the read-only probe classifier MUST emit the same
-    // `unsupported hooks` REASONS token for the same on-disk condition (SURF-01).
-    // Mirrors the probe-side prefix set verbatim -- if a prefix is added or
-    // renamed on one side, the other side MUST follow in lockstep (pinned by
-    // tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
-    const isHooksNote =
-      reason.startsWith("hooks.json is not valid JSON:") ||
-      reason.startsWith("hooks.json failed schema validation:") ||
-      reason.startsWith("unsupported hooks:") ||
-      reason.startsWith("malformed hooks.json:");
-    if (isHooksNote) {
-      out.push("unsupported hooks");
-      continue;
-    }
-
-    // The resolver emits `"contains hooks"` / `"contains lspServers"` --
-    // extract the bare token via the typed helper for the MSG-GR-4 carve-out.
-    const manifestFieldToken = manifestFieldTokenFromNote(reason);
-    if (manifestFieldToken !== undefined) {
-      out.push(manifestFieldToken);
-      continue;
-    }
-
-    // SURF-01 / WR-01 / D-64-07: a `contains <kind>` note for a kind OTHER than
-    // the `lspServers` carve-out (e.g. `monitors`, `themes`) is arm-dependent.
-    // On the partially-available arm (`partialable === true`) it is a per-kind
-    // COMPONENT marker: route the bare token through the SAME shared helper
-    // `list`/`info` consume (`narrowUnsupportedKinds` -> `unsupported component`)
-    // so a multi-kind plugin emits a byte-identical marker set on every surface
-    // (CR-01 / D-64-02 / D-90-05). On the structural `unavailable` arm
-    // (`partialable === false`) the note stays on the SOURCE axis and renders
-    // `unsupported source`, mirroring `narrowResolverNotes`'s permissive
-    // catch-all so install agrees with `list`/`info` there too. The component-
-    // axis token belongs to the partially-available arm ONLY (D-64-07 structural
-    // precedence); leaking it onto the structural arm was the SURF-01 divergence.
-    if (reason.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
-      if (partialable) {
-        out.push(...narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)]));
-      } else {
-        out.push("unsupported source");
-      }
-
-      continue;
-    }
-
-    // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
-    // `mcpServers` string reference renders `{malformed mcp}` on the install
-    // surface, matching `list`/`info` (SURF-01). Placed BEFORE the
-    // `Unexpected token` arm so a JSON-parse-error reference maps to
-    // `malformed mcp`, not `{unparseable}`, and before the `includes("source")`
-    // catch-all. Byte-consistent with `shared/probe-classifiers.ts`.
-    if (reason.startsWith("malformed mcp reference")) {
-      out.push("malformed mcp");
-      continue;
-    }
-
-    if (reason.includes("source")) {
-      out.push("unsupported source");
-      continue;
-    }
-
-    // Defensive errno-substring fallback (see JSDoc above).
-    if (reason.includes("EACCES") || reason.includes("EPERM")) {
-      out.push("permission denied");
-      continue;
-    }
-
-    if (reason.includes("ENOENT") || reason.includes("ENOTDIR")) {
-      out.push("source missing");
-      continue;
-    }
-
-    if (reason.includes("SyntaxError") || reason.includes("Unexpected token")) {
-      out.push("unparseable");
-    }
+    out.push(...classifyResolverReason(reason, partialable));
   }
 
   if (out.length === 0) {

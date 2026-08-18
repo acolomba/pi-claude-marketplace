@@ -3930,8 +3930,10 @@ test("S5: update success + invalid config write-back surfaces a warning row (no 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the new hooks config without /reload", async () => {
-  const { _resetForTest, addPluginConfigToCache, getRoutingBucket } =
+  const { _resetForTest, addPluginConfigToCache } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { compileIfPredicate } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
   const { parseHooksConfig } =

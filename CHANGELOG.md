@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.16.0] - 2026-08-18
+
+- Fixed: an uninstall whose plugin data directory failed the NFR-10 containment check reported plain success while the directory survived. The cleanup step resolves that path through `assertSafeName` twice and `assertPathInside`, and a refactor had moved the call inside the `try` whose `catch` deliberately swallows cleanup leaks, so a refused path became indistinguishable from an `rm` failure. D-19-01 sanctions swallowing the cleanup, not the assertion guarding it. The path is resolved before the guard again, and a test now mounts the data dir as a symlink out of the data root to hold it there.
+
+- Apart from that fix, this release is build and tooling only.
+
+- The `fallow` static-analysis gate now checks the whole repository for dead code, complexity and duplication, and the same `npm run fallow` command runs locally, in the pre-commit hook, and in CI. The local gate previously ran `fallow dead-code --boundary-violations`, and that flag is an only-report filter rather than an addition, so architecture-zone violations were the only thing it checked -- cycles, unused files and exports, complexity and duplication were all ungated locally. CI meanwhile ran a different subcommand over only the changed files and failed on newly-introduced findings alone. A green local run therefore did not imply a green pull request, and neither implied a clean codebase. A green run now means the same thing everywhere.
+
+- Made the codebase compliant with that gate, which is the bulk of the change: 36 functions over the complexity thresholds were decomposed, and duplication fell from 3.6% to 2.1% as copied blocks were replaced by shared helpers. The largest were two copies of the hook environment builder that a comment asked readers to keep in sync by hand, and eight command render maps that re-inlined row bodies their own comments said should be called rather than duplicated. All 3467 unit tests and 21 integration tests pass unchanged throughout, including the catalog suite that compares rendered output byte for byte.
+
+- The hooks bridge's shared module state is now reached through named accessors instead of exported mutable Maps. `routing-state.ts` held four cells under two contradictory conventions: the two `let` bindings were private with accessors, because an importer cannot reassign an imported binding, while the two `const` Maps were exported raw, because interior mutability let them be. The read path had already drifted as a result, with one accessor documenting that callers should not touch the raw table and the caller doing it anyway in two places. Both Maps are private now, with one write surface each.
+
+- An unzoned file is now a build failure that names the path, instead of passing silently unchecked. Zone coverage is complete by construction rather than by accident of the current tree.
+
+- Unused exports and orphan files are now detected and fail the build. Clearing the 154 this exposed removed two entirely dead module barrels, 27 unreferenced declarations, and 13 runtime arrays that existed only to derive a type.
+
+- Removed the aggregate `bridges/index.ts` barrel and pruned 66 dead re-export lines from the five per-kind bridge barrels, which had been declaring 115 symbols public while 49 were consumed. The aggregate barrel was re-exporting all five bridge kinds with `export *`, which both offered a route around the rule forbidding one bridge from importing another, and silently disabled unused-export detection in every file it re-exported -- a star re-export counts as a consumer of everything in its target. Its only user was a lint-boundary test fixture. With it gone, a dead export in any of the five barrels now fails the build, verified by planting one in each.
+
+- Every quality gate now runs exactly when the files it reads change. CI skipped `**/*.md` and `docs/**` on the stated grounds that no test reads repo markdown, which was false: the catalog suite byte-compares 166 rendered examples against `docs/output-catalog.md`, and the SonarCloud job runs the coverage suite that executes it, so a docs-only edit could break that contract without CI ever running. Locally the reverse: the lint, format and typecheck hooks matched `extensions/` but never `tests/`, while the TypeScript project includes both, so a test-only commit skipped about 29 seconds of checks. Each pattern was verified by planting a violation and watching the gate fire.
+
+- The install ledger no longer hands its mutable working context to callers. `runInstallLedger` returned the scratchpad the five phases write into -- rollback handles, a live state snapshot -- which forced that type to be public. It now returns a readonly projection of the four fields that actually cross the module boundary.
+
 ## [0.15.0] - 2026-08-14
 
 - Added GitLab support for private marketplace and plugin sources. Adding a `https://gitlab.com/...` marketplace or plugin source now authenticates via RFC 8628 OAuth Device Flow when no credential is cached, the same flow already used for GitHub.

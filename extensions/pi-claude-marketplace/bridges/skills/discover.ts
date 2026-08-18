@@ -20,10 +20,11 @@
 // SK-2 elision is delegated to `domain/name.ts::generatedSkillName`; this
 // module is purely the discovery/filter step.
 
-import { lstat, readdir } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName, generatedSkillName } from "../../domain/name.ts";
+import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredSkill } from "./types.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
@@ -38,19 +39,6 @@ import type { Dirent } from "node:fs";
 export interface DiscoverPluginSkillsResult {
   readonly discovered: readonly DiscoveredSkill[];
   readonly warnings: readonly string[];
-}
-
-async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true, encoding: "utf8" });
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return [];
-    }
-
-    throw err;
-  }
 }
 
 async function hasRegularSkillFile(skillDir: string): Promise<boolean> {
@@ -157,7 +145,7 @@ export async function discoverPluginSkills(input: {
       continue;
     }
 
-    const entries = await readEntriesGracefully(skillsDir);
+    const entries = await readDirEntriesTolerant(skillsDir);
 
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 

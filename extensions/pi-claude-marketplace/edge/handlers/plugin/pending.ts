@@ -15,9 +15,10 @@
 // guard.
 
 import { pendingReconcile } from "../../../orchestrators/reconcile/pending.ts";
-import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
+
+import { withParsedArgs } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -30,15 +31,7 @@ const USAGE = "Usage: /claude:plugin pending [--scope user|project]";
 export function makePendingHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    let parsed;
-    try {
-      parsed = parseArgs(args);
-    } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
-      return;
-    }
-
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
     // `pending` takes NO positional arguments. Any non-flag token (or an
     // unknown long flag passed through parseArgs as a positional) is a
     // usage error.
@@ -59,5 +52,5 @@ export function makePendingHandler(
       cwd: ctx.cwd,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });
-  };
+  });
 }

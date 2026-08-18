@@ -45,6 +45,25 @@ import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
  *   with an informational marker so this gate can land before implementation.
  *   Once a target file exists, assertions fire.
  *
+ * Why this test is NOT replaceable by a fallow boundary rule (measured):
+ *   Planting `import { clone } from "platform/git.ts"` plus a `clone()` call
+ *   in install.ts was observed leaving `npm run fallow` at exit 0, while this
+ *   test failed. Three reasons, each independent:
+ *     1. `orchestrators` -> `platform` is a LEGAL edge -- update.ts,
+ *        clone-cache.ts and auth-host.ts all need it -- so an import rule at
+ *        zone granularity cannot forbid it for three files only.
+ *     2. Splitting a narrow `orchestrators-network-free` zone out was tried and
+ *        produces 26 false violations, because the two halves legitimately
+ *        import each other. Allowing them back lets `DEFAULT_GIT_OPS` reach
+ *        install.ts through the `marketplace/shared.ts` re-export anyway, so
+ *        the rule would enforce nothing.
+ *     3. `platform/git.ts` and `platform/pi-api.ts` share a directory, and
+ *        install.ts legitimately imports the latter. Fallow zones are
+ *        directory-scoped, so they cannot separate the two.
+ *   `boundaries.calls.forbidden` catches a CALL; this gate additionally
+ *   catches an IMPORT and a bare `gitOps` field declaration, which is the
+ *   surface NFR-5 actually cares about. Keep this test.
+ *
  * stripComments rationale (mandatory):
  *   Source files include header docstrings that legally mention the forbidden
  *   symbols (e.g. "MUST NOT import platform/git"). Without `stripComments`,

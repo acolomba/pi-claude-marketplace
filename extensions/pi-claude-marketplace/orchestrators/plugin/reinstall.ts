@@ -93,7 +93,7 @@ import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { canonicalCloneUrl, materializePluginClone, resolveGitSubdirRoot } from "./clone-cache.ts";
@@ -116,7 +116,7 @@ import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/ski
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -137,18 +137,14 @@ import type {
   ReinstallReinstalledOutcome,
 } from "../types.ts";
 
-export type {
-  ReinstallFailedOutcome,
-  ReinstallPluginOutcome,
-  ReinstallPluginPartition,
-  ReinstallReinstalledOutcome,
-  ReinstallSkippedOutcome,
-} from "../types.ts";
+export type { ReinstallPluginOutcome } from "../types.ts";
 
-type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";
-type RemoveDataDirFn = (path: string, options: { recursive: true; force: true }) => Promise<void>;
-type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
+export type RemoveDataDirFn = (
+  path: string,
+  options: { recursive: true; force: true },
+) => Promise<void>;
+export type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
 
 export interface ReinstallPluginOptions {
   readonly ctx: ExtensionContext;
@@ -1356,34 +1352,6 @@ async function loadCachedEntry(
 }
 
 /**
- * PROV-02/03: build the host-keyed bundle for the COLD-cache re-clone
- * (undefined for a public / no-provider host). A warm cache short-circuits
- * inside materializePluginClone before the clone, so the bundle is never
- * exercised offline (PURL-07 parity). The bulk path threads a shared authMemo
- * so repeated challenges across one sweep prompt once per host (D-79-02); the
- * standalone single-plugin caller omits it.
- */
-function buildReinstallCloneAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  auth: {
-    ctx: ExtensionContext;
-    credentialOps: CredentialOps;
-    deviceFlowHttp?: DeviceFlowHttp;
-    authMemo?: Map<string, AuthAttemptResult>;
-  },
-): ReturnType<typeof buildAuthForHost> {
-  const host = hostFromCloneUrl(cloneUrl, kind);
-  return buildAuthForHost({
-    host,
-    credentialOps: auth.credentialOps,
-    ctx: auth.ctx,
-    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-  });
-}
-
-/**
  * PURL-07 / D-78-02: build the recorded-sha `resolveGitPluginRoot` callback for a
  * git plugin source. Reinstall pins from the state record's `recordedSha` (the pin
  * IS the record) and reaches `materializePluginClone` by name via the seam -- it
@@ -1437,7 +1405,7 @@ function makeReinstallCloneProbe(
       }
     }
 
-    const authBundle = buildReinstallCloneAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
 
     const cloneRoot = await seam.materializePluginClone({
       locations,
@@ -1522,7 +1490,7 @@ async function prepareAllHandles(input: {
   readonly plugin: string;
   readonly installable: MaterializablePlugin;
   readonly pluginDataDir: string;
-  readonly oldRecord: PluginRecord;
+  readonly oldRecord: PluginInstallRecord;
   readonly agentsSourceDir: string | null;
 }): Promise<PreparedHandles> {
   const handles: PartialPreparedHandles = {};
@@ -1648,7 +1616,8 @@ interface HooksReplaceArgs {
 /**
  * LIFE-01 hooks-bridge atomic write/remove during reinstall's replace step.
  * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
- * on-disk hooks.json (mirroring `install.ts:340-360`) and call writeHookConfig.
+ * on-disk hooks.json (mirroring `install.ts`'s `hooksPhase` inside
+ * `runInstallLedger`) and call writeHookConfig.
  * When the resolved plugin has no hooks, remove any stale subtree (defensive
  * cleanup of an artifact a prior install left behind).
  *
@@ -1691,7 +1660,7 @@ function updateStateRecord(
   state: ExtensionState,
   marketplace: string,
   plugin: string,
-  oldRecord: PluginRecord,
+  oldRecord: PluginInstallRecord,
   installable: MaterializablePlugin,
   handles: PreparedHandles,
   hookEntries: readonly HookSummaryEntry[] | undefined,
@@ -1740,7 +1709,7 @@ function resourcesFromHandles(
   handles: PreparedHandles,
   plugin?: string,
   installable?: MaterializablePlugin,
-): PluginRecord["resources"] {
+): PluginInstallRecord["resources"] {
   return {
     skills: handles.skills.result.recorded.map((r) => r.generatedName),
     prompts: handles.commands.result.recorded.map((r) => r.generatedName),
@@ -1763,7 +1732,7 @@ function successOutcome(
   scope: Scope,
   marketplace: string,
   plugin: string,
-  oldRecord: PluginRecord,
+  oldRecord: PluginInstallRecord,
   handles: PreparedHandles,
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
@@ -1800,8 +1769,8 @@ function successOutcome(
 }
 
 function resourcesChanged(
-  oldResources: PluginRecord["resources"],
-  next: PluginRecord["resources"],
+  oldResources: PluginInstallRecord["resources"],
+  next: PluginInstallRecord["resources"],
 ): boolean {
   return (
     next.skills.length > 0 ||
@@ -2040,7 +2009,7 @@ async function runPostSuccessMaintenance(
   return Object.freeze(warnings);
 }
 
-function clonePluginRecord(record: PluginRecord): PluginRecord {
+function clonePluginRecord(record: PluginInstallRecord): PluginInstallRecord {
   return {
     version: record.version,
     resolvedSource: record.resolvedSource,

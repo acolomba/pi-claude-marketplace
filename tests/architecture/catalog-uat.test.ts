@@ -61,6 +61,95 @@ interface CatalogExample {
 }
 
 /**
+ * Resolve the catalog section identifier from a heading match.
+ *
+ * Group 2 is the backtick-wrapped `/claude:plugin ...` capture, present only
+ * on the command-section arm. When it is absent the literal section name in
+ * group 1 is used: kebab-cased for the `Manual recovery anchors` arm, and
+ * left verbatim for the plain `reconcile-applied-cascade` arm (RECON-04).
+ */
+function resolveSectionName(sectionMatch: RegExpExecArray): string {
+  if (sectionMatch[2] !== undefined) {
+    return sectionMatch[2];
+  }
+
+  const groupOne = sectionMatch[1] ?? "";
+  return groupOne === "Manual recovery anchors" ? "manual-recovery-anchors" : groupOne;
+}
+
+/** Mutable scan position for the catalog line parser. */
+interface CatalogScanState {
+  currentSection: string | null;
+  pendingState: string | null;
+  inFence: boolean;
+  fenceBody: string[];
+}
+
+// RECON-04: the `reconcile-applied-cascade` H2 is a command-less section --
+// the cascade is emitted programmatically by the load-time apply
+// orchestrator, not via a `/claude:plugin` verb. The parser therefore accepts
+// a plain non-backtick heading whose text matches the discriminator-style
+// identifier.
+const CATALOG_SECTION_RE =
+  /^## (`(\/claude:plugin [^`]+)`|Manual recovery anchors|reconcile-applied-cascade)\s*$/;
+const CATALOG_STATE_RE = /^<!-- catalog-state: ([a-z0-9-]+) -->\s*$/;
+
+/**
+ * Consume one line while inside a fenced block. The closing fence emits the
+ * accumulated example, but only when the fence was preceded by BOTH a section
+ * heading and a `catalog-state` marker.
+ */
+function scanInsideFence(line: string, st: CatalogScanState, examples: CatalogExample[]): void {
+  if (!line.startsWith("```")) {
+    st.fenceBody.push(line);
+    return;
+  }
+
+  if (st.pendingState !== null && st.currentSection !== null) {
+    examples.push({
+      section: st.currentSection,
+      state: st.pendingState,
+      expected: st.fenceBody.join("\n"),
+    });
+  }
+
+  st.pendingState = null;
+  st.fenceBody = [];
+  st.inFence = false;
+}
+
+/**
+ * Consume one line while outside a fenced block: a recognised section heading
+ * arms the section, any other H2 disarms it, a `catalog-state` marker arms the
+ * next fence, and an opening fence starts accumulating.
+ */
+function scanOutsideFence(line: string, st: CatalogScanState): void {
+  const sectionMatch = CATALOG_SECTION_RE.exec(line);
+  if (sectionMatch !== null) {
+    st.currentSection = resolveSectionName(sectionMatch);
+    st.pendingState = null;
+    return;
+  }
+
+  if (line.startsWith("## ")) {
+    st.currentSection = null;
+    st.pendingState = null;
+    return;
+  }
+
+  const stateMatch = CATALOG_STATE_RE.exec(line);
+  if (stateMatch !== null) {
+    st.pendingState = stateMatch[1] ?? null;
+    return;
+  }
+
+  if (line.startsWith("```")) {
+    st.inFence = true;
+    st.fenceBody = [];
+  }
+}
+
+/**
  * Walk catalog lines, tracking the current per-command H2 section, and
  * pair each `<!-- catalog-state: STATE -->` annotation with the body of
  * the next fenced block.
@@ -75,78 +164,19 @@ interface CatalogExample {
  * appear under a null section.
  */
 function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
-  const lines = catalog.split("\n");
   const examples: CatalogExample[] = [];
-  let currentSection: string | null = null;
-  let pendingState: string | null = null;
-  let inFence = false;
-  let fenceBody: string[] = [];
+  const st: CatalogScanState = {
+    currentSection: null,
+    pendingState: null,
+    inFence: false,
+    fenceBody: [],
+  };
 
-  // RECON-04: the `reconcile-applied-cascade` H2 is a
-  // command-less section -- the cascade is emitted programmatically by the
-  // load-time apply orchestrator, not via a `/claude:plugin` verb. The
-  // parser accepts a plain non-backtick heading whose text matches the
-  // discriminator-style identifier.
-  const sectionRe =
-    /^## (`(\/claude:plugin [^`]+)`|Manual recovery anchors|reconcile-applied-cascade)\s*$/;
-  const stateRe = /^<!-- catalog-state: ([a-z0-9-]+) -->\s*$/;
-
-  for (const line of lines) {
-    if (inFence) {
-      if (line.startsWith("```")) {
-        if (pendingState !== null && currentSection !== null) {
-          examples.push({
-            section: currentSection,
-            state: pendingState,
-            expected: fenceBody.join("\n"),
-          });
-        }
-
-        pendingState = null;
-        fenceBody = [];
-        inFence = false;
-        continue;
-      }
-
-      fenceBody.push(line);
-      continue;
-    }
-
-    const sectionMatch = sectionRe.exec(line);
-    if (sectionMatch !== null) {
-      // sectionMatch[2] is the backtick-wrapped `/claude:plugin ...` capture
-      // (present only on the command-section arm). When absent, fall back to
-      // the literal section name from group 1 (transformed to kebab-case for
-      // the `Manual recovery anchors` arm; left as-is for the plain
-      // `reconcile-applied-cascade` arm -- RECON-04).
-      const groupOne = sectionMatch[1] ?? "";
-      if (sectionMatch[2] !== undefined) {
-        currentSection = sectionMatch[2];
-      } else if (groupOne === "Manual recovery anchors") {
-        currentSection = "manual-recovery-anchors";
-      } else {
-        currentSection = groupOne;
-      }
-
-      pendingState = null;
-      continue;
-    }
-
-    if (line.startsWith("## ")) {
-      currentSection = null;
-      pendingState = null;
-      continue;
-    }
-
-    const stateMatch = stateRe.exec(line);
-    if (stateMatch !== null) {
-      pendingState = stateMatch[1] ?? null;
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      inFence = true;
-      fenceBody = [];
+  for (const line of catalog.split("\n")) {
+    if (st.inFence) {
+      scanInsideFence(line, st, examples);
+    } else {
+      scanOutsideFence(line, st);
     }
   }
 
@@ -4631,124 +4661,147 @@ const FIXTURES: FixtureMap = {
 // assert byte equality + severity-arg shape.
 // ---------------------------------------------------------------------------
 
+/** One catalog example's disagreement with what `notify()` actually rendered. */
+interface Failure {
+  readonly section: string;
+  readonly state: string;
+  readonly kind: "missing-fixture" | "byte-mismatch" | "severity-mismatch";
+  readonly expected?: string;
+  readonly actual?: string;
+}
+
+/**
+ * Assert the severity ARG shape for one rendered call. A fixture that declares
+ * `expectedSeverity` requires exactly that second argument; a fixture that
+ * declares none requires the second argument be absent (the info default).
+ */
+function checkSeverityArg(
+  example: CatalogExample,
+  expectedSeverity: string | undefined,
+  callArgs: [string, string?],
+): Failure | undefined {
+  if (expectedSeverity !== undefined) {
+    if (callArgs.length === 2 && callArgs[1] === expectedSeverity) {
+      return undefined;
+    }
+
+    return {
+      section: example.section,
+      state: example.state,
+      kind: "severity-mismatch",
+      expected: expectedSeverity,
+      actual: callArgs[1] ?? "(info / no 2nd arg)",
+    };
+  }
+
+  if (callArgs.length === 1) {
+    return undefined;
+  }
+
+  return {
+    section: example.section,
+    state: example.state,
+    kind: "severity-mismatch",
+    expected: "(info / no 2nd arg)",
+    actual: callArgs[1] ?? "?",
+  };
+}
+
+/**
+ * Render one catalog example through `notify()` against a FRESH mock ctx and
+ * compare the emitted bytes and severity arg. A fresh ctx per example is
+ * required because `mock.fn()` accumulates calls across invocations, so
+ * reusing one would leak state between fixtures.
+ */
+function checkCatalogExample(example: CatalogExample): Failure[] {
+  const fixture = FIXTURES[example.section]?.[example.state];
+  if (fixture === undefined) {
+    return [{ section: example.section, state: example.state, kind: "missing-fixture" }];
+  }
+
+  const ctx = makeCtx();
+  // UGRM-01 / UGRM-02: orchestrator-emitted no-op states route through the
+  // fixture's `emit` override (`emitUpdateNoOpCascade`); every other state
+  // drives the `notify()` renderer directly.
+  if (fixture.emit !== undefined) {
+    fixture.emit(ctx, fixture.pi);
+  } else {
+    notify(ctx as never, fixture.pi as never, fixture.message);
+  }
+
+  assert.equal(
+    ctx.ui.notify.mock.calls.length,
+    1,
+    `notify() must call ctx.ui.notify exactly once per invocation (section=${example.section} state=${example.state})`,
+  );
+
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  const failures: Failure[] = [];
+  const actual = callArgs[0];
+  if (actual !== example.expected) {
+    failures.push({
+      section: example.section,
+      state: example.state,
+      kind: "byte-mismatch",
+      expected: example.expected,
+      actual,
+    });
+  }
+
+  const severityFailure = checkSeverityArg(example, fixture.expectedSeverity, callArgs);
+  if (severityFailure !== undefined) {
+    failures.push(severityFailure);
+  }
+
+  return failures;
+}
+
+/** Render one failure as the operator-facing diff block. */
+function formatCatalogFailure(f: Failure): string {
+  if (f.kind === "missing-fixture") {
+    return `[MISSING FIXTURE] section=${f.section} state=${f.state}`;
+  }
+
+  if (f.kind === "severity-mismatch") {
+    return [
+      `[SEVERITY MISMATCH] section=${f.section} state=${f.state}`,
+      `--- expected severity --- ${f.expected ?? ""}`,
+      `--- actual severity ----- ${f.actual ?? ""}`,
+    ].join("\n");
+  }
+
+  return [
+    `[BYTE MISMATCH] section=${f.section} state=${f.state}`,
+    "--- expected ---",
+    f.expected ?? "",
+    "--- actual ---",
+    f.actual ?? "",
+    "----------------",
+  ].join("\n");
+}
+
 test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal with notify()", async () => {
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  assert.ok(
-    examples.length >= 30,
-    `Expected at least 30 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost.`,
+  // Exact count, not a floor: 166 is the number of annotated examples in
+  // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
+  // refactor from silently parsing a fraction of the corpus. Update it
+  // deliberately when catalog examples are added or removed.
+  assert.equal(
+    examples.length,
+    166,
+    `Expected exactly 166 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
-
-  interface Failure {
-    readonly section: string;
-    readonly state: string;
-    readonly kind: "missing-fixture" | "byte-mismatch" | "severity-mismatch";
-    readonly expected?: string;
-    readonly actual?: string;
-  }
 
   const failures: Failure[] = [];
 
   for (const example of examples) {
-    const sectionFixtures = FIXTURES[example.section];
-    if (sectionFixtures === undefined) {
-      failures.push({
-        section: example.section,
-        state: example.state,
-        kind: "missing-fixture",
-      });
-      continue;
-    }
-
-    const fixture = sectionFixtures[example.state];
-    if (fixture === undefined) {
-      failures.push({
-        section: example.section,
-        state: example.state,
-        kind: "missing-fixture",
-      });
-      continue;
-    }
-
-    // Fresh ctx per iteration -- mock.fn() accumulates calls across
-    // invocations, so reusing it would leak state across fixtures.
-    const ctx = makeCtx();
-    // UGRM-01/UGRM-02: orchestrator-emitted no-op states route through the
-    // fixture's `emit` override (`emitUpdateNoOpCascade`); every other state
-    // drives the `notify()` renderer directly.
-    if (fixture.emit !== undefined) {
-      fixture.emit(ctx, fixture.pi);
-    } else {
-      notify(ctx as never, fixture.pi as never, fixture.message);
-    }
-
-    assert.equal(
-      ctx.ui.notify.mock.calls.length,
-      1,
-      `notify() must call ctx.ui.notify exactly once per invocation (section=${example.section} state=${example.state})`,
-    );
-
-    const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-    const actual = callArgs[0];
-
-    if (actual !== example.expected) {
-      failures.push({
-        section: example.section,
-        state: example.state,
-        kind: "byte-mismatch",
-        expected: example.expected,
-        actual,
-      });
-    }
-
-    // Severity-arg assertion.
-    if (fixture.expectedSeverity !== undefined) {
-      if (callArgs.length !== 2 || callArgs[1] !== fixture.expectedSeverity) {
-        failures.push({
-          section: example.section,
-          state: example.state,
-          kind: "severity-mismatch",
-          expected: fixture.expectedSeverity,
-          actual: callArgs[1] ?? "(info / no 2nd arg)",
-        });
-      }
-    } else if (callArgs.length !== 1) {
-      failures.push({
-        section: example.section,
-        state: example.state,
-        kind: "severity-mismatch",
-        expected: "(info / no 2nd arg)",
-        actual: callArgs[1] ?? "?",
-      });
-    }
+    failures.push(...checkCatalogExample(example));
   }
 
   if (failures.length > 0) {
-    const formatted = failures
-      .map((f) => {
-        if (f.kind === "missing-fixture") {
-          return `[MISSING FIXTURE] section=${f.section} state=${f.state}`;
-        }
-
-        if (f.kind === "severity-mismatch") {
-          return [
-            `[SEVERITY MISMATCH] section=${f.section} state=${f.state}`,
-            `--- expected severity --- ${f.expected ?? ""}`,
-            `--- actual severity ----- ${f.actual ?? ""}`,
-          ].join("\n");
-        }
-
-        return [
-          `[BYTE MISMATCH] section=${f.section} state=${f.state}`,
-          "--- expected ---",
-          f.expected ?? "",
-          "--- actual ---",
-          f.actual ?? "",
-          "----------------",
-        ].join("\n");
-      })
-      .join("\n\n");
+    const formatted = failures.map(formatCatalogFailure).join("\n\n");
     assert.fail(`catalog UAT failures (${failures.length}):\n${formatted}`);
   }
 });

@@ -23,7 +23,7 @@ import { createManifestCache } from "./manifest-cache.ts";
  * The `strict` field controls resolver behavior (resolveStrict vs
  * resolveLoose) per MM-5/MM-6/MM-7; the schema only validates presence.
  */
-export const MARKETPLACE_SCHEMA = Type.Object({
+const MARKETPLACE_SCHEMA = Type.Object({
   name: Type.String(),
   plugins: Type.Array(PLUGIN_ENTRY_SCHEMA),
   strict: Type.Optional(Type.Boolean()),

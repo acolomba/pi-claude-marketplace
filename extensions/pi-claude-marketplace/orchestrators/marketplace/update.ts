@@ -281,7 +281,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   }
 }
 
-interface RefreshOneArgs {
+export interface RefreshOneArgs {
   readonly ctx: ExtensionContext;
   readonly name: string;
   readonly scope: Scope;
@@ -488,7 +488,7 @@ async function refreshRecord(
   }
 }
 
-interface RefreshSnapshot {
+export interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
   /**

@@ -12,7 +12,5 @@ import { Compile } from "typebox/compile";
 
 export const MCP_SERVERS_SCHEMA = Type.Record(Type.String(), Type.Unknown());
 
-export type MCPServers = Type.Static<typeof MCP_SERVERS_SCHEMA>;
-
 /** JIT-compiled validator (D-07). Use `.Check(value)` or `.Parse(value)`. */
 export const MCP_SERVERS_VALIDATOR = Compile(MCP_SERVERS_SCHEMA);

@@ -33,7 +33,7 @@
 // `info.test.ts`.
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -48,11 +48,14 @@ import {
   getPluginInfo,
   type InfoCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+  seedAutoupdateConfig,
+} from "../../helpers/marketplace-seed.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
@@ -207,69 +210,30 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
-    const unsupported = info.unsupported ?? [];
+    // This suite's inventory contract: a single seeded skill unless the
+    // fixture overrides an axis explicitly.
     const override = info.resources;
-    plugins[name] = {
-      version: info.version,
-      resolvedSource: info.resolvedSource ?? "./placeholder",
-      ...(info.hookEntries !== undefined && {
-        hookEntries: info.hookEntries.map((e) => ({ ...e })),
-      }),
-      compatibility: {
-        installable: unsupported.length === 0,
-        notes: [],
-        supported: [],
-        unsupported: [...unsupported],
-      },
-      resources: {
-        skills: [...(override?.skills ?? [`${name}-skill`])],
-        prompts: [...(override?.prompts ?? [])],
-        agents: [...(override?.agents ?? [])],
-        mcpServers: [...(override?.mcpServers ?? [])],
-        hooks: [...(override?.hooks ?? [])],
-      },
-      enabled: info.disabled !== true,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
+    plugins[name] = buildInstalledPluginRecord(info, {
+      skills: [...(override?.skills ?? [`${name}-skill`])],
+      prompts: [...(override?.prompts ?? [])],
+      agents: [...(override?.agents ?? [])],
+      mcpServers: [...(override?.mcpServers ?? [])],
+      hooks: [...(override?.hooks ?? [])],
+    });
   }
 
-  const stateJsonPath = path.join(locations.extensionRoot, "state.json");
-  let existing: { marketplaces: Record<string, unknown> } = { marketplaces: {} };
-  try {
-    const raw = await readFile(stateJsonPath, "utf8");
-    existing = JSON.parse(raw) as { marketplaces: Record<string, unknown> };
-  } catch {
-    /* first marketplace in scope */
-  }
+  await mergeMarketplaceIntoState(locations.extensionRoot, mpName, {
+    name: mpName,
+    scope,
+    source: pathSource(`./${mpName}-src`),
+    addedFromCwd: cwd,
+    manifestPath,
+    marketplaceRoot: mpRoot,
+    plugins,
+  });
 
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 2,
-    marketplaces: {
-      ...existing.marketplaces,
-      [mpName]: {
-        name: mpName,
-        scope,
-        source: pathSource(`./${mpName}-src`),
-        addedFromCwd: cwd,
-        manifestPath,
-        marketplaceRoot: mpRoot,
-        plugins,
-      },
-    },
-  } as unknown as Parameters<typeof saveState>[1]);
-
-  // SPLIT-01: the info orchestrator reads autoupdate from the merged config, so
-  // seed `claude-plugins.json` when the fixture asks for it.
   if (opts.autoupdate !== undefined) {
-    await saveConfig(
-      locations.configJsonPath,
-      {
-        schemaVersion: 1,
-        marketplaces: { [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate } },
-      },
-      locations.scopeRoot,
-    );
+    await seedAutoupdateConfig(locations, mpName, opts.autoupdate);
   }
 
   return mpRoot;

@@ -36,7 +36,7 @@ export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | u
   };
 }
 
-export interface ParsedPositionalsResult {
+interface ParsedPositionalsResult {
   readonly nonFlagPositionals: readonly string[];
   readonly mapModel: boolean;
   readonly partial: boolean;
@@ -59,7 +59,7 @@ const DOWNSTREAM_BOOLEAN_FLAGS = new Set([
  * unrecognised long flag is encountered (MSG-NC-2: argument-parsing failure
  * with Usage-block-appended sentence form).
  */
-export function parsePositionalsWithFlags(
+function parsePositionalsWithFlags(
   tokens: readonly string[],
   ctx: ExtensionCommandContext,
   usage: string,
@@ -170,5 +170,32 @@ export function parseRequiredPluginMarketplaceRef(
   return {
     ...ref,
     ...(parsed.scope !== undefined && { scope: parsed.scope }),
+  };
+}
+
+/**
+ * MSG-NC-2: the shared handler prelude. Parse the raw argument string and, on
+ * a parse throw -- an invalid `--scope` value, an unknown long flag -- emit the
+ * sentence-form usage error with the Usage block appended after a blank line,
+ * then return without calling the orchestrator.
+ *
+ * Every `/claude:plugin` subcommand handler opens this way, so the prelude
+ * lives here rather than being restated per handler.
+ */
+export function withParsedArgs<P>(
+  parse: (args: string) => P,
+  usage: string,
+  run: (parsed: P, ctx: ExtensionCommandContext) => Promise<void>,
+): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+  return async (args, ctx): Promise<void> => {
+    let parsed: P;
+    try {
+      parsed = parse(args);
+    } catch (err) {
+      notifyUsageError(ctx, { message: errorMessage(err), usage });
+      return;
+    }
+
+    await run(parsed, ctx);
   };
 }

@@ -53,8 +53,6 @@ export type {
   SessionStartEvent,
   ToolCallEvent,
   ToolCallEventResult,
-  ToolDefinition,
-  ToolInfo,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
@@ -88,8 +86,6 @@ export interface ToolResultEventResult {
   details?: unknown;
   isError?: boolean;
 }
-
-export type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 export interface ResourcesDiscoverEvent {
   type: "resources_discover";

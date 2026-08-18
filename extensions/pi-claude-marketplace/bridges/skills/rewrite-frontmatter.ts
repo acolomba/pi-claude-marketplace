@@ -9,55 +9,14 @@
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 
+import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
+
 /** The top-level frontmatter `name` key token (including its colon). */
 const NAME_KEY = "name:";
 
 /** A fresh `name`-only frontmatter block prepended ahead of `content`. */
 function freshBlock(newName: string, content: string): string {
   return `---\nname: ${newName}\n---\n\n${content}`;
-}
-
-/** Index of the closing `---` fence (frontmatter block end), or `lines.length`. */
-function frontmatterBlockEnd(lines: readonly string[]): number {
-  for (let i = 1; i < lines.length; i++) {
-    if ((lines[i] ?? "").trim() === "---") {
-      return i;
-    }
-  }
-
-  return lines.length;
-}
-
-/**
- * Given the `name` key line at `keyIndex`, return the index of the LAST line its
- * value spans. A scalar value continues onto later lines for EVERY multi-line
- * form -- block (`>` / `|`, optionally with a chomp / indent modifier),
- * multi-line plain, and multi-line single/double-quoted -- and in all of them
- * the continuation lines are indented deeper than the column-0 key. Absorb every
- * indented (non-blank) continuation line up to `blockEnd`, stopping at the first
- * line that returns to column 0. An inline scalar has no continuation, so the
- * key line itself is returned. Absorbing the full node span for all multi-line
- * forms -- not just block scalars (WR-01) -- prevents a multi-line source `name:`
- * from leaving orphaned prose that folds into the parsed name and trips the
- * SKILL-03 verify (the corruption class, e.g. `<gen> a b`).
- */
-function nameValueEnd(lines: readonly string[], keyIndex: number, blockEnd: number): number {
-  let lastReplaced = keyIndex;
-  for (let i = keyIndex + 1; i < blockEnd; i++) {
-    const line = lines[i] ?? "";
-    if (line.trim() === "") {
-      continue;
-    }
-
-    if (/^\s/.test(line)) {
-      lastReplaced = i;
-      continue;
-    }
-
-    break;
-  }
-
-  return lastReplaced;
 }
 
 /**
@@ -85,7 +44,7 @@ function rewriteNameNode(content: string, newName: string): string {
     return [lines[0], replacement, ...lines.slice(1)].join("\n");
   }
 
-  const lastReplaced = nameValueEnd(lines, keyIndex, blockEnd);
+  const lastReplaced = keyValueEnd(lines, keyIndex, blockEnd);
   return [...lines.slice(0, keyIndex), replacement, ...lines.slice(lastReplaced + 1)].join("\n");
 }
 

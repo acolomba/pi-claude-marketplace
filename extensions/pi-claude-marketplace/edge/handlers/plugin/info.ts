@@ -8,12 +8,11 @@
 // the positional/scope shape and delegates.
 
 import { getPluginInfo } from "../../../orchestrators/plugin/info.ts";
-import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";
 
-import { splitPluginMarketplaceRef } from "./shared.ts";
+import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -30,18 +29,7 @@ const ACCEPTED_FLAGS = parseFlagNames("info");
 export function makePluginInfoHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    let parsed;
-    try {
-      parsed = parseArgs(args);
-    } catch (err) {
-      // MSG-NC-2: argument-parsing failure (invalid --scope value,
-      // unknown long flag) -- sentence form with Usage block appended
-      // after a blank line.
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
-      return;
-    }
-
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
     // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
     // accepted set); every other long flag is rejected inline.
     let fetch = false;
@@ -87,5 +75,5 @@ export function makePluginInfoHandler(
       ...(fetch && { fetch: true }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });
-  };
+  });
 }

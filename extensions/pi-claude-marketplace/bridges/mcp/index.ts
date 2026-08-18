@@ -16,23 +16,5 @@ export {
   rollbackMcpReplacement,
 } from "./stage.ts";
 export { unstageMcpServers } from "./unstage.ts";
-export { resolvePluginMcpServers, parseMcpServers } from "./parse.ts";
-export { MCP_COLLISION_SLOTS, loadEffectiveServerNames } from "./collision-slots.ts";
-export { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, readMarker, isOwnedBy } from "./marker.ts";
-export type { ClaudeMarketplaceMarker } from "./marker.ts";
-export type {
-  McpReplacement,
-  McpServerEntry,
-  McpServersSource,
-  PreparedMcpNoop,
-  PreparedMcpStaged,
-  PreparedMcpStaging,
-  RawMcpDoc,
-  ResolvedMcpServers,
-  ResolvePluginMcpServersInput,
-  StageMcpInput,
-  StageMcpCommitResult,
-  StagedMcpRecord,
-  UnstageMcpInput,
-  UnstageMcpResult,
-} from "./types.ts";
+export { resolvePluginMcpServers } from "./parse.ts";
+export type { McpReplacement, PreparedMcpStaging } from "./types.ts";

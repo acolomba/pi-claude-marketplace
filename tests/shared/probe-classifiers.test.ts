@@ -8,11 +8,23 @@
 // mid-string must NOT classify as `unsupported hooks` -- the old
 // `note.includes("hooks")` form would silently miss-classify; the new
 // form is prefix-anchored.
+//
+// Also home to the `narrowProbeError` ladder. The list surface wraps that
+// classifier twice for documentation (`narrowProbeError` /
+// `narrowListFailReason`), and the ladder tests used to live behind
+// test-only re-exports of BOTH wrappers, in two different orchestrator
+// suites, while this file -- the ladder's own module -- had none. The
+// wrapper bodies are byte-identical one-line delegates, so those suites
+// were asserting the same five arms twice through a seam. The cases are
+// consolidated here against the public function, which is what the
+// wrappers already delegate to.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  narrowProbeError,
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
@@ -174,4 +186,68 @@ test("D-90-05: a mixed carve-out + non-carve-out list yields `lsp` + `unsupporte
     [...narrowUnsupportedKinds(["lspServers", "monitors"])],
     ["lsp", "unsupported component"],
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// narrowProbeError: the errno/typed-error ladder behind every read surface.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr A3 / WR-01 / WR-03: narrowProbeError -> EACCES classifies as `permission denied`", () => {
+  const err = new Error("EACCES: permission denied, open '/foo/bar/manifest.json'");
+  (err as NodeJS.ErrnoException).code = "EACCES";
+  assert.equal(narrowProbeError(err), "permission denied");
+});
+
+test("260525-cjr A3 / WR-03: narrowProbeError -> EPERM also classifies as `permission denied`", () => {
+  const err = new Error("EPERM");
+  (err as NodeJS.ErrnoException).code = "EPERM";
+  assert.equal(narrowProbeError(err), "permission denied");
+});
+
+test("260525-cjr A3 / WR-01 / WR-03: narrowProbeError -> ENOENT classifies as `source missing`", () => {
+  const err = new Error("ENOENT");
+  (err as NodeJS.ErrnoException).code = "ENOENT";
+  assert.equal(narrowProbeError(err), "source missing");
+});
+
+test("narrowProbeError -> ENOTDIR also classifies as `source missing`", () => {
+  // Documented alongside ENOENT in the classifier's own comment but never
+  // asserted while the tests lived behind the list-surface seams.
+  const err = new Error("ENOTDIR");
+  (err as NodeJS.ErrnoException).code = "ENOTDIR";
+  assert.equal(narrowProbeError(err), "source missing");
+});
+
+test("260525-cjr A3 / WR-01 / WR-03: narrowProbeError -> SyntaxError classifies as `unparseable`", () => {
+  const err = new SyntaxError("Unexpected token } in JSON at position 7");
+  assert.equal(narrowProbeError(err), "unparseable");
+});
+
+test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", () => {
+  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
+  // surface reports the SAME `{invalid manifest}` reason the write path does.
+  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
+  assert.equal(narrowProbeError(err), "invalid manifest");
+});
+
+test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", () => {
+  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
+  // into one InvalidMarketplaceManifestError branch must preserve this arm.
+  const err = new InvalidMarketplaceManifestError("bad json", {
+    cause: new SyntaxError("Unexpected token"),
+  });
+  assert.equal(narrowProbeError(err), "unparseable");
+});
+
+test("260525-cjr A3 / WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", () => {
+  const err = new Error("something went wrong probing this plugin");
+  const reason = narrowProbeError(err);
+  assert.equal(reason, "unreadable");
+  assert.notEqual(reason, "unsupported source");
+});
+
+test("WR-03: narrowProbeError -> non-Error throws fall through to `unreadable`", () => {
+  assert.equal(narrowProbeError("string throw"), "unreadable");
+  assert.equal(narrowProbeError(42), "unreadable");
+  assert.equal(narrowProbeError(undefined), "unreadable");
 });

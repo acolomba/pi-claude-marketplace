@@ -40,7 +40,7 @@ import {
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 
-type ManifestEntry = MarketplaceManifest["plugins"][number];
+export type ManifestEntry = MarketplaceManifest["plugins"][number];
 
 /**
  * MIRR-05 / A1: read a git mirror's checked-out HEAD sha fs-only, matching the

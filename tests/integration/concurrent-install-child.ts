@@ -1,19 +1,14 @@
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import {
+  makeNotifyCollectingCtx,
+  makeStubPi,
+  type NotificationRecord,
+} from "../helpers/ipc-child.ts";
 
 interface StartMessage {
   readonly plugin: string;
   readonly marketplace: string;
   readonly cwd: string;
-}
-
-interface NotificationRecord {
-  readonly message: string;
-  readonly severity?: string;
 }
 
 function isStartMessage(value: unknown): value is StartMessage {
@@ -27,12 +22,6 @@ function isStartMessage(value: unknown): value is StartMessage {
     typeof record.marketplace === "string" &&
     typeof record.cwd === "string"
   );
-}
-
-function makePi(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
 }
 
 function sendResult(result: {
@@ -51,22 +40,12 @@ async function handleMessage(message: unknown): Promise<void> {
     return;
   }
 
-  const notifications: NotificationRecord[] = [];
-  const ctx = {
-    cwd: message.cwd,
-    ui: {
-      notify: (body: string, severity?: string): void => {
-        notifications.push(
-          severity === undefined ? { message: body } : { message: body, severity },
-        );
-      },
-    },
-  } as unknown as ExtensionContext;
+  const { ctx, notifications } = makeNotifyCollectingCtx(message.cwd);
 
   try {
     await installPlugin({
       ctx,
-      pi: makePi(),
+      pi: makeStubPi(),
       scope: "project",
       cwd: message.cwd,
       marketplace: message.marketplace,

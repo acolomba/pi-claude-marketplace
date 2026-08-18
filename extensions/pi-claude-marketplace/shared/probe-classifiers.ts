@@ -71,7 +71,7 @@ export function narrowProbeError(
  * `kindToReason`). Extracted so the three sites reference one alias instead of
  * re-declaring the union.
  */
-type UnsupportedReason =
+export type UnsupportedReason =
   "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component";
 
 /**
@@ -82,7 +82,7 @@ type UnsupportedReason =
  * stay on the narrow `UnsupportedReason` alias (they classify per-kind markers,
  * never resolver notes).
  */
-type ResolverNoteReason = UnsupportedReason | "malformed mcp";
+export type ResolverNoteReason = UnsupportedReason | "malformed mcp";
 
 /**
  * Narrow resolver `notes` strings to closed-set REASONS members.
