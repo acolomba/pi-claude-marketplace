@@ -88,7 +88,7 @@ pi-claude-marketplace/
 - `extensions/pi-claude-marketplace/index.ts`: extension factory — registers `resources_discover`, `session_start`, `/claude:plugin` command, MCP tools
 
 **Configuration:**
-- `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, `maxCrap: 0`), 12-zone boundary rules
+- `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, `maxCrap: 0`), 13-zone boundary rules
 - `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (8-folder boundary matrix) and extension-scoped `no-restricted-syntax` (forbids `process.stdout`/`stderr` writes)
 - `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `tests/**/*.ts`
 

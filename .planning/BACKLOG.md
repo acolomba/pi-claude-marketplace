@@ -424,7 +424,7 @@ Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
 Deliberately NOT acted on in 260816-qov, which left the rule and its three
 pinning tests untouched.
 
-Fallow's 14-zone model is a finer-grained superset of the ESLint 8-zone matrix,
+Fallow's 13-zone model is a finer-grained superset of the ESLint 8-zone matrix,
 and it is the only thing enforcing that cross-bridge imports are forbidden.
 That invites the question of whether the ESLint rule still earns its keep.
 
@@ -436,8 +436,47 @@ keeping the rule would leave a silently-misconfigured lint rule undetected,
 which is the exact failure mode the `import-x/no-cycle` test was written to
 catch.
 
-Settle whether the reachability gap is real on this codebase before removing
-anything.
+**Update 2026-08-18: the reachability gap is not real. Measured, not reasoned.**
+
+Two probes, each a file under `domain/` that imports `orchestrators/` -- a
+forbidden edge -- and that NOTHING imports, so it is unreachable from the
+configured `entry`:
+
+| probe | import form | verdict |
+| --- | --- | --- |
+| unreachable file, runtime import | `import { installPlugin }` | REPORTED |
+| unreachable file, type-only import | `import type { InstallPluginOptions }` | REPORTED |
+
+Both produced `domain/_probe-unreachable.ts:2 -> orchestrators/plugin/install.ts
+(domain -> orchestrators)`. The reason is FLOW-06's setting rather than anything
+about boundaries: under `production: false` fallow promotes every discovered
+file to an entry point, so no file under `extensions/` is unreachable in the
+first place. The gap this item worried about was inherited from a
+`production: true` mental model that the repository no longer runs.
+
+So the FIRST reason to keep the ESLint rule is gone, and the second one does not
+survive on its own -- it argues that deleting the three tests while KEEPING the
+rule is unsafe, which is true and beside the point, because removing the rule
+takes its tests with it and leaves nothing to misconfigure.
+
+**What is still unproven, and what actually blocks removal.** Nobody has shown
+fallow's 13-zone matrix forbids every edge the ESLint 8-zone matrix forbids.
+Superset is asserted in three places and derived from zone COUNT, which proves
+nothing about the allow-lists: fallow is finer-grained on `bridges` (five
+sub-zones) and adds `entry`, but a finer partition can still admit an edge the
+coarser one refuses. Removal needs an edge-by-edge comparison of the two
+matrices, not another count.
+
+**The standing argument against removing it at all.** CONVENTIONS.md keeps TWO
+cognitive-complexity gates on the explicit grounds that ESLint and fallow use
+different algorithms and do not agree, so a function must satisfy both. The same
+reasoning defends two boundary gates: ~90 lines of config and three tests are
+cheap next to an architecture rule silently ceasing to fire, which is exactly
+what happened to `import-x/no-cycle` (FLOW-03). Redundancy between independently
+implemented gates is the feature, not the waste.
+
+Reopen the removal question only with the matrix comparison in hand. The
+reachability half is settled and needs no re-measuring.
 
 ## ~~FLOW-08: barrel re-export hygiene is unenforced~~ -- CLOSED
 
