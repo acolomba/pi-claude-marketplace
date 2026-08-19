@@ -56,6 +56,7 @@ import { isDispatchableEvent } from "../../domain/components/hook-events.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { parseTimeoutMs } from "../../shared/timeout.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
@@ -298,8 +299,7 @@ async function spawnAndCollect(
   spawnImpl: typeof spawn = spawn,
 ): Promise<HookExecResult> {
   const plan = planSpawn(entry);
-  const timeoutMsRaw = entry.handlerDecl.timeout;
-  const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
+  const timeoutMs = parseTimeoutMs(entry.handlerDecl.timeout, DEFAULT_TIMEOUT_MS);
 
   const child = spawnImpl(plan.command, [...plan.args], {
     cwd: env.CLAUDE_PROJECT_DIR,

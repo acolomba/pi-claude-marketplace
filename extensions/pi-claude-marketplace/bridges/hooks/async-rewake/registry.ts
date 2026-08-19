@@ -45,6 +45,7 @@ import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
+import { parseTimeoutMs } from "../../../shared/timeout.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
@@ -250,8 +251,7 @@ export async function spawnAndRegister(
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
     const planValue = planSpawn(entry);
-    const timeoutMsRaw = entry.handlerDecl.timeout;
-    const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
+    const timeoutMs = parseTimeoutMs(entry.handlerDecl.timeout, DEFAULT_TIMEOUT_MS);
 
     let child: ChildProcess;
     try {

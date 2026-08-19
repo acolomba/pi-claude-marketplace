@@ -164,6 +164,10 @@ export interface HookHandlerEntry {
   async?: unknown;
   shell?: unknown;
   args?: unknown;
+  // EXEC-02: hook timeout in SECONDS (Claude Code parity). Parsed to
+  // ms by shared/timeout.ts at the exec layer. Optional; absent falls
+  // back to the 600s default.
+  readonly timeout?: number;
   // HOOK-06 / EXEC-05: asyncRewake field family. Schema admission is
   // type-loose per the HOOK-03 lenient stance -- runtime narrowing
   // (typeof boolean / typeof string guards) lives in the
@@ -186,6 +190,9 @@ const HOOK_HANDLER_SCHEMA = Type.Unsafe<HookHandlerEntry>({
     // "command required when type === 'command'" discriminator). The
     // user-facing field is OPTIONAL -- absent on most handlers.
     if: { type: "string" },
+    // EXEC-02: timeout in SECONDS (Claude Code parity). Parsed to ms
+    // at the exec layer by shared/timeout.ts.
+    timeout: { type: "number" },
     // HOOK-06 / EXEC-05: asyncRewake / rewakeMessage / rewakeSummary
     // schema admission. Empty-object JSON Schema means "accept any
     // value" -- non-boolean asyncRewake or non-string rewakeMessage /
