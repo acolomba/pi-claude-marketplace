@@ -23,6 +23,11 @@
 // `error.message` in the projection input -- `outcome.reason` is the sole
 // field the renderer reads.
 
+import path from "node:path";
+
+import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -342,3 +347,106 @@ export type PerEntryOutcome =
   | PluginDisableFailedOutcome
   | SourceMismatchOutcome
   | InvalidBlockOutcome;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Throw classification and the install-outcome dependency derivation, moved
+// from apply.ts. Both the apply pass and the backfill pass narrow the same
+// throws into the same closed set, so the classifiers sit beside the outcome
+// shapes they feed rather than inside one of their two callers (FLOW-09).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * I6 / PR #51: closed-set reason for an unexpected orchestrator throw.
+ *
+ * Narrows on the typed marketplace/plugin errors BEFORE falling through to
+ * the generic FS/JSON probe classifier so a `StateLockHeldError` surfaces as
+ * `{lock held}` and a `PluginShapeError` surfaces as its kind-mapped catalog
+ * token (`not in manifest` / `already installed` / `no longer installable`)
+ * instead of flattening to the misleading `{unreadable}` fallback. Mirrors
+ * the instanceof ladder in `import/execute.ts::dispatchFailedOutcome`; the
+ * `not-installable` and `no-longer-installable` shape kinds collapse to the
+ * single `no longer installable` token used by import's
+ * `importWarningReason("uninstallable")` so the cross-surface reason stays
+ * identical for the same underlying failure.
+ *
+ * Exported for direct unit-test exercise of the closed-set mapping
+ * (the function is otherwise module-private).
+ */
+export function classifyOrchestratorThrow(
+  err: unknown,
+): import("../../shared/notify.ts").ContentReason {
+  if (err instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
+  if (err instanceof PluginShapeError) {
+    switch (err.shape.kind) {
+      case "not-in-manifest":
+        return "not in manifest";
+      case "already-installed":
+        return "already installed";
+      case "not-installable":
+      case "no-longer-installable":
+        return "no longer installable";
+    }
+  }
+
+  return narrowProbeError(err);
+}
+
+/**
+ * S3 / PR #51: sentinel wrapping a throw originating in
+ * `migrateFirstRunConfig`'s inner `saveConfig` call. The per-scope read-pass
+ * catch unwraps `.configFilePath` to attribute the failure row to
+ * `claude-plugins.json` (the actual failing file) rather than `state.json`.
+ * Pre-fix every read-pass throw misattributed to state.json regardless of
+ * origin.
+ */
+export class MigrateConfigSaveError extends Error {
+  readonly configFilePath: string;
+  override readonly cause: unknown;
+  constructor(configFilePath: string, cause: unknown) {
+    super(`migrateFirstRunConfig saveConfig failed for "${path.basename(configFilePath)}"`);
+    this.name = "MigrateConfigSaveError";
+    this.configFilePath = configFilePath;
+    this.cause = cause;
+  }
+}
+
+/**
+ * WR-01: closed-set reason for a per-scope read-pass throw. A concurrent
+ * process holding the scope lock surfaces as `lock held`; a corrupt
+ * state.json surfaces as `unparseable` (loadState wraps the JSON.parse
+ * SyntaxError one level deep in `Error.cause`, so unwrap before falling back
+ * to the generic probe classifier).
+ */
+export function classifyReadPassThrow(
+  err: unknown,
+): import("../../shared/notify.ts").ContentReason {
+  if (err instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
+  if (err instanceof Error && err.cause instanceof SyntaxError) {
+    return "unparseable";
+  }
+
+  return narrowProbeError(err);
+}
+
+/** Derive the closed-set Dependency[] from InstallPluginOutcome flags. */
+export function dependenciesFromInstall(outcome: {
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
+}): readonly Dependency[] {
+  const deps: Dependency[] = [];
+  if (outcome.declaresAgents) {
+    deps.push("agents");
+  }
+
+  if (outcome.declaresMcp) {
+    deps.push("mcp");
+  }
+
+  return deps;
+}

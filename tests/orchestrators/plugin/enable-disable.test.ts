@@ -14,10 +14,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import {
-  __test_staleGateDropped,
-  setPluginEnabled,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { staleGateDropped } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
+import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
@@ -2420,7 +2418,7 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     partialable: true,
     unsupportedKinds: [],
   });
-  assert.equal(__test_staleGateDropped(emptyKinds), undefined);
+  assert.equal(staleGateDropped(emptyKinds), undefined);
 
   // The matching shape still returns its narrowed reasons.
   const withKinds = new PluginShapeError({
@@ -2430,7 +2428,7 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     partialable: true,
     unsupportedKinds: ["lspServers"],
   });
-  assert.deepEqual([...(__test_staleGateDropped(withKinds) ?? [])], ["lsp"]);
+  assert.deepEqual([...(staleGateDropped(withKinds) ?? [])], ["lsp"]);
 
   // A non-partialable structural failure is not a stale gate at all.
   const structural = new PluginShapeError({
@@ -2439,7 +2437,7 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  assert.equal(__test_staleGateDropped(structural), undefined);
+  assert.equal(staleGateDropped(structural), undefined);
 });
 
 // ──────────────────────────────────────────────────────────────────────────

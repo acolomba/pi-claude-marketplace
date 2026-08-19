@@ -65,7 +65,7 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { redactAbsolutePaths } from "../../shared/notify.ts";
@@ -76,6 +76,9 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import {
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
+  narrowDisableFailure,
+  narrowEnableFailure,
+  staleGateDropped,
   type DisableMsg,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
@@ -1247,96 +1250,3 @@ function composeOutcomeRow(args: {
           };
   }
 }
-
-/**
- * WR-02 / D-98-03: recognise the STALE-GATE enable failure and name the kinds
- * it dropped. The enable branch derives its ledger gate from the persisted
- * record, so a record that was installable at disable time runs the strict
- * `requireInstallable` gate (op `install` -> shape kind `not-installable`);
- * `partialable` is true only when the live resolution came back
- * `partially-available`, which is exactly the record-versus-manifest
- * disagreement. The kinds are narrowed through the same
- * `narrowUnsupportedKinds` seam the `list (partially-upgradable)` row uses, so
- * the brace is byte-identical across the surfaces, and the caller stamps
- * `partialHint` to point at `update --partial` -- the command that re-pins the
- * record against the current manifest entry.
- *
- * Returns `undefined` for every other cause, which keeps the trailer inert.
- * Mirrors `composeUpdateDeclineRow`'s cause narrowing in `update.ts`.
- */
-function staleGateDropped(cause: Error): readonly ContentReason[] | undefined {
-  if (
-    cause instanceof PluginShapeError &&
-    cause.shape.kind === "not-installable" &&
-    cause.shape.partialable
-  ) {
-    const narrowed = narrowUnsupportedKinds(cause.shape.unsupportedKinds ?? []);
-    // WR-05: an EMPTY narrowing names no fact, so it is not a match. The caller
-    // writes `staleGate ?? baseReasons`, and `??` treats `[]` as present -- an
-    // empty return would therefore discard the base narrowing AND still stamp
-    // `partialHint`, producing a brace-less `(failed)` row carrying a
-    // remediation trailer. Unreachable today (the resolver builds the
-    // `partially-available` arm only for a non-empty kind list, and every kind
-    // maps to a reason), which is exactly why the contract is enforced here
-    // rather than assumed: `undefined` means leave the row as it was.
-    return narrowed.length > 0 ? narrowed : undefined;
-  }
-
-  return undefined;
-}
-
-/**
- * Narrow an enable-branch failure cause to a closed Reason. ENOENT-class
- * failures surface as `source missing` (ENBL-03 missing-clone path);
- * everything else falls back to an empty array so the renderer suppresses
- * the brace and surfaces the cause-chain trailer.
- */
-function narrowEnableFailure(cause: Error): readonly ContentReason[] {
-  if (isErrnoException(cause) && cause.code === "ENOENT") {
-    return ["source missing"];
-  }
-
-  const chained = cause.cause;
-  if (chained !== undefined && isErrnoException(chained) && chained.code === "ENOENT") {
-    return ["source missing"];
-  }
-
-  // Defensive: an empty reasons array lets the renderer suppress the brace
-  // while still surfacing the cause via the 4-space-indent trailer.
-  return [];
-}
-
-/**
- * Narrow a disable-branch cascade failure to a closed Reason. Mirrors the
- * uninstall.ts `narrowCascadeFailure` taxonomy (permission denied / source
- * missing / unreadable). The full taxonomy is duplicated locally rather than
- * exported from uninstall.ts because the disable branch is structurally a
- * cascade re-use of uninstall's primitives -- the two should drift together.
- */
-function narrowDisableFailure(cause: Error): readonly ContentReason[] {
-  if (isErrnoException(cause)) {
-    switch (cause.code) {
-      case "EACCES":
-      case "EPERM":
-        return ["permission denied"];
-      case "ENOENT":
-        return ["source missing"];
-      default:
-        break;
-    }
-  }
-
-  return ["unreadable"];
-}
-
-/** Structural predicate for `NodeJS.ErrnoException`. */
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return (
-    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
-  );
-}
-
-// Test seam (mirrors the `__test_` exports on `install.ts`): the stale-gate
-// narrowing's empty-list contract is unreachable through the public verb, so it
-// is asserted directly rather than assumed.
-export { staleGateDropped as __test_staleGateDropped };

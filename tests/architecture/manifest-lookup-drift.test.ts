@@ -69,7 +69,7 @@ const NON_ABSENCE_LOOKUPS: ReadonlyArray<{ readonly rel: string; readonly purpos
       "fetches the entry a pending install would materialize. A miss means `not a candidate` (returns undefined) -- the scan emits nothing, so no claim is made about the record.",
   },
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+    rel: "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
     purpose:
       "fetches the entry to resolve OFFLINE when re-materializing a recorded plugin. A miss returns undefined and the plugin is left alone.",
   },

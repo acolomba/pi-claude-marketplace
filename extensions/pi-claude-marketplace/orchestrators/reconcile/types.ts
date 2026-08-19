@@ -40,7 +40,11 @@
 //
 // for any populated state.
 
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { GitOps } from "../marketplace/shared.ts";
 
 /** Planned addition of a marketplace declared in config but not recorded. */
 export interface PlannedMarketplaceAdd {
@@ -230,4 +234,62 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
     pluginsToDisable: [],
     sourceMismatches: [],
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Both moved from apply.ts when the backfill pass became its own module: two
+// files in this folder now name them, so leaving them in one of those files
+// would have made the other import back into it (FLOW-09).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
+ * out across BOTH scopes project-first (mirrors
+ * `pending.ts::pendingReconcile`'s scope fan-out).
+ */
+export interface ApplyReconcileOptions {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  /** Project-scope cwd (ignored for the user scope). */
+  readonly cwd: string;
+  readonly scope?: Scope;
+  /**
+   * D-12 injection seam threaded into `addMarketplace` for RECON-03 network
+   * soft-fail tests. Production callers (index.ts) omit and the default
+   * `DEFAULT_GIT_OPS` from `marketplace/shared.ts` applies. The seam is
+   * narrow on purpose: only `addMarketplace` touches the network at apply
+   * time (NFR-5; the install / uninstall / enable / disable orchestrators
+   * are local-only by construction). Tests inject a failing `gitOps.clone`
+   * to drive the soft-fail-per-entry proof without real network.
+   */
+  readonly gitOps?: GitOps;
+}
+
+/**
+ * Per-scope read-pass result. `plan` is undefined when CFG-03 aborted the
+ * scope (the apply path SKIPS the planner for that scope -- invalid input
+ * is never coerced to an empty desired-state diff, which would render as a
+ * mass-uninstall).
+ */
+export interface ScopeReadResult {
+  readonly scope: Scope;
+  readonly plan: ReconcilePlan | undefined;
+  /** CFG-03 + state-load failure rows surfaced from the read pass. */
+  readonly invalidOutcomes: readonly PerEntryOutcome[];
+  /**
+   * BFILL-02: the read-pass state snapshot, carried out so the load-time
+   * backfill gate can read its persisted `lastReconciledExtensionVersion`
+   * stamp + scan its partially-installed plugins. Undefined for a pristine scope
+   * (no state.json) -- backfill MUST NOT create state.json there (WR-05).
+   */
+  readonly state?: ExtensionState;
+  /**
+   * WR-01: whether state.json existed ON DISK at read time. A config-present /
+   * state.json-absent scope loads DEFAULT_STATE inside the read pass (so
+   * `state` is defined) even though no state.json exists; the backfill stamp
+   * must NOT bring an unsolicited state.json into existence purely to record
+   * the version when there is nothing to promote (WR-05). False for the
+   * pristine arm (no `state` carried anyway).
+   */
+  readonly stateExisted: boolean;
 }

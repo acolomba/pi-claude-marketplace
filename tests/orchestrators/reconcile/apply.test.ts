@@ -1040,7 +1040,7 @@ test("I6 / PR #51: classifyOrchestratorThrow maps PluginShapeError.kind and Stat
   // typed errors first (mirroring import/execute.ts::dispatchFailedOutcome's
   // instanceof ladder) and returns the catalog-correct token.
   const { classifyOrchestratorThrow } =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts");
   const { PluginShapeError, StateLockHeldError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 

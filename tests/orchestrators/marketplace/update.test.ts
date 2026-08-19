@@ -10,8 +10,8 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
+import { outcomeToCascadePluginMessage } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 import {
-  __test_outcomeToCascadePluginMessage,
   __test_snapshotAfterRefresh,
   updateAllMarketplaces,
   updateMarketplace,
@@ -1564,7 +1564,7 @@ test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage wit
     declaresAgents: true,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "updated");
   assert.equal(msg.name, "p");
   assert.equal(msg.scope, "project");
@@ -1595,7 +1595,7 @@ test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginParti
     declaresMcp: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   if (msg.status !== "partially-installed") {
     throw new Error("unreachable: narrowed above");
@@ -1625,7 +1625,7 @@ test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stam
     declaresMcp: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   // A previously-clean plugin silently degraded by the auto-update is
   // actionable -> warning (drives the `needs attention` summary line).
@@ -1644,7 +1644,7 @@ test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) 
     declaresMcp: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   // Re-degrading a plugin that was already force-installed is benign -> info.
   assert.equal(msg.severity, "info");
@@ -1668,7 +1668,7 @@ test("CR-01: an autoupdate outcome that drops a kind AND degrades a component na
     degradedKinds: ["skill"],
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   if (msg.status !== "partially-installed") {
     throw new Error("unreachable: narrowed above");
@@ -1690,7 +1690,7 @@ test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updat
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "updated");
 });
 
@@ -1766,7 +1766,7 @@ test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage w
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "skipped");
   if (msg.status !== "skipped") {
     throw new Error("unreachable: narrowed above");
@@ -1788,7 +1788,7 @@ test("outcomeToCascadePluginMessage: skipped outcome with typed reasons reads th
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "skipped");
   if (msg.status !== "skipped") {
     throw new Error("unreachable: narrowed above");
@@ -1808,7 +1808,7 @@ test("outcomeToCascadePluginMessage: failed outcome with typed reasons + cause -
     declaresMcp: false,
     cause,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "failed");
   if (msg.status !== "failed") {
     throw new Error("unreachable: narrowed above");
@@ -1833,7 +1833,7 @@ test("outcomeToCascadePluginMessage: skipped outcome without typed reasons falls
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "skipped");
   if (msg.status !== "skipped") {
     throw new Error("unreachable: narrowed above");
@@ -1851,7 +1851,7 @@ test("outcomeToCascadePluginMessage: failed outcome without typed reasons falls 
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "failed");
   if (msg.status !== "failed") {
     throw new Error("unreachable: narrowed above");
