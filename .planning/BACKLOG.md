@@ -1517,6 +1517,33 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
 
+## HKTO-01: per-event `timeout` default reductions are not implemented
+
+Surfaced while landing PR #138 (2026-08-19), which corrected the `timeout`
+unit but left its default alone.
+
+Claude Code gives `command` handlers a 600 s default and then lowers it per
+event: `UserPromptSubmit` drops to 30 s, `MessageDisplay` to 10 s, and
+`SessionEnd` hooks share a 1.5 s budget that a longer per-hook `timeout`
+raises to at most 60 s. The bridge applies a flat 600 s to every event, held
+in a `DEFAULT_TIMEOUT_MS` constant duplicated across both exec lanes.
+
+`MessageDisplay` is not a bridged event, so the reachable gaps today are
+`UserPromptSubmit` and `SessionEnd`. A plugin that leans on the upstream
+default to bound a prompt-submit hook gets twenty times the wall clock it
+expects, and that hook blocks the turn while it runs.
+
+**Fix shape.** Make the default a per-event lookup keyed on
+`entry.claudeEvent` rather than a module constant, and have both lanes read
+it from one place -- the same treatment `parseTimeoutMs` just gave the unit.
+`parseTimeoutMs` already takes the default as a parameter, so the change is
+at the two call sites, not in the parser. `docs/hooks-compatibility.md`
+needs the matching row note.
+
+Code seams: `bridges/hooks/dispatch-exec.ts` (`DEFAULT_TIMEOUT_MS`),
+`bridges/hooks/async-rewake/registry.ts` (`DEFAULT_TIMEOUT_MS`),
+`domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
+
 ## ~~HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable~~ -- CLOSED
 
 Closed 2026-08-17 by the routingTable encapsulation, which removed both

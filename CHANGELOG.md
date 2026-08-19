@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- A hook handler's `timeout` is read as seconds again, which is what Claude Code's hooks specification declares and what plugin authors write. The bridge consumed the bare number as milliseconds, so a plugin's `timeout: 2` -- two seconds upstream -- armed a 2 ms SIGTERM that killed the handler at spawn. Every hook that set a timeout degraded to a silent no-op, and nothing in the output said so. Both execution lanes, the synchronous dispatcher and the async-rewake spawner, now read the field through one shared parser, so they cannot drift apart on the unit again. A `timeout` that is not a number falls back to the 600 s default instead of being reinterpreted. A plugin that wrote its timeout in milliseconds to suit the old behavior now gets that number in seconds -- the value Claude Code has always read is the one that applies. Thanks to @rakesh-vs for the contribution (#138).
+
 ## [0.16.1] - 2026-08-18
 
 - The development dependency on the Pi host API moved to 0.84.2. That release adds a stop reason for a provider request that Pi deferred to a batch or asynchronous lane, and the turn-boundary hook dispatcher now treats it as an in-flight state that runs no Stop hooks, the same as it already treats a pending request. Nothing in the extension behaves differently on a Pi release that never reports the new reason.
