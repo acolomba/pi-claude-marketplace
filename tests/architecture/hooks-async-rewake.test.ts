@@ -42,8 +42,8 @@ import {
   type PidTableEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
-  _awaitLastPidTablePersistForTest,
-  _getRegistryForTest,
+  awaitPidTablePersist,
+  asyncRewakeEntries,
   MARKER_ENV,
   reapOrphans,
   shutdownInMemoryChildren,
@@ -55,11 +55,11 @@ import {
   STDOUT_CAP_BYTES,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
 import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
-import {
-  _bumpEpochForTest,
-  _resetForTest as _resetEventRouterForTest,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  bumpEpoch,
+  resetRoutingState as _resetEventRouterForTest,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -335,7 +335,7 @@ async function makeTempLocations(): Promise<{
       // temp directory.  write-file-atomic holds a temp file open in
       // _shared/ until the rename+fsync completes; removing the directory
       // concurrently produces ENOTEMPTY on macOS.
-      await _awaitLastPidTablePersistForTest();
+      await awaitPidTablePersist();
       if (prev === undefined) {
         delete process.env.PI_CODING_AGENT_DIR;
       } else {
@@ -439,7 +439,7 @@ describe("spawn-and-register", () => {
         tmp.loc,
         { spawnImpl: spy.spawnImpl, dispatchId },
       );
-      const reg = _getRegistryForTest();
+      const reg = asyncRewakeEntries();
       assert.equal(reg.has("fixed-uuid-2"), true);
     } finally {
       await tmp.cleanup();
@@ -465,7 +465,7 @@ describe("spawn-and-register", () => {
         { spawnImpl: spy.spawnImpl },
       );
       assert.equal(spy.calls.length, 0, "the guard must return before any child-process spawn");
-      assert.equal(_getRegistryForTest().size, 0, "no registry entry may be recorded");
+      assert.equal(asyncRewakeEntries().size, 0, "no registry entry may be recorded");
     } finally {
       await tmp.cleanup();
     }
@@ -512,7 +512,7 @@ describe("spawn-and-register", () => {
       );
       await promise;
       // Child still alive after the await -- exit handler has not fired
-      const reg = _getRegistryForTest();
+      const reg = asyncRewakeEntries();
       assert.equal(reg.has("fixed-uuid-4"), true);
       // Now emit exit; the handler runs out-of-band
       spy.children[0]?.emitExit(0);
@@ -538,7 +538,7 @@ describe("spawn-and-register", () => {
         tmp.loc,
         { spawnImpl: spy.spawnImpl, dispatchId },
       );
-      const reg = _getRegistryForTest();
+      const reg = asyncRewakeEntries();
       assert.equal(reg.has("fixed-uuid-onerror"), true);
       // A spawn-level failure (e.g. ENOENT) surfaces as a child "error" event,
       // routed to onChildError out-of-band: it cancels the ladder, drops the
@@ -546,7 +546,7 @@ describe("spawn-and-register", () => {
       spy.children[0]?.emitError(new Error("spawn failed"));
       await new Promise((r) => setImmediate(r));
       assert.equal(reg.has("fixed-uuid-onerror"), false);
-      await _awaitLastPidTablePersistForTest();
+      await awaitPidTablePersist();
     } finally {
       await tmp.cleanup();
     }
@@ -757,7 +757,7 @@ describe("on-exit", () => {
       // the spy throws BEFORE recording.
       assert.equal(pi.sendMessageCalls.length, 0);
       // Registry still cleaned up.
-      assert.equal(_getRegistryForTest().has("uuid-throw"), false);
+      assert.equal(asyncRewakeEntries().has("uuid-throw"), false);
     } finally {
       await tmp.cleanup();
     }
@@ -779,7 +779,7 @@ describe("on-exit", () => {
         { spawnImpl: spy.spawnImpl, dispatchId },
       );
       // Simulate a /reload between spawn and exit.
-      _bumpEpochForTest();
+      bumpEpoch();
       spy.children[0]?.emitStderr("late body");
       spy.children[0]?.emitExit(2);
       await new Promise((r) => setImmediate(r));
@@ -1079,7 +1079,7 @@ describe("dispatch-exec delegation", () => {
       );
       assert.deepEqual(result, { kind: "noop" });
       assert.equal(spy.calls.length, 1);
-      assert.equal(_getRegistryForTest().has("uuid-disp-async"), true);
+      assert.equal(asyncRewakeEntries().has("uuid-disp-async"), true);
     } finally {
       await tmp.cleanup();
     }
@@ -1105,7 +1105,7 @@ describe("dispatch-exec delegation", () => {
       });
       assert.equal(spy.calls.length, 1);
       // No async registry entry -- the spy uuid was never consumed.
-      assert.equal(_getRegistryForTest().has("uuid-should-not-be-used"), false);
+      assert.equal(asyncRewakeEntries().has("uuid-should-not-be-used"), false);
     } finally {
       await tmp.cleanup();
     }
@@ -1131,7 +1131,7 @@ describe("dispatch-exec delegation", () => {
       );
       // Strict === true discriminator: non-boolean routes to sync.
       // Async registry is empty.
-      assert.equal(_getRegistryForTest().has("uuid-yes-route"), false);
+      assert.equal(asyncRewakeEntries().has("uuid-yes-route"), false);
       assert.equal(spy.calls.length, 1);
     } finally {
       await tmp.cleanup();
@@ -1203,7 +1203,7 @@ describe("multi-hook fan-in", () => {
           { spawnImpl: spy.spawnImpl, dispatchId },
         ),
       ]);
-      const reg = _getRegistryForTest();
+      const reg = asyncRewakeEntries();
       assert.equal(reg.size, 2);
       assert.equal(reg.has("uuid-fan-A"), true);
       assert.equal(reg.has("uuid-fan-B"), true);
@@ -1242,14 +1242,14 @@ describe("multi-hook fan-in", () => {
         tmp.loc,
         { spawnImpl: spy.spawnImpl, dispatchId },
       );
-      assert.equal(_getRegistryForTest().size, 2);
+      assert.equal(asyncRewakeEntries().size, 2);
       spy.children[0]?.emitExit(0);
       await new Promise((r) => setImmediate(r));
-      assert.equal(_getRegistryForTest().size, 1);
-      assert.equal(_getRegistryForTest().has("uuid-indep-B"), true);
+      assert.equal(asyncRewakeEntries().size, 1);
+      assert.equal(asyncRewakeEntries().has("uuid-indep-B"), true);
       spy.children[1]?.emitExit(0);
       await new Promise((r) => setImmediate(r));
-      assert.equal(_getRegistryForTest().size, 0);
+      assert.equal(asyncRewakeEntries().size, 0);
     } finally {
       await tmp.cleanup();
     }
@@ -1292,7 +1292,7 @@ describe("multi-hook fan-in", () => {
       // module-level _lastPidTablePersist handle, so draining that exact
       // promise is deterministic -- a fixed sleep is a race under parallel
       // CPU load (the off-band write may not finish in time).
-      await _awaitLastPidTablePersistForTest();
+      await awaitPidTablePersist();
       const table1 = await readPidTable(tmp.loc);
       assert.equal(table1.length, 1);
       assert.equal(table1[0]?.dispatchId, "uuid-pid-B");

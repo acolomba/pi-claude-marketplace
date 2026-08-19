@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
-import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -95,7 +95,7 @@ async function emptyFixture(): Promise<Fixture> {
 // ---------------------------------------------------------------------------
 
 test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/pending/enable/disable/import/marketplace)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("", f.resolver);
@@ -132,7 +132,7 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
 });
 
 test('TC-1 :: top-level keyword filtering by prefix ("ins" -> install only)', async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("ins", f.resolver);
@@ -147,7 +147,7 @@ test('TC-1 :: top-level keyword filtering by prefix ("ins" -> install only)', as
 });
 
 test('TC-1 :: top-level keyword filtering by prefix ("l" -> list and ls)', async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("l", f.resolver);
@@ -162,7 +162,7 @@ test('TC-1 :: top-level keyword filtering by prefix ("l" -> list and ls)', async
 });
 
 test("PRL-16 :: top-level rei completes to reinstall with trailing space", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("rei", f.resolver);
@@ -178,7 +178,7 @@ test("PRL-16 :: top-level rei completes to reinstall with trailing space", async
 // ---------------------------------------------------------------------------
 
 test("TC-2 :: after marketplace surfaces nested keywords and aliases", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("marketplace ", f.resolver);
@@ -203,7 +203,7 @@ test("TC-2 :: after marketplace surfaces nested keywords and aliases", async () 
 });
 
 test("TC-2 :: nested keyword prefix surfaces rm and ls aliases", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const rmItems = await getArgumentCompletions("marketplace r", f.resolver);
@@ -229,7 +229,7 @@ test("TC-2 :: nested keyword prefix surfaces rm and ls aliases", async () => {
 // ---------------------------------------------------------------------------
 
 test("TC-3 :: - prefix surfaces --scope", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("install -", f.resolver);
@@ -242,7 +242,7 @@ test("TC-3 :: - prefix surfaces --scope", async () => {
 });
 
 test("TC-3 / RSTA-07 :: list head flag completion is EXACTLY scope + the filter family incl. --remote", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("list -", f.resolver);
@@ -263,7 +263,7 @@ test("TC-3 / RSTA-07 :: list head flag completion is EXACTLY scope + the filter 
 });
 
 test("TC-3 / RSTA-07 :: ls alias flag completion is EXACTLY scope + the filter family incl. --remote", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("ls -", f.resolver);
@@ -282,7 +282,7 @@ test("TC-3 / RSTA-07 :: ls alias flag completion is EXACTLY scope + the filter f
 });
 
 test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model + partial", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("install -", f.resolver);
@@ -300,7 +300,7 @@ test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model +
 });
 
 test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + map-model + partial", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("update -", f.resolver);
@@ -316,7 +316,7 @@ test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + map-model + 
 });
 
 test("TC-3 / FTCH-03 :: info head flag completion is EXACTLY scope + fetch", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("info -", f.resolver);
@@ -329,7 +329,7 @@ test("TC-3 / FTCH-03 :: info head flag completion is EXACTLY scope + fetch", asy
 });
 
 test("TC-3 :: --map-model does NOT appear under list head (260516-08j)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("list -", f.resolver);
@@ -342,7 +342,7 @@ test("TC-3 :: --map-model does NOT appear under list head (260516-08j)", async (
 });
 
 test("TC-3 :: -- and - prefixes behave identically", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const single = await getArgumentCompletions("install -", f.resolver);
@@ -359,7 +359,7 @@ test("TC-3 :: -- and - prefixes behave identically", async () => {
 });
 
 test("PRL-16 / RINST-01 :: reinstall flag completion excludes --partial; --scope still offered", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const reinstallItems = await getArgumentCompletions("reinstall -", f.resolver);
@@ -394,7 +394,7 @@ test("PRL-16 / RINST-01 :: reinstall flag completion excludes --partial; --scope
 // ---------------------------------------------------------------------------
 
 test("TC-4 :: token after --scope surfaces user and project only", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("install --scope ", f.resolver);
@@ -410,7 +410,7 @@ test("TC-4 :: token after --scope surfaces user and project only", async () => {
 // ---------------------------------------------------------------------------
 
 test("TC-5 :: list <here> completes with union of marketplace names from both scopes", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: {
       user: { "mp-u": {} },
@@ -428,7 +428,7 @@ test("TC-5 :: list <here> completes with union of marketplace names from both sc
 });
 
 test("TC-5 :: ls <here> completes with union of marketplace names from both scopes", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: {
       user: { "mp-u": {} },
@@ -446,7 +446,7 @@ test("TC-5 :: ls <here> completes with union of marketplace names from both scop
 });
 
 test("TC-5 :: marketplace remove <here> completes with marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -464,7 +464,7 @@ test("TC-5 :: marketplace remove <here> completes with marketplace names", async
 });
 
 test("TC-5 :: exact marketplace remove token without trailing space completes marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -486,7 +486,7 @@ test("TC-5 :: exact marketplace remove token without trailing space completes ma
 });
 
 test("TC-5 :: marketplace remove --scope project <here> completes with marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: {}, project: { "superpowers-marketplace": {} } },
     manifests: { user: {}, project: {} },
@@ -511,7 +511,7 @@ test("TC-5 :: marketplace remove --scope project <here> completes with marketpla
 });
 
 test("TC-5 :: marketplace rm --scope project <here> completes with marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: {}, project: { "superpowers-marketplace": {} } },
     manifests: { user: {}, project: {} },
@@ -536,7 +536,7 @@ test("TC-5 :: marketplace rm --scope project <here> completes with marketplace n
 });
 
 test("TC-5 :: marketplace ls does not take a marketplace-name positional", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -550,7 +550,7 @@ test("TC-5 :: marketplace ls does not take a marketplace-name positional", async
 });
 
 test("TC-6 :: install --scope project <here> still completes plugin refs", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: {}, project: { mp: {} } },
     manifests: { user: {}, project: { mp: [{ name: "solo", status: "available" }] } },
@@ -568,7 +568,7 @@ test("TC-6 :: install --scope project <here> still completes plugin refs", async
 });
 
 test("TC-5 :: marketplace update <here> completes with marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -586,7 +586,7 @@ test("TC-5 :: marketplace update <here> completes with marketplace names", async
 });
 
 test("TC-5 :: marketplace autoupdate <here> completes with marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -604,7 +604,7 @@ test("TC-5 :: marketplace autoupdate <here> completes with marketplace names", a
 });
 
 test("TC-5 :: marketplace noautoupdate <here> completes with marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -628,7 +628,7 @@ test("TC-5 :: marketplace noautoupdate <here> completes with marketplace names",
 // mismatch at execution time via the INFO-04 `{not added}` row).
 
 test("TC-5 :: marketplace info <here> completes with union of marketplace names from both scopes", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: {
       user: { "mp-u": {} },
@@ -646,7 +646,7 @@ test("TC-5 :: marketplace info <here> completes with union of marketplace names 
 });
 
 test("TC-5 :: exact `marketplace info` token without trailing space completes marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
@@ -668,7 +668,7 @@ test("TC-5 :: exact `marketplace info` token without trailing space completes ma
 });
 
 test("TC-5 :: marketplace info --scope project <here> still completes union of marketplace names (scope filter does NOT narrow set)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     // Marketplace lives in USER scope only; with `--scope project` the
     // completion still surfaces the name. The orchestrator handles the
@@ -697,7 +697,7 @@ test("TC-5 :: marketplace info --scope project <here> still completes union of m
 // ---------------------------------------------------------------------------
 
 test("TC-6 :: install <here> -- status filter excludes installed plugins", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -725,7 +725,7 @@ test("TC-6 :: install <here> -- status filter excludes installed plugins", async
 });
 
 test("TC-6 / CMP-7 :: install <here> excludes unavailable plugins", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -757,7 +757,7 @@ test("TC-6 / CMP-7 :: install <here> excludes unavailable plugins", async () => 
 // ---------------------------------------------------------------------------
 
 test("CMP-8 :: install --scope project completes from user marketplace fallback", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: { user: { mp: [{ name: "fallback", status: "available" }] }, project: {} },
@@ -775,7 +775,7 @@ test("CMP-8 :: install --scope project completes from user marketplace fallback"
 });
 
 test("CMP-8 :: project marketplace shadows same-named user marketplace in install completion", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: { mp: {} } },
     manifests: {
@@ -794,7 +794,7 @@ test("CMP-8 :: project marketplace shadows same-named user marketplace in instal
 });
 
 test("TC-6 :: uninstall <here> -- status filter shows only installed plugins", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -822,7 +822,7 @@ test("TC-6 :: uninstall <here> -- status filter shows only installed plugins", a
 });
 
 test("TC-6 :: exact uninstall token without trailing space completes installed plugin refs", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -852,7 +852,7 @@ test("TC-6 :: exact uninstall token without trailing space completes installed p
 });
 
 test("TC-6 :: uninstall --scope user limits installed plugin refs to user scope", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: { mp: {} } },
     manifests: {
@@ -873,7 +873,7 @@ test("TC-6 :: uninstall --scope user limits installed plugin refs to user scope"
 });
 
 test("TC-6 :: update <here> -- status filter shows only installed plugins", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -935,7 +935,7 @@ test("TC-6 :: update <here> -- status filter shows only installed plugins", asyn
 // `<plugin>@<mp>` and bare-`<TAB>` plugin-half forms are unaffected (their
 // token does not START with `@`).
 test("TC-6 :: update accepts bare @<marketplace> form", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
     manifests: {
@@ -958,7 +958,7 @@ test("TC-6 :: update accepts bare @<marketplace> form", async () => {
 });
 
 test("PRL-16 :: reinstall completion mode shows only installed plugins", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -993,7 +993,7 @@ test("PRL-16 :: reinstall completion mode shows only installed plugins", async (
 // surviving coverage for the reinstall ref surface.
 
 test("PRL-16 :: reinstall @ completes marketplace-only targets", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
     manifests: {
@@ -1021,7 +1021,7 @@ test("PRL-16 :: reinstall @ completes marketplace-only targets", async () => {
 });
 
 test("PRL-16 :: reinstall @m ignores stale marketplace-name cache", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, market: {} }, project: {} },
     manifests: {
@@ -1047,7 +1047,7 @@ test("PRL-16 :: reinstall @m ignores stale marketplace-name cache", async () => 
 });
 
 test("PRL-16 :: reinstall plugin half preserves multi-marketplace no trailing space", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
     manifests: {
@@ -1068,7 +1068,7 @@ test("PRL-16 :: reinstall plugin half preserves multi-marketplace no trailing sp
 });
 
 test("TC-6 :: update --scope user limits installed plugin refs to user scope", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: { mp: {} } },
     manifests: {
@@ -1089,7 +1089,7 @@ test("TC-6 :: update --scope user limits installed plugin refs to user scope", a
 });
 
 test("TC-6 :: unique plugin yields name@mp with trailing space", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -1109,7 +1109,7 @@ test("TC-6 :: unique plugin yields name@mp with trailing space", async () => {
 });
 
 test("TC-6 :: multi-marketplace plugin yields name@ without trailing space", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
     manifests: {
@@ -1145,7 +1145,7 @@ test("TC-6 :: multi-marketplace plugin yields name@ without trailing space", asy
 // ---------------------------------------------------------------------------
 
 test("TC-6 / INFO-02 :: info <here> returns union of installed + available + unavailable refs across both scopes", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: {
       user: { mp: {} },
@@ -1173,7 +1173,7 @@ test("TC-6 / INFO-02 :: info <here> returns union of installed + available + una
 });
 
 test("TC-6 / INFO-02 :: info foo@<here> narrows to marketplaces carrying foo", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
     manifests: {
@@ -1197,7 +1197,7 @@ test("TC-6 / INFO-02 :: info foo@<here> narrows to marketplaces carrying foo", a
 });
 
 test("TC-6 / INFO-02 :: info --scope project <here> returns the SAME union (scope filter does NOT narrow set)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   // Marketplace lives in USER scope only; with `--scope project` the
   // completion still surfaces every known plugin. The orchestrator
   // handles the mismatch at execution time via the INFO-04
@@ -1234,7 +1234,7 @@ test("TC-6 / INFO-02 :: info --scope project <here> returns the SAME union (scop
 // ---------------------------------------------------------------------------
 
 test("FTCH-07 :: fetch <here> offers the fetchable buckets, excludes installed and installed-family", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -1267,7 +1267,7 @@ test("FTCH-07 :: fetch <here> offers the fetchable buckets, excludes installed a
 });
 
 test("FTCH-07 :: fetch <here> surfaces fetchable plugins already present in state (no install-state exclusion)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   // A plugin whose marketplace is added AND whose row derives a fetchable
   // status is offered regardless of install state -- fetch enumerates the
   // manifest, not the installed inventory.
@@ -1291,7 +1291,7 @@ test("FTCH-07 :: fetch <here> surfaces fetchable plugins already present in stat
 });
 
 test("FTCH-07 :: fetch @<here> offers marketplace names (allowMarketplaceOnly)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
     manifests: {
@@ -1319,7 +1319,7 @@ test("FTCH-07 :: fetch @<here> offers marketplace names (allowMarketplaceOnly)",
 });
 
 test("FTCH-07 :: fetch --scope user <here> limits fetchable refs to user scope", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: { mp: {} } },
     manifests: {
@@ -1348,7 +1348,7 @@ test("FTCH-07 :: fetch --scope user <here> limits fetchable refs to user scope",
 // ---------------------------------------------------------------------------
 
 test("LIST-02 / D-67-02 :: install --partial offers available + unsupported, excludes unavailable", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -1374,7 +1374,7 @@ test("LIST-02 / D-67-02 :: install --partial offers available + unsupported, exc
 });
 
 test("LIST-02 / D-67-02 / WR-02 :: update --partial offers upgradable + force-upgradable + force-installed-upgradable, excludes installed/force-installed/unavailable", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -1405,7 +1405,7 @@ test("LIST-02 / D-67-02 / WR-02 :: update --partial offers upgradable + force-up
 });
 
 test("LIST-02 / D-67-02 :: install (no --partial) offers ONLY available -- byte-identical regression", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -1432,7 +1432,7 @@ test("LIST-02 / D-67-02 :: install (no --partial) offers ONLY available -- byte-
 });
 
 test("LIST-02 / D-67-02 :: update (no --partial) offers ALL installed-family statuses -- byte-identical regression", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -1469,7 +1469,7 @@ test("LIST-02 / D-67-02 :: update (no --partial) offers ALL installed-family sta
 });
 
 test("LIST-02 / D-67-02 :: --partial is a flag completion for install/update and NOT for reinstall", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     for (const head of ["install", "update"]) {
@@ -1493,7 +1493,7 @@ test("LIST-02 / D-67-02 :: --partial is a flag completion for install/update and
 });
 
 test("LIST-02 / D-67-02 :: install --partial <here> does not return null (positional-ref branch fires)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: { user: { mp: [{ name: "p-avail", status: "available" }] }, project: {} },
@@ -1511,7 +1511,7 @@ test("LIST-02 / D-67-02 :: install --partial <here> does not return null (positi
 // ---------------------------------------------------------------------------
 
 test("TC-7 :: all terminal completions include trailing space (TC-1 case)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("", f.resolver);
@@ -1529,7 +1529,7 @@ test("TC-7 :: all terminal completions include trailing space (TC-1 case)", asyn
 // ---------------------------------------------------------------------------
 
 test("TC-8 :: per-marketplace manifest load failure soft-fails to empty list (no throw)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { broken: {}, healthy: {} }, project: {} },
     manifests: {
@@ -1557,7 +1557,7 @@ test("TC-8 :: per-marketplace manifest load failure soft-fails to empty list (no
 });
 
 test("PRL-16 :: reinstall per-marketplace manifest soft-fail preserves other marketplace completions", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { broken: {}, healthy: {} }, project: {} },
     manifests: {
@@ -1583,7 +1583,7 @@ test("PRL-16 :: reinstall per-marketplace manifest soft-fail preserves other mar
 });
 
 test("TC-9 :: state.json error propagates (throw escapes getArgumentCompletions)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: { user: { mp: [] }, project: {} },
@@ -1600,7 +1600,7 @@ test("TC-9 :: state.json error propagates (throw escapes getArgumentCompletions)
 });
 
 test("PRL-16 :: reinstall state load errors propagate", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: { user: { mp: [] }, project: {} },
@@ -1618,7 +1618,7 @@ test("PRL-16 :: reinstall state load errors propagate", async () => {
 // ---------------------------------------------------------------------------
 
 test("no-match position returns null (Pi-tui sentinel; not [])", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     // `install foo@bar ` -- past the only positional, no flag prefix, no
@@ -1632,7 +1632,7 @@ test("no-match position returns null (Pi-tui sentinel; not [])", async () => {
 });
 
 test("TC-1 :: first positional completion includes import", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("", f.resolver);
@@ -1644,7 +1644,7 @@ test("TC-1 :: first positional completion includes import", async () => {
 });
 
 test("import completions offer scope values and no plugin refs", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const f = await makeFixture({
     state: { user: { mp: { manifestPath: "/tmp/manifest" } } },
     manifests: {

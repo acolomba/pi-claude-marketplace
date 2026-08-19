@@ -17,7 +17,7 @@ import { test } from "node:test";
 import { loadMarketplaceManifest } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { resolveStrict } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
-import { __test_availableRowMessage } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { availableRowMessage } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import {
   classifyInstalledRecord,
   classifyManifestEntry,
@@ -746,7 +746,7 @@ test("RSTA-01 output-parity: the completion bucketizer emits `remote` for not-fe
     for (const entry of manifest.plugins) {
       // The fourth argument is the user's config `enabled` opinion; this parity
       // check is about the status vocabulary, so no opinion is stated.
-      const { message } = await __test_availableRowMessage(
+      const { message } = await availableRowMessage(
         entry,
         marketplaceRoot,
         listLocations,

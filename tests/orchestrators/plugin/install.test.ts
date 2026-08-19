@@ -34,7 +34,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
@@ -1972,15 +1972,15 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
 // ───────────────────────────────────────────────────────────────────────────
 
 test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -2026,15 +2026,15 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
 });
 
 test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -3452,7 +3452,7 @@ test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommit
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-cache-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -3628,7 +3628,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d03inv-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5146,15 +5146,15 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5243,12 +5243,12 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json via the hooks bridge slot", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5289,12 +5289,12 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
 });
 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but no asyncRewake surfaces `(installed) {orphan rewake}`", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5346,12 +5346,12 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
 });
 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND asyncRewake: true does NOT surface `{orphan rewake}`", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 

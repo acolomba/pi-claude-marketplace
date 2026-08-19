@@ -23,7 +23,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -900,7 +900,7 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-d03inv-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
@@ -1242,7 +1242,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cache-eisdir-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedState(locations.extensionRoot, {
         schemaVersion: 1,
@@ -1940,8 +1940,10 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
-  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache } =
+  const { addPluginConfigToCache } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState, setRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { compileIfPredicate, MATCH_ALL_IF } =
@@ -1952,7 +1954,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wr03-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       // Pre-seed state with a hooks-bearing plugin so the rebuild walk sees
@@ -1996,7 +1998,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
         parsed.value,
         parsed.ifPredicates,
       );
-      _setRoutingBucketForTest("PreToolUse", [
+      setRoutingBucket("PreToolUse", [
         {
           scope: "project",
           marketplace: "mp",

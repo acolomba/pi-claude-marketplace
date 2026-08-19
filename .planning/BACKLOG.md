@@ -539,6 +539,58 @@ different cause with a different fix.
 
 ## FLOW-09: internals exported only for tests
 
+**Status 2026-08-18: the seams are at ZERO. The item is NOT closed -- see the
+`production: true` measurement below, which is what it was actually named
+after.**
+
+All 27 exported `__test_*` re-exports and `_*ForTest` accessors are gone,
+resolved site by site under the item's own (a)/(b) rule rather than swept:
+
+- **Moved to the module that owns the concept (a).** The `ManualRecoveryError`
+  protocol to `shared/errors.ts`; `clonePluginRecord` to `state-io.ts` beside
+  the schema it copies; reinstall's and marketplace-update's outcome-to-row
+  projections and install's error-classification family to their own
+  `*.messaging.ts` siblings; `narrowCascadeFailure` beside the error class it
+  dispatches on; the enable/disable failure narrowing to
+  `enable-disable.messaging.ts`; and the ~450-line reconcile backfill pass to
+  its own `reconcile/backfill.ts`, which already had a test file of its own.
+- **Deleted, the behavior tested through the public interface (b).**
+  `snapshotAfterRefresh`'s seam test was a narrower duplicate of an end-to-end
+  companion sitting directly beneath it; the companion took over its NFR-5
+  no-network assertion and the seam went.
+- **Renamed to the honest contract.** The six `event-router.ts` accessors were
+  pass-throughs to functions `routing-state.ts` already exported, so the
+  wrappers went and the tests call the real ones; `_resetForTest` became
+  `resetRoutingState` in the module that owns all four cells. The remaining
+  read accessors in `settle.ts`, `registry.ts` and `completion-cache.ts` became
+  `settleCacheSnapshot` / `loopProtectionState` / `asyncRewakeEntries` /
+  `awaitPidTablePersist` / `resetCompletionCache`. `availableRowMessage` lost
+  its `__test_` prefix, which this item had already called for.
+
+**Four duplications were hiding behind seams**, which is the item's thesis
+paid out. Three depth-5 `Error.cause` walkers, each with its own `MAX_DEPTH = 5`
+and each documenting itself as "mirroring" the others, now share one
+`causeChain` generator. Three byte-identical `isErrnoException` type guards
+(uninstall.ts, marketplace/remove.ts, enable-disable.ts) are one definition in
+`shared/errors.ts`. `errorMessageOf` in reconcile/apply.ts was a fourth verbatim
+copy of `errorMessage`. None of these was visible while the third copy was
+reachable only through a `__test_` export.
+
+**The payoff this item was named for is NOT unlocked, and the seams were not
+what blocked it.** Measured after the sweep:
+
+| Configuration | Findings |
+|---|---|
+| `production: true`, at this item's filing | 288 |
+| `production: true`, now | 94 unused exports + 2 unused files |
+| `production: false` + `includeEntryExports: true` (shipping) | 0 |
+
+So the 27 seams were roughly a fifth of the gap. The remaining ~94 are the
+item's OTHER population -- ordinary internal helpers exported so a test can
+reach them, spread thin (the worst file contributes one). That is the ~84-site
+decision pass the item explicitly warns must not be done mechanically, and it
+is what still stands between here and `production: true`.
+
 **Status 2026-08-18: 27 seams down to 24; `reinstall.ts` went 5 to 2.**
 
 One pass on the `defaults-enabled` branch, applying the item's own (a)/(b) rule

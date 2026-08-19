@@ -846,8 +846,10 @@ test("MATCH-03: parseHooksConfig success arm collapses malformed `if` to MATCH_A
 test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Bash + path-tool + unknown-prefix + absent)", async () => {
   const router =
     await import("../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const routingState =
+    await import("../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
-  router._resetForTest();
+  routingState.resetRoutingState();
   const raw = JSON.stringify({
     PreToolUse: [
       {
@@ -878,7 +880,7 @@ test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Ba
 
   router.rebuildRoutingTables();
 
-  const bucket = router._routingTableForTest().get("PreToolUse");
+  const bucket = routingState.routingTableEntries().get("PreToolUse");
   assert.ok(bucket !== undefined);
   assert.equal(bucket.length, 4);
 
@@ -897,7 +899,7 @@ test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Ba
   // equality (D-61-02 always-present-with-sentinel).
   assert.strictEqual(bareRow.ifPredicate, MATCH_ALL_IF);
 
-  router._resetForTest();
+  routingState.resetRoutingState();
 });
 
 // ──────────────────────────────────────────────────────────────────────────

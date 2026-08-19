@@ -27,11 +27,13 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
-  _peekPendingSessionStartContextForTest,
-  _resetForTest,
   beforeAgentStartHandlerFor,
   registerHooksBridge,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import {
+  pendingSessionStartContextEntries,
+  resetRoutingState,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { currentEpoch } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -135,9 +137,9 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
 }
 
 test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches before_agent_start.systemPrompt end-to-end", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
@@ -208,7 +210,7 @@ JSON
 
     // Pre-flight: pending buffer empty after a fresh registerHooksBridge.
     assert.deepEqual(
-      _peekPendingSessionStartContextForTest(),
+      pendingSessionStartContextEntries(),
       [],
       "registerHooksBridge must clear the pending buffer so /reload cannot leak stale context",
     );
@@ -225,7 +227,7 @@ JSON
     await sessionStartReg.handler(sessionStartEvent, placeholderCtx);
 
     assert.deepEqual(
-      _peekPendingSessionStartContextForTest().map((e) => e.context),
+      pendingSessionStartContextEntries().map((e) => e.context),
       ["LEARN-MODE-MARK"],
       "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
     );
@@ -244,7 +246,7 @@ JSON
       "before_agent_start handler must surface the joined systemPrompt to Pi's chain",
     );
     assert.deepEqual(
-      _peekPendingSessionStartContextForTest(),
+      pendingSessionStartContextEntries(),
       [],
       "drain semantics: pending buffer cleared after the first before_agent_start",
     );
@@ -265,9 +267,9 @@ JSON
 });
 
 test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
@@ -326,7 +328,7 @@ JSON
     const firstReloadEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
     await firstSessionStartReg.handler(firstReloadEvent, placeholderCtx);
     assert.deepEqual(
-      _peekPendingSessionStartContextForTest().map((e) => e.context),
+      pendingSessionStartContextEntries().map((e) => e.context),
       ["FIRST-LOAD-MARK"],
     );
 
@@ -337,7 +339,7 @@ JSON
     const secondLoad = makeMockPi();
     await registerHooksBridge(secondLoad.pi, { ctx: placeholderCtx, cwd: extensionRoot });
     assert.deepEqual(
-      _peekPendingSessionStartContextForTest(),
+      pendingSessionStartContextEntries(),
       [],
       "registerHooksBridge re-entry must clear the pending buffer (no stale-context leak across /reload)",
     );

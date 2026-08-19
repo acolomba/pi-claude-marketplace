@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   dropMarketplaceCache,
   getMarketplaceNames,
   getPluginIndex,
@@ -21,7 +21,7 @@ import type { PluginIndexRow } from "../../extensions/pi-claude-marketplace/shar
 /**
  * D-03 two-tier completion cache primitives + TC-8 soft-fail + TC-9
  * propagation + 10-min TTL via injected clock. Tests are hermetic per-case:
- * each test() calls __resetCacheForTests() at the top to clear the module-
+ * each test() calls resetCompletionCache() at the top to clear the module-
  * level memory maps and works in its own mkdtemp().
  */
 
@@ -39,7 +39,7 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 // ---------------------------------------------------------------------------
 
 test("schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion === 2", () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   // The schema is a TypeBox Type.Object; the schemaVersion property is a
   // literal `1`. Reach into the JSON-schema representation (TypeBox 1.x
   // exposes the schema's properties through the .properties field).
@@ -48,7 +48,7 @@ test("schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion ===
 });
 
 test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 6", () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const properties = PLUGIN_INDEX_CACHE_SCHEMA.properties;
   // LIST-02 / D-67-02: bumped 1 -> 2 for the finer-status union. WR-02: bumped
   // 2 -> 3 for the added `force-installed-upgradable` status; stale v2 caches
@@ -69,7 +69,7 @@ test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 6", 
 // ---------------------------------------------------------------------------
 
 test("getMarketplaceNames :: lazy load on first call; cache hit on second (no rebuild call)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     let rebuildCalls = 0;
@@ -89,7 +89,7 @@ test("getMarketplaceNames :: lazy load on first call; cache hit on second (no re
 });
 
 test("getMarketplaceNames :: in-memory hit serves without file read", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     let rebuildCalls = 0;
@@ -112,7 +112,7 @@ test("getMarketplaceNames :: in-memory hit serves without file read", async () =
 });
 
 test("getMarketplaceNames :: file hit on memory miss; no rebuild", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     // Pre-seed file (simulates a prior session's cache on disk).
@@ -130,7 +130,7 @@ test("getMarketplaceNames :: file hit on memory miss; no rebuild", async () => {
 });
 
 test("getMarketplaceNames :: ENOENT triggers rebuild + atomic write", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "subdir", "marketplace-names.json");
     let rebuildCalls = 0;
@@ -144,7 +144,7 @@ test("getMarketplaceNames :: ENOENT triggers rebuild + atomic write", async () =
     assert.equal(rebuildCalls, 1);
 
     // File was written -- next session (memory cleared) hits the file.
-    __resetCacheForTests();
+    resetCompletionCache();
     let rebuild2Calls = 0;
     const after = await getMarketplaceNames(filePath, "project", () => {
       rebuild2Calls++;
@@ -156,7 +156,7 @@ test("getMarketplaceNames :: ENOENT triggers rebuild + atomic write", async () =
 });
 
 test("getMarketplaceNames :: stale schemaVersion 1 drops + rebuilds", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     await writeFile(filePath, JSON.stringify({ schemaVersion: 1, names: ["stale"] }), "utf8");
@@ -173,7 +173,7 @@ test("getMarketplaceNames :: stale schemaVersion 1 drops + rebuilds", async () =
 });
 
 test("getMarketplaceNames :: corrupt JSON drops + rebuilds", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     await writeFile(filePath, "{ not valid json", "utf8");
@@ -194,7 +194,7 @@ test("getMarketplaceNames :: corrupt JSON drops + rebuilds", async () => {
 // ---------------------------------------------------------------------------
 
 test("getPluginIndex :: lazy load + cache hit (same as marketplace-names)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     const rows: PluginIndexRow[] = [
@@ -219,7 +219,7 @@ test("getPluginIndex :: lazy load + cache hit (same as marketplace-names)", asyn
 });
 
 test("D-03-TTL :: getPluginIndex re-reads file after 10-min TTL via injected clock", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     let clock = 1_000_000;
@@ -272,7 +272,7 @@ test("D-03-TTL :: getPluginIndex re-reads file after 10-min TTL via injected clo
 });
 
 test("D-03-TTL :: stale plugin-index file rebuilds instead of serving old statuses", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     const clock = 1_000_000;
@@ -305,7 +305,7 @@ test("D-03-TTL :: stale plugin-index file rebuilds instead of serving old status
 });
 
 test("D-75-01 :: stale v3 plugin-index cache (old force literals) drops + rebuilds v4", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     const clock = 1_000_000;
@@ -342,7 +342,7 @@ test("D-75-01 :: stale v3 plugin-index cache (old force literals) drops + rebuil
 });
 
 test("PURL-08 :: stale v4 plugin-index cache (git-source rows misclassified unavailable) drops + rebuilds", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     const clock = 1_000_000;
@@ -379,7 +379,7 @@ test("PURL-08 :: stale v4 plugin-index cache (git-source rows misclassified unav
 });
 
 test("RSTA-03 :: stale v5 plugin-index cache (git-source rows classified `available`) drops + rebuilds into `remote`", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     const clock = 1_000_000;
@@ -416,7 +416,7 @@ test("RSTA-03 :: stale v5 plugin-index cache (git-source rows classified `availa
 });
 
 test("D-03-TTL :: getPluginIndex serves in-memory before TTL expiry", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     let clock = 1_000_000;
@@ -470,7 +470,7 @@ test("D-03-TTL :: getPluginIndex serves in-memory before TTL expiry", async () =
 // ---------------------------------------------------------------------------
 
 test("invalidateMarketplaceNames :: removes cache file + memory entry", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     let names = ["initial"];
@@ -496,7 +496,7 @@ test("invalidateMarketplaceNames :: removes cache file + memory entry", async ()
 });
 
 test("invalidateMarketplaceNames :: ENOENT on cache file is silent", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     await invalidateMarketplaceNames(filePath, "user");
@@ -504,7 +504,7 @@ test("invalidateMarketplaceNames :: ENOENT on cache file is silent", async () =>
 });
 
 test("invalidateMarketplaceCache :: next read rebuilds (memory dropped, file kept)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     let rebuildCalls = 0;
@@ -529,7 +529,7 @@ test("invalidateMarketplaceCache :: next read rebuilds (memory dropped, file kep
 });
 
 test("dropMarketplaceCache :: removes cache file + memory entry", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-a.json");
     let rebuildCalls = 0;
@@ -554,7 +554,7 @@ test("dropMarketplaceCache :: removes cache file + memory entry", async () => {
 });
 
 test("dropMarketplaceCache :: ENOENT on cache file is silent (file already absent is OK)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "never-existed.json");
     // Must not throw even when there's nothing on disk and no memory entry.
@@ -567,7 +567,7 @@ test("dropMarketplaceCache :: ENOENT on cache file is silent (file already absen
 // ---------------------------------------------------------------------------
 
 test("TC-8 :: rebuild that throws manifest error caches { plugins: [], _loadError }", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-broken.json");
 
@@ -591,7 +591,7 @@ test("TC-8 :: rebuild that throws manifest error caches { plugins: [], _loadErro
 });
 
 test("TC-8 :: subsequent reads of TC-8-poisoned cache return [] (no throw)", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp-broken.json");
     // Pre-seed the poison file (simulates a prior session's TC-8 result).
@@ -630,7 +630,7 @@ test("TC-8 :: subsequent reads of TC-8-poisoned cache return [] (no throw)", asy
 // ---------------------------------------------------------------------------
 
 test("TC-9 :: rebuild that throws state.json error propagates from getMarketplaceNames", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     await assert.rejects(
@@ -644,7 +644,7 @@ test("TC-9 :: rebuild that throws state.json error propagates from getMarketplac
 });
 
 test("TC-9 :: rebuild that throws state.json error propagates from getPluginIndex", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "plugins", "mp.json");
     await assert.rejects(

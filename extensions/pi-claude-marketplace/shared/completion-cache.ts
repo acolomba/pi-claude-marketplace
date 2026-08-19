@@ -37,7 +37,7 @@
 //   dropMarketplaceCache(path, scope, mp) -- memory drop + unlink (ENOENT silent)
 //
 // Test seam
-//   __resetCacheForTests() -- clear both in-memory maps between cases.
+//   resetCompletionCache() -- clear both in-memory maps between cases.
 //
 // TC-8 discriminator: callers wrap manifest-load failures in
 // ManifestSoftFailError; everything else propagates. The cache module cannot
@@ -423,15 +423,17 @@ export async function dropMarketplaceCache(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Test-only seam (NOT part of the public contract).
-// ---------------------------------------------------------------------------
-
 /**
- * @internal -- clear both in-memory maps. Tests call this between cases to
- * isolate state since the module's maps are process-global.
+ * Drop both in-memory maps.
+ *
+ * The narrower `invalidateMarketplaceCache` / `dropMarketplaceCache` entries
+ * above evict ONE marketplace, which is what the mutating orchestrators want.
+ * This clears the lot, for a caller that needs the whole process-global cache
+ * back to its cold state. Its only caller today is test setup isolating cases
+ * from each other, which is exactly that need; keeping it beside the two
+ * narrower evictions is what stops a third map being added and missed here.
  */
-export function __resetCacheForTests(): void {
+export function resetCompletionCache(): void {
   memMarketplaceNames.clear();
   memPluginIndex.clear();
 }

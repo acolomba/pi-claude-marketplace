@@ -90,7 +90,7 @@ export interface RoutingEntry {
 /**
  * One plugin's parsed hooks config as held in `parsedConfigCache`. Exported
  * (unlike its former module-private form in `event-router.ts`) because
- * `_parsedConfigCacheForTest` names it across the module boundary.
+ * `parsedConfigEntries` names it across the module boundary.
  */
 export interface CacheEntry {
   readonly scope: Scope;
@@ -255,7 +255,7 @@ export function deleteParsedConfig(key: string): void {
  * Drop every parsed config. Paired with the two mutators above so the cache
  * has one write surface.
  */
-export function clearParsedConfigCache(): void {
+function clearParsedConfigCache(): void {
   parsedConfigCache.clear();
 }
 
@@ -294,7 +294,7 @@ export function setRoutingBucket(
  * Drop every bucket. Paired with `setRoutingBucket` so the rebuild path and
  * the test-reset path share one write surface.
  */
-export function clearRoutingTable(): void {
+function clearRoutingTable(): void {
   routingTable.clear();
 }
 
@@ -305,4 +305,22 @@ export function clearRoutingTable(): void {
  */
 export function routingTableEntries(): ReadonlyMap<BucketAEvent, ReadonlyArray<RoutingEntry>> {
   return routingTable;
+}
+
+/**
+ * Clear every cell this module owns: the epoch, the parsed-config cache, the
+ * routing table and the pending SessionStart buffer.
+ *
+ * A public lifecycle operation rather than a test hole. This module is the one
+ * place that knows the full cell inventory, so a caller that wants a clean
+ * baseline should say so once here instead of composing four clears and
+ * silently missing the fifth when one is added. Its only caller today is test
+ * setup, which is what a reset is for; the four clears it composes are each
+ * already public.
+ */
+export function resetRoutingState(): void {
+  resetEpoch();
+  clearParsedConfigCache();
+  clearRoutingTable();
+  clearPendingSessionStartContext();
 }

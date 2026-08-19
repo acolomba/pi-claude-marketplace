@@ -39,7 +39,7 @@ import {
   saveState,
   type ExtensionState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
@@ -62,11 +62,11 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
   const cwd = await mkdtemp(path.join(tmpdir(), "backfill-cwd-"));
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  __resetCacheForTests();
+  resetCompletionCache();
   try {
     return await fn({ cwd });
   } finally {
-    __resetCacheForTests();
+    resetCompletionCache();
     if (originalHome === undefined) {
       delete process.env.HOME;
     } else {

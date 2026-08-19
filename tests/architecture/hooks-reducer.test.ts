@@ -27,11 +27,11 @@ import {
   compositeHandlerFor,
   toolResultCompositeHandler,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
-import {
-  _resetForTest,
-  _setRoutingBucketForTest,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  resetRoutingState,
+  setRoutingBucket,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
   currentEpoch,
   type RoutingEntry,
@@ -127,14 +127,14 @@ function makeSpy(results: Record<string, HookExecResult>): {
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-60-02 first-block-wins: entry-1 blocks; entries 2-3 executor NOT invoked", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "block", reason: "denied" },
     p2: { kind: "noop" },
     p3: { kind: "noop" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
@@ -156,13 +156,13 @@ test("D-60-02 first-block-wins: entry-1 blocks; entries 2-3 executor NOT invoked
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-60-02 mutate composition: entry-2 sees entry-1's in-place mutation", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "mutate", updatedInput: { extraField: "x" } },
     p2: { kind: "noop" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
   ]);
@@ -188,13 +188,13 @@ test("D-60-02 mutate composition: entry-2 sees entry-1's in-place mutation", asy
 });
 
 test("D-60-02 mutate composition: two mutates compose left-to-right (entry-2 patch overlays entry-1)", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "mutate", updatedInput: { a: 1, shared: "from-p1" } },
     p2: { kind: "mutate", updatedInput: { b: 2, shared: "from-p2" } },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
   ]);
@@ -214,14 +214,14 @@ test("D-60-02 mutate composition: two mutates compose left-to-right (entry-2 pat
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-60-02 stop terminal: entry-1 stops; entries 2-3 executor NOT invoked", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "stop", stopReason: "halt" },
     p2: { kind: "noop" },
     p3: { kind: "noop" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
@@ -245,10 +245,10 @@ test("D-60-02 stop terminal: entry-1 stops; entries 2-3 executor NOT invoked", a
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-60-02 noop chain: all entries run; composite handler returns undefined", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({});
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
@@ -270,14 +270,14 @@ test("D-60-02 noop chain: all entries run; composite handler returns undefined",
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-59-01 + D-60-02: toolResult isError=true reduces only PostToolUseFailure bucket", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     "p-failure": { kind: "noop" },
     "p-success": { kind: "noop" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
   const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(makeToolResultEvent(true), stubCtx);
@@ -290,14 +290,14 @@ test("D-59-01 + D-60-02: toolResult isError=true reduces only PostToolUseFailure
 });
 
 test("D-59-01 + D-60-02: toolResult isError=false reduces only PostToolUse bucket", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     "p-failure": { kind: "noop" },
     "p-success": { kind: "noop" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
   const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(makeToolResultEvent(false), stubCtx);
@@ -310,13 +310,13 @@ test("D-59-01 + D-60-02: toolResult isError=false reduces only PostToolUse bucke
 });
 
 test("D-59-01 + D-60-02: toolResult bucket reduces first-block-wins", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "block", reason: "tool-blocked" },
     p2: { kind: "noop" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PostToolUse", [
+  setRoutingBucket("PostToolUse", [
     makeEntry({ pluginId: "p1", claudeEvent: "PostToolUse", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", claudeEvent: "PostToolUse", declarationIndex: 1 }),
   ]);
@@ -340,20 +340,20 @@ test("D-59-01 + D-60-02: toolResult bucket reduces first-block-wins", async () =
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-60-03 PreToolUse: block returns { block: true, reason }", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({ p1: { kind: "block", reason: "x" } });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
+  setRoutingBucket("PreToolUse", [makeEntry({ pluginId: "p1" })]);
   const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   const out = await handler(makeToolCallEvent(), stubCtx);
   assert.deepEqual(out, { block: true, reason: "x" });
 });
 
 test("D-60-03 UserPromptSubmit: block returns { action: 'handled' }", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({ p1: { kind: "block", reason: "x" } });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("UserPromptSubmit", [
+  setRoutingBucket("UserPromptSubmit", [
     makeEntry({ pluginId: "p1", claudeEvent: "UserPromptSubmit" }),
   ]);
   const handler = compositeHandlerFor(
@@ -367,12 +367,12 @@ test("D-60-03 UserPromptSubmit: block returns { action: 'handled' }", async () =
 });
 
 test("D-60-03 UserPromptSubmit: mutate.additionalContext returns { action: 'transform', text }", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "mutate", additionalContext: "more" },
   });
   const injectedExecutor: HookExecutor = spy.impl;
-  _setRoutingBucketForTest("UserPromptSubmit", [
+  setRoutingBucket("UserPromptSubmit", [
     makeEntry({ pluginId: "p1", claudeEvent: "UserPromptSubmit" }),
   ]);
   const handler = compositeHandlerFor(
@@ -386,7 +386,7 @@ test("D-60-03 UserPromptSubmit: mutate.additionalContext returns { action: 'tran
 });
 
 test("D-60-03 observation events: always return undefined (SessionStart / SessionEnd / PreCompact / PostCompact)", async () => {
-  _resetForTest();
+  resetRoutingState();
   const spy = makeSpy({
     p1: { kind: "block", reason: "drop-me" },
   });
@@ -396,7 +396,7 @@ test("D-60-03 observation events: always return undefined (SessionStart / Sessio
   // observation events; the per-event adapter is invoked for the
   // debug-log side effect only, so calling the handler as a statement
   // pins the never-throws contract without assigning a void expression.
-  _setRoutingBucketForTest("SessionStart", [
+  setRoutingBucket("SessionStart", [
     makeEntry({ pluginId: "p1", claudeEvent: "SessionStart", rawMatcher: "" }),
   ]);
   const ssHandler = compositeHandlerFor(
@@ -408,9 +408,7 @@ test("D-60-03 observation events: always return undefined (SessionStart / Sessio
   await ssHandler({ type: "session_start", reason: "startup" }, stubCtx);
 
   // SessionEnd / PreCompact / PostCompact: same drop-to-undefined behavior.
-  _setRoutingBucketForTest("SessionEnd", [
-    makeEntry({ pluginId: "p1", claudeEvent: "SessionEnd" }),
-  ]);
+  setRoutingBucket("SessionEnd", [makeEntry({ pluginId: "p1", claudeEvent: "SessionEnd" })]);
   const seHandler = compositeHandlerFor("SessionEnd", currentEpoch(), undefined, injectedExecutor);
   await seHandler({ type: "session_shutdown" } as never, stubCtx);
 

@@ -33,7 +33,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   findManualRecoveryError,
   ManualRecoveryError,
@@ -77,11 +77,11 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   const hermeticHome = await mkdtemp(path.join(tmpdir(), "reinstall-home-"));
   const prevHome = process.env.HOME;
   process.env.HOME = hermeticHome;
-  __resetCacheForTests();
+  resetCompletionCache();
   try {
     return await fn();
   } finally {
-    __resetCacheForTests();
+    resetCompletionCache();
     if (prevHome === undefined) {
       delete process.env.HOME;
     } else {
@@ -2422,15 +2422,15 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2497,12 +2497,12 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hooks.json from the resolved manifest", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-rewrite-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const hooksJson = {
@@ -2554,12 +2554,12 @@ test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hook
 });
 
 test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<plugin>/ subtree", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-drop-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       // Seed a plugin WITHOUT hooks.

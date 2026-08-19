@@ -277,7 +277,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   }
 }
 
-export interface RefreshOneArgs {
+interface RefreshOneArgs {
   readonly ctx: ExtensionContext;
   readonly name: string;
   readonly scope: Scope;
@@ -484,7 +484,7 @@ async function refreshRecord(
   }
 }
 
-export interface RefreshSnapshot {
+interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
   /**
@@ -865,12 +865,3 @@ async function validateManifestAtRoot(
     record.marketplaceRoot = marketplaceRoot;
   }
 }
-
-/**
- * Test seam for the TOCTOU concurrent-removal regression (CR-01). Verifies that
- * `snapshotAfterRefresh` returns `undefined` (instead of throwing a raw
- * MarketplaceNotFoundError) when the marketplace record is absent at the guard's
- * fresh `loadState` -- the silent-return that prevents `refreshOneMarketplace`'s
- * catch from misattributing the race as the lying `{network unreachable}`.
- */
-export { snapshotAfterRefresh as __test_snapshotAfterRefresh };

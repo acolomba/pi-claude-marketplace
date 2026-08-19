@@ -22,7 +22,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -742,7 +742,7 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "remove-d03inv-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedState(locations.extensionRoot, {
         schemaVersion: 1,

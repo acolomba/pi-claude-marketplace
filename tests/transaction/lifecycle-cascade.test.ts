@@ -134,12 +134,12 @@ async function fileExists(p: string): Promise<boolean> {
 }
 
 test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall all wire the hooks slot end-to-end", async () => {
-  const { _resetForTest } =
-    await import("../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "lifecycle-cascade-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       const hooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
 

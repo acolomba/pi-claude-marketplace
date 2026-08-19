@@ -668,8 +668,16 @@ function narrowProbeError(err: unknown): ListReason {
  * `<plugin>@<marketplace>` key, taken from the PLUGIN scope's merged
  * base+local config view. It gates the install-time claim -- see the
  * `installsDisabledField` computation below.
+ *
+ * PURL-08 / D-78-03: exported because it is a cross-surface contract, not
+ * because a test wanted in. The output-parity drift guard in
+ * tests/orchestrators/edge-deps.test.ts feeds the SAME git-source manifest
+ * through this builder and through the completion bucketizer and asserts the
+ * two agree on the status bucket, which is what holds the list `(available)`
+ * versus completion `unavailable` divergence class closed. Both surfaces are
+ * callers of a shared classification; the guard needs to name it.
  */
-async function availableRowMessage(
+export async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
   locations: ScopedLocations,
@@ -718,7 +726,7 @@ async function availableRowMessage(
 
 /**
  * The `{ message, bucket }` pair every not-installed row resolves to. Exported
- * because `__test_availableRowMessage` returns it: a same-file private type in
+ * because `availableRowMessage` returns it: a same-file private type in
  * an exported signature is a leak the build refuses, and naming the pair is
  * what lets the three builders below share one return type instead of
  * restating the union.
@@ -1569,10 +1577,3 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
  */
 const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
 const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
-
-// PURL-08 / D-78-03: test-only re-export of the not-installed row builder. The
-// output-parity drift-guard (tests/orchestrators/edge-deps.test.ts) feeds the
-// SAME git-source manifest through this list-surface builder and the completion
-// bucketizer and asserts identical status buckets, guarding the list
-// `(available)` vs completion `unavailable` divergence class.
-export { availableRowMessage as __test_availableRowMessage };

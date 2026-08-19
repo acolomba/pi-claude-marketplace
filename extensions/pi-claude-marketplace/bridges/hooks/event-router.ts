@@ -63,20 +63,15 @@ import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 import {
   bumpEpoch,
-  clearParsedConfigCache,
   clearPendingSessionStartContext,
-  clearRoutingTable,
   currentEpoch,
   deleteParsedConfig,
   getRoutingBucket,
   parsedConfigEntries,
   pendingSessionStartContextEntries,
-  resetEpoch,
-  routingTableEntries,
   setParsedConfig,
   setRoutingBucket,
   type CacheEntry,
-  type PendingSessionStartContext,
   type RoutingEntry,
 } from "./routing-state.ts";
 import {
@@ -825,67 +820,4 @@ export async function registerHooksBridge(
   // latch on a genuine user input. Bridge-injected `sendMessage` re-entries do
   // NOT pass through `input`, so the flag never self-clears.
   pi.on("input", inputResetHandlerFor(capturedEpoch));
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Test-only inspectors -- NOT re-exported from bridges/hooks/index.ts.
-// ──────────────────────────────────────────────────────────────────────────
-
-/**
- * Returns the routingTable as-is so unit tests can assert against its
- * contents. Not part of the public surface.
- */
-export function _routingTableForTest(): ReadonlyMap<BucketAEvent, ReadonlyArray<RoutingEntry>> {
-  return routingTableEntries();
-}
-
-/**
- * Returns the parsedConfigCache as-is so unit tests can assert on cache
- * mutator idempotency without exposing the key format. Not part of the
- * public surface.
- */
-export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
-  return parsedConfigEntries();
-}
-
-/**
- * Resets all module-state cells. Used by unit tests so each test starts
- * from a clean baseline. Not part of the public surface.
- */
-export function _resetForTest(): void {
-  resetEpoch();
-  clearParsedConfigCache();
-  clearRoutingTable();
-  clearPendingSessionStartContext();
-}
-
-/**
- * Test-only inspector for the pending SessionStart additionalContext
- * buffer. Returns a snapshot of the buffer; mutating the returned array
- * does not affect the module state. Not part of the public surface.
- */
-export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingSessionStartContext> {
-  return Array.from(pendingSessionStartContextEntries());
-}
-
-/**
- * Synthetic epoch bump for unit tests that pin the
- * mismatch-causes-no-op contract without exercising the full
- * registerHooksBridge factory path. Not part of the public surface.
- */
-export function _bumpEpochForTest(): number {
-  return bumpEpoch();
-}
-
-/**
- * Inject a synthetic bucket directly into the routing table so dispatch
- * tests can exercise the composite-handler closures without first
- * standing up a full state + cache fixture. Not part of the public
- * surface.
- */
-export function _setRoutingBucketForTest(
-  claudeEvent: BucketAEvent,
-  entries: ReadonlyArray<RoutingEntry>,
-): void {
-  setRoutingBucket(claudeEvent, entries);
 }
