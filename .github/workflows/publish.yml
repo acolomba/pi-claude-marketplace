@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -48,3 +48,26 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public --provenance
+
+  # Create the GitHub release from the CHANGELOG.md section matching the tag.
+  # taiki-e/create-gh-release-action extracts the section and creates the
+  # release in one step; its parser (taiki-e/parse-changelog) reads this
+  # repository's changelog format directly, so no extraction script is needed.
+  # allow-missing-changelog defaults to false, so a tag with no changelog
+  # section fails the job rather than publishing an empty release.
+  # needs: [publish] -- a release page must not announce a version that is
+  # not yet on npm.
+  release:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Create the GitHub release
+        uses: taiki-e/create-gh-release-action@v1
+        with:
+          changelog: CHANGELOG.md
