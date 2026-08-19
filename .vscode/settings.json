@@ -1,0 +1,6 @@
+{
+  "sonarlint.connectedMode.project": {
+    "connectionId": "acolomba",
+    "projectKey": "acolomba_pi-claude-marketplace"
+  }
+}
