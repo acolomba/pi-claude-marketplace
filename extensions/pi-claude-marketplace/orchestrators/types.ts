@@ -318,3 +318,102 @@ export type PluginUpdateFn = (
   marketplace: string,
   scope: Scope,
 ) => Promise<PluginUpdateOutcome>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// It moved here from install.ts to join its three siblings. Leaving it in the
+// orchestrator meant install.messaging.ts could not name the type its own
+// failure classifier returns without importing back into install.ts, which
+// would close a cycle (FLOW-09).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is
+ * the edge layer's responsibility; this orchestrator entrypoint
+ * accepts already-parsed strings + the resolved scope.
+ *
+ * `pi` is REQUIRED -- `notify(ctx, pi, message)` consumes it for the
+ * single `softDepStatus(pi)` probe per call. The renderer
+ * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
+ * markers from the per-row `dependencies: readonly Dependency[]`
+ * declaration combined with the threaded probe. Making `pi`
+ * optional would force a runtime branch the type checker cannot reason
+ * about.
+ *
+ * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
+ * `dependencies: readonly Dependency[]` (the closed-set
+ * `"agents" | "mcp"` per SNM-04). The orchestrator derives the
+ * array at the success-return site from
+ * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`) and
+ * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`); the
+ * `declaresAgents`/`declaresMcp` predicates on `InstallPluginOutcome`
+ * remain (consumed by `orchestrators/import/execute.ts` for its
+ * cascade-row composition) -- NFR-7's discriminated-outcome contract
+ * is unchanged.
+ *
+ * IN-07 / D-98-01: the `installed` arm INTERSECTS the shared
+ * `LedgerDegradationSignals` shape rather than re-declaring the ledger's
+ * degradation fields, so the enable branch and this one read ONE vocabulary for
+ * the same ledger run. Each field is omitted when empty, so a clean install's
+ * outcome shape is unchanged (NREG-01).
+ *
+ * WR-03: the intersection EXCLUDES the two staged-count verdicts, and every
+ * field it keeps is populated below. WR-11: the type operator is an EXCLUSION,
+ * so it cannot state that second half on its own -- a signal added to the shared
+ * shape would widen this arm with a field nothing here writes. The key set is
+ * pinned bidirectionally by `COMPAT-01: the install outcome inherits exactly the
+ * signals installPlugin populates` in
+ * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
+ * either a widening or a narrowing. Each field of the shared shape is optional,
+ * so intersecting all five never made a missing one a compile error -- it only
+ * advertised `stagedAgents` / `stagedMcpServers` that `installPlugin` never
+ * writes, which a consumer reads as `undefined` and takes for "no agents
+ * staged". Those two facts already ride the REQUIRED `declaresAgents` /
+ * `declaresMcp` predicates below (consumed by `orchestrators/import/execute.ts`
+ * and the reconcile projection), so excluding the optional twins removes a
+ * duplicate vocabulary rather than a signal. The dropped-component
+ * `unsupported` kind list stays and is populated: an install admitted through
+ * the partial gate drops component kinds, and an outcome silent about them would
+ * contradict the `(partially-installed)` row `list` renders one command later --
+ * the same contradiction the shared shape exists to prevent on the enable side.
+ */
+export type InstallPluginOutcome =
+  | ({
+      readonly status: "installed";
+      readonly resourcesChanged: boolean;
+      readonly declaresAgents: boolean;
+      readonly declaresMcp: boolean;
+      /**
+       * The resolved install version, as the standalone rows render it. An
+       * orchestrated caller has no other way to fill the version slot its own
+       * projection carries on every comparable row. Not a
+       * `LedgerDegradationSignals` member, so the COMPAT-01 key-set pin is
+       * undisturbed.
+       */
+      readonly version?: string;
+      /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
+      readonly postCommitWarnings?: readonly string[];
+      /**
+       * DFEN-04: the install ran to completion and then unstaged, because the
+       * plugin's own `defaultEnabled` declaration said so -- the record is
+       * `enabled: false` and nothing the plugin declares is on disk. Omitted
+       * otherwise (NREG-01). The reconcile cascade reads it so its projection
+       * can report the truthful disabled row instead of `(installed)` over a
+       * disabled record. Not a `LedgerDegradationSignals` member, so the
+       * COMPAT-01 key-set pin (which covers only the intersection with that
+       * shape) is undisturbed.
+       */
+      readonly landedDisabled?: true;
+    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">)
+  | {
+      /**
+       * Collapsed failure shape. All failure variants (`already-installed`,
+       * `unavailable`, `uninstallable`, `unexpected-failure`) map here.
+       * `error` is the typed dispatch surface -- consumers narrow on
+       * `instanceof PluginShapeError` and `.shape.kind` to recover the
+       * specific failure class. `cause` preserves the formatted user-visible
+       * text for callers in orchestrated mode that render it directly.
+       */
+      readonly status: "failed";
+      readonly error: Error;
+      readonly cause: string;
+    };

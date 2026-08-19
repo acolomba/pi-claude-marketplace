@@ -35,7 +35,7 @@ import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
-import { MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { isErrnoException, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
@@ -44,6 +44,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ContentReason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -586,3 +587,66 @@ export async function loadVisibleMarketplaces(opts: {
 // failure facts to `notify()`; the renderer composes the trailer internally.
 // Callers that need the trailer outside the notify path compose it inline via
 // `causeChainTrailer(err)` imported from `shared/errors.ts`.
+
+// ───────────────────────────────────────────────────────────────────────────
+// It lives here, beside `AgentsUnstageFailureError`, because that class is the
+// first thing it dispatches on. It was declared in remove.ts and reached
+// through a `__test_` re-export; a narrower kept apart from the error it
+// narrows is how two cascade-failure mappings drift (FLOW-09).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Narrow a per-plugin cascade Error.cause to a closed-set Reason for the
+ * failed-plugin children block by dispatching on the typed cause
+ * (`AgentsUnstageFailureError` or `NodeJS.ErrnoException.code`) rather than
+ * substring-matching message text. Falls back to `"not in manifest"` as the
+ * permissive default when no typed case matches; bare-Error substring branches
+ * are a defensive last resort for cases where the error was already serialised
+ * into a notes string.
+ */
+export function narrowCascadeFailure(cause: Error): ContentReason {
+  if (cause instanceof AgentsUnstageFailureError) {
+    // ATTR-09 / D-NCF: foreign content owned by another process is a
+    // content/ownership mismatch, not a manifest absence. Aligned with
+    // uninstall.ts's mapping (`AgentsUnstageFailureError` -> "source mismatch")
+    // so the two cascade-failure narrowers do not drift.
+    return "source mismatch";
+  }
+
+  if (isErrnoException(cause)) {
+    switch (cause.code) {
+      case "EACCES":
+      case "EPERM":
+        return "permission denied";
+      case "ENOENT":
+        return "source missing";
+      default:
+        // Other errno codes fall through to the textual fallback so
+        // any future-classified error surface can still be picked up
+        // by the substring branches below before landing on the
+        // permissive default.
+        break;
+    }
+  }
+
+  // Defensive textual fallback: bridges may still throw bare `Error`
+  // with diagnostic messages for `unreadable` / `unparseable` /
+  // `not in manifest` conditions. These branches are retained as a
+  // defense-in-depth last resort -- never as the primary
+  // classification path. A future audit may show them dead and they
+  // can be deleted.
+  const text = `${cause.name} ${cause.message}`.toLowerCase();
+  if (text.includes("unreadable")) {
+    return "unreadable";
+  }
+
+  if (text.includes("unparseable")) {
+    return "unparseable";
+  }
+
+  if (text.includes("not in manifest")) {
+    return "not in manifest";
+  }
+
+  return "not in manifest";
+}

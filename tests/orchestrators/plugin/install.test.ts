@@ -19,10 +19,12 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
-  __test_classifyEntityShapeError,
-  __test_classifyInstallFailure,
-  __test_composeInstallFailureMessage,
-  __test_narrowResolverReasons,
+  classifyEntityShapeError,
+  classifyInstallFailure,
+  composeInstallFailureMessage,
+  narrowResolverReasons,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import {
   installPlugin,
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
@@ -3687,7 +3689,7 @@ test("classifyEntityShapeError dispatches on kind=already-installed -> failed/{a
     plugin: "p",
     marketplace: "mp",
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3705,7 +3707,7 @@ test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not
     plugin: "p",
     marketplace: "mp",
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3740,7 +3742,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
     reasons: ["contains hooks", "contains lspServers"],
     partialable: false,
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3762,7 +3764,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable with source no
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3773,7 +3775,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable with source no
 });
 
 test("classifyEntityShapeError returns undefined for non-PluginShapeError input (fallback to bare errorMessage)", () => {
-  const row = __test_classifyEntityShapeError(new Error("random failure"), {
+  const row = classifyEntityShapeError(new Error("random failure"), {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3796,7 +3798,7 @@ test("IN-02 / RSTATE-05: hooks-only unsupported (typed kind, no notes) renders {
     partialable: true,
     unsupportedKinds: ["hooks"],
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3816,7 +3818,7 @@ test("IN-02 / RSTATE-05: lsp unsupported (typed kind) renders {lsp} on the failu
     partialable: true,
     unsupportedKinds: ["lspServers"],
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3841,7 +3843,7 @@ test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their note
     partialable: false,
     unsupportedKinds: [],
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -3855,7 +3857,7 @@ test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the th
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  const partialable = __test_classifyEntityShapeError(
+  const partialable = classifyEntityShapeError(
     new PluginShapeError({
       kind: "not-installable",
       plugin: "p",
@@ -3868,7 +3870,7 @@ test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the th
   assert.equal(partialable.status, "unavailable");
   assert.equal(partialable.partialable, true);
 
-  const structural = __test_classifyEntityShapeError(
+  const structural = classifyEntityShapeError(
     new PluginShapeError({
       kind: "not-installable",
       plugin: "p",
@@ -3895,14 +3897,14 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
     reasons: ["contains lspServers"],
     partialable: true,
   });
-  const partialableMsg = __test_composeInstallFailureMessage({
+  const partialableMsg = composeInstallFailureMessage({
     err: partialableErr,
     plugin: "helper",
     scope: "project",
     version: undefined,
     rolledBackPartial: false,
     rollbackPartials: [],
-    entityErrorRow: __test_classifyEntityShapeError(partialableErr, {
+    entityErrorRow: classifyEntityShapeError(partialableErr, {
       plugin: "helper",
       marketplace: "mp",
       scope: "project",
@@ -3921,14 +3923,14 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  const structuralMsg = __test_composeInstallFailureMessage({
+  const structuralMsg = composeInstallFailureMessage({
     err: structuralErr,
     plugin: "helper",
     scope: "project",
     version: undefined,
     rolledBackPartial: false,
     rollbackPartials: [],
-    entityErrorRow: __test_classifyEntityShapeError(structuralErr, {
+    entityErrorRow: classifyEntityShapeError(structuralErr, {
       plugin: "helper",
       marketplace: "mp",
       scope: "project",
@@ -3950,12 +3952,12 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
     reasons: ["contains lspServers"],
     partialable: true,
   });
-  const partialableRow = __test_classifyEntityShapeError(partialableErr, {
+  const partialableRow = classifyEntityShapeError(partialableErr, {
     plugin: "helper",
     marketplace: "mp",
     scope: "project",
   });
-  const withVersion = __test_composeInstallFailureMessage({
+  const withVersion = composeInstallFailureMessage({
     err: partialableErr,
     plugin: "helper",
     scope: "project",
@@ -3974,12 +3976,12 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  const structuralRow = __test_classifyEntityShapeError(structuralErr, {
+  const structuralRow = classifyEntityShapeError(structuralErr, {
     plugin: "helper",
     marketplace: "mp",
     scope: "project",
   });
-  const unavailableWithVersion = __test_composeInstallFailureMessage({
+  const unavailableWithVersion = composeInstallFailureMessage({
     err: structuralErr,
     plugin: "helper",
     scope: "project",
@@ -3993,7 +3995,7 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
   assert.equal(unavailableWithVersion.version, "2.0.0", "the unavailable arm carries the version");
 
   // An empty-string version (a placeholder resolve) is OMITTED from both arms.
-  const emptyPartial = __test_composeInstallFailureMessage({
+  const emptyPartial = composeInstallFailureMessage({
     err: partialableErr,
     plugin: "helper",
     scope: "project",
@@ -4005,7 +4007,7 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
   assert.ok(emptyPartial.status === "partially-available");
   assert.equal(emptyPartial.version, undefined, "empty-string version is omitted");
 
-  const emptyStructural = __test_composeInstallFailureMessage({
+  const emptyStructural = composeInstallFailureMessage({
     err: structuralErr,
     plugin: "helper",
     scope: "project",
@@ -4019,7 +4021,7 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
 });
 
 test("composeInstallFailureMessage runtime arm: a non-Error throw yields the bare failed row (no cause) with the version threaded", () => {
-  const msg = __test_composeInstallFailureMessage({
+  const msg = composeInstallFailureMessage({
     err: "disk exploded",
     plugin: "helper",
     scope: "project",
@@ -4270,7 +4272,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     plugin: "p",
     marketplace: "mp",
   });
-  const notInManifest = __test_classifyInstallFailure(notInManifestErr, "formatted");
+  const notInManifest = classifyInstallFailure(notInManifestErr, "formatted");
   assert.equal(notInManifest.status, "failed");
   assert.ok(notInManifest.status === "failed");
   assert.equal(notInManifest.error, notInManifestErr);
@@ -4281,7 +4283,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     plugin: "p",
     marketplace: "mp",
   });
-  const alreadyInstalled = __test_classifyInstallFailure(alreadyInstalledErr, "formatted");
+  const alreadyInstalled = classifyInstallFailure(alreadyInstalledErr, "formatted");
   assert.equal(alreadyInstalled.status, "failed");
   assert.ok(alreadyInstalled.status === "failed");
   assert.equal(alreadyInstalled.error, alreadyInstalledErr);
@@ -4292,7 +4294,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     reasons: ["hooks"],
     partialable: false,
   });
-  const notInstallable = __test_classifyInstallFailure(notInstallableErr, "formatted");
+  const notInstallable = classifyInstallFailure(notInstallableErr, "formatted");
   assert.equal(notInstallable.status, "failed");
   assert.ok(notInstallable.status === "failed");
   assert.equal(notInstallable.error, notInstallableErr);
@@ -4303,14 +4305,14 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     reasons: ["unsupported source"],
     partialable: false,
   });
-  const noLongerInstallable = __test_classifyInstallFailure(noLongerInstallableErr, "formatted");
+  const noLongerInstallable = classifyInstallFailure(noLongerInstallableErr, "formatted");
   assert.equal(noLongerInstallable.status, "failed");
   assert.ok(noLongerInstallable.status === "failed");
   assert.equal(noLongerInstallable.error, noLongerInstallableErr);
 
   // Non-PluginShapeError input is preserved verbatim on `error`.
   const opaque = new Error("random");
-  const unexpected = __test_classifyInstallFailure(opaque, "formatted");
+  const unexpected = classifyInstallFailure(opaque, "formatted");
   assert.equal(unexpected.status, "failed");
   assert.ok(unexpected.status === "failed");
   assert.equal(unexpected.error, opaque);
@@ -4339,13 +4341,13 @@ test("PHOOK-05 / D-71-04: narrowResolverReasons routes the `contains hooks` toke
   // partially-available arm -- pass the arm discriminant (`true`) so the
   // `contains <kind>` token routes through the component-axis helper.
   assert.deepEqual(
-    [...__test_narrowResolverReasons(["contains hooks"], ["hooks"], true)],
+    [...narrowResolverReasons(["contains hooks"], ["hooks"], true)],
     ["unsupported hooks"],
   );
 });
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
-  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
+  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
 test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as the sole remaining manifest-field carve-out", () => {
@@ -4354,7 +4356,7 @@ test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as t
   // dropped (dead under v1.13). The `lspServers` detection token maps
   // to the `lsp` Reason per SNM-36 / D-24-04; the catalog row form is
   // `(unavailable) {lsp}`.
-  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
+  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
 test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-out-kind>` to {unsupported component}", () => {
@@ -4369,48 +4371,46 @@ test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-o
   // available arm, so pass the arm discriminant (`true`); on the structural
   // `unavailable` arm the same note stays on the source axis (covered by the
   // cross-surface parity suite).
-  const reasons = __test_narrowResolverReasons(["contains monitors"], ["monitors"], true);
+  const reasons = narrowResolverReasons(["contains monitors"], ["monitors"], true);
   assert.deepEqual([...reasons], ["unsupported component"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
   assert.deepEqual(
-    [...__test_narrowResolverReasons(["unsupported source kind: foo"])],
+    [...narrowResolverReasons(["unsupported source kind: foo"])],
     ["unsupported source"],
   );
 });
 
 test("260525-cjr B2: narrowResolverReasons -> EACCES note surfaces as `permission denied` (NOT `unsupported source`)", () => {
-  const reasons = __test_narrowResolverReasons([
-    "EACCES: permission denied opening '/.pi/agent/...'",
-  ]);
+  const reasons = narrowResolverReasons(["EACCES: permission denied opening '/.pi/agent/...'"]);
   assert.deepEqual([...reasons], ["permission denied"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> EPERM also classifies as `permission denied`", () => {
-  const reasons = __test_narrowResolverReasons(["EPERM: operation not permitted"]);
+  const reasons = narrowResolverReasons(["EPERM: operation not permitted"]);
   assert.deepEqual([...reasons], ["permission denied"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> ENOENT note surfaces as `source missing`", () => {
-  const reasons = __test_narrowResolverReasons(["ENOENT: no such file or directory"]);
+  const reasons = narrowResolverReasons(["ENOENT: no such file or directory"]);
   assert.deepEqual([...reasons], ["source missing"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> SyntaxError note surfaces as `unparseable`", () => {
-  const reasons = __test_narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
+  const reasons = narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
   assert.deepEqual([...reasons], ["unparseable"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> empty notes -> `unsupported source` (permissive fallback)", () => {
-  assert.deepEqual([...__test_narrowResolverReasons([])], ["unsupported source"]);
+  assert.deepEqual([...narrowResolverReasons([])], ["unsupported source"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `unsupported source` (permissive fallback)", () => {
   // No carve-out, no `source` substring, no errno substring -- the
   // permissive `unsupported source` fallback runs only here.
   assert.deepEqual(
-    [...__test_narrowResolverReasons(["something genuinely unclassifiable"])],
+    [...narrowResolverReasons(["something genuinely unclassifiable"])],
     ["unsupported source"],
   );
 });

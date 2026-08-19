@@ -93,8 +93,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { REPO_ROOT, stripComments } from "../helpers/source-scan.ts";
 
-import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
+import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
 const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
 const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";

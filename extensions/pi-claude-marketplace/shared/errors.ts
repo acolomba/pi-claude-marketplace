@@ -5,6 +5,20 @@ export function errorMessage(err: unknown): string {
 }
 
 /**
+ * Structural predicate for `NodeJS.ErrnoException`. The `.code` property is
+ * what every errno-dispatching narrower keys on, and `instanceof` cannot see
+ * it because Node throws plain `Error` objects with the field attached.
+ *
+ * One definition: byte-identical copies previously sat in `uninstall.ts` and
+ * `marketplace/remove.ts`, each private to its own narrower.
+ */
+export function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return (
+    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
+  );
+}
+
+/**
  * Exhaustiveness check helper for discriminated unions.
  * Call in the `default` case of a switch to get a compile-time error if a new
  * variant is added without updating the switch.

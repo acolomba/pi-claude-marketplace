@@ -267,7 +267,13 @@ async function buildCanaryMarketplace(root, markerFile) {
       {
         description: "Stop-only always-block canary.",
         hooks: {
-          Stop: [{ hooks: [{ type: "command", command: `bash "${path.join(hooksDir, "stop-hook.sh")}"` }] }],
+          Stop: [
+            {
+              hooks: [
+                { type: "command", command: `bash "${path.join(hooksDir, "stop-hook.sh")}"` },
+              ],
+            },
+          ],
         },
       },
       null,
@@ -316,7 +322,9 @@ async function installCanary(root) {
   }
 
   // Pre-clean any residue from a prior aborted run (ignore failures).
-  await command.handler(`uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME} --scope user`, ctx).catch(() => {});
+  await command
+    .handler(`uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME} --scope user`, ctx)
+    .catch(() => {});
   await command.handler(`marketplace remove ${MARKETPLACE_NAME} --scope user`, ctx).catch(() => {});
 
   await command.handler(`marketplace add ${root} --scope user`, ctx);
@@ -331,7 +339,9 @@ async function installCanary(root) {
       `install notifications:\n${notifications.map((n) => `  [${n.severity ?? "info"}] ${n.message}`).join("\n")}`,
     );
   }
-  pass(`canary installed (${PLUGIN_NAME}@${MARKETPLACE_NAME}, hooks: ${pluginRecord.resources.hooks.join(",")})`);
+  pass(
+    `canary installed (${PLUGIN_NAME}@${MARKETPLACE_NAME}, hooks: ${pluginRecord.resources.hooks.join(",")})`,
+  );
   return { command, ctx };
 }
 
@@ -339,7 +349,9 @@ async function uninstallCanary(command, ctx) {
   if (command === undefined) {
     return;
   }
-  await command.handler(`uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME} --scope user`, ctx).catch(() => {});
+  await command
+    .handler(`uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME} --scope user`, ctx)
+    .catch(() => {});
   await command.handler(`marketplace remove ${MARKETPLACE_NAME} --scope user`, ctx).catch(() => {});
 }
 
@@ -444,7 +456,9 @@ async function main() {
           : `blocks=${blockCount}, agent_settled=${settleCount}.\n\npi stderr:\n${run.stderr}`,
       );
     }
-    pass(`STOP-01: agent_settled fired and dispatched the Stop bucket end-to-end (stopReason "stop").`);
+    pass(
+      `STOP-01: agent_settled fired and dispatched the Stop bucket end-to-end (stopReason "stop").`,
+    );
 
     // STOP-03: a `decision: block` Stop hook re-enters the idle agent loop.
     // The re-entry manifests as a SECOND turn for the single user prompt (the

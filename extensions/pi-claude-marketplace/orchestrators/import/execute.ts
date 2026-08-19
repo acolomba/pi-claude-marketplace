@@ -3,7 +3,6 @@ import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/mar
 import {
   installPlugin as defaultInstallPlugin,
   type InstallPluginOptions,
-  type InstallPluginOutcome,
 } from "../../orchestrators/plugin/install.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
@@ -40,6 +39,7 @@ import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
+import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {

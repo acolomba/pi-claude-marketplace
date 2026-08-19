@@ -21,8 +21,10 @@ import {
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
-  __test_outcomeToPluginMessage,
-  __test_renderReinstallPartitionAndNotify,
+  outcomeToPluginMessage,
+  renderReinstallPartitionAndNotify,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
+import {
   reinstallPlugin,
   reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
@@ -1320,7 +1322,7 @@ test("D-19-02: outcomeToPluginMessage maps failureClass=manual-recovery -> Plugi
   };
   // marketplace scope matches outcome.scope -> per-row scope orphan-folded
   // (omitted from the variant).
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   // manual-recovery is its own discriminated variant per D-19-02 -- NOT
   // a `failed` row carrying `{rollback partial}`. The status discriminator
   // is the literal "manual recovery" WITH a space per shared/grammar/
@@ -1342,7 +1344,7 @@ test("ATTR-09 / D-47-B: outcomeToPluginMessage without failureClass falls back t
     scope: "project",
     notes: ["something opaque"],
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["unreadable"]);
@@ -1360,7 +1362,7 @@ test("D-19-02: outcomeToPluginMessage rollback substring still maps to rollback 
     scope: "project",
     notes: ["rollback failed at phase X"],
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["rollback partial"]);
@@ -1384,7 +1386,7 @@ test("D-19-02: outcomeToPluginMessage prefers typed `outcome.reasons` (`permissi
     notes: ["EACCES: permission denied at some/.pi/agent/file"],
     reasons: ["permission denied"] as const,
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["permission denied"]);
@@ -1399,7 +1401,7 @@ test("D-19-02: outcomeToPluginMessage `source missing` typed reason wins over no
     notes: ["ENOENT: no such file or directory"],
     reasons: ["source missing"] as const,
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["source missing"]);
@@ -1417,7 +1419,7 @@ test("ATTR-09 / D-47-B: outcomeToPluginMessage without `reasons` falls back to t
     scope: "project",
     notes: ["something opaque without a matching substring"],
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["unreadable"]);
@@ -1440,7 +1442,7 @@ test("D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins 
     failureClass: "manual-recovery",
     reasons: ["permission denied"] as const,
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   // (1) wins -- the manual-recovery structural tag is highest priority.
   assert.equal(row.status, "manual recovery");
   assert.ok(row.status === "manual recovery");
@@ -1498,7 +1500,7 @@ test("D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginMan
     },
   ];
 
-  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes, "plural");
+  renderReinstallPartitionAndNotify(ctx, pi, outcomes, "plural");
 
   // Exactly one notification was emitted; severity routes via notify()'s
   // content-derived ladder (D-16-11): manual-recovery in plugins[] -> warning.
@@ -1547,7 +1549,7 @@ test("D-19-02: outcomeToPluginMessage stays correct when the orchestrator catche
     notes: ["staging failed (lock release also failed: chmod denied)"],
     ...(mre !== undefined && { failureClass: "manual-recovery" as const }),
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   // The canonical CMC-11 Reason is preserved across the release-failure
   // wrapping path, and the variant is a PluginManualRecoveryMessage per
   // D-19-02.
@@ -3534,7 +3536,7 @@ test("WR-09: the bulk cascade mapper composes the same brace and raise as the st
   // mapper -- and they read the same outcome. One naming the degrade while the
   // other renders a bare success row would be the very drift the shared signal
   // exists to close, so the mapper is pinned beside the verb.
-  const degraded = __test_outcomeToPluginMessage(
+  const degraded = outcomeToPluginMessage(
     {
       partition: "reinstalled",
       name: "good",
@@ -3557,7 +3559,7 @@ test("WR-09: the bulk cascade mapper composes the same brace and raise as the st
 
   // And the clean arm keeps the field absent, not present-and-empty: an empty
   // array would render the same today but is a different shape to reason about.
-  const clean = __test_outcomeToPluginMessage(
+  const clean = outcomeToPluginMessage(
     {
       partition: "reinstalled",
       name: "good",

@@ -24,7 +24,7 @@ The harness builds a disposable path-source marketplace with three plugins -- a 
 
 ### What it asserts (exit 0 conditions)
 
-**Flow A -- manifest absence.** The manifest stays *valid*; only the entry goes away. That distinction is the point: an unreadable manifest must never be reported as a missing entry, so the canary never corrupts the file.
+**Flow A -- manifest absence.** The manifest stays _valid_; only the entry goes away. That distinction is the point: an unreadable manifest must never be reported as a missing entry, so the canary never corrupts the file.
 
 - **A1** (INV-01..04) -- `list` keeps the record and stamps `{not in manifest}`.
 - **A2** (BOUND-03) -- the still-declared control plugin is **not** stamped, proving the reason tracks the entry rather than the read.
@@ -71,7 +71,7 @@ It has two halves:
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pi` CLI **>= 0.80.5** on `PATH`           | `agent_settled` fire-point. Verified against 0.80.10.                                                                                                                                   |
 | A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                   |
-| A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's *startup* network ops (marketplace autoupdate), not the model call. |
+| A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call. |
 
 ### The scripted canary
 

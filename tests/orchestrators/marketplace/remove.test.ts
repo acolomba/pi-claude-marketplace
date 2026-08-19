@@ -9,13 +9,11 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import {
-  __test_narrowCascadeFailure,
-  removeMarketplace,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
+import { removeMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
+  narrowCascadeFailure,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -834,12 +832,12 @@ test("narrowCascadeFailure: NodeJS.ErrnoException code=EACCES -> {permission den
   const errnoLike = Object.assign(new Error("permission denied: /agents/foo.md"), {
     code: "EACCES",
   });
-  assert.equal(__test_narrowCascadeFailure(errnoLike), "permission denied");
+  assert.equal(narrowCascadeFailure(errnoLike), "permission denied");
 });
 
 test("narrowCascadeFailure: NodeJS.ErrnoException code=ENOENT -> {source missing}", () => {
   const errnoLike = Object.assign(new Error("no such file"), { code: "ENOENT" });
-  assert.equal(__test_narrowCascadeFailure(errnoLike), "source missing");
+  assert.equal(narrowCascadeFailure(errnoLike), "source missing");
 });
 
 test("narrowCascadeFailure: AgentsUnstageFailureError -> {source mismatch} (ATTR-09 / D-NCF align with uninstall.ts)", () => {
@@ -849,7 +847,7 @@ test("narrowCascadeFailure: AgentsUnstageFailureError -> {source mismatch} (ATTR
   const err = new AgentsUnstageFailureError("agents leak", [
     { generatedName: "foo", targetPath: "/agents/foo.md", reason: "EACCES" },
   ]);
-  assert.equal(__test_narrowCascadeFailure(err), "source mismatch");
+  assert.equal(narrowCascadeFailure(err), "source mismatch");
 });
 
 test("narrowCascadeFailure: arbitrary bare Error with 'unreadable' substring -> {unreadable} (defensive textual fallback)", () => {
@@ -857,12 +855,12 @@ test("narrowCascadeFailure: arbitrary bare Error with 'unreadable' substring -> 
   // resort for bridges that throw bare `Error`. Documented as transitional
   // in the implementation comment.
   const err = new Error("manifest file is unreadable");
-  assert.equal(__test_narrowCascadeFailure(err), "unreadable");
+  assert.equal(narrowCascadeFailure(err), "unreadable");
 });
 
 test("narrowCascadeFailure: arbitrary bare Error with no recognizable text -> {not in manifest} (permissive default)", () => {
   const err = new Error("something else");
-  assert.equal(__test_narrowCascadeFailure(err), "not in manifest");
+  assert.equal(narrowCascadeFailure(err), "not in manifest");
 });
 
 // ───────────────────────────────────────────────────────────────────────────
