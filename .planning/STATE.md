@@ -38,7 +38,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-18 - Completed quick task 260818-k7f: Bump pi-coding-agent to 0.84.2 and handle the deferred stop reason
+Last activity: 2026-08-19 - Completed quick task 260819-bs8: GitHub release automation and Codex config tracking
 
 ## Milestone Summary
 
@@ -80,6 +80,7 @@ remain uncovered, each with its unreachability reason recorded in
 | 260815-p25 | Remove the bridges/hooks circular-dependency knot and gate cycles locally | 2026-08-15 | cee12150 | [260815-p25-implement-hooks-cycle-removal-from-spike](./quick/260815-p25-implement-hooks-cycle-removal-from-spike/) |
 | 260816-qov | Make fallow a full uniform static-analysis gate with zero categorical exclusions | 2026-08-16 | 345b325e..HEAD (PR #132) | [260816-qov-make-fallow-a-full-uniform-static-analys](./quick/260816-qov-make-fallow-a-full-uniform-static-analys/) |
 | 260818-k7f | Bump pi-coding-agent to 0.84.2 and handle the deferred stop reason | 2026-08-18 | b6414110 | [260818-k7f-bump-pi-coding-agent-to-0-84-2-and-handl](./quick/260818-k7f-bump-pi-coding-agent-to-0-84-2-and-handl/) |
+| 260819-bs8 | GitHub release automation and Codex config tracking | 2026-08-19 | 2c19c8cb | [260819-bs8-github-release-automation-and-codex-conf](./quick/260819-bs8-github-release-automation-and-codex-conf/) |
 
 ## Decisions
 
