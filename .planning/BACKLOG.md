@@ -539,6 +539,47 @@ different cause with a different fix.
 
 ## FLOW-09: internals exported only for tests
 
+**Status 2026-08-18: 27 seams down to 24; `reinstall.ts` went 5 to 2.**
+
+One pass on the `defaults-enabled` branch, applying the item's own (a)/(b) rule
+rather than sweeping. All three were outcome (a) -- the code was a coherent unit
+sitting in the wrong module, and moving it gave it a public interface for free:
+
+- `errorWithManualRecovery` and `findManualRecoveryError` were declared in
+  `reinstall.ts` but are the `ManualRecoveryError` PROTOCOL: three bridges throw
+  the class and the notify renderer reads it. Both moved to `shared/errors.ts`
+  beside the class, and their ten tests moved to `tests/shared/errors.test.ts`
+  against the public interface.
+- `clonePluginRecord` moved to `persistence/state-io.ts`, beside the
+  `PLUGIN_INSTALL_RECORD_SCHEMA` it copies field by field. Its own comment warns
+  that a forgotten key vanishes silently; the point of the move is that the
+  schema and the enumeration are now adjacent, so whoever adds a field sees the
+  clone that must copy it. Its two tests moved to `tests/persistence/`.
+
+The move surfaced something the seam had been hiding. THREE separate depth-5
+`Error.cause` walkers existed -- `causeChainTrailer` in `errors.ts`,
+`collectManualRecoveryLeaks` in `notify.ts`, and `findManualRecoveryError` in
+`reinstall.ts` -- each declaring its own `MAX_DEPTH = 5` and each documenting
+itself as "mirroring" the others. That is a contract maintained by comment
+across three modules. They now share one `causeChain` generator and one
+`CAUSE_CHAIN_MAX_DEPTH`, with the walkers differing only in their predicate.
+Worth noting as evidence for the item's thesis: the duplication was invisible
+while the third copy was reachable only through a `__test_` seam.
+
+What is left, by concentration: `event-router.ts` 6, `install.ts` 4, then
+`apply.ts` / `reinstall.ts` / `marketplace/update.ts` / `settle.ts` /
+`registry.ts` at 2 each, and five files at 1. The `event-router.ts` six are
+`_*ForTest` state accessors, which is the dependency-injection half rather than
+the re-export half.
+
+`reinstall.ts`'s remaining two -- `outcomeToPluginMessage` and
+`renderReinstallPartitionAndNotify` -- are a single outcome-(a) move that was
+scoped OUT of this pass deliberately: `outcomeToPluginMessage` pulls
+`narrowReasons`, `narrowReason` and `reinstalledRowFromOutcome` with it, and the
+whole family belongs in `reinstall.messaging.ts`. No cycle blocks it
+(`reinstall.ts` already imports that module and nothing points back), so it is
+ready to pick up as its own change.
+
 **Status 2026-08-17: the type-leak half is done; the seams remain.**
 
 All ten `private-type-leak` suppressions that cited this item are gone,

@@ -21,9 +21,6 @@ import {
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
-  __test_clonePluginRecord,
-  __test_errorWithManualRecovery,
-  __test_findManualRecoveryError,
   __test_outcomeToPluginMessage,
   __test_renderReinstallPartitionAndNotify,
   reinstallPlugin,
@@ -35,7 +32,10 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  findManualRecoveryError,
+  ManualRecoveryError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
@@ -1448,111 +1448,6 @@ test("D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins 
 });
 
 /**
- * CMC-16 / F-5 dedup regression guard.
- *
- * `errorWithManualRecovery` MAY be called twice in the bridge cascade: once
- * when a bridge throws ManualRecoveryError with its own `.leaks`, and again
- * at the orchestrator-source rollback site with the merged leak set. The
- * F-5 invariant: even if the same leak string appears in both sources, the
- * final `.leaks` payload counts it ONCE. The implementation uses a
- * `Set`-dedup on the merged array.
- */
-test("CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
-  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
-  const wrapped = __test_errorWithManualRecovery(inner, ["agents: foo"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.equal(
-    wrapped.leaks.length,
-    1,
-    `expected dedup; got: ${JSON.stringify([...wrapped.leaks])}`,
-  );
-  assert.equal(wrapped.leaks[0], "agents: foo");
-  // Cause-chain preserved so the depth-5 walker still surfaces the inner.
-  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
-});
-
-test("CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
-  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
-  const wrapped = __test_errorWithManualRecovery(inner, ["skills: bar"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.deepEqual([...wrapped.leaks], ["agents: foo", "skills: bar"]);
-});
-
-test("CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
-  const inner = new Error("raw error");
-  const wrapped = __test_errorWithManualRecovery(inner, ["x: leak"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.equal(wrapped.message, "raw error");
-  assert.deepEqual([...wrapped.leaks], ["x: leak"]);
-  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
-});
-
-test("CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
-  const inner = new Error("raw error");
-  const wrapped = __test_errorWithManualRecovery(inner, []);
-  // Zero-leak fast path preserves the original Error reference verbatim.
-  assert.equal(wrapped, inner);
-});
-
-/**
- * CMC-16 / WR-01 regression guard.
- *
- * When `withScopeLock`'s body throw is a `ManualRecoveryError` AND
- * `release()` also throws, the lock helper wraps the original in a plain
- * `new Error(combinedMsg, { cause: base })`. A direct
- * `err instanceof ManualRecoveryError` check would see a plain Error and
- * silently downgrade the cascade row's Reason from `{rollback partial}`
- * to the `narrowReason` last-resort fallback. WR-01 uses a cause-chain walk
- * instead of the direct `instanceof` check so the class identity survives the
- * wrapping.
- *
- * These tests pin both directions: positive (the walker finds the wrapped
- * MRE) and negative (no MRE in the chain returns undefined; cycles and
- * the depth bound terminate cleanly).
- */
-test("WR-01: findManualRecoveryError returns the wrapped MRE when release-also-failed wrapper sits on top", () => {
-  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
-  const wrapped = new Error("staging failed (lock release also failed: chmod denied)", {
-    cause: inner,
-  });
-  const found = __test_findManualRecoveryError(wrapped);
-  assert.equal(found, inner);
-});
-
-test("WR-01: findManualRecoveryError returns the MRE directly when it is the top-level error", () => {
-  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
-  assert.equal(__test_findManualRecoveryError(inner), inner);
-});
-
-test("WR-01: findManualRecoveryError returns undefined when no MRE is in the chain", () => {
-  const inner = new Error("opaque inner");
-  const wrapped = new Error("opaque outer", { cause: inner });
-  assert.equal(__test_findManualRecoveryError(wrapped), undefined);
-});
-
-test("WR-01: findManualRecoveryError terminates cleanly on self-referencing cause cycles", () => {
-  const cyclic = new Error("cyclic") as Error & { cause: unknown };
-  cyclic.cause = cyclic;
-  assert.equal(__test_findManualRecoveryError(cyclic), undefined);
-});
-
-test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
-  // Build a 6-link chain with the MRE at the deepest position; the walker
-  // visits depth 0..4 inclusive, so a MRE at depth 5 is unreachable.
-  const mre = new ManualRecoveryError("deep", ["x"]);
-  const l5 = new Error("l5", { cause: mre });
-  const l4 = new Error("l4", { cause: l5 });
-  const l3 = new Error("l3", { cause: l4 });
-  const l2 = new Error("l2", { cause: l3 });
-  const l1 = new Error("l1", { cause: l2 });
-  const l0 = new Error("l0", { cause: l1 });
-  // l0 -> l1 -> l2 -> l3 -> l4 -> l5 -> mre (mre is at depth 6 from l0;
-  // 5 hops via .cause). The walker visits l0, l1, l2, l3, l4 (5 slots);
-  // mre is unreachable.
-  assert.equal(__test_findManualRecoveryError(l0), undefined);
-});
-
-/**
  * D-19-02 / CMC-16 manual-recovery inline-row emission regression guard.
  *
  * Per D-19-02 the manual-recovery row is folded INSIDE the same cascade
@@ -1643,7 +1538,7 @@ test("D-19-02: outcomeToPluginMessage stays correct when the orchestrator catche
   const releaseWrapped = new Error("staging failed (lock release also failed: chmod denied)", {
     cause: inner,
   });
-  const mre = __test_findManualRecoveryError(releaseWrapped);
+  const mre = findManualRecoveryError(releaseWrapped);
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1789,18 +1684,6 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
       await rm(cwd, { recursive: true, force: true });
     }
   });
-});
-
-test("GAP-05: errorWithManualRecovery instanceof-ManualRecoveryError branch merges leaks deduped", () => {
-  // When the input error is already a ManualRecoveryError, errorWithManualRecovery
-  // merges the new leaks into the existing leaks (deduped) and wraps with cause.
-  const inner = new ManualRecoveryError("stage failed", ["agents: old"]);
-  const wrapped = __test_errorWithManualRecovery(inner, ["agents: old", "skills: new"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  const mre = wrapped;
-  assert.deepEqual([...mre.leaks].sort(), ["agents: old", "skills: new"]);
-  assert.equal(mre.message, "stage failed");
-  assert.equal(mre.cause, inner);
 });
 
 test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and wraps error", async () => {
@@ -4215,47 +4098,4 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
       await rm(cwd, { recursive: true, force: true });
     }
   });
-});
-
-// D-100-01 / ENBL-10: `clonePluginRecord` enumerates the record's fields
-// rather than spreading it, so a key it forgets vanishes from the old-record
-// snapshot silently -- no compile error, no failing assertion elsewhere. These
-// two clauses are the alarm for the hook description specifically.
-test("D-100-01 / ENBL-10: the reinstall old-record snapshot preserves hookEntries", () => {
-  const record = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "/plugins/hello",
-    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
-
-  const snapshot = __test_clonePluginRecord(record);
-
-  assert.deepEqual(snapshot.hookEntries, [
-    { event: "PreToolUse", matcher: "Bash" },
-    { event: "SessionStart" },
-  ]);
-  // Deep copy, not an alias: the snapshot is read after the live record has
-  // been overwritten in place, so a shared element would report the new value.
-  assert.notEqual(snapshot.hookEntries?.[0], record.hookEntries[0]);
-});
-
-test("D-100-01 / ENBL-10: a record with no hookEntries clones without inventing the key", () => {
-  const record = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "/plugins/hello",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
-
-  const snapshot = __test_clonePluginRecord(record);
-
-  assert.equal(Object.hasOwn(snapshot, "hookEntries"), false);
 });

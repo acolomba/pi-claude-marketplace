@@ -69,13 +69,15 @@ import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   assertNever,
   composeErrorWithCauseChain,
   errorMessage,
+  errorWithManualRecovery,
+  findManualRecoveryError,
   ManualRecoveryError,
   MarketplaceNotFoundError,
   PluginShapeError,
@@ -1916,99 +1918,6 @@ async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly st
   }
 }
 
-/**
- * CMC-16: wrap an error with bridge-rollback leak data.
- *
- * Short-circuits to the original error when no leaks accumulated (the
- * zero-leak fast path). Otherwise constructs a
- * `ManualRecoveryError` carrying the merged leak set via `Error.cause` so
- * the depth-5 `causeChainTrailer` walker surfaces the original error text
- * at the notify boundary.
- *
- * Merge semantics: when the incoming `err` is already a
- * `ManualRecoveryError` (e.g. a bridge threw and this helper is wrapping
- * at the orchestrator level), the leaks arrays are merged via
- * `Set`-dedup. This binds the F-5 no-double-count invariant for the
- * counterexample case where the bridge-source leak set and the
- * orchestrator-source leak set happen to overlap (structurally possible
- * if a `rollbackReplacements` cascade re-reports a leak the inner bridge
- * already surfaced).
- */
-function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error {
-  if (leaks.length === 0) {
-    return err instanceof Error ? err : new Error(errorMessage(err));
-  }
-
-  if (err instanceof ManualRecoveryError) {
-    const merged = Object.freeze([...new Set([...err.leaks, ...leaks])]);
-    return new ManualRecoveryError(err.message, merged, { cause: err });
-  }
-
-  const base = err instanceof Error ? err : new Error(errorMessage(err));
-  return new ManualRecoveryError(base.message, leaks, { cause: base });
-}
-
-/**
- * CMC-16 / F-5 binding seam: exported under the `__test_*`
- * prefix so the dedicated F-5 dedup regression test in
- * tests/orchestrators/plugin/reinstall.test.ts can verify the
- * no-double-count invariant on the merged `.leaks` payload directly
- * without forcing a contrived bridge cascade.
- *
- * Placement note (WR-02): this re-export sits BELOW the function
- * declaration so its JSDoc does not orphan the primary contract JSDoc on
- * `errorWithManualRecovery` from the IDE hover-doc binding.
- */
-export { errorWithManualRecovery as __test_errorWithManualRecovery };
-
-/**
- * CMC-16 / WR-01: walk the `Error.cause` chain (bounded to
- * depth 5, mirroring `causeChainTrailer`'s DoS-mitigation budget at
- * `shared/errors.ts::causeChainTrailer`) to find a `ManualRecoveryError`
- * anywhere in the chain.
- *
- * Why this exists (regression context): `withScopeLock` (in
- * `transaction/with-state-guard.ts:138-143`) wraps a body-thrown error with a
- * plain `new Error(..., { cause: body })` when BOTH the body throw AND
- * `release` also throw. A bare `err instanceof ManualRecoveryError` at the
- * orchestrator catch then sees the plain wrapper and silently downgrades the
- * cascade row's Reason from `{rollback partial}` to `{not in manifest}`
- * (`narrowReason` fallback). Walking `.cause` recovers the class identity
- * the wrapping discarded, so the structural CMC-16 `failureClass:
- * "manual-recovery"` tag survives the lock-release-also-failed path.
- *
- * Depth/cycle bounds match `causeChainTrailer`: stop at 5 hops, and bail if
- * a link's `.cause` references itself.
- */
-function findManualRecoveryError(err: unknown): ManualRecoveryError | undefined {
-  let current: unknown = err;
-  for (let depth = 0; depth < 5; depth++) {
-    if (current instanceof ManualRecoveryError) {
-      return current;
-    }
-
-    if (!(current instanceof Error) || current.cause === undefined || current.cause === current) {
-      return undefined;
-    }
-
-    current = current.cause;
-  }
-
-  return undefined;
-}
-
-/**
- * CMC-16 / WR-01 binding seam: exported under the
- * `__test_*` prefix so the regression guard in
- * tests/orchestrators/plugin/reinstall.test.ts can directly exercise the
- * release-also-failed wrapping path without standing up a real
- * `withScopeLock` fixture.
- *
- * Placement note (WR-02): this re-export sits BELOW the function
- * declaration so its JSDoc does not orphan the primary contract JSDoc.
- */
-export { findManualRecoveryError as __test_findManualRecoveryError };
-
 function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined): void {
   if (leak !== undefined) {
     leaks.push(`${phase}: ${leak}`);
@@ -2042,46 +1951,3 @@ async function runPostSuccessMaintenance(
 
   return Object.freeze(warnings);
 }
-
-function clonePluginRecord(record: PluginInstallRecord): PluginInstallRecord {
-  return {
-    version: record.version,
-    resolvedSource: record.resolvedSource,
-    // PURL-07 / D-78-02: preserve the recorded resolvedSha across the snapshot so
-    // reinstall's recorded-sha probe (and the carry-forward rewrite) see the pin.
-    ...(record.resolvedSha !== undefined && { resolvedSha: record.resolvedSha }),
-    // D-100-01 / ENBL-10: preserve the recorded hook description across the
-    // snapshot. This function enumerates fields rather than spreading, so an
-    // omission here silently drops the key from the old-record snapshot. Deep
-    // copy, matching the resources arrays below.
-    ...(record.hookEntries !== undefined && {
-      hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
-    }),
-    compatibility: {
-      installable: record.compatibility.installable,
-      notes: [...record.compatibility.notes],
-      supported: [...record.compatibility.supported],
-      unsupported: [...record.compatibility.unsupported],
-    },
-    resources: {
-      skills: [...record.resources.skills],
-      prompts: [...record.resources.prompts],
-      agents: [...record.resources.agents],
-      mcpServers: [...record.resources.mcpServers],
-      // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
-      hooks: [...record.resources.hooks],
-    },
-    enabled: record.enabled,
-    installedAt: record.installedAt,
-    updatedAt: record.updatedAt,
-  };
-}
-
-/**
- * Test binding seam: exported under the `__test_*` prefix, following the
- * sibling seams in this file. The snapshot enumerates fields rather than
- * spreading, so a record key it forgets is dropped with NO compile error and
- * NO observable failure until some future reader wants it. That silence is
- * what the seam exists to break.
- */
-export { clonePluginRecord as __test_clonePluginRecord };
