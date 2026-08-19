@@ -6,7 +6,8 @@
 //
 //   Block A -- spawn options pinned: { detached: false,
 //       stdio: ["pipe","pipe","pipe"] } + the
-//       PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId> env marker.
+//       PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId> env marker;
+//       also pins EXEC-02's `timeout` as SECONDS at this lane's call site.
 //   Block B -- exit code 2 -> pi.sendMessage({ customType:
 //       "claude-hook-rewake", display: false, content, details },
 //       { deliverAs: ctx.isIdle() ? "nextTurn" : "followUp" }); any other
@@ -280,6 +281,7 @@ function makeEntry(overrides: {
   rewakeSummary?: string;
   pluginId?: string;
   claudeEvent?: BucketAEvent;
+  timeout?: number;
 }): RoutingEntry {
   const handlerDecl: Record<string, unknown> = {
     type: "command",
@@ -287,6 +289,10 @@ function makeEntry(overrides: {
   };
   if (overrides.asyncRewake !== undefined) {
     handlerDecl.asyncRewake = overrides.asyncRewake;
+  }
+
+  if (overrides.timeout !== undefined) {
+    handlerDecl.timeout = overrides.timeout;
   }
 
   if (overrides.rewakeMessage !== undefined) {
@@ -419,6 +425,42 @@ describe("spawn-and-register", () => {
       assert.equal(env.CLAUDECODE, "1");
       assert.equal(env.CLAUDE_CODE_SESSION_ID, "session-rewake");
       assert.equal(env.CLAUDE_SESSION_ID, "session-rewake");
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+
+  test("EXEC-02: `timeout` reaches the async ladder as SECONDS", async (t) => {
+    const tmp = await makeTempLocations();
+    try {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const spy = installSpawnSpy();
+      const ctx = makeMockCtx("/tmp/proj");
+      const pi = makeMockPi();
+      await spawnAndRegister(
+        makeEntry({ asyncRewake: true, timeout: 2 }),
+        { toolName: "bash", input: {} },
+        ctx.ctx,
+        pi.pi,
+        tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-timeout-units" },
+      );
+      const child = spy.children[0];
+      assert.ok(child !== undefined, "spawn spy captured no child");
+
+      t.mock.timers.tick(1_999);
+      assert.deepEqual(
+        child.killCalls(),
+        [],
+        "`timeout: 2` read as milliseconds would SIGTERM the child at 2 ms",
+      );
+
+      t.mock.timers.tick(1);
+      assert.deepEqual(
+        child.killCalls(),
+        ["SIGTERM"],
+        "`timeout: 2` is 2 seconds (Claude Code parity), so SIGTERM lands at 2000 ms",
+      );
     } finally {
       await tmp.cleanup();
     }

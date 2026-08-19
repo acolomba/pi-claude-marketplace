@@ -8,7 +8,8 @@
 //   - Block A: EXEC-01 -- spawn invoked with ctx.cwd as options.cwd and the
 //     three always-set CLAUDE_* env vars merged with process.env.
 //   - Block B: EXEC-02 -- 256 KB stdin truncation marker, 1 MB stdout
-//     overflow kill + noop, timer ladder cancellation on natural exit.
+//     overflow kill + noop, timer ladder cancellation on natural exit,
+//     and the `timeout` field read as SECONDS at this lane's call site.
 //   - Block C: EXEC-03 -- static-grep guarantees `ctx.ui.notify` does NOT
 //     appear in dispatch-exec.ts (comment lines excluded); stderr emits at
 //     runtime are observable via spawn-spy + close events.
@@ -156,6 +157,7 @@ function makeEntry(input: {
   claudeEvent?: BucketAEvent;
   args?: readonly string[];
   shell?: string;
+  timeout?: number;
 }): RoutingEntry {
   const handlerDecl: Record<string, unknown> = { type: "command", command: "/bin/true" };
   if (input.args !== undefined) {
@@ -164,6 +166,10 @@ function makeEntry(input: {
 
   if (input.shell !== undefined) {
     handlerDecl.shell = input.shell;
+  }
+
+  if (input.timeout !== undefined) {
+    handlerDecl.timeout = input.timeout;
   }
 
   return {
@@ -343,6 +349,51 @@ test("Block B / EXEC-02: stdout > 1 MB triggers SIGTERM + noop", async (t) => {
   assert.deepEqual(result, { kind: "noop" });
   const killSignals = spy.children[0]?.killCalls() ?? [];
   assert.ok(killSignals.includes("SIGTERM"), "expected SIGTERM on stdout overflow");
+});
+
+test("Block B / EXEC-02: `timeout` reaches the sync ladder as SECONDS", async (t) => {
+  await relocateAgent(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  let announceSpawn: () => void;
+  const spawned = new Promise<void>((resolve) => {
+    announceSpawn = resolve;
+  });
+  const spy = installSpawnSpy(() => {
+    announceSpawn();
+  });
+
+  // Deliberately not awaited: the mock child never closes on its own, so
+  // the dispatch promise settles only after the ladder has fired and the
+  // close below lets it resolve.
+  const pending = dispatchHookExec(
+    makeEntry({ timeout: 2 }),
+    { toolName: "bash", input: {} },
+    makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
+  );
+
+  await spawned;
+  const child = spy.children[0];
+  assert.ok(child !== undefined, "spawn spy captured no child");
+
+  t.mock.timers.tick(1_999);
+  assert.deepEqual(
+    child.killCalls(),
+    [],
+    "`timeout: 2` read as milliseconds would SIGTERM the child at 2 ms",
+  );
+
+  t.mock.timers.tick(1);
+  assert.deepEqual(
+    child.killCalls(),
+    ["SIGTERM"],
+    "`timeout: 2` is 2 seconds (Claude Code parity), so SIGTERM lands at 2000 ms",
+  );
+
+  child.emitClose(null);
+  await pending;
 });
 
 // ──────────────────────────────────────────────────────────────────────────
