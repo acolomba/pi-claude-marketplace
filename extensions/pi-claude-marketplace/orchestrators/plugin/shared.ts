@@ -330,6 +330,70 @@ export async function resolveInstallMarketplaceSource(opts: {
 }
 
 /**
+ * ATTR-11: locate the marketplace CONTAINER in the scope the install did NOT
+ * target. Used by the install path's `marketplace-absent` arm to decide whether
+ * the bare `{not added}` row should carry a cross-scope hint.
+ *
+ * Mirrors the one-extra-`loadState` read `resolveCrossScopePluginTarget`
+ * performs for the explicit-scope lifecycle miss, applied to the install path
+ * that `resolveInstallMarketplaceSource` does NOT cover: a USER-target install
+ * has no CMP-3 fallback, so a marketplace registered only at PROJECT scope miss
+ * resolves to `undefined` and surfaces as `marketplace-absent` with no hint as
+ * to where the container actually lives. This helper answers that one question
+ * -- is the container present in the OTHER scope -- without re-running the
+ * install resolution or mutating anything.
+ *
+ * Returns the other scope's name when the container exists there, `undefined`
+ * otherwise. Read-only (NFR-5: no network). For a PROJECT-target install the
+ * other scope is USER, and `marketplace-absent` already implies the USER record
+ * was absent too (the CMP-3 fallback missed), so the helper returns
+ * `undefined` and no hint renders -- exactly the bare-row behavior.
+ */
+export async function findMarketplaceContainerInOtherScope(opts: {
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}): Promise<Scope | undefined> {
+  const other = otherScope(opts.scope);
+  const otherLocations = locationsFor(other, opts.cwd);
+  const otherState = await loadState(otherLocations.extensionRoot);
+  return otherState.marketplaces[opts.marketplace] !== undefined ? other : undefined;
+}
+
+/**
+ * ATTR-11: compose the cross-scope install hint appended under a
+ * `marketplace-not-added` row when {@link findMarketplaceContainerInOtherScope}
+ * locates the container in the other scope. The string is pre-indented (2-space
+ * lead, 4-space command) so `renderMarketplaceNotAdded` can append it after the
+ * row with a single `\n` and no further formatting.
+ *
+ * The hint names the clean retry command at the scope the container lives in.
+ * `--local` is suggested only when that scope is PROJECT: a repo-bundled
+ * marketplace is the common trigger for this hint, and a bare `--scope project`
+ * write would land in the shared `claude-plugins.json`. `--local` routes the
+ * write-back to `claude-plugins.local.json` (CFG-02), leaving the shared file
+ * untouched. The flag is otherwise undiscoverable (`complete: false` in the
+ * flag catalog), so surfacing it here is the discoverability fix. The USER-other
+ * arm omits `--local`: a user-scope install is personal by default, and the
+ * shared-file concern does not apply.
+ *
+ * Pure / deterministic / no I/O -- safe to unit-test directly.
+ */
+export function composeCrossScopeInstallHint(opts: {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly presentIn: Scope;
+}): string {
+  const { plugin, marketplace, presentIn } = opts;
+  const local = presentIn === "project";
+  const command = `/claude:plugin install ${plugin}@${marketplace} --scope ${presentIn}${local ? " --local" : ""}`;
+  const note = local
+    ? "\n  (--local writes to claude-plugins.local.json and leaves claude-plugins.json untouched)"
+    : "";
+  return `  Marketplace "${marketplace}" is registered at ${presentIn} scope; retry with:\n    ${command}${note}`;
+}
+
+/**
  * Materialize the target-scope marketplace container needed by the current
  * state shape when CMP-3 falls back to a user-scope marketplace. The copied
  * record preserves source/manifest paths but starts with no target-scope

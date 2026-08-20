@@ -1358,6 +1358,27 @@ const FIXTURES: FixtureMap = {
         scope: "project",
       } satisfies NotificationMessage,
     },
+
+    // ATTR-11: when the marketplace container exists at the OTHER scope (the
+    // common repo-bundled-marketplace case, where a default-scope user install
+    // misses a project-only container), the `{not added}` row carries a
+    // cross-scope hint naming the clean retry command -- including the
+    // otherwise-undiscoverable `--local` flag. The hint is advisory and appends
+    // after the row; the `{not added}` brace, severity, and summary are
+    // unchanged. The absent-from-both state above renders the bare row.
+    "missing-marketplace-not-added-cross-scope-hint": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "mp",
+        scope: "user",
+        hint:
+          '  Marketplace "mp" is registered at project scope; retry with:\n' +
+          "    /claude:plugin install hello@mp --scope project --local\n" +
+          "  (--local writes to claude-plugins.local.json and leaves claude-plugins.json untouched)",
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -5024,14 +5045,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 173 is the number of annotated examples in
+  // Exact count, not a floor: 174 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    173,
-    `Expected exactly 173 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    174,
+    `Expected exactly 174 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

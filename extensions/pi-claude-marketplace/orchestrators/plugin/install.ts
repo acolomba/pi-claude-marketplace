@@ -150,6 +150,8 @@ import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
+  composeCrossScopeInstallHint,
+  findMarketplaceContainerInOtherScope,
   pickAgentsSourceDir,
   removePluginRecord,
   resolveInstallMarketplaceSource,
@@ -2257,10 +2259,27 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return { status: "failed", error: new Error(cause), cause };
     }
 
+    // ATTR-11: the bare `{not added}` row is not actionable when the marketplace
+    // container lives in the OTHER scope -- the common repo-bundled-marketplace
+    // case, where a default-scope (user) install misses a project-only
+    // container. One extra read-only `loadState` of the other scope (mirrors the
+    // cross-scope read `resolveCrossScopePluginTarget` already performs for the
+    // lifecycle path) turns the bare row into a hint naming the clean retry
+    // command. No hint when the container is absent in both scopes -- the bare
+    // row renders byte-identically to before.
+    const presentIn = await findMarketplaceContainerInOtherScope({
+      cwd,
+      marketplace,
+      scope,
+    });
+
     notify(ctx, pi, {
       kind: "marketplace-not-added",
       name: marketplace,
       scope,
+      ...(presentIn !== undefined && {
+        hint: composeCrossScopeInstallHint({ plugin, marketplace, presentIn }),
+      }),
     });
     return { status: "failed", error: new Error(cause), cause };
   }
