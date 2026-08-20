@@ -99,6 +99,43 @@ test("CM-1 commitPreparedCommands lands files at <extensionRoot>/resources/promp
   }
 });
 
+test("CM-4 nested command stages at <ext>/resources/prompts/<plugin>:<dir>:<cmd>.md", async () => {
+  const scope = await tmpScope();
+
+  try {
+    // Build a tmp plugin root with a nested command file.
+    const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "nested-cmd-plugin-"));
+    const commandsDir = path.join(pluginRoot, "commands", "build");
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(path.join(commandsDir, "web.md"), "---\ndescription: nested\n---\nbody\n");
+
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(pluginRoot, "commands"),
+    });
+
+    assert.equal(prepared.kind, "staged");
+    assert.deepEqual([...prepared.result.recorded.map((r) => r.generatedName)], ["acme:build:web"]);
+
+    const leak = await commitPreparedCommands(prepared);
+    assert.equal(leak, undefined, "nested commit must not leak");
+
+    const target = path.join(scope.loc.promptsTargetDir, "acme:build:web.md");
+    assert.equal(
+      await pathExists(target),
+      true,
+      "nested command file lands at the colon-joined target path",
+    );
+  } finally {
+    await scope.cleanup();
+  }
+});
+
 // CM-3 substitution -----------------------------------------------------
 
 test("CM-3 substituted body has no remaining ${CLAUDE_PLUGIN_ROOT} or ${CLAUDE_PLUGIN_DATA}", async () => {

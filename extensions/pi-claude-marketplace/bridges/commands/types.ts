@@ -21,9 +21,17 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A single command discovered under `componentPaths.commands`. */
 export interface DiscoveredCommand {
-  /** `.md` basename minus extension (e.g. "acme-deploy" or "status"). */
+  /**
+   * `.md` source path relative to its `commands/` directory, minus the
+   * extension, with OS separators normalized to `/`. Flat files are bare
+   * names ("acme-deploy"); nested files are `/`-separated paths
+   * ("build/web"). See CM-4.
+   */
   readonly sourceName: string;
-  /** `<plugin>:<command>` after CM-2 elision (e.g. "acme:deploy"). */
+  /**
+   * `<plugin>:<command>` after CM-2 elision, with nested path segments
+   * joined by `:` (e.g. "acme:deploy", "acme:build:web").
+   */
   readonly generatedName: string;
   /** Absolute path to the source `.md` file. */
   readonly commandFile: string;

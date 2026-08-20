@@ -144,6 +144,30 @@ test("CM-2 generatedCommandName throws when elision yields empty string", () => 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// CM-4 (revised): nested command paths -- "/"-separated source joins with ":"
+// ──────────────────────────────────────────────────────────────────────────
+
+test("CM-4 generatedCommandName maps a nested source path to colon-separated segments", () => {
+  assert.equal(generatedCommandName("acme", "build/web"), "acme:build:web");
+});
+
+test("CM-4 generatedCommandName maps deeper nesting with one colon per segment", () => {
+  assert.equal(generatedCommandName("acme", "build/web/prod"), "acme:build:web:prod");
+});
+
+test("CM-4 generatedCommandName elides plugin prefix from the first segment only", () => {
+  assert.equal(generatedCommandName("acme", "acme-build/web"), "acme:build:web");
+});
+
+test("CM-4 generatedCommandName rejects a path with an empty segment", () => {
+  assert.throws(() => generatedCommandName("acme", "build//web"), /non-empty/);
+});
+
+test("CM-4 generatedCommandName rejects a backslash in a segment (OS sep must be normalized upstream)", () => {
+  assert.throws(() => generatedCommandName("acme", "build\\web"), /path separators/);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // RN-1 / AG-1: generatedAgentName -- "pi-claude-marketplace-<plugin>-<agent>"
 // ──────────────────────────────────────────────────────────────────────────
 

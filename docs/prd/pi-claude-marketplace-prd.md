@@ -429,7 +429,7 @@ flowchart LR
 | **CM-1** | Commands MUST be staged as `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`.                          |
 | **CM-2** | Generated command name MUST be `<plugin>:<command>`, with the `<plugin>-` prefix stripped from the source name when present. |
 | **CM-3** | Variable substitution (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`) MUST apply to command bodies.                       |
-| **CM-4** | Discovery MUST treat flat `*.md` files only (non-recursive, ignore non-md).                                                  |
+| **CM-4** | Discovery MUST enumerate `*.md` files under each `commands/` path **recursively**. A nested file (e.g. `commands/build/web.md`) is discovered with source name `build/web` and generated name `<plugin>:build:web` -- the path separator becomes a colon, matching Claude Code's nested-command convention. Dotfile-prefixed entries and symlinks (files and directories) MUST be skipped.                                                  |
 
 ### 5.7 Agents Bridge (pi-subagents soft dependency)
 
