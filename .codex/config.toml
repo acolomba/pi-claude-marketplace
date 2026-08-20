@@ -1,0 +1,12 @@
+# points Codex at CLAUDE.md, which it otherwise ignores in favor of AGENTS.md.
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+# raises the per-file instructions budget from the 32 KiB default.
+project_doc_max_bytes = 65536
+
+# GSD Agent Configuration — managed by gsd-core installer
+[agents]
+max_depth = 1
+
+[features]
+hooks = true

@@ -1,4 +1,4 @@
-exclude: ^(\.claude/|tests/domain/fixtures/hash-stability/)
+exclude: ^(\.claude/|\.codex/|tests/domain/fixtures/hash-stability/)
 
 default_install_hook_types:
   - pre-commit

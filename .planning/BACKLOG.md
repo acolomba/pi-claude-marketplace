@@ -1649,6 +1649,75 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
 
+## HKDR-01: the blocking lane settles on `close`, so a surviving grandchild can pin a turn
+
+Surfaced by review while landing PR #138 (2026-08-19), alongside the dead
+SIGKILL escalation that PR fixed.
+
+`spawnAndCollect` (`bridges/hooks/dispatch-exec.ts`) resolves only from the
+child's `error` and `close` handlers. `close` fires when every stdio stream has
+closed, not when the child exits. Hook handlers spawn shell-form by default, so
+the ladder's signals reach `/bin/sh`; a grandchild that inherited the stdout
+pipe and outlives it keeps that pipe open, `close` never fires, and the promise
+never settles. `reduceBucket` awaits the executor with no deadline, so the turn
+does not complete.
+
+The async lane does not share the defect -- it listens on `exit`
+(`bridges/hooks/async-rewake/registry.ts`) -- and it has a `/reload` backstop
+in `shutdownInMemoryChildren`. The blocking lane has neither.
+
+The comments that stated the ladder's cancel contract in terms of `exit`,
+while this lane wires `close`, were corrected when this item was filed. What
+remains here is the behavior alone, not the drift that hid it.
+
+**Fix shape.** Settle on `exit` as well as `close`, with a short drain window
+after `exit` so a normally-behaved handler's tail output is not truncated --
+the reason `close` was chosen in the first place. A `detached: true` spawn plus
+a process-group kill would close the grandchild case properly but is a larger
+change with its own `/reload` implications.
+
+Code seams: `bridges/hooks/dispatch-exec.ts` (`spawnAndCollect`),
+`bridges/hooks/spawn-helpers.ts` (the shell-form default),
+`bridges/hooks/exec-timer.ts` (the ladder's documented cancel contract).
+
+## HKTO-01: `SessionEnd` hooks do not share a timeout budget
+
+Surfaced while landing PR #138 (2026-08-19). That change made the per-event
+`timeout` defaults match Claude Code -- 600 s for a `command` handler, lowered
+to 30 s on `UserPromptSubmit` and 1.5 s on `SessionEnd`. One mechanism behind
+those numbers is still missing.
+
+Upstream states: "`SessionEnd` hooks share a 1.5-second budget; if your
+settings set a longer per-hook `timeout`, Claude Code raises the budget to
+match, up to 60 seconds." Two behaviors sit in that sentence, and the bridge
+implements neither:
+
+- **The budget is shared across the fan-out.** Three SessionEnd hooks get
+  1.5 s between them upstream. The bridge gives each its own 1.5 s, so the
+  worst case is 4.5 s.
+- **An explicit `timeout` raises the budget, capped at 60 s.** The bridge
+  honors a declared SessionEnd `timeout` with no ceiling, so
+  `"timeout": 600` on a SessionEnd hook holds shutdown for ten minutes where
+  upstream would stop at sixty seconds.
+
+**Why it was not done with the defaults.** The fan-out is
+`reduceBucket` (`bridges/hooks/dispatch.ts`), a sequential awaited loop shared
+by every dispatched event. A shared budget means threading a deadline through
+that reducer and into the `HookExecutor` seam -- widening a signature every
+event and every executor-injecting test depends on, for one event's semantics.
+The defaults were a lookup table; this is a dispatch-shape change.
+
+**Fix shape.** Give `reduceBucket` an optional per-invocation deadline,
+computed once by the SessionEnd composite handler as
+`min(60, max(1.5, max(declared timeouts)))`, and have each executor call clamp
+its own timeout to the remaining budget. `MessageDisplay`'s 10 s reduction
+needs nothing -- Pi exposes no render-time hook on assistant messages, so the
+event is not bridged.
+
+Code seams: `bridges/hooks/dispatch.ts` (`reduceBucket`,
+`compositeHandlerFor`), `bridges/hooks/timeout.ts` (`BLOCKING_EVENT_DEFAULT_SECONDS`),
+`bridges/hooks/event-router.ts` (the `session_shutdown` registration).
+
 ## ~~HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable~~ -- CLOSED
 
 Closed 2026-08-17 by the routingTable encapsulation, which removed both

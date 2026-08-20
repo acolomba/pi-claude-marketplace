@@ -1,13 +1,13 @@
 # ai harnesses
 **/.claude/settings.local.json
-/.codex
 /.opencode
 /.pi/
 /.pi-lens/
-/.ralph/
-/.serena
 
 # gsd
+/.gsd
+
+# claude
 /.claude/.gsd-profile
 /.claude/agents/gsd-*
 /.claude/commands/gsd-*
@@ -19,8 +19,24 @@
 /.claude/hooks/lib/
 /.claude/hooks/managed-hooks-registry.cjs
 /.claude/hooks/package.json
+/.claude/package.json
 /.claude/scripts/*
-/.gsd
+
+/.codex/.gsd-profile
+/.codex/agents/gsd-*
+/.codex/commands/gsd-*
+/.codex/gsd-core/*
+/.codex/gsd-file-manifest.json
+/.codex/gsd-install-state.json
+/.codex/gsd-migration-journal/*
+# hooks.json is not ideal
+/.codex/hooks.json
+/.codex/hooks/gsd-*
+/.codex/hooks/lib/
+/.codex/hooks/managed-hooks-registry.cjs
+/.codex/hooks/package.json
+/.codex/scripts/*
+/.codex/skills/gsd-*
 
 # build output
 /dist/

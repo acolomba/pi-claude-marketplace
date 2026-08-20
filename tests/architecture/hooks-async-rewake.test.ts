@@ -6,7 +6,8 @@
 //
 //   Block A -- spawn options pinned: { detached: false,
 //       stdio: ["pipe","pipe","pipe"] } + the
-//       PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId> env marker.
+//       PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId> env marker;
+//       also pins EXEC-02's `timeout` as SECONDS at this lane's call site.
 //   Block B -- exit code 2 -> pi.sendMessage({ customType:
 //       "claude-hook-rewake", display: false, content, details },
 //       { deliverAs: ctx.isIdle() ? "nextTurn" : "followUp" }); any other
@@ -280,6 +281,7 @@ function makeEntry(overrides: {
   rewakeSummary?: string;
   pluginId?: string;
   claudeEvent?: BucketAEvent;
+  timeout?: unknown;
 }): RoutingEntry {
   const handlerDecl: Record<string, unknown> = {
     type: "command",
@@ -287,6 +289,10 @@ function makeEntry(overrides: {
   };
   if (overrides.asyncRewake !== undefined) {
     handlerDecl.asyncRewake = overrides.asyncRewake;
+  }
+
+  if (overrides.timeout !== undefined) {
+    handlerDecl.timeout = overrides.timeout;
   }
 
   if (overrides.rewakeMessage !== undefined) {
@@ -422,6 +428,121 @@ describe("spawn-and-register", () => {
     } finally {
       await tmp.cleanup();
     }
+  });
+
+  test("EXEC-02: `timeout` reaches the async ladder as SECONDS", async (t) => {
+    const tmp = await makeTempLocations();
+    try {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const spy = installSpawnSpy();
+      const ctx = makeMockCtx("/tmp/proj");
+      const pi = makeMockPi();
+      await spawnAndRegister(
+        makeEntry({ asyncRewake: true, timeout: 2 }),
+        { toolName: "bash", input: {} },
+        ctx.ctx,
+        pi.pi,
+        tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-timeout-units" },
+      );
+      const child = spy.children[0];
+      assert.ok(child !== undefined, "spawn spy captured no child");
+
+      t.mock.timers.tick(1_999);
+      assert.deepEqual(
+        child.killCalls(),
+        [],
+        "`timeout: 2` read as milliseconds would SIGTERM the child at 2 ms",
+      );
+
+      t.mock.timers.tick(1);
+      assert.deepEqual(
+        child.killCalls(),
+        ["SIGTERM"],
+        "`timeout: 2` is 2 seconds (Claude Code parity), so SIGTERM lands at 2000 ms",
+      );
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+
+  test("EXEC-02: the background lane keeps 600 s where the blocking lane lowers", async (t) => {
+    const tmp = await makeTempLocations();
+    try {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const spy = installSpawnSpy();
+      const ctx = makeMockCtx("/tmp/proj");
+      const pi = makeMockPi();
+      // No `timeout` declared, on the event Claude Code lowers to 30 s for a
+      // turn-blocking handler. An asyncRewake handler blocks nothing -- it is
+      // registered and left to run -- so that reduction has no rationale here
+      // and would silently truncate long-running background work.
+      await spawnAndRegister(
+        makeEntry({ asyncRewake: true, claudeEvent: "UserPromptSubmit" }),
+        { text: "hello" },
+        ctx.ctx,
+        pi.pi,
+        tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-lane" },
+      );
+      const child = spy.children[0];
+      assert.ok(child !== undefined, "spawn spy captured no child");
+
+      t.mock.timers.tick(30_000);
+      assert.deepEqual(
+        child.killCalls(),
+        [],
+        "the blocking lane's 30 s UserPromptSubmit budget must not reach this lane",
+      );
+
+      t.mock.timers.tick(570_000);
+      assert.deepEqual(child.killCalls(), ["SIGTERM"], "background keeps the 600 s default");
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+
+  test("EXEC-02: an unusable timeout is attributed to this lane's own plugin and event", async () => {
+    const tmp = await makeTempLocations();
+    const prevDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    const originalError = console.error;
+    const lines: string[] = [];
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    console.error = (...args: unknown[]): void => {
+      lines.push(args.join(" "));
+    };
+
+    try {
+      const spy = installSpawnSpy();
+      // The blocking lane has the same gate. Without one here, this lane could
+      // pass a hardcoded plugin id or the wrong event and the whole suite would
+      // stay green -- measured.
+      await spawnAndRegister(
+        makeEntry({ asyncRewake: true, claudeEvent: "PreToolUse", timeout: "30" }),
+        { toolName: "bash", input: {} },
+        makeMockCtx("/tmp/proj").ctx,
+        makeMockPi().pi,
+        tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-attribution" },
+      );
+    } finally {
+      console.error = originalError;
+      if (prevDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prevDebug;
+      }
+
+      await tmp.cleanup();
+    }
+
+    const attribution = lines.find((line) => line.includes("unusable timeout"));
+    assert.ok(attribution !== undefined, "a declared-but-unusable timeout must be reported");
+    assert.match(
+      attribution,
+      /rewake-plug\/PreToolUse \(background\)/,
+      "the line must carry this entry's own plugin, event and lane",
+    );
   });
 
   test("EXEC-05: registry add happens before resolve", async () => {

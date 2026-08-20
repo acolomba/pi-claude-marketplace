@@ -164,6 +164,13 @@ export interface HookHandlerEntry {
   async?: unknown;
   shell?: unknown;
   args?: unknown;
+  // Hook timeout in SECONDS, per Claude Code's hooks reference (EXEC-02
+  // owns the ladder this feeds, but states a single bridge-wide default
+  // and never the unit). Typed `unknown` like its HOOK-03 siblings above
+  // -- the schema admits any value and `bridges/hooks/timeout.ts` narrows
+  // it at the exec layer, so a wrong-typed timeout degrades to the
+  // default instead of disqualifying the plugin.
+  timeout?: unknown;
   // HOOK-06 / EXEC-05: asyncRewake field family. Schema admission is
   // type-loose per the HOOK-03 lenient stance -- runtime narrowing
   // (typeof boolean / typeof string guards) lives in the
@@ -186,6 +193,16 @@ const HOOK_HANDLER_SCHEMA = Type.Unsafe<HookHandlerEntry>({
     // "command required when type === 'command'" discriminator). The
     // user-facing field is OPTIONAL -- absent on most handlers.
     if: { type: "string" },
+    // Timeout in SECONDS, narrowed at the exec layer by
+    // bridges/hooks/timeout.ts. Empty-object JSON Schema for the
+    // same reason as the asyncRewake family below: a type-enforcing
+    // declaration here would make a mis-typed timeout a STRUCTURAL parse
+    // failure, and D-57-04 reserves that arm for invalid JSON, shape
+    // mismatch, and a missing REQUIRED `command`. A quoted number would
+    // otherwise flip the whole plugin to (unavailable) -- not
+    // force-rescuable -- and silently drop every one of its hooks from
+    // the routing table on the next load.
+    timeout: {},
     // HOOK-06 / EXEC-05: asyncRewake / rewakeMessage / rewakeSummary
     // schema admission. Empty-object JSON Schema means "accept any
     // value" -- non-boolean asyncRewake or non-string rewakeMessage /

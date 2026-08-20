@@ -570,6 +570,48 @@ test("HOOK_HANDLER_SCHEMA admits asyncRewake / rewakeMessage / rewakeSummary as 
   );
 });
 
+test("HOOK_HANDLER_SCHEMA accepts a non-number timeout (HOOK-03 lenient)", () => {
+  // A type-enforcing declaration would make a quoted number a STRUCTURAL
+  // parse failure, which D-57-04 reserves for invalid JSON, shape mismatch,
+  // and a missing REQUIRED `command`. The blast radius is the whole plugin:
+  // (unavailable), not force-rescuable, and every hook it declares silently
+  // dropped from the routing table on the next load. bridges/hooks/timeout.ts
+  // narrows the value instead.
+  assert.equal(
+    HOOKS_VALIDATOR.Check({
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [{ type: "command", command: "/bin/false", timeout: "30" }],
+        },
+      ],
+    }),
+    true,
+  );
+  assert.equal(
+    HOOKS_VALIDATOR.Check({
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [{ type: "command", command: "/bin/false", timeout: null }],
+        },
+      ],
+    }),
+    true,
+  );
+});
+
+test("parseHooksConfig admits a non-number timeout without dropping the handler", () => {
+  const raw = JSON.stringify({
+    PreToolUse: [
+      { matcher: "Edit", hooks: [{ type: "command", command: "/bin/false", timeout: "30" }] },
+    ],
+  });
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
+  assert.equal(result.ok, true, "a quoted timeout must not fail the whole config");
+  assert.equal(result.ok && result.dropped.length, 0, "the handler must survive the partition");
+});
+
 test("HOOK_HANDLER_SCHEMA accepts non-boolean asyncRewake (HOOK-03 lenient)", () => {
   assert.equal(
     HOOKS_VALIDATOR.Check({
@@ -632,7 +674,7 @@ test("HOOK_HANDLER_SCHEMA explicitly lists asyncRewake / rewakeMessage / rewakeS
   // The properties block should declare each of the three names by
   // literal key. The empty-object JSON Schema value (`asyncRewake: {}`)
   // is the HOOK-03 lenient marker.
-  for (const name of ["asyncRewake", "rewakeMessage", "rewakeSummary"]) {
+  for (const name of ["asyncRewake", "rewakeMessage", "rewakeSummary", "timeout"]) {
     assert.match(source, new RegExp(`${name}\\s*:\\s*\\{\\s*\\}`));
   }
 });

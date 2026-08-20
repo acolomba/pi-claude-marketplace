@@ -71,6 +71,7 @@ import { translate as translateStopFailure } from "./payloads/stop-failure.ts";
 import { translate as translateStop } from "./payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
+import { resolveTimeoutSeconds } from "./timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
@@ -84,8 +85,6 @@ import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 // Constants
 // ──────────────────────────────────────────────────────────────────────────
 
-/** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
-const DEFAULT_TIMEOUT_MS = 600_000;
 // planSpawn + serializeWithTruncation are shared with
 // `async-rewake/registry.ts` via ./spawn-helpers.ts -- both sites build the
 // same `child_process.spawn` invocation against the same `RoutingEntry` shape
@@ -298,8 +297,14 @@ async function spawnAndCollect(
   spawnImpl: typeof spawn = spawn,
 ): Promise<HookExecResult> {
   const plan = planSpawn(entry);
-  const timeoutMsRaw = entry.handlerDecl.timeout;
-  const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
+  const timeoutSeconds = resolveTimeoutSeconds({
+    raw: entry.handlerDecl.timeout,
+    event: entry.claudeEvent,
+    pluginId: entry.pluginId,
+    // This lane awaits the child, so the turn waits with it.
+    lane: "blocking",
+  });
+  const ladderLabel = `${entry.pluginId}/${entry.claudeEvent}`;
 
   const child = spawnImpl(plan.command, [...plan.args], {
     cwd: env.CLAUDE_PROJECT_DIR,
@@ -314,7 +319,7 @@ async function spawnAndCollect(
     let overflowed = false;
     let settled = false;
 
-    let ladder = installTimerLadder(child, timeoutMs);
+    let ladder = installTimerLadder(child, timeoutSeconds, ladderLabel);
 
     const settle = (result: HookExecResult): void => {
       if (settled) {
@@ -333,8 +338,8 @@ async function spawnAndCollect(
     // SIGTERM/SIGKILL ladder and arm a tight escalation -- the child
     // has demonstrated misbehavior, so SIGTERM fires synchronously and
     // SIGKILL fires after the 5s grace rather than waiting up to
-    // `timeoutMs + 5s` (default 605 s) for the original ladder to
-    // escalate.
+    // `timeoutSeconds + 5s` (605 s on most events, less on the ones
+    // `./timeout.ts` lowers) for the original ladder to escalate.
     const handleOverflow = (which: "stdout" | "stderr"): void => {
       if (overflowed) {
         return;
@@ -358,7 +363,10 @@ async function spawnAndCollect(
         child.kill("SIGTERM");
       }
 
-      ladder = installTimerLadder(child, 0);
+      // 0 seconds: SIGTERM already went out synchronously above. The fresh
+      // ladder re-sends it immediately (harmless) and, five seconds later,
+      // escalates to SIGKILL for a child that ignored it.
+      ladder = installTimerLadder(child, 0, ladderLabel);
     };
 
     accumulateStream(
