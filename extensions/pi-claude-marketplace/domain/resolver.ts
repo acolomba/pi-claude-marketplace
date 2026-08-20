@@ -1597,12 +1597,14 @@ async function runStructuralStages(args: {
     );
   }
 
-  flags.push(await mode.applyMcp({ entry, manifest, partial, pluginRoot, ctx }));
-  // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
-  // either add `hooks` to supported (parse OK) or flip installable=false with
-  // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
-  // conflict semantics are deferred, so the convention file is the sole gate.
-  flags.push(await applyHooksConfig(ctx, pluginRoot, partial));
+  flags.push(
+    await mode.applyMcp({ entry, manifest, partial, pluginRoot, ctx }),
+    // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
+    // either add `hooks` to supported (parse OK) or flip installable=false with
+    // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
+    // conflict semantics are deferred, so the convention file is the sole gate.
+    await applyHooksConfig(ctx, pluginRoot, partial),
+  );
 
   return flags.includes(true);
 }

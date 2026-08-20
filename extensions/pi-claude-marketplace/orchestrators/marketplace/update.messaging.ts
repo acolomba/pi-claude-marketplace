@@ -23,17 +23,15 @@ import {
   joinTokens,
   pluginRow,
   renderScopeBracket,
+  type ContentReason,
+  type PluginFailedMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginSkippedMessage,
+  type PluginUpdatedMessage,
 } from "../../shared/notify.ts";
 import { updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
-import type { ContentReason } from "../../shared/notify.ts";
-import type {
-  PluginFailedMessage,
-  PluginPartiallyInstalledMessage,
-  PluginSkippedMessage,
-  PluginUpdatedMessage,
-} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateFailedOutcome,

@@ -764,22 +764,24 @@ interface InfoBlock {
  *   (e) Unavailable (resolveStrict not installable OR threw) ->
  *       `(unavailable)` row with closed-set reasons.
  */
-async function buildBlock(
-  marketplace: string,
-  pluginName: string,
-  scope: Scope,
-  mpRecord: MarketplaceRecord,
-  autoupdate: boolean,
+async function buildBlock(args: {
+  marketplace: string;
+  pluginName: string;
+  scope: Scope;
+  mpRecord: MarketplaceRecord;
+  autoupdate: boolean;
   /**
    * DFEN-04: the user's own `enabled` opinion for this
    * `<plugin>@<marketplace>` key in THIS scope's merged base+local config
    * view, or `undefined` where the user has stated none. Gates the
    * install-time claim -- see `applyInstallDisabledRowShape`.
    */
-  declaredEnabled: boolean | undefined,
-  cwd: string,
-  fetchCtx?: InfoFetchContext,
-): Promise<InfoBlock> {
+  declaredEnabled: boolean | undefined;
+  cwd: string;
+  fetchCtx?: InfoFetchContext;
+}): Promise<InfoBlock> {
+  const { marketplace, pluginName, scope, mpRecord, autoupdate, declaredEnabled, cwd, fetchCtx } =
+    args;
   const marketplaceDetails = { autoupdate };
 
   // RSTA-06 / NFR-5: the per-scope locations feed `makePresenceProbe`'s
@@ -2322,16 +2324,16 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
-    const built = await buildBlock(
-      opts.marketplace,
-      opts.plugin,
-      sole.scope,
-      sole.record,
-      sole.autoupdate,
-      sole.declaredEnabled,
-      opts.cwd,
-      fetchCtx,
-    );
+    const built = await buildBlock({
+      marketplace: opts.marketplace,
+      pluginName: opts.plugin,
+      scope: sole.scope,
+      mpRecord: sole.record,
+      autoupdate: sole.autoupdate,
+      declaredEnabled: sole.declaredEnabled,
+      cwd: opts.cwd,
+      ...(fetchCtx !== undefined && { fetchCtx }),
+    });
     notify(opts.ctx, opts.pi, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
@@ -2354,16 +2356,16 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const built = await Promise.all(
     found.map((f) =>
-      buildBlock(
-        opts.marketplace,
-        opts.plugin,
-        f.scope,
-        f.record,
-        f.autoupdate,
-        f.declaredEnabled,
-        opts.cwd,
-        fetchCtx,
-      ),
+      buildBlock({
+        marketplace: opts.marketplace,
+        pluginName: opts.plugin,
+        scope: f.scope,
+        mpRecord: f.record,
+        autoupdate: f.autoupdate,
+        declaredEnabled: f.declaredEnabled,
+        cwd: opts.cwd,
+        ...(fetchCtx !== undefined && { fetchCtx }),
+      }),
     ),
   );
   const blocks = built.map((b) => b.block);

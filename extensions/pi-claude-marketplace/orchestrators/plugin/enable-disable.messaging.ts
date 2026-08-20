@@ -12,11 +12,11 @@ import {
   type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
+  type ContentReason,
 } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-import type { ContentReason } from "../../shared/notify.ts";
 
 /**
  * enable-disable.messaging.ts -- the command-local notification vocabulary for

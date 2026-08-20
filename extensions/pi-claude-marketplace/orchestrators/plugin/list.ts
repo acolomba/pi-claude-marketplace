@@ -979,20 +979,30 @@ function probeFailureRow(
  * Returns the rows in stable (state-iteration + manifest-order) order;
  * the orchestrator applies the final MSG-GR-3 sort at the block boundary.
  */
-async function enumerateMarketplacePlugins(
-  opts: ListPluginsOptions,
-  mpName: string,
-  mpRecord: ExtensionState["marketplaces"][string],
-  pluginScope: Scope,
-  marketplaceScope: Scope,
-  scopedManifest: ScopedManifest,
+async function enumerateMarketplacePlugins(args: {
+  opts: ListPluginsOptions;
+  mpName: string;
+  mpRecord: ExtensionState["marketplaces"][string];
+  pluginScope: Scope;
+  marketplaceScope: Scope;
+  scopedManifest: ScopedManifest;
   /**
    * DFEN-04: the PLUGIN scope's merged base+local config view. Candidate rows
    * read the user's `enabled` opinion out of it -- see `availableRowMessage`.
    */
-  pluginScopeConfig: MergedConfig,
-  excludeFromAvailable: ReadonlySet<string> = new Set(),
-): Promise<ListMsg[]> {
+  pluginScopeConfig: MergedConfig;
+  excludeFromAvailable?: ReadonlySet<string> | undefined;
+}): Promise<ListMsg[]> {
+  const {
+    opts,
+    mpName,
+    mpRecord,
+    pluginScope,
+    marketplaceScope,
+    scopedManifest,
+    pluginScopeConfig,
+    excludeFromAvailable = new Set<string>(),
+  } = args;
   const rows: ListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
@@ -1205,15 +1215,15 @@ async function computeOrphanFold(
   }
 
   const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
-  const projectSideRows = await enumerateMarketplacePlugins(
+  const projectSideRows = await enumerateMarketplacePlugins({
     opts,
     mpName,
-    projectMp,
-    "project",
-    "user",
-    projectScopedManifest,
-    projectConfig,
-  );
+    mpRecord: projectMp,
+    pluginScope: "project",
+    marketplaceScope: "user",
+    scopedManifest: projectScopedManifest,
+    pluginScopeConfig: projectConfig,
+  });
   const folded = projectSideRows.filter(
     (r) =>
       r.status === "installed" ||
@@ -1277,16 +1287,16 @@ async function buildMarketplaceMessage(args: {
   }
 
   // Normal header + enumerated plugins (own scope) + folded extras.
-  const ownPlugins = await enumerateMarketplacePlugins(
+  const ownPlugins = await enumerateMarketplacePlugins({
     opts,
     mpName,
     mpRecord,
-    mpScope,
-    mpScope,
+    pluginScope: mpScope,
+    marketplaceScope: mpScope,
     scopedManifest,
-    scopeConfig,
+    pluginScopeConfig: scopeConfig,
     excludeFromAvailable,
-  );
+  });
   const merged: readonly ListMsg[] = [...ownPlugins, ...extraPlugins];
 
   // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The
