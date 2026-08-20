@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-19
+
 - A plugin author can now ship a plugin that installs disabled. `defaultEnabled` is an optional boolean that may appear on a marketplace plugin entry and in `plugin.json`, with the marketplace entry winning and absence at both sites resolving to `true`. It is added once to the shared `PLUGIN_METADATA_FIELDS` group, so both the entry and manifest schemas carry it and a non-boolean fails validation like any other schema violation. The precedence rule is answered in the resolver rather than re-derived per consumer.
 
 - Installing a plugin that resolves `defaultEnabled: false` records it disabled and writes `enabled: false` through to that scope's `claude-plugins.json` entry -- the first field the install write-back's plugin patch has ever carried. Its artifacts are not materialized, matching the terminal state of an ordinary disable. An `enabled` value already present in the config entry wins in either direction and is never overwritten, which is the analog of Claude Code's rule that an existing `enabledPlugins` setting takes precedence and persists.
@@ -23,6 +25,8 @@
 - The ladder clamps a timeout to what a timer can represent. `setTimeout` cannot express a delay above about 24.8 days: Node replaces a larger one with a single millisecond and warns on standard error. So a plugin that wrote its timeout in milliseconds to suit the old behavior -- `timeout: 3600000` for an hour -- would have been killed at spawn once that value was read as seconds, landing back in the same no-op by a different route. Such a plugin now runs to the ceiling instead.
 
 - A `timeout` that is not a number falls back to the default for its event, and the hooks schema keeps admitting the field at any type. Declaring it as strictly numeric would make a quoted number a structural parse failure, which is reserved for invalid JSON, a shape mismatch, and a missing required `command`. The blast radius would have been the whole plugin rather than the one field: refused at install and not recoverable with `--force`, and for a plugin already installed, every one of its hooks dropped from the routing table on the next load with no message anywhere.
+
+- Internal only, with no change in behavior: every export that existed so a test could reach it is gone -- 27 `__test_*` re-exports and `_*ForTest` accessors, now zero. Each was resolved by moving the code to the module that owns it rather than by renaming the seam, so the removals arrived as real extractions. The reconcile backfill pass, roughly 450 lines reached through two re-exports and already holding its own test file, became `reconcile/backfill.ts`. The reinstall and install outcome-to-row families moved to the `.messaging.ts` modules that already held those verbs' message vocabulary, and the `ManualRecoveryError` protocol moved beside the class three bridges throw. Extraction surfaced duplication the seams had hidden: three separate depth-5 `Error.cause` walkers, each documenting itself as mirroring the other two, now share one generator and one bound, and a fourth verbatim copy of `errorMessage` is gone.
 
 ## [0.16.1] - 2026-08-18
 
