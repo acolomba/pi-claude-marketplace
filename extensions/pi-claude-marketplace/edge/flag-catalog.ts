@@ -27,9 +27,11 @@
 // Each entry carries two orthogonal visibility bits:
 //   - parse:    the handler accepts the flag during argv parsing.
 //   - complete: the completion offers the flag as a suggestion.
-// The two bits diverge intentionally in one case: the install/update/uninstall/
-// reinstall/enable/disable scope-target flag is parse-accepted but never offered
-// by completion (parse=true, complete=false).
+// Every catalog entry today sets both bits the same: a flag the handler
+// accepts is also one completion offers. (`--local` previously diverged as
+// parse=true/complete=false to keep completions quiet, but that hid the
+// per-machine override path from the operator at exactly the scope-decision
+// point where it matters, so it now completes too.)
 
 /**
  * A single per-verb flag: its long-flag name, an optional completion
@@ -60,12 +62,20 @@ export type CatalogVerb =
   | "import"
   | "bootstrap";
 
-// The scope-target flag is parse-accepted on install/update/uninstall/reinstall/
-// enable/disable but is never offered by completion.
-const NON_COMPLETED_SCOPE_TARGET: FlagEntry = {
+// The scope-target flag is parse-accepted AND completed on
+// install/update/uninstall/reinstall/enable/disable. `--local` selects the
+// per-machine override file (claude-plugins.local.json) as the write target
+// instead of the shared base (claude-plugins.json), so a project-scope install
+// or enable can stay out of a git-tracked config. It is orthogonal to `--scope`
+// (which selects the scope's state tree, not the file within it) and is valid at
+// both scopes. Surfacing it in completion puts it at the operator's fingertips at
+// the scope-decision point rather than requiring it be known ahead of time.
+const SCOPE_TARGET_FLAG_ENTRY: FlagEntry = {
   name: "--local",
+  description:
+    "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
   parse: true,
-  complete: false,
+  complete: true,
 };
 
 const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
@@ -85,7 +95,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       parse: true,
       complete: true,
     },
-    NON_COMPLETED_SCOPE_TARGET,
+    SCOPE_TARGET_FLAG_ENTRY,
   ],
   update: [
     {
@@ -100,7 +110,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       parse: true,
       complete: true,
     },
-    NON_COMPLETED_SCOPE_TARGET,
+    SCOPE_TARGET_FLAG_ENTRY,
   ],
   list: [
     // LIST-01 / D-67-01: the PL-1 filter family.
@@ -130,11 +140,11 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       complete: true,
     },
   ],
-  uninstall: [NON_COMPLETED_SCOPE_TARGET],
-  reinstall: [NON_COMPLETED_SCOPE_TARGET],
+  uninstall: [SCOPE_TARGET_FLAG_ENTRY],
+  reinstall: [SCOPE_TARGET_FLAG_ENTRY],
   fetch: [],
-  enable: [NON_COMPLETED_SCOPE_TARGET],
-  disable: [NON_COMPLETED_SCOPE_TARGET],
+  enable: [SCOPE_TARGET_FLAG_ENTRY],
+  disable: [SCOPE_TARGET_FLAG_ENTRY],
   pending: [],
   import: [],
   bootstrap: [],
@@ -153,7 +163,7 @@ export function isCatalogVerb(value: string): value is CatalogVerb {
  * (edge/handlers/shared.ts `extractLocalFlag`) consumes this constant so the
  * catalog owns the name rather than a duplicated literal.
  */
-export const SCOPE_TARGET_FLAG = NON_COMPLETED_SCOPE_TARGET.name;
+export const SCOPE_TARGET_FLAG = SCOPE_TARGET_FLAG_ENTRY.name;
 
 /**
  * Ordered completion entries (name + optional description) for a verb -- the
