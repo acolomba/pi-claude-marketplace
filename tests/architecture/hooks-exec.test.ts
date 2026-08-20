@@ -157,7 +157,7 @@ function makeEntry(input: {
   claudeEvent?: BucketAEvent;
   args?: readonly string[];
   shell?: string;
-  timeout?: number;
+  timeout?: unknown;
 }): RoutingEntry {
   const handlerDecl: Record<string, unknown> = { type: "command", command: "/bin/true" };
   if (input.args !== undefined) {
@@ -394,6 +394,128 @@ test("Block B / EXEC-02: `timeout` reaches the sync ladder as SECONDS", async (t
 
   child.emitClose(null);
   await pending;
+});
+
+test("Block B / EXEC-02: the blocking lane takes the per-event default (UserPromptSubmit 30 s)", async (t) => {
+  await relocateAgent(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  let announceSpawn: () => void;
+  const spawned = new Promise<void>((resolve) => {
+    announceSpawn = resolve;
+  });
+  const spy = installSpawnSpy(() => {
+    announceSpawn();
+  });
+
+  // No `timeout` declared: the handler takes whatever default its lane and
+  // event give it. Claude Code lowers UserPromptSubmit to 30 s because the
+  // handler holds up the turn, and this lane awaits the child.
+  const pending = dispatchHookExec(
+    makeEntry({ claudeEvent: "UserPromptSubmit" }),
+    { text: "hello" },
+    makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
+  );
+
+  await spawned;
+  const child = spy.children[0];
+  assert.ok(child !== undefined, "spawn spy captured no child");
+
+  t.mock.timers.tick(29_999);
+  assert.deepEqual(child.killCalls(), [], "must not fire before the 30 s UserPromptSubmit default");
+
+  t.mock.timers.tick(1);
+  assert.deepEqual(
+    child.killCalls(),
+    ["SIGTERM"],
+    "a flat 600 s default would leave this turn blocked for ten minutes",
+  );
+
+  child.emitClose(null);
+  await pending;
+});
+
+test("Block B / EXEC-02: the blocking lane takes the per-event default (SessionEnd 1.5 s)", async (t) => {
+  await relocateAgent(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  let announceSpawn: () => void;
+  const spawned = new Promise<void>((resolve) => {
+    announceSpawn = resolve;
+  });
+  const spy = installSpawnSpy(() => {
+    announceSpawn();
+  });
+
+  // The sharpest tightening in this change: a SessionEnd handler that declared
+  // no timeout went from 600 s to 1.5 s. It lands on shutdown, where a killed
+  // hook is least likely to be noticed, so it is gated at the call site rather
+  // than only in the resolver's unit test.
+  const pending = dispatchHookExec(
+    makeEntry({ claudeEvent: "SessionEnd" }),
+    { reason: "quit" },
+    makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
+  );
+
+  await spawned;
+  const child = spy.children[0];
+  assert.ok(child !== undefined, "spawn spy captured no child");
+
+  t.mock.timers.tick(1_499);
+  assert.deepEqual(child.killCalls(), [], "must not fire before upstream's 1.5 s budget");
+
+  t.mock.timers.tick(1);
+  assert.deepEqual(child.killCalls(), ["SIGTERM"]);
+
+  child.emitClose(null);
+  await pending;
+});
+
+test("Block B / EXEC-02: an unusable timeout is attributed to the real plugin, event and lane", async (t) => {
+  await relocateAgent(t);
+  const spy = installSpawnSpy((h) => {
+    h.emitClose(0);
+  });
+
+  // The resolver's own test builds its plugin id and lane by hand, so nothing
+  // proved the lanes pass the REAL entry through: the whole unit suite stayed
+  // green with a hardcoded plugin id planted at this call site.
+  const prevDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  const originalError = console.error;
+  const lines: string[] = [];
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  console.error = (...args: unknown[]): void => {
+    lines.push(args.join(" "));
+  };
+
+  try {
+    await dispatchHookExec(
+      makeEntry({ claudeEvent: "PreToolUse", timeout: "30" }),
+      { toolName: "bash", input: {} },
+      makeCtx("/tmp/proj"),
+      undefined,
+      { spawnImpl: spy.spawnImpl },
+    );
+  } finally {
+    console.error = originalError;
+    if (prevDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prevDebug;
+    }
+  }
+
+  const attribution = lines.find((line) => line.includes("unusable timeout"));
+  assert.ok(attribution !== undefined, "a declared-but-unusable timeout must be reported");
+  assert.match(
+    attribution,
+    /test-plugin\/PreToolUse \(blocking\)/,
+    "the line must carry the entry's own plugin, event and lane",
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────

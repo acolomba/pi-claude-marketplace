@@ -45,7 +45,6 @@ import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
-import { parseTimeoutMs } from "../../../shared/timeout.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
@@ -60,6 +59,7 @@ import { translate as translateStop } from "../payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { currentEpoch, type RoutingEntry } from "../routing-state.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
+import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
 import { readPidTable, writePidTable, unlinkPidTable, type PidTableEntry } from "./pid-table.ts";
@@ -79,9 +79,6 @@ import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts
  * to SIGKILL a stranger process that may have inherited a recycled pid.
  */
 export const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
-
-/** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
-const DEFAULT_TIMEOUT_MS = 600_000;
 
 /** HOOK-06: separator between `rewakeMessage` and the captured body. */
 const BODY_SEPARATOR = "\n\n";
@@ -251,7 +248,14 @@ export async function spawnAndRegister(
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
     const planValue = planSpawn(entry);
-    const timeoutMs = parseTimeoutMs(entry.handlerDecl.timeout, DEFAULT_TIMEOUT_MS);
+    const timeoutSeconds = resolveTimeoutSeconds({
+      raw: entry.handlerDecl.timeout,
+      event: entry.claudeEvent,
+      pluginId: entry.pluginId,
+      // This lane returns as soon as the child is registered, so upstream's
+      // turn-blocking reductions do not apply -- see ../timeout.ts.
+      lane: "background",
+    });
 
     let child: ChildProcess;
     try {
@@ -296,7 +300,11 @@ export async function spawnAndRegister(
       stdoutBuffer.write(buf);
     });
 
-    const ladder = installTimerLadder(child, timeoutMs);
+    const ladder = installTimerLadder(
+      child,
+      timeoutSeconds,
+      `${entry.pluginId}/${entry.claudeEvent}`,
+    );
 
     const rewakeMessageField = entry.handlerDecl.rewakeMessage;
     const rewakeSummaryField = entry.handlerDecl.rewakeSummary;

@@ -135,6 +135,13 @@ test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler w
     await mkdir(handlersDir, { recursive: true });
     const handlerScript = `#!/usr/bin/env bash
 set -euo pipefail
+# The sleep is what makes the declared timeout observable. Without it this
+# handler is a bare printf that completes inside the millisecond deadline, so
+# the sentinel lands before any SIGTERM and the assertion below passes whether
+# the bridge reads the timeout as seconds or as milliseconds -- measured, 8
+# runs, 8 false greens. 0.3 s is 10x the millisecond deadline and 1% of the
+# seconds one, so the gate is decisive in both directions.
+sleep 0.3
 printf 'fired at %s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${sentinelPath}"
 # Echo a valid hook output so the bridge's stdout parser is satisfied.
 echo '{}'
@@ -156,6 +163,12 @@ echo '{}'
             {
               type: "command",
               command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.sh"',
+              // Carries the seconds contract end to end -- schema admission,
+              // handlerDecl carry, resolveTimeoutSeconds, ladder, real spawn.
+              // Read as milliseconds the ladder SIGTERMs at 30 ms, during the
+              // handler's sleep, and the sentinel never lands. Read as seconds
+              // the handler has 30 s to do 0.3 s of work.
+              timeout: 30,
             },
           ],
         },
