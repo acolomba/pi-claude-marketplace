@@ -29,6 +29,20 @@ export interface DiscoveredGeneratedNames {
   readonly agentsSourceDir: string | null;
 }
 
+/**
+ * Name preview only. The three discoveries also return D-07 warnings, and
+ * this function drops them on purpose.
+ *
+ * Every caller runs the same walk again during staging, and that pass is the
+ * one that reports: `install.ts` folds each `prepareStage*` result onto
+ * `discoveryWarnings` and `reinstall.ts` aggregates the same four results in
+ * `collectStagingWarnings`. Reporting here as well would print every warning
+ * twice for one install.
+ *
+ * The cost of the drop is a second walk of the same directories. It buys the
+ * cross-plugin conflict check a name set BEFORE the ledger opens, which is
+ * where a conflict has to be refused.
+ */
 export async function discoverGeneratedNames(
   plugin: string,
   resolved: MaterializablePlugin,

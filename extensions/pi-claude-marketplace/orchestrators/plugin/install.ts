@@ -122,7 +122,7 @@ import {
   malformedReasonsForKinds,
   type DegradeKind,
 } from "../../shared/notify-reasons.ts";
-import { notify } from "../../shared/notify.ts";
+import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -356,6 +356,13 @@ interface InstallCtx {
   stagedMcpServerNames: readonly string[];
   // Aggregated soft warnings from the bridges (e.g. agents bridge cleanup leaks).
   bridgeWarnings: string[];
+  // D-07 discovery warnings from the skills, commands and agents bridges: an
+  // artifact the plugin author shipped that this install did NOT materialize
+  // (a duplicate generated name, an unreadable subdirectory, a source path
+  // that produces no valid name). Kept apart from `bridgeWarnings` because
+  // D-19-01 as amended surfaces these in standalone mode and the hygiene
+  // warnings beside them stay suppressed.
+  discoveryWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
   agentForeignFailures: { generatedName: string; reason: string }[];
   // SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade records
@@ -898,6 +905,7 @@ async function runInstallLedgerBody(
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     bridgeWarnings: [],
+    discoveryWarnings: [],
     agentForeignFailures: [],
     frontmatterDegradations: [],
     stateSnapshot: state,
@@ -926,6 +934,10 @@ async function runInstallLedgerBody(
       for (const d of prep.result.degraded) {
         c.frontmatterDegradations.push({ kind: "skill", ...d });
       }
+
+      // The skills bridge puts its discovery warnings, and nothing else, on
+      // this array (D-141-03).
+      c.discoveryWarnings.push(...prep.result.warnings);
 
       const leak = await commitPreparedSkills(prep);
       if (leak !== undefined) {
@@ -967,6 +979,9 @@ async function runInstallLedgerBody(
         c.frontmatterDegradations.push({ kind: "command", ...d });
       }
 
+      // As with skills, this array carries discovery warnings only.
+      c.discoveryWarnings.push(...prep.result.warnings);
+
       const leak = await commitPreparedCommands(prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(leak);
@@ -1005,6 +1020,13 @@ async function runInstallLedgerBody(
         cwd: c.cwd,
       });
       c.agentsPrep = prep;
+      // The agents bridge aggregates THREE kinds on one array: agents-index
+      // corruptions, per-agent frontmatter conversion notes, and D-07
+      // duplicate-name skips. Only the last is a discovery truncation, and
+      // the three are not separable here, so the whole array rides the
+      // hygiene channel (D-19-01) rather than the D-141-03 one. Folding it
+      // at all is the fix: it used to be dropped outright.
+      c.bridgeWarnings.push(...prep.result.warnings);
       const leak = await commitPreparedAgents(prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(leak);
@@ -1462,11 +1484,22 @@ function readDeclaredEnabled(args: {
 /**
  * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
  * AS-7 / WARN-01). The state record is already committed, so every arm is
- * defensive: a failure here must not strand a successful install. Per
- * D-19-01 the collected strings surface only in orchestrated mode, where
- * the cascade caller owns a `pushDiagnostic` channel; standalone drops
- * them because `MarketplaceNotificationMessage` has no field for a soft
- * warning after a successful state mutation.
+ * defensive: a failure here must not strand a successful install.
+ *
+ * D-19-01 gates the HYGIENE warnings on orchestrated mode, where the cascade
+ * caller owns a `pushDiagnostic` channel. A deferred data-dir mkdir or a
+ * deferred completion-cache refresh describes housekeeping the extension
+ * will retry; `MarketplaceNotificationMessage` has no field for one, and a
+ * standalone user has nothing to do about it.
+ *
+ * D-141-03 amends that for the DISCOVERY warnings, which ride
+ * `installCtx.discoveryWarnings` and surface in BOTH modes. A discovery
+ * warning says the installed artifact set does not match what the plugin
+ * author shipped, and the install row's resource count gives the user no
+ * baseline to notice the shortfall. The caller renders the standalone half
+ * through `surfaceStandaloneDiscoveryWarnings`. Only the skills and
+ * commands bridges feed that array; the agents bridge mixes three kinds of
+ * warning onto one result field and rides the hygiene channel instead.
  */
 async function collectPostCommitWarnings(
   installCtx: InstallCtx,
@@ -1475,12 +1508,17 @@ async function collectPostCommitWarnings(
 ): Promise<string[]> {
   const { locations, marketplace, plugin } = installCtx;
   const warnings: string[] = [];
-  // Collected only in orchestrated mode; the standalone drop is D-19-01.
+  // Hygiene warnings only; the standalone drop is D-19-01.
   const push = (msg: string): void => {
     if (orchestrated) {
       warnings.push(msg);
     }
   };
+
+  // D-141-03: never gated. In standalone mode these are the only strings the
+  // returned array carries, which is what the caller's notifyDiagnostic
+  // surface renders.
+  warnings.push(...installCtx.discoveryWarnings);
 
   // AS-6 / D-08: eager per-plugin data dir mkdir.
   try {
@@ -1527,6 +1565,36 @@ async function collectPostCommitWarnings(
   }
 
   return warnings;
+}
+
+/**
+ * D-141-03: the standalone half of the discovery-warning surface.
+ *
+ * In standalone mode `collectPostCommitWarnings` returns the discovery
+ * warnings and nothing else, so the whole array renders here. The seam is
+ * `notifyDiagnostic`, the same sanctioned second-notify channel the
+ * reconcile pass uses; the install row itself stays exactly one
+ * `MarketplaceNotificationMessage` (IL-2).
+ *
+ * NFR-9: a discovery warning embeds the absolute component directory it
+ * walked, so it goes through `redactAbsolutePaths` before it reaches the
+ * user, exactly as the reconcile composer does.
+ */
+function surfaceStandaloneDiscoveryWarnings(
+  ctx: ExtensionContext,
+  plugin: string,
+  warnings: readonly string[],
+): void {
+  if (warnings.length === 0) {
+    return;
+  }
+
+  const lines = warnings.map((w) => redactAbsolutePaths(w));
+  const header =
+    lines.length === 1
+      ? `Plugin "${plugin}" installed; 1 declared component was skipped.`
+      : `Plugin "${plugin}" installed; ${lines.length.toString()} declared components were skipped.`;
+  notifyDiagnostic(ctx, header, lines);
 }
 
 /**
@@ -2347,6 +2415,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         ],
       },
     ]);
+    surfaceStandaloneDiscoveryWarnings(ctx, plugin, postCommitWarnings);
   }
 
   return buildInstalledOutcome(installCtx, postCommitWarnings, disabledInstall.landed);
