@@ -424,12 +424,12 @@ flowchart LR
 
 ### 5.6 Commands Bridge (Pi prompt templates)
 
-| ID       | Requirement                                                                                                                  |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **CM-1** | Commands MUST be staged as `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`.                          |
-| **CM-2** | Generated command name MUST be `<plugin>:<command>`, with the `<plugin>-` prefix stripped from the source name when present. |
-| **CM-3** | Variable substitution (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`) MUST apply to command bodies.                       |
-| **CM-4** | Discovery MUST enumerate `*.md` files under each `commands/` path **recursively**. A nested file (e.g. `commands/build/web.md`) is discovered with source name `build/web` and generated name `<plugin>:build:web` -- the path separator becomes a colon, matching Claude Code's nested-command convention. Dotfile-prefixed entries and symlinks (files and directories) MUST be skipped.                                                  |
+| ID       | Requirement                                                                                                                                                                                                                                                                                                                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **CM-1** | Commands MUST be staged as `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`.                                                                                                                                                                                                                                                                                        |
+| **CM-2** | Generated command name MUST be `<plugin>:<command>`, with the `<plugin>-` prefix stripped from the head of the source name when present. The head is the first path segment when the source is a nested path, so `acme-tools/lint.md` in plugin `acme` becomes `acme:tools:lint` (D-141-01).                                                                                               |
+| **CM-3** | Variable substitution (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`) MUST apply to command bodies.                                                                                                                                                                                                                                                                                     |
+| **CM-4** | Discovery MUST enumerate `*.md` files under each `commands/` path **recursively**. A nested file (e.g. `commands/build/web.md`) is discovered with source name `build/web` and generated name `<plugin>:build:web` -- the path separator becomes a colon, matching Claude Code's nested-command convention. Dotfile-prefixed entries and symlinks (files and directories) MUST be skipped. |
 
 ### 5.7 Agents Bridge (pi-subagents soft dependency)
 
@@ -1106,12 +1106,12 @@ ______________________________________________________________________
 
 ### Appendix B: Generated-name conventions
 
-| Artifact   | Generated form                           | Stripping rule                             |
-| ---------- | ---------------------------------------- | ------------------------------------------ |
-| Skill      | `<plugin>-<skill>`                       | drop leading `<plugin>-` from source       |
-| Command    | `<plugin>:<command>`                     | drop leading `<plugin>-` from source       |
-| Agent      | `pi-claude-marketplace-<plugin>-<agent>` | drop leading `<plugin>-` from source       |
-| MCP server | server name verbatim from declaration    | none (`_piClaudeMarketplace` marker added) |
+| Artifact   | Generated form                           | Stripping rule                                                                                                      |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Skill      | `<plugin>-<skill>`                       | drop leading `<plugin>-` from source                                                                                |
+| Command    | `<plugin>:<command>`                     | drop leading `<plugin>-` from the head of the source -- the first path segment when the source is nested (D-141-01) |
+| Agent      | `pi-claude-marketplace-<plugin>-<agent>` | drop leading `<plugin>-` from source                                                                                |
+| MCP server | server name verbatim from declaration    | none (`_piClaudeMarketplace` marker added)                                                                          |
 
 ### Appendix C: Reload-hint verbs
 
