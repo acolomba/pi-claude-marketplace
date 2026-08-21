@@ -88,6 +88,25 @@ async function readWalkEntries(dir: string, base: string, warnings: string[]): P
 }
 
 /**
+ * `generatedCommandName` with the directory context restored.
+ *
+ * `domain/name.ts` is a pure module: it knows the failing segment but not
+ * the directory the file came from, so its label names only the source. The
+ * throw site and the call site each hold half of the answer, and the call
+ * site is where they meet. Rethrow with both, keeping the original as
+ * `cause`.
+ */
+function nameCommandInDir(pluginName: string, sourceName: string, base: string): string {
+  try {
+    return generatedCommandName(pluginName, sourceName);
+  } catch (err) {
+    throw new Error(`invalid command source "${sourceName}" in "${base}": ${errorMessage(err)}`, {
+      cause: err,
+    });
+  }
+}
+
+/**
  * Recursive walk of one `commands` directory. Collects every plain `.md`
  * file (non-symlink, non-dotfile) with `sourceName` set to the file's
  * relative path from `base` minus the `.md` extension, with OS path
@@ -142,7 +161,7 @@ async function walkCommandsDir(
     // inside generatedCommandName, which splits the `/`-separated sourceName
     // and validates each segment. The full sourceName intentionally contains
     // `/` for nested files, so it MUST NOT be passed to assertSafeName here.
-    const generatedName = generatedCommandName(pluginName, sourceName);
+    const generatedName = nameCommandInDir(pluginName, sourceName, base);
 
     out.push({ sourceName, generatedName, commandFile: full });
   }
