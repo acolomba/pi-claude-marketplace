@@ -1,8 +1,15 @@
 // bridges/commands/stage.ts
 //
-// CommandsBridge: prepare/commit/abort + RN-6 collision detection, plus
-// replacement exports: replacePreparedCommands, rollbackCommandsReplacement,
+// CommandsBridge: prepare/commit/abort, plus replacement exports:
+// replacePreparedCommands, rollbackCommandsReplacement,
 // finalizeCommandsReplacement.
+//
+// There is no RN-6 collision gate here. `discoverPluginCommands` returns the
+// values of a Map keyed on the generated name, so its output is duplicate-free
+// by construction and a gate reading it could never fire. Two sources that
+// produce one name is the D-07 first-wins skip, warned about at discovery --
+// which is also what D-141-01 mandates, since the elision it locks in makes
+// the collision reachable within one directory.
 //
 // Storage layout:
 //   - Staging:   <extensionRoot>/commands-staging/<uuid>/<plugin>:<command>.md
@@ -26,10 +33,12 @@ import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   appendLeakToError,
   appendLeaks,
   errorMessage,
+  isErrnoException,
   ManualRecoveryError,
 } from "../../shared/errors.ts";
 import {
@@ -46,7 +55,6 @@ import { discoverPluginCommands } from "./discover.ts";
 import type {
   CommandDegradeRecord,
   CommandsReplacement,
-  DiscoveredCommand,
   PreparedCommandsStaging,
   StageCommandsInput,
   StagedCommandRecord,
@@ -62,43 +70,6 @@ const commandsReplacementInternals = new WeakMap<
   Extract<CommandsReplacement, { kind: "replaced" }>,
   CommandsReplacementInternals
 >();
-
-/**
- * RN-6: detect two source command names that elide to the same generated
- * name. When a collision is found, throw with BOTH source names listed so
- * the user can resolve it without guessing which two collided.
- *
- * Single-collision message:
- *   `Generated command name collision detected. Rename one of the source commands:
- *      "acme:deploy" <- ["acme-deploy", "deploy"]`
- *
- * Multi-collision messages join each line on a fresh `\n  ` separator.
- */
-export function assertNoCommandCollisions(discovered: readonly DiscoveredCommand[]): void {
-  const groups = new Map<string, string[]>();
-
-  for (const c of discovered) {
-    const arr = groups.get(c.generatedName) ?? [];
-    arr.push(c.sourceName);
-    groups.set(c.generatedName, arr);
-  }
-
-  const collisions: string[] = [];
-
-  for (const [gen, sources] of groups) {
-    if (sources.length > 1) {
-      const quotedSources = sources.map((s) => `"${s}"`).join(", ");
-      collisions.push(`"${gen}" <- [${quotedSources}]`);
-    }
-  }
-
-  if (collisions.length > 0) {
-    throw new Error(
-      `Generated command name collision detected. Rename one of the source commands:\n  ` +
-        collisions.join("\n  "),
-    );
-  }
-}
 
 /**
  * CMD-01 / D-86-07: neutralize an unparseable command source by stripping the
@@ -165,6 +136,30 @@ function neutralizeCommandFrontmatter(content: string): string {
  * previousCommandNames.length === 0`: nothing to stage AND nothing to
  * remove, so creating the staging dir would be wasteful.
  */
+/**
+ * Give a filesystem failure during staging the two facts it is missing.
+ *
+ * The staged basename is the generated command name, and CM-4 makes that name
+ * as long as the whole relative source path, so ENAMETOOLONG is reachable.
+ * The raw errno names a path under an internal staging UUID, which tells the
+ * plugin author nothing about which of their files is at fault.
+ *
+ * Only an errno exception is wrapped. `PathContainmentError` carries no
+ * `.code`, so it passes through verbatim and the PI-14 bypass still sees the
+ * class it narrows on; a frontmatter parse throw passes through for the same
+ * reason.
+ */
+function contextualStagingError(pluginName: string, generatedName: string, err: unknown): unknown {
+  if (!isErrnoException(err)) {
+    return err;
+  }
+
+  return new BridgeStagingError(
+    `command "${generatedName}" of plugin "${pluginName}" could not be staged`,
+    { cause: err },
+  );
+}
+
 export async function prepareStageCommands(
   input: StageCommandsInput,
 ): Promise<PreparedCommandsStaging> {
@@ -177,8 +172,6 @@ export async function prepareStageCommands(
     pluginName,
     resolved,
   });
-
-  assertNoCommandCollisions(discovered);
 
   // Materialization gate (symmetry with skills bridge). D-07: surface
   // discoverWarnings even on noop so duplicate-generated-name skips
@@ -207,56 +200,60 @@ export async function prepareStageCommands(
 
   try {
     for (const command of discovered) {
-      assertSafeName(command.generatedName, "generated command name");
-      // Filename includes the colon: <plugin>:<command>.md
-      const stagedFile = path.join(stagingRoot, command.generatedName + ".md");
-      await assertPathInside(stagingRoot, stagedFile, "staged command file");
-
-      const targetFile = path.join(locations.promptsTargetDir, command.generatedName + ".md");
-      await assertPathInside(locations.promptsTargetDir, targetFile, "target command file");
-
-      let content = await readFile(command.commandFile, "utf8");
-
-      // PARSE-01: parse the SOURCE frontmatter BEFORE substitution to establish
-      // attribution ground truth + the degrade trigger. A THROW means a closed
-      // `---` block whose inner YAML is malformed (an author defect); a RETURN
-      // (including absent/empty frontmatter) is the byte-identical passthrough
-      // (NREG-01). The parse is READ-ONLY -- validate, never eval (T-03-17).
       try {
-        parseFrontmatter(content);
-      } catch (parseErr) {
-        // CMD-01 / D-86-07: neutralize by stripping the entire malformed
-        // frontmatter block, leaving the real body, so Pi's command loader
-        // takes name-from-filename + description-from-first-body-line. No
-        // synthesized placeholder and no disable flag -- Pi's command loader
-        // has no non-empty-description gate.
-        content = neutralizeCommandFrontmatter(content);
-        degraded.push({
-          generatedName: command.generatedName,
-          parseError: errorMessage(parseErr),
+        assertSafeName(command.generatedName, "generated command name");
+        // Filename includes the colon: <plugin>:<command>.md
+        const stagedFile = path.join(stagingRoot, command.generatedName + ".md");
+        await assertPathInside(stagingRoot, stagedFile, "staged command file");
+
+        const targetFile = path.join(locations.promptsTargetDir, command.generatedName + ".md");
+        await assertPathInside(locations.promptsTargetDir, targetFile, "target command file");
+
+        let content = await readFile(command.commandFile, "utf8");
+
+        // PARSE-01: parse the SOURCE frontmatter BEFORE substitution to establish
+        // attribution ground truth + the degrade trigger. A THROW means a closed
+        // `---` block whose inner YAML is malformed (an author defect); a RETURN
+        // (including absent/empty frontmatter) is the byte-identical passthrough
+        // (NREG-01). The parse is READ-ONLY -- validate, never eval (T-03-17).
+        try {
+          parseFrontmatter(content);
+        } catch (parseErr) {
+          // CMD-01 / D-86-07: neutralize by stripping the entire malformed
+          // frontmatter block, leaving the real body, so Pi's command loader
+          // takes name-from-filename + description-from-first-body-line. No
+          // synthesized placeholder and no disable flag -- Pi's command loader
+          // has no non-empty-description gate.
+          content = neutralizeCommandFrontmatter(content);
+          degraded.push({
+            generatedName: command.generatedName,
+            parseError: errorMessage(parseErr),
+          });
+        }
+
+        // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
+        // project scope; user scope leaves the token literal (undefined ->
+        // pass-through). Commands are not skill-scoped, so no skillDir is
+        // supplied and ${CLAUDE_SKILL_DIR} stays literal.
+        content = substituteClaudeVars(content, {
+          pluginRoot,
+          pluginData: pluginDataDir,
+          projectDir: locations.scope === "project" ? cwd : undefined,
         });
+        await writeFile(stagedFile, content, "utf8");
+
+        // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
+        // backstop. The neutralized output is designed to RETURN, so a THROW here
+        // is OUR self-inflicted defect (substitution produced bytes Pi rejects) --
+        // throw loudly so it rides the cleanup catch below; never mask it as
+        // author degradation.
+        parseFrontmatter(content);
+
+        renamePairs.push({ from: stagedFile, to: targetFile });
+        stagedNames.push(command.generatedName);
+      } catch (err) {
+        throw contextualStagingError(pluginName, command.generatedName, err);
       }
-
-      // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
-      // project scope; user scope leaves the token literal (undefined ->
-      // pass-through). Commands are not skill-scoped, so no skillDir is
-      // supplied and ${CLAUDE_SKILL_DIR} stays literal.
-      content = substituteClaudeVars(content, {
-        pluginRoot,
-        pluginData: pluginDataDir,
-        projectDir: locations.scope === "project" ? cwd : undefined,
-      });
-      await writeFile(stagedFile, content, "utf8");
-
-      // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
-      // backstop. The neutralized output is designed to RETURN, so a THROW here
-      // is OUR self-inflicted defect (substitution produced bytes Pi rejects) --
-      // throw loudly so it rides the cleanup catch below; never mask it as
-      // author degradation.
-      parseFrontmatter(content);
-
-      renamePairs.push({ from: stagedFile, to: targetFile });
-      stagedNames.push(command.generatedName);
     }
   } catch (err) {
     throw appendLeakToError(err, await cleanupStaging(stagingRoot, "commands staging directory"));

@@ -43,7 +43,7 @@
 // commands directory itself is the resolver's job (it called
 // `assertPathInside(pluginRoot, ...)` when populating componentPaths).
 
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { generatedCommandName } from "../../domain/name.ts";
@@ -100,6 +100,59 @@ function unreadableFileWarning(file: string, base: string, err: unknown): string
 
 function badNameWarning(err: CommandNameError): string {
   return `${err.message} -- ${causeChainTrailer(err)}; skipping file.`;
+}
+
+/**
+ * Report a skipped SUBDIRECTORY, and only a subdirectory.
+ *
+ * A skipped file discards exactly one command and the two policies behind it
+ * -- no dotfiles, no symlinks -- are stated in this file's header. A skipped
+ * directory discards however many commands the tree below it holds, which
+ * the user has no way to count from the install row.
+ */
+function warnOnDirectorySkip(
+  warnings: string[],
+  isDirectory: boolean,
+  dir: string,
+  base: string,
+  reason: string,
+): void {
+  if (!isDirectory) {
+    return;
+  }
+
+  warnings.push(
+    `command subdirectory "${relFrom(base, dir)}" in "${base}" ${reason}; skipping subdirectory.`,
+  );
+}
+
+function duplicateFileWarning(
+  fileRel: string,
+  firstGeneratedName: string,
+  secondGeneratedName: string,
+): string {
+  return (
+    `command file "${fileRel}" is reached by more than one componentPaths.commands ` +
+    `entry; installing it as both "${firstGeneratedName}" and "${secondGeneratedName}".`
+  );
+}
+
+/**
+ * Whether a skipped symlink pointed at a directory.
+ *
+ * The walk never descends into a symlinked directory and never reads one
+ * (D-14 / PS-1). The single `stat` here reads metadata to decide whether the
+ * skip is worth reporting: a symlinked FILE discards one artifact, and a
+ * symlinked DIRECTORY discards however many the tree below it holds. A
+ * dangling or unreadable link answers "no" -- nothing was discarded, so
+ * there is nothing to report.
+ */
+async function symlinkPointsAtDirectory(full: string): Promise<boolean> {
+  try {
+    return (await stat(full)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -271,18 +324,21 @@ async function walkCommandsDir(
   const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
   for (const entry of sorted) {
+    const full = path.join(dir, entry.name);
+
     // Skip dotfile-prefixed files AND directories (e.g. .hidden.md, .git/).
     if (entry.name.startsWith(".")) {
+      warnOnDirectorySkip(warnings, entry.isDirectory(), full, base, "is dotfile-prefixed");
       continue;
     }
 
     // D-14 / PS-1: refuse symlinks outright, before recursing or reading.
     // A symlinked directory could point outside the plugin root; never follow.
     if (entry.isSymbolicLink()) {
+      const pointsAtDir = await symlinkPointsAtDirectory(full);
+      warnOnDirectorySkip(warnings, pointsAtDir, full, base, "is a symlink");
       continue;
     }
-
-    const full = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
       await walkCommandsDir(full, base, pluginName, out, warnings);
@@ -304,6 +360,12 @@ export async function discoverPluginCommands(input: {
   const commandsDirs = input.resolved.componentPaths.commands;
 
   const seenByGenerated = new Map<string, DiscoveredCommand>();
+  // Keyed on the absolute source file. Two componentPaths.commands entries
+  // that overlap -- "commands" and "commands/build", say -- reach the same
+  // file at two different depths, so it generates two DIFFERENT names and
+  // the dedup above never sees it. Both names install and the user gets the
+  // one command twice under two spellings, which is worth saying out loud.
+  const seenByFile = new Map<string, DiscoveredCommand>();
   const warnings: string[] = [];
 
   for (const commandsRel of commandsDirs) {
@@ -329,6 +391,18 @@ export async function discoverPluginCommands(input: {
         continue;
       }
 
+      const sameFile = seenByFile.get(command.commandFile);
+      if (sameFile !== undefined) {
+        warnings.push(
+          duplicateFileWarning(
+            relFrom(input.resolved.pluginRoot, command.commandFile),
+            sameFile.generatedName,
+            command.generatedName,
+          ),
+        );
+      }
+
+      seenByFile.set(command.commandFile, command);
       seenByGenerated.set(command.generatedName, command);
     }
   }

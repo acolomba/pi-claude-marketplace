@@ -642,3 +642,107 @@ test("D-07 a flat build:web.md loses to a nested build/web.md", async () => {
     await rm(tmp, { recursive: true, force: true });
   }
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// A skipped SUBDIRECTORY discards an unbounded number of commands, so it is
+// reported. A skipped file discards one and stays silent.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-14 discoverPluginCommands reports a skipped dotfile subdirectory", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-dotdir-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(path.join(commandsDir, ".hidden"), { recursive: true });
+    await writeFile(path.join(commandsDir, ".hidden", "secret.md"), "body");
+    await writeFile(path.join(commandsDir, ".dotfile.md"), "body");
+    await writeFile(path.join(commandsDir, "good.md"), "body");
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["good"],
+    );
+    assert.equal(warnings.length, 1, "the dotfile FILE stays silent; the directory does not");
+    assert.match(warnings[0]!, /command subdirectory "\.hidden"/);
+    assert.match(warnings[0]!, /is dotfile-prefixed/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("D-14 discoverPluginCommands reports a skipped symlinked subdirectory only", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-symdir-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(commandsDir, { recursive: true });
+    const outside = path.join(tmp, "outside");
+    await mkdir(outside, { recursive: true });
+    await writeFile(path.join(outside, "escaped.md"), "body");
+    await writeFile(path.join(tmp, "loose.md"), "body");
+    await writeFile(path.join(commandsDir, "good.md"), "body");
+    await symlink(outside, path.join(commandsDir, "linked"));
+    await symlink(path.join(tmp, "loose.md"), path.join(commandsDir, "linked-file.md"));
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["good"],
+      "neither symlink is followed",
+    );
+    assert.equal(warnings.length, 1, "the symlinked FILE stays silent; the directory does not");
+    assert.match(warnings[0]!, /command subdirectory "linked"/);
+    assert.match(warnings[0]!, /is a symlink/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-07: two overlapping componentPaths.commands entries reach one file at two
+// depths, so it generates two names and the generated-name dedup never sees
+// it. Both install; the user is told.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-07 discoverPluginCommands warns when two entries reach the same file", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-overlap-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(path.join(commandsDir, "build"), { recursive: true });
+    await writeFile(path.join(commandsDir, "build", "web.md"), "body");
+
+    const resolved = makeResolved(tmp, "commands");
+    const overlapping = {
+      ...resolved,
+      componentPaths: { ...resolved.componentPaths, commands: ["commands", "commands/build"] },
+    };
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved: overlapping,
+    });
+
+    assert.deepEqual(
+      out.map((c) => c.generatedName),
+      ["acme:build:web", "acme:web"],
+      "one file, two names, both installed",
+    );
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /command file "commands\/build\/web\.md"/);
+    assert.match(warnings[0]!, /"acme:build:web"/);
+    assert.match(warnings[0]!, /"acme:web"/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});

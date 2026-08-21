@@ -6,7 +6,6 @@ import test from "node:test";
 
 import {
   abortPreparedCommands,
-  assertNoCommandCollisions,
   commitPreparedCommands,
   finalizeCommandsReplacement,
   prepareStageCommands,
@@ -17,7 +16,6 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { DiscoveredCommand } from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -255,58 +253,6 @@ test('prepareStageCommands returns kind:"noop" when no commands AND no previousC
     await scope.cleanup();
   }
 });
-
-// RN-6 collisions -------------------------------------------------------
-
-test("RN-6 assertNoCommandCollisions throws with both source names listed", () => {
-  const collisions: DiscoveredCommand[] = [
-    {
-      sourceName: "acme-deploy",
-      generatedName: "acme:deploy",
-      commandFile: "/fake/acme-deploy.md",
-    },
-    {
-      sourceName: "deploy",
-      generatedName: "acme:deploy",
-      commandFile: "/fake/deploy.md",
-    },
-  ];
-
-  assert.throws(
-    () => {
-      assertNoCommandCollisions(collisions);
-    },
-    (err: unknown) => {
-      assert.ok(err instanceof Error);
-      assert.match(err.message, /Generated command name collision detected/);
-      // BOTH source names must appear in the message.
-      assert.match(err.message, /"acme-deploy"/);
-      assert.match(err.message, /"deploy"/);
-      assert.match(err.message, /"acme:deploy"/);
-      return true;
-    },
-  );
-});
-
-test("RN-6 assertNoCommandCollisions does NOT throw on disjoint names", () => {
-  const ok: DiscoveredCommand[] = [
-    {
-      sourceName: "acme-deploy",
-      generatedName: "acme:deploy",
-      commandFile: "/fake/acme-deploy.md",
-    },
-    {
-      sourceName: "status",
-      generatedName: "acme:status",
-      commandFile: "/fake/status.md",
-    },
-  ];
-
-  // No throw.
-  assertNoCommandCollisions(ok);
-});
-
-// Re-stage path ---------------------------------------------------------
 
 test("commitPreparedCommands removes previous-named files (re-stage path)", async () => {
   const scope = await tmpScope();
@@ -1211,6 +1157,47 @@ test("D-07 prepareStageCommands carries a discovery warning onto result.warnings
     assert.match(prepared.result.warnings[0]!, /"acme:tools:lint"/);
     assert.match(prepared.result.warnings[0]!, /ignoring duplicate/);
     await abortPreparedCommands(prepared);
+  } finally {
+    await rm(pluginRoot, { recursive: true, force: true });
+    await scope.cleanup();
+  }
+});
+
+// CM-4: a nested source makes the generated name as long as the whole
+// relative path, so ENAMETOOLONG became reachable. The failure has to say
+// which command of which plugin, not name a path under a staging UUID.
+
+test("CM-4 prepareStageCommands names the plugin and the command on a too-long name", async () => {
+  const scope = await tmpScope();
+  const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "stage-cmds-longname-"));
+
+  try {
+    // 200 + 1 + 200 path segments -> a ~400-character generated name, past
+    // the 255-byte basename limit every mainstream filesystem enforces.
+    const outer = "d".repeat(200);
+    const inner = "c".repeat(200);
+    const commandsDir = path.join(pluginRoot, "commands");
+    await mkdir(path.join(commandsDir, outer), { recursive: true });
+    await writeFile(path.join(commandsDir, outer, `${inner}.md`), "body");
+
+    const err = await prepareStageCommands({
+      locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(pluginRoot, "commands"),
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    assert.ok(err instanceof Error, "expected a staging failure");
+    assert.match(err.message, /plugin "acme"/, "the failure names the plugin");
+    assert.match(err.message, new RegExp(`command "acme:${outer}:${inner}"`));
+    assert.ok(err.cause instanceof Error, "the errno rides Error.cause");
+    assert.match(err.cause.message, /ENAMETOOLONG/);
   } finally {
     await rm(pluginRoot, { recursive: true, force: true });
     await scope.cleanup();
