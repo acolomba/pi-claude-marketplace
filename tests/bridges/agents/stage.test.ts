@@ -43,6 +43,7 @@ function makeResolved(name: string, pluginRoot: string): ResolvedPluginInstallab
     // D-07: componentPaths.agents is `readonly string[]`.
     componentPaths: { skills: [], commands: [], agents: ["agents"] },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 

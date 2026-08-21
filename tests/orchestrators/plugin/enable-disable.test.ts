@@ -14,10 +14,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import {
-  __test_staleGateDropped,
-  setPluginEnabled,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { staleGateDropped } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
+import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   MarketplaceNotFoundError,
   PluginShapeError,
@@ -169,6 +173,32 @@ async function readConfig(configPath: string): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The MERGED view of the user scope, which is the only view that proves a
+ * config write happened: CFG-02 replaces a same-keyed base entry wholesale, so
+ * an entry written into the shadowed file changes no effective value even
+ * though the file on disk visibly gained it.
+ */
+async function readMergedUserPluginEntry(
+  cwd: string,
+  key: string,
+): Promise<{ source: "base" | "local"; declaredEnabled: boolean } | undefined> {
+  const { merged } = await loadMergedScopeConfig(locationsFor("user", cwd));
+  const entry = merged.plugins[key];
+  return entry === undefined
+    ? undefined
+    : { source: entry.source, declaredEnabled: isDeclaredEnabled(entry.entry) };
+}
+
 /**
  * Build a REAL on-disk path-source marketplace (manifest + skill-bearing
  * plugin tree) AND a user-scope state.json carrying the KEPT disabled record
@@ -223,8 +253,30 @@ async function seedRealDisabledMarketplace(
      * one, which is what makes the row declare the `pi-subagents` companion.
      */
     withAgent?: boolean;
+    /**
+     * DFEN-07: spread `defaultEnabled` onto the plugin's MARKETPLACE ENTRY.
+     * The entry is the side that WINS the resolution (`resolveDefaultEnabled`
+     * consults it before `plugin.json`), so a fixture that declared the field
+     * on the manifest instead could be satisfied by an entry that never
+     * carried it. Omitted by default, which resolves to `true`.
+     */
+    defaultEnabled?: boolean;
+    /**
+     * Seed the plugin's config declaration into ONE of the scope's two
+     * physical files, alongside the marketplace declaration the planner needs
+     * to see. Naming the file is the point: which file a declaration lives in
+     * is what selects the write target of every verb that authors enablement.
+     * Omitted by default, leaving both files absent.
+     */
+    configSeed?: { file: "base" | "local"; entry: Record<string, unknown> };
   },
-): Promise<{ statePath: string; configPath: string }> {
+): Promise<{
+  statePath: string;
+  configPath: string;
+  configLocalPath: string;
+  mpRoot: string;
+  manifestPath: string;
+}> {
   const scopeRoot = path.join(home, ".pi", "agent");
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extRoot, { recursive: true });
@@ -274,10 +326,26 @@ async function seedRealDisabledMarketplace(
                 name: opts.pluginName,
                 source: `./plugins/${opts.pluginName}`,
                 version: opts.version,
+                ...(opts.defaultEnabled !== undefined && { defaultEnabled: opts.defaultEnabled }),
               },
             ],
     }),
   );
+
+  if (opts.configSeed !== undefined) {
+    await writeFile(
+      path.join(
+        scopeRoot,
+        opts.configSeed.file === "local" ? "claude-plugins.local.json" : "claude-plugins.json",
+      ),
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { [opts.marketplaceName]: { source: mpRoot } },
+        plugins: { [`${opts.pluginName}@${opts.marketplaceName}`]: opts.configSeed.entry },
+      }),
+      "utf8",
+    );
+  }
 
   // State: the KEPT disabled record -- the pinned version + explicit
   // enabled: false. `installable` mirrors the seeded availability axis, which
@@ -321,7 +389,13 @@ async function seedRealDisabledMarketplace(
     },
   };
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-  return { statePath, configPath: path.join(scopeRoot, "claude-plugins.json") };
+  return {
+    statePath,
+    configPath: path.join(scopeRoot, "claude-plugins.json"),
+    configLocalPath: path.join(scopeRoot, "claude-plugins.local.json"),
+    mpRoot,
+    manifestPath,
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -361,15 +435,6 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
     });
 
     // Verify base does NOT exist at start.
-    async function fileExists(p: string): Promise<boolean> {
-      try {
-        await stat(p);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
     const baseExistsPre = await fileExists(configPath);
     const { ctx } = makeCtx(cwd);
     await setPluginEnabled({
@@ -391,6 +456,223 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
     const cfg = await readConfig(configLocalPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
     assert.equal(plugins["foo@mp"]?.enabled, false, "--local file should carry enabled:false");
+  });
+});
+
+test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin writes the LOCAL file and moves the merged view", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const configPath = path.join(scopeRoot, "claude-plugins.json");
+    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    // The declaration lives ONLY in the local file, matching the disabled
+    // record. The base file does not exist.
+    await writeFile(
+      configLocalPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: path.join(home, "mp-src") } },
+        plugins: { "foo@mp": { enabled: false } },
+      }),
+      "utf8",
+    );
+
+    const { ctx } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      // NO --local: the user named no file, so the declaration names it.
+    });
+
+    // The flip landed in the DECLARING file, as the whole entry -- an added or
+    // removed key fails here rather than passing on a loose field probe.
+    const localCfg = (await readConfig(configLocalPath)) as {
+      plugins?: Record<string, unknown>;
+    };
+    assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
+    // The shadowed file was not touched. It did not exist and still does not.
+    assert.equal(await fileExists(configPath), false, "base file must stay absent");
+
+    // The load-bearing assertion. Before this fix the flip landed in the BASE
+    // file: that file visibly gained `enabled: true`, the merged view still
+    // read `enabled: false` from the local entry that replaces it wholesale,
+    // and the next reload planned a disable and put the record back -- so the
+    // user's explicit command survived until the next reload and no further.
+    // A physical-file check alone cannot tell that write from a correct one.
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: "local",
+      declaredEnabled: true,
+    });
+
+    const state = JSON.parse(
+      await readFile(path.join(scopeRoot, "pi-claude-marketplace", "state.json"), "utf8"),
+    ) as {
+      marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
+    };
+    assert.equal(state.marketplaces["mp"]?.plugins["foo"]?.enabled, true);
+  });
+});
+
+test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes the base file, local absent", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const configPath = path.join(scopeRoot, "claude-plugins.json");
+    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    // The mirror of the locally-declared case above: the SAME flagless call,
+    // the SAME disabled record, the declaration in the other file. The
+    // declaration-following rule must leave this arm exactly where it was, and
+    // an inverted selector would pass the local-declared case and fail here.
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: path.join(home, "mp-src") } },
+        plugins: { "foo@mp": { enabled: false } },
+      }),
+      "utf8",
+    );
+
+    const { ctx } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    const baseCfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(baseCfg.plugins?.["foo@mp"], { enabled: true });
+    assert.equal(await fileExists(configLocalPath), false, "local file must stay absent");
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: "base",
+      declaredEnabled: true,
+    });
+  });
+});
+
+test("UAT-05 / D-103-13: a typed --local still targets the local file even when the declaration is in base", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const configPath = path.join(scopeRoot, "claude-plugins.json");
+    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const baseBytes = JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: path.join(home, "mp-src") } },
+      plugins: { "foo@mp": { enabled: false } },
+    });
+    await writeFile(configPath, baseBytes, "utf8");
+
+    const { ctx } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    // This is not a leftover of the old flag-only rule. The flag is the user
+    // naming the file they want written, and a per-machine override that
+    // shadows a shared base declaration is the whole purpose of the local
+    // file. The declaration-following rule answers the question the user did
+    // NOT answer; it does not overrule the one they did. Contrast the case
+    // directly above, which is the same fixture with the flag dropped.
+    const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
+    // The base declaration keeps its pre-call value, byte for byte.
+    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+    // And the local entry now shadows it wholesale (CFG-02).
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: "local",
+      declaredEnabled: true,
+    });
+  });
+});
+
+test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rather than aiming the write at the shadowed base file", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const configPath = path.join(scopeRoot, "claude-plugins.json");
+    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    const statePath = path.join(scopeRoot, "pi-claude-marketplace", "state.json");
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const baseBytes = JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: path.join(home, "mp-src") } },
+      plugins: { "foo@mp": { enabled: false } },
+    });
+    await writeFile(configPath, baseBytes, "utf8");
+    // The local file is the one that DECIDES the destination on a flagless
+    // call, and this one cannot be read (a truncated mid-save write; an EACCES
+    // or a schema violation arrive through the same `invalid` arm). Whether it
+    // declares `foo@mp` is now unknowable -- and the two answers select
+    // different files. Reading `invalid` as "not declared locally" put the flip
+    // in the base file, which a local entry replaces wholesale under CFG-02:
+    // the verb reported success, the merged view never moved, and the next
+    // reload planned the opposite of the command.
+    await writeFile(configLocalPath, '{"plugins": {"foo@mp": {"enabled": fal', "utf8");
+    const statePre = await readFile(statePath, "utf8");
+    const mtimePre = (await stat(statePath)).mtimeMs;
+
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{invalid manifest\}/);
+    // The row names the file that could not be read -- the one the user has to
+    // repair -- not the file the write would have landed in.
+    assert.match(
+      notifications[0]!.message,
+      /claude-plugins\.local\.json/,
+      "the abort must name the unreadable local file",
+    );
+    assert.ok(
+      !notifications[0]!.message.includes(configLocalPath),
+      "absolute path must not be leaked (T-54-02-02)",
+    );
+
+    // Nothing was written anywhere: the base file keeps its bytes and the
+    // no-save abort discipline holds for state.json.
+    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+    assert.equal(await readFile(statePath, "utf8"), statePre);
+    assert.equal((await stat(statePath)).mtimeMs, mtimePre);
   });
 });
 
@@ -1398,6 +1680,59 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
   });
 });
 
+test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declaring file and moves the merged view", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath, configPath, configLocalPath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    // The same drift the case directly above pins, with the declaration in the
+    // local file instead of the base one: the state side already says enabled,
+    // while the DECLARING config carries the opposite explicit value. This is
+    // the SECOND of the orchestrator's two write sites, and it is the one that
+    // would keep the defect alive had only the ordinary write-back been
+    // re-aimed -- an arm that exists precisely to stop a config/state
+    // divergence from letting the next reconcile invert the user's command.
+    await writeFile(
+      configLocalPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "/tmp/dummy-mp" } },
+        plugins: { "foo@mp": { enabled: false } },
+      }),
+      "utf8",
+    );
+    const statePre = await readFile(statePath, "utf8");
+
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
+    assert.equal(await fileExists(configPath), false, "base file must stay absent");
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: "local",
+      declaredEnabled: true,
+    });
+
+    // The arm writes config ONLY (no tx.save()). A change that accidentally
+    // saved would churn state.json's mtime, which the load-time no-op
+    // detection depends on.
+    assert.equal(await readFile(statePath, "utf8"), statePre);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(installed\)/);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // CFG-03: invalid-config abort
 // ──────────────────────────────────────────────────────────────────────────
@@ -2083,7 +2418,7 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     partialable: true,
     unsupportedKinds: [],
   });
-  assert.equal(__test_staleGateDropped(emptyKinds), undefined);
+  assert.equal(staleGateDropped(emptyKinds), undefined);
 
   // The matching shape still returns its narrowed reasons.
   const withKinds = new PluginShapeError({
@@ -2093,7 +2428,7 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     partialable: true,
     unsupportedKinds: ["lspServers"],
   });
-  assert.deepEqual([...(__test_staleGateDropped(withKinds) ?? [])], ["lsp"]);
+  assert.deepEqual([...(staleGateDropped(withKinds) ?? [])], ["lsp"]);
 
   // A non-partialable structural failure is not a stale gate at all.
   const structural = new PluginShapeError({
@@ -2102,5 +2437,214 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  assert.equal(__test_staleGateDropped(structural), undefined);
+  assert.equal(staleGateDropped(structural), undefined);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// DFEN-07 / D-103-10 / D-103-11: an explicit enable outlives the lifecycle
+// ──────────────────────────────────────────────────────────────────────────
+
+/** One leg's expectation. The leg name lands in every assertion message. */
+interface ChainLeg {
+  readonly leg: string;
+  readonly version: string;
+  readonly declaringSource: "base" | "local";
+}
+
+/**
+ * The invariant every leg of the chain restates: the record is enabled AND the
+ * declaration the next reload reads agrees. Asserting only the record would
+ * pass on a config the next reload immediately reverses, which is the failure
+ * mode the chain exists to catch.
+ */
+async function assertStaysEnabled(
+  env: { readonly cwd: string; readonly statePath: string },
+  leg: ChainLeg,
+): Promise<void> {
+  const state = JSON.parse(await readFile(env.statePath, "utf8")) as {
+    marketplaces: Record<
+      string,
+      { plugins: Record<string, { version: string; enabled: boolean }> }
+    >;
+  };
+  const record = state.marketplaces["mp"]?.plugins["foo"];
+  assert.equal(record?.enabled, true, `${leg.leg}: the record must still be enabled`);
+  assert.equal(record?.version, leg.version, `${leg.leg}: recorded version`);
+  assert.deepEqual(
+    await readMergedUserPluginEntry(env.cwd, "foo@mp"),
+    { source: leg.declaringSource, declaredEnabled: true },
+    `${leg.leg}: the merged view the next reload reads`,
+  );
+}
+
+/**
+ * The converse of this milestone's main claim, run end to end against real
+ * on-disk artifacts. The milestone closes a reload that turns a plugin ON
+ * against the user's word; this asserts the same reload cannot turn one OFF
+ * against it. Both are one rule: the merged config is the desired state, and
+ * the commands the user runs must move it.
+ *
+ * The plugin's author shipped it off (`defaultEnabled: false` on the
+ * marketplace entry) and the user turned it on with no flag. It must stay on
+ * across a reload, a release that flips nothing in the user's favor, and a
+ * repair -- whichever physical file the declaration lives in.
+ */
+async function runConverseEnableChain(declarationFile: "base" | "local"): Promise<void> {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath, configPath, configLocalPath, manifestPath, mpRoot } =
+      await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.0.0",
+        defaultEnabled: false,
+        configSeed: { file: declarationFile, entry: { enabled: false } },
+      });
+    const declaringPath = declarationFile === "local" ? configLocalPath : configPath;
+    const pi = makePi();
+    const skillsTargetDir = locationsFor("user", cwd).skillsTargetDir;
+
+    // 1. START: the install-disabled steady state. Asserted so a mis-seeded
+    // fixture cannot make the rest of the chain pass vacuously.
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: declarationFile,
+      declaredEnabled: false,
+    });
+    const seeded = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
+    };
+    assert.equal(seeded.marketplaces["mp"]?.plugins["foo"]?.enabled, false);
+
+    // 2. ENABLE, with no flag.
+    await setPluginEnabled({
+      ctx: makeCtx(cwd).ctx,
+      pi,
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "enable", version: "1.0.0", declaringSource: declarationFile },
+    );
+    assert.deepEqual(
+      ((await readConfig(declaringPath)) as { plugins?: Record<string, unknown> }).plugins?.[
+        "foo@mp"
+      ],
+      { enabled: true },
+      "enable: the DECLARING file carries the flip",
+    );
+    assert.ok((await readdir(skillsTargetDir)).length > 0, "enable: artifacts staged on disk");
+    if (declarationFile === "local") {
+      assert.equal(await fileExists(configPath), false, "enable: the shadowed file stays absent");
+    }
+
+    // 3. RELOAD. This is the leg that failed for the local declaration before
+    // the write target followed the declaration: the merged view still read
+    // `enabled: false`, the planner planned a disable, and this pass rendered
+    // a `(disabled)` row and put the record back.
+    const firstReload = makeCtx(cwd);
+    await applyReconcile({ ctx: firstReload.ctx, pi, cwd, scope: "user" });
+    assert.deepEqual(firstReload.notifications, [], "reload: a converged pass says nothing");
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "reload", version: "1.0.0", declaringSource: declarationFile },
+    );
+    if (declarationFile === "local") {
+      // The reload's first-run config materialization writes a base file from
+      // recorded state when none exists. Its plugin entry is FIELDLESS, so the
+      // local entry keeps replacing it wholesale (CFG-02) and the merged view
+      // asserted above does not move -- which is why the reload leg converges
+      // instead of planning a disable.
+      assert.deepEqual(
+        ((await readConfig(configPath)) as { plugins?: Record<string, unknown> }).plugins?.[
+          "foo@mp"
+        ],
+        {},
+      );
+    }
+
+    // 4. UPDATE against a manifest whose declaration is STILL false. The
+    // version bump is the control proving the update really ran and really
+    // re-read the manifest, rather than short-circuiting on version equality.
+    // `plugin.json` is the first tier of the version derivation, so a bump
+    // confined to the marketplace entry would never reach the record.
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "foo", source: "./plugins/foo", version: "2.0.0", defaultEnabled: false },
+        ],
+      }),
+    );
+    await writeFile(
+      path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo", version: "2.0.0" }),
+    );
+    await updatePlugins({
+      ctx: makeCtx(cwd).ctx,
+      pi,
+      cwd,
+      scope: "user",
+      target: { kind: "plugin", plugin: "foo", marketplace: "mp" },
+    });
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "update", version: "2.0.0", declaringSource: declarationFile },
+    );
+    if (declarationFile === "local") {
+      // The update's post-success write-back is still aimed by the FLAG, so a
+      // flagless update under a local-only declaration writes the shadowed
+      // base file. Pinned rather than glossed: that patch carries no `enabled`
+      // field, so the entry stays fieldless, the local entry keeps replacing
+      // it wholesale, and the merged view asserted immediately above does not
+      // move. Cosmetic, not a reversal -- which is why re-aiming that write is
+      // deliberately outside this change's scope.
+      assert.deepEqual(
+        ((await readConfig(configPath)) as { plugins?: Record<string, unknown> }).plugins?.[
+          "foo@mp"
+        ],
+        {},
+      );
+    }
+
+    // 5. REINSTALL: a repair, never an upgrade.
+    await reinstallPlugin({
+      ctx: makeCtx(cwd).ctx,
+      pi,
+      scope: "user",
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+    });
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "reinstall", version: "2.0.0", declaringSource: declarationFile },
+    );
+    assert.ok((await readdir(skillsTargetDir)).length > 0, "reinstall: artifacts on disk");
+
+    // 6. RELOAD again: the chain ends where it started, in a fixed point
+    // pointed the other way.
+    const secondReload = makeCtx(cwd);
+    await applyReconcile({ ctx: secondReload.ctx, pi, cwd, scope: "user" });
+    assert.deepEqual(secondReload.notifications, [], "reload: still converged");
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "final reload", version: "2.0.0", declaringSource: declarationFile },
+    );
+  });
+}
+
+test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugin survives reload, update and reinstall", async () => {
+  await runConverseEnableChain("base");
+});
+
+test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared plugin survives reload, update and reinstall", async () => {
+  // The base variant above passes without the declaring-file write target;
+  // this one does not. Before that fix the enable wrote the base file, the
+  // local entry kept shadowing it wholesale, and the reload leg reversed the
+  // user's command.
+  await runConverseEnableChain("local");
 });

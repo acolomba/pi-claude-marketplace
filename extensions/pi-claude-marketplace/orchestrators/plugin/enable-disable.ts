@@ -46,6 +46,15 @@
 // absent arm yields an empty starting shape that `saveConfig` writes back to
 // the local file, creating it fresh).
 //
+// D-103-13: absent the flag the target follows the DECLARATION -- the local
+// file when the plugin key is declared there, the base file otherwise. The flag
+// names the file the user wants written; it cannot name the file a declaration
+// already lives in. CFG-02 replaces a same-keyed base entry wholesale, so a
+// flagless flip written to the base file under a local declaration moves no
+// merged value: the verb reports success and the next reconcile pass plans the
+// opposite of the command. Selection therefore happens INSIDE the lock (it
+// reads a config file) -- see `selectDeclaringConfigWriteTarget`.
+//
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
 // abort row carries `path.basename(targetConfigPath)` -- never the absolute
 // path -- reusing the dry-run preview pattern.
@@ -53,12 +62,10 @@
 import path from "node:path";
 
 import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
-import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { redactAbsolutePaths } from "../../shared/notify.ts";
@@ -69,6 +76,9 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import {
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
+  narrowDisableFailure,
+  narrowEnableFailure,
+  staleGateDropped,
   type DisableMsg,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
@@ -78,13 +88,12 @@ import {
   emitMarketplaceNotAdded,
   enableRowDependencies,
   resolveCrossScopePluginTarget,
-  selectConfigWriteTarget,
-  synthesizeAdoptedMarketplaceSource,
+  selectDeclaringConfigWriteTarget,
+  writeAdoptingConfigEntries,
 } from "./shared.ts";
 
 import type { InstallFailureCapture } from "./install.ts";
-import type { LedgerDegradationSignals } from "./shared.ts";
-import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
+import type { DeclaringConfigWriteTarget, LedgerDegradationSignals } from "./shared.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -427,20 +436,21 @@ function dropCachedHooks(
  */
 type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 /**
- * The identity and file targets a config write-back needs, resolved once
- * before the lock so the write helpers stay pure module functions rather than
- * closures over the orchestrator body.
+ * The plugin identity a config write-back needs, resolved once before the lock
+ * so the write helpers stay pure module functions rather than closures over the
+ * orchestrator body. The FILES are not part of it: D-103-13 chooses those
+ * inside the lock, and both parses travel together in the selection.
  */
 interface EnabledFlagWriteTarget {
   readonly marketplace: string;
   readonly plugin: string;
   readonly enable: boolean;
   readonly orchestrated: boolean;
-  readonly targetConfigPath: string;
-  /** Read fresh inside the lock for the membership test ONLY -- never written. */
-  readonly siblingConfigPath: string;
   readonly scopeRoot: string;
 }
+
+/** D-103-13: the selection arm that actually names a write target. */
+type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "selected" }>;
 
 /**
  * Write the plugin's `enabled` flag back through the SOLE sanctioned
@@ -454,31 +464,30 @@ interface EnabledFlagWriteTarget {
  *
  * UAT-05: the membership gate considers BOTH physical files (base union
  * local) so a `--local` flip never re-declares a base-declared marketplace
- * (CFG-02 wholesale shadowing).
+ * (CFG-02 wholesale shadowing). Both parses arrive from the caller's
+ * in-lock selection, so no arm here re-reads a file another arm already read.
+ * An UNREADABLE sibling skips the adoption write instead of counting as a file
+ * that declares nothing.
  *
- * S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined` collapses the
- * benign (already-declared) and dangerous (no string `source.raw`) arms. The
- * dangerous arm writes a dangling plugin declaration -- an acknowledged
- * trade-off pending a return-type widen in a follow-up PR.
+ * S4 (PR #51, CONTEXT.md S4): the shared helper's `adoptedSource === undefined`
+ * arms collapse -- benign (already declared) and dangerous (no string
+ * `source.raw`). The dangerous arm seals a dangling plugin declaration; an
+ * acknowledged trade-off pending a return-type widen.
  */
 async function writeEnabledFlagBack(
   write: EnabledFlagWriteTarget,
-  cfg: ConfigLoadResult,
+  selection: SelectedConfigWriteTarget,
   state: ExtensionState,
 ): Promise<void> {
-  const { marketplace, plugin, enable } = write;
-  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-  const adoptedSource = await synthesizeAdoptedMarketplaceSource({
-    current,
-    siblingConfigPath: write.siblingConfigPath,
+  await writeAdoptingConfigEntries({
+    current: selection.current,
+    sibling: selection.sibling,
     state,
-    marketplace,
-  });
-  await writeBatchedConfigEntries(current, write.targetConfigPath, write.scopeRoot, {
-    ...(adoptedSource !== undefined && {
-      marketplaces: { [marketplace]: { source: adoptedSource } },
-    }),
-    plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
+    marketplace: write.marketplace,
+    plugin: write.plugin,
+    targetConfigPath: selection.targetConfigPath,
+    scopeRoot: write.scopeRoot,
+    pluginPatch: { enabled: write.enable },
   });
 }
 
@@ -498,18 +507,17 @@ async function writeEnabledFlagBack(
  */
 async function resolveIdempotentOutcome(
   write: EnabledFlagWriteTarget,
-  cfg: ConfigLoadResult,
+  selection: SelectedConfigWriteTarget,
   state: ExtensionState,
   installed: { readonly version: string },
 ): Promise<SetEnabledOutcome> {
   const { marketplace, plugin, enable, orchestrated } = write;
-  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-  const configEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
+  const configEnabled = selection.current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
   if (orchestrated || configEnabled === undefined || configEnabled === enable) {
     return { kind: "idempotent" };
   }
 
-  await writeEnabledFlagBack(write, cfg, state);
+  await writeEnabledFlagBack(write, selection, state);
   return { kind: "fresh", version: installed.version };
 }
 
@@ -578,11 +586,12 @@ export async function setPluginEnabled(
   }
 
   const { scope, locations } = resolution;
-  // WB-01 / UAT-05: target selected ONCE; the sibling path exists only for
-  // the merged-view membership test (read fresh inside the lock, never
-  // written).
-  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
-  const configBasename = path.basename(targetConfigPath);
+  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
+  // the row is rendered after the lock closes. The target is now chosen inside
+  // the lock, so the basename escapes the closure through this `let`. It starts
+  // at the base file -- the value the no-flag, no-declaration arm yields -- so
+  // the pre-assignment value is never wrong and the type stays definite.
+  let configBasename = path.basename(locations.configJsonPath);
 
   let outcome: SetEnabledOutcome | undefined;
   const write: EnabledFlagWriteTarget = {
@@ -590,24 +599,47 @@ export async function setPluginEnabled(
     plugin,
     enable,
     orchestrated,
-    targetConfigPath,
-    siblingConfigPath,
     scopeRoot: locations.scopeRoot,
   };
 
   try {
     // A single per-scope lock owns the whole critical section. The closure
-    // sequences CFG-03 load, ENBL-02 idempotency, the enable/disable branch
-    // dispatch, the I3 shrunken-record save, and the UAT-05 config
-    // write-back; keeping that order visible here is what makes the
-    // save-vs-throw discipline auditable.
+    // sequences the D-103-13 write-target selection, ENBL-02 idempotency, the
+    // enable/disable branch dispatch, the I3 shrunken-record save, and the
+    // UAT-05 config write-back; keeping that order visible here is what makes
+    // the save-vs-throw discipline auditable.
     await withLockedStateTransaction(locations, async (tx) => {
+      // D-103-13: ONE selection, made before anything reads a config path, so
+      // the ordinary write-back and the config-truth promotion below cannot
+      // drift onto different files. It runs inside the lock because it READS
+      // the local config -- the WB-01 discipline that sibling reads happen
+      // fresh under the lock the write also holds. UAT-05: the sibling path is
+      // the scope's OTHER file, for the merged-view membership test only.
+      const selection = await selectDeclaringConfigWriteTarget({
+        locations,
+        local: opts.local,
+        key: `${plugin}@${marketplace}`,
+      });
+
       const state = tx.state;
-      const cfg = await loadConfig(targetConfigPath);
-      if (cfg.status === "invalid") {
+      // CFG-03: the arm covers the TARGETED file being unreadable and, on the
+      // flagless path, the local file being unreadable while the base file is
+      // fine -- the local file is what DECIDES the destination there, so an
+      // unreadable one leaves the destination unknown. The row names the file
+      // that could not be read; writing to the file CFG-02 would then shadow
+      // would report a flip that moves no merged value.
+      if (selection.kind === "unreadable") {
+        configBasename = path.basename(selection.filePath);
         outcome = { kind: "invalid-config" };
         return;
       }
+
+      // Both physical files were parsed ONCE by the selector, and the whole
+      // selection travels to the write arms below: the target config steers
+      // every one of them, the sibling serves the UAT-05 membership gate, and
+      // no two decisions in this closure rest on different bytes of the same
+      // file.
+      configBasename = path.basename(selection.targetConfigPath);
 
       const mp = state.marketplaces[marketplace];
       const installed = mp?.plugins[plugin];
@@ -621,7 +653,7 @@ export async function setPluginEnabled(
       // disabled PARTIAL record is idempotent on `disable` and re-materializes
       // on `enable`, at parity with the canonical disabled record.
       if (isRecordedButDisabled(installed) === !enable) {
-        outcome = await resolveIdempotentOutcome(write, cfg, state, installed);
+        outcome = await resolveIdempotentOutcome(write, selection, state, installed);
         return;
       }
 
@@ -662,7 +694,7 @@ export async function setPluginEnabled(
       // user-authored base declaration. The config is the reconcile's INPUT;
       // only standalone commands author declarations.
       if (!orchestrated) {
-        await writeEnabledFlagBack(write, cfg, state);
+        await writeEnabledFlagBack(write, selection, state);
       }
 
       await tx.save();
@@ -1218,96 +1250,3 @@ function composeOutcomeRow(args: {
           };
   }
 }
-
-/**
- * WR-02 / D-98-03: recognise the STALE-GATE enable failure and name the kinds
- * it dropped. The enable branch derives its ledger gate from the persisted
- * record, so a record that was installable at disable time runs the strict
- * `requireInstallable` gate (op `install` -> shape kind `not-installable`);
- * `partialable` is true only when the live resolution came back
- * `partially-available`, which is exactly the record-versus-manifest
- * disagreement. The kinds are narrowed through the same
- * `narrowUnsupportedKinds` seam the `list (partially-upgradable)` row uses, so
- * the brace is byte-identical across the surfaces, and the caller stamps
- * `partialHint` to point at `update --partial` -- the command that re-pins the
- * record against the current manifest entry.
- *
- * Returns `undefined` for every other cause, which keeps the trailer inert.
- * Mirrors `composeUpdateDeclineRow`'s cause narrowing in `update.ts`.
- */
-function staleGateDropped(cause: Error): readonly ContentReason[] | undefined {
-  if (
-    cause instanceof PluginShapeError &&
-    cause.shape.kind === "not-installable" &&
-    cause.shape.partialable
-  ) {
-    const narrowed = narrowUnsupportedKinds(cause.shape.unsupportedKinds ?? []);
-    // WR-05: an EMPTY narrowing names no fact, so it is not a match. The caller
-    // writes `staleGate ?? baseReasons`, and `??` treats `[]` as present -- an
-    // empty return would therefore discard the base narrowing AND still stamp
-    // `partialHint`, producing a brace-less `(failed)` row carrying a
-    // remediation trailer. Unreachable today (the resolver builds the
-    // `partially-available` arm only for a non-empty kind list, and every kind
-    // maps to a reason), which is exactly why the contract is enforced here
-    // rather than assumed: `undefined` means leave the row as it was.
-    return narrowed.length > 0 ? narrowed : undefined;
-  }
-
-  return undefined;
-}
-
-/**
- * Narrow an enable-branch failure cause to a closed Reason. ENOENT-class
- * failures surface as `source missing` (ENBL-03 missing-clone path);
- * everything else falls back to an empty array so the renderer suppresses
- * the brace and surfaces the cause-chain trailer.
- */
-function narrowEnableFailure(cause: Error): readonly ContentReason[] {
-  if (isErrnoException(cause) && cause.code === "ENOENT") {
-    return ["source missing"];
-  }
-
-  const chained = cause.cause;
-  if (chained !== undefined && isErrnoException(chained) && chained.code === "ENOENT") {
-    return ["source missing"];
-  }
-
-  // Defensive: an empty reasons array lets the renderer suppress the brace
-  // while still surfacing the cause via the 4-space-indent trailer.
-  return [];
-}
-
-/**
- * Narrow a disable-branch cascade failure to a closed Reason. Mirrors the
- * uninstall.ts `narrowCascadeFailure` taxonomy (permission denied / source
- * missing / unreadable). The full taxonomy is duplicated locally rather than
- * exported from uninstall.ts because the disable branch is structurally a
- * cascade re-use of uninstall's primitives -- the two should drift together.
- */
-function narrowDisableFailure(cause: Error): readonly ContentReason[] {
-  if (isErrnoException(cause)) {
-    switch (cause.code) {
-      case "EACCES":
-      case "EPERM":
-        return ["permission denied"];
-      case "ENOENT":
-        return ["source missing"];
-      default:
-        break;
-    }
-  }
-
-  return ["unreadable"];
-}
-
-/** Structural predicate for `NodeJS.ErrnoException`. */
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return (
-    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
-  );
-}
-
-// Test seam (mirrors the `__test_` exports on `install.ts`): the stale-gate
-// narrowing's empty-list contract is unreachable through the public verb, so it
-// is asserted directly rather than assumed.
-export { staleGateDropped as __test_staleGateDropped };

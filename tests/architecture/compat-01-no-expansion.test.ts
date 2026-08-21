@@ -93,8 +93,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { REPO_ROOT, stripComments } from "../helpers/source-scan.ts";
 
-import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
+import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
 const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
 const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
@@ -165,6 +165,7 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
       "malformed mcp",
       "malformed skill",
       "malformed command",
+      "installs disabled",
     ],
     "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
   );

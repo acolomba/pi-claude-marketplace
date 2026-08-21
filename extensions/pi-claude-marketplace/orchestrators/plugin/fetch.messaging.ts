@@ -58,7 +58,9 @@ export type FetchMsg =
  * closed-set reason such as `up-to-date` is carried in `reasons`).
  */
 const FETCH_RENDER: { [K in FetchStatus]: RenderFn<Extract<FetchMsg, { status: K }>> } = {
-  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope),
+  // OUT-02: this surface's producer never stamps `reasons` on a candidate row,
+  // so the drop is stated here rather than inherited from the composer.
+  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope, undefined),
   // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
   // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. The
   // helper differs from the `unavailable` one in glyph and token only (same
@@ -68,9 +70,10 @@ const FETCH_RENDER: { [K in FetchStatus]: RenderFn<Extract<FetchMsg, { status: K
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. The helper differs from the `available` one in glyph
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
-  // `remote` has NO `scope?` field, so the scope bracket is omitted, and the row
-  // is bare -- NO reasons brace (D-80-03), which is why it takes no `probe`.
-  remote: (p, _probe, mpScope) => renderRemoteRow(p, mpScope),
+  // `remote` has NO `scope?` field, so the scope bracket is omitted.
+  // OUT-05 / RSTA-01: D-80-03's bare-row rule holds on THIS surface -- its
+  // producer never stamps `reasons` on a remote row, so the row stays bare.
+  remote: (p, probe, mpScope) => renderRemoteRow(p, probe, mpScope, undefined),
   // D-81-02: no-op fetch (pinned-warm clone / nothing-to-fetch path source).
   // Routes through `pluginRow` with the `(skipped)` token, mirroring the update
   // verb's no-op parity; the existing `up-to-date` REASONS member is carried in

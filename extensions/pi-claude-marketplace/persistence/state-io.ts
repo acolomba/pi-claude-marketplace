@@ -129,6 +129,56 @@ export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
 export type PluginInstallRecord = Type.Static<typeof PLUGIN_INSTALL_RECORD_SCHEMA>;
 
 /**
+ * Deep-copy a stored plugin record, for callers that need a before-snapshot to
+ * compare against or to restore from (reinstall's replace step is the one
+ * today).
+ *
+ * It lives beside the type rather than in the orchestrator that wanted it,
+ * because the hazard is a field drift: the copy ENUMERATES fields instead of
+ * spreading, so a key added to `PLUGIN_INSTALL_RECORD_SCHEMA` and not added
+ * here is dropped from every snapshot with no compile error and no observable
+ * failure until a later reader wants it. Keeping the two adjacent is what puts
+ * the omission in front of whoever extends the schema.
+ *
+ * Enumeration is deliberate and must stay: a spread would alias the nested
+ * `compatibility` and `resources` arrays, and the whole point of a snapshot is
+ * that a later in-place mutation of the live record cannot reach it.
+ */
+export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRecord {
+  return {
+    version: record.version,
+    resolvedSource: record.resolvedSource,
+    // PURL-07 / D-78-02: preserve the recorded resolvedSha across the snapshot so
+    // reinstall's recorded-sha probe (and the carry-forward rewrite) see the pin.
+    ...(record.resolvedSha !== undefined && { resolvedSha: record.resolvedSha }),
+    // D-100-01 / ENBL-10: preserve the recorded hook description across the
+    // snapshot. This function enumerates fields rather than spreading, so an
+    // omission here silently drops the key from the old-record snapshot. Deep
+    // copy, matching the resources arrays below.
+    ...(record.hookEntries !== undefined && {
+      hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
+    }),
+    compatibility: {
+      installable: record.compatibility.installable,
+      notes: [...record.compatibility.notes],
+      supported: [...record.compatibility.supported],
+      unsupported: [...record.compatibility.unsupported],
+    },
+    resources: {
+      skills: [...record.resources.skills],
+      prompts: [...record.resources.prompts],
+      agents: [...record.resources.agents],
+      mcpServers: [...record.resources.mcpServers],
+      // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
+      hooks: [...record.resources.hooks],
+    },
+    enabled: record.enabled,
+    installedAt: record.installedAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+/**
  * ENBL-02 / ENBL-18 / D-100-10: the disable transform's guarantee, expressed
  * in the type system.
  *

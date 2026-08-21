@@ -8,7 +8,9 @@
 // variants.
 //
 // Coverage:
-//   (a) single-scope installed with resolved components + description
+//   (a) single-scope installed with resolved components + description,
+//       plus the DFEN-01 characterization that an entry declaring
+//       `defaultEnabled` renders byte-identically to one that does not
 //   (b) single-scope available with description
 //   (c) single-scope unavailable with `{unsupported hooks}` reason
 //   (d) single-scope external source -> componentsResolved: false marker
@@ -50,6 +52,7 @@ import {
   getPluginInfo,
   type InfoCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
@@ -293,49 +296,80 @@ async function seedWarmSubdirMirror(opts: {
 // (a) single-scope installed with resolved components + description.
 // ---------------------------------------------------------------------------
 
+/**
+ * The rendered message shared by the two cases below. The DFEN-01 case's entire
+ * claim is that its output is byte-identical to the plain case, so both read one
+ * literal: two copies would let a renderer change update one of them and retire
+ * the claim without any test failing.
+ */
+const EXPECTED_FOO_INSTALLED_INFO = [
+  "● mp [user] <no autoupdate>",
+  "  ● foo v1.2.3 (installed)",
+  "    Foo plugin",
+  "    agents: a1",
+  "    commands: c1",
+  "    skills: s1",
+].join("\n");
+
+/** The `foo` entry both cases seed; `over` is the only intended difference. */
+function fooInstalledEntry(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    name: "foo",
+    source: "./foo",
+    version: "1.2.3",
+    description: "Foo plugin",
+    skills: "skills",
+    commands: "commands",
+    agents: "agents",
+    ...over,
+  };
+}
+
+function seedFooInstalled(
+  home: string,
+  cwd: string,
+  entryOver: Record<string, unknown> = {},
+): Promise<string> {
+  return seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: { name: "mp", plugins: [fooInstalledEntry(entryOver)] },
+    installed: { foo: { version: "1.2.3" } },
+    installablePluginDirs: ["foo"],
+    componentDirs: { foo: ["skills/s1"] },
+    componentFiles: { foo: ["commands/c1.md", "agents/a1.md"] },
+  });
+}
+
 test("INFO-02: single-scope installed (path source) renders header + plugin row + description + sorted per-kind components", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
-    const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
-      scope: "user",
-      scopeRoot: userRoot,
-      cwd,
-      mpName: "mp",
-      manifest: {
-        name: "mp",
-        plugins: [
-          {
-            name: "foo",
-            source: "./foo",
-            version: "1.2.3",
-            description: "Foo plugin",
-            skills: "skills",
-            commands: "commands",
-            agents: "agents",
-          },
-        ],
-      },
-      installed: { foo: { version: "1.2.3" } },
-      installablePluginDirs: ["foo"],
-      componentDirs: { foo: ["skills/s1"] },
-      componentFiles: { foo: ["commands/c1.md", "agents/a1.md"] },
-    });
+    await seedFooInstalled(home, cwd);
 
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● foo v1.2.3 (installed)",
-        "    Foo plugin",
-        "    agents: a1",
-        "    commands: c1",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.equal(notifications[0]!.message, EXPECTED_FOO_INSTALLED_INFO);
+  });
+});
+
+test("DFEN-01: an entry declaring defaultEnabled renders the same info message as one that does not", async () => {
+  // `info` reads named fields off the parsed entry, so a declared
+  // `defaultEnabled` is invisible to it: same single notification, same
+  // `undefined` severity, same bytes as the case above -- no enablement line
+  // and no reason token. The expectation is a shared literal rather than a
+  // second live `getPluginInfo` call, because two live runs would agree even if
+  // both had regressed.
+  await withHermeticHome(async ({ home, cwd }) => {
+    await seedFooInstalled(home, cwd, { defaultEnabled: false });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(notifications[0]!.message, EXPECTED_FOO_INSTALLED_INFO);
   });
 });
 
@@ -2845,6 +2879,61 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
   });
 });
 
+test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEnabled: false` carries the claim while making ZERO git-seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0", defaultEnabled: false }],
+      },
+    });
+
+    // The seam is injected but `fetch` is omitted, so any call through it is a
+    // defect rather than a consented fetch. Counting the calls is what makes
+    // this evidence: a source grep says the module holds no git import, while
+    // the count says the injected surface was never reached at run time.
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // The pair asserted in one run: the claim IS made, and nothing was fetched
+    // to make it. The second half is what turns the first half into a
+    // requirement rather than a coincidence -- a surface that quietly
+    // materialized a mirror and read its `plugin.json` would emit these same
+    // bytes, so the row cannot testify about its own source.
+    assert.equal(gitState.cloneCalls.length, 0, "the claim must cost no clone");
+    assert.equal(gitState.fetchCalls.length, 0, "the claim must cost no fetch");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    const msg = notifications[0]!.message;
+    assert.ok(msg.includes("(remote) {installs disabled}"), msg);
+    assert.equal(
+      msg,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◌ gplug v1.0.0 (remote) {installs disabled}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
 test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing clone surfaces the fetch failure reason WITHOUT regressing the recorded status", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
@@ -3099,5 +3188,556 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     const msg = notifications[0]!.message;
     assert.match(msg, /◌ gplug v1\.0\.0 \(remote\) \{authentication required\}/, msg);
     assert.match(msg, /components: not resolved/, msg);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUT-03: the author-declared install-time claim on the info surface.
+//
+// A not-installed row whose marketplace ENTRY declares `defaultEnabled: false`
+// says so in the row's existing reason brace, so a user deciding whether to
+// install learns it before committing. OUT-05 / DOC-02: the entry is the only
+// source
+// -- the plugin's own manifest is never read, which is what lets a row with no
+// materialized tree at all carry the claim.
+//
+// Every case below pins the severity as ABSENT. That is not decoration: the
+// token names an AUTHOR'S INTENT rather than a shortfall, so stating it must
+// not move the surface off informational severity.
+// ---------------------------------------------------------------------------
+
+test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` info row, and a declared-true entry differs by exactly that brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "dis",
+            source: "./dis",
+            version: "1.0.0",
+            description: "Candidate plugin.",
+            skills: "skills",
+            defaultEnabled: false,
+          },
+          {
+            name: "ena",
+            source: "./ena",
+            version: "1.0.0",
+            description: "Candidate plugin.",
+            skills: "skills",
+            defaultEnabled: true,
+          },
+        ],
+      },
+      installablePluginDirs: ["dis", "ena"],
+      componentDirs: { dis: ["skills/s1"], ena: ["skills/s1"] },
+    });
+
+    const declaring = makeCtx();
+    await getPluginInfo({
+      ctx: declaring.ctx,
+      pi: declaring.pi,
+      marketplace: "mp",
+      plugin: "dis",
+      scope: "user",
+      cwd,
+    });
+    assert.equal(declaring.notifications.length, 1);
+    assert.equal(declaring.notifications[0]!.severity, undefined);
+    assert.equal(
+      declaring.notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ dis v1.0.0 (available) {installs disabled}",
+        "    Candidate plugin.",
+        "    skills: s1",
+      ].join("\n"),
+    );
+
+    const declaredTrue = makeCtx();
+    await getPluginInfo({
+      ctx: declaredTrue.ctx,
+      pi: declaredTrue.pi,
+      marketplace: "mp",
+      plugin: "ena",
+      scope: "user",
+      cwd,
+    });
+    assert.equal(declaredTrue.notifications.length, 1);
+    assert.equal(declaredTrue.notifications[0]!.severity, undefined);
+    assert.equal(
+      declaredTrue.notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ ena v1.0.0 (available)",
+        "    Candidate plugin.",
+        "    skills: s1",
+      ].join("\n"),
+    );
+
+    // OUT-03: the fact is stated through the brace the row ALREADY has, never
+    // through a new body line. Asserting the two renders line-by-line is what
+    // proves it: same line count, every non-row line identical, and the row
+    // line differing by the brace alone. One fact keeps one grammar here.
+    const declaringLines = declaring.notifications[0]!.message.split("\n");
+    const declaredTrueLines = declaredTrue.notifications[0]!.message.split("\n");
+    assert.equal(declaringLines.length, declaredTrueLines.length);
+    assert.deepEqual(
+      declaringLines.filter((_, i) => i !== 1),
+      declaredTrueLines.filter((_, i) => i !== 1),
+    );
+    assert.equal(
+      declaringLines[1],
+      `${declaredTrueLines[1]!.replace("ena", "dis")} {installs disabled}`,
+    );
+  });
+});
+
+test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs disabled}` in EITHER direction, because install checks it first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      // All three entries declare the SAME thing, so the only variable across
+      // the three renders is what the user's config says about each key.
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "yes", source: "./yes", version: "1.0.0", skills: "skills" },
+          { name: "no", source: "./no", version: "1.0.0", skills: "skills" },
+          { name: "mute", source: "./mute", version: "1.0.0", skills: "skills" },
+        ].map((p) => ({ ...p, defaultEnabled: false })),
+      },
+      installablePluginDirs: ["yes", "no", "mute"],
+      componentDirs: { yes: ["skills/s1"], no: ["skills/s1"], mute: ["skills/s1"] },
+    });
+    // None of the three is INSTALLED -- these are hand-added declarations for
+    // plugins the user has not reloaded into existence yet, which is exactly
+    // the state in which a candidate row is read.
+    const locations = locationsFor("user", cwd);
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        plugins: { "yes@mp": { enabled: true }, "no@mp": { enabled: false } },
+      },
+      locations.scopeRoot,
+    );
+
+    const rowFor = async (plugin: string): Promise<string> => {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin, scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      return notifications[0]!.message.split("\n")[1]!;
+    };
+
+    // The row states what an install WOULD do, so it must model the same
+    // precedence `install` applies (install.ts::readDeclaredEnabled), not a
+    // shorter one:
+    //
+    // `yes` -- the config says `enabled: true`. `install` reads that FIRST,
+    //   never reaches the entry's default, and the plugin lands ENABLED. A row
+    //   claiming otherwise would predict an outcome the install path does not
+    //   produce, which is the one thing this claim exists not to do.
+    //
+    // `no` -- the config says `enabled: false`. An explicit declaration wins in
+    //   EITHER direction, so the entry's default does not apply here either.
+    //   The bare row is deliberate: the user typed the value, and the token is
+    //   about the manifest's default taking effect, not about the user's own
+    //   declaration being echoed back.
+    //
+    // `mute` -- no config opinion, so the entry answers and the row claims.
+    //   This is the control: it proves the suppression above comes from the
+    //   config read and not from the entry read having broken.
+    assert.equal(await rowFor("yes"), "  ○ yes v1.0.0 (available)");
+    assert.equal(await rowFor("no"), "  ○ no v1.0.0 (available)");
+    assert.equal(await rowFor("mute"), "  ○ mute v1.0.0 (available) {installs disabled}");
+  });
+});
+
+test("OUT-03 / OUT-05 / RSTA-01: a COLD `(remote)` row whose entry declares `defaultEnabled: false` carries `{installs disabled}` with no tree materialized anywhere", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: "https://example.com/repo",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+        ],
+      },
+    });
+
+    // No mirror is staged, so there is no `plugin.json` on disk to read and no
+    // fetch is made to produce one. The claim can only have come from the
+    // marketplace entry -- which is exactly why the entry is the single source
+    // (OUT-05 / DOC-02): it reads the same warm and cold.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◌ gplug v1.0.0 (remote) {installs disabled}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/warmdecl";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      // The ENTRY says nothing about the install-time default.
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "warmdecl", source: cloneUrl, version: "1.0.0" }],
+      },
+    });
+    // The warm clone's OWN manifest declares what the entry does not, and the
+    // components make the mirror resolve installable rather than empty -- so the
+    // row this produces is a real `(available)` row whose declaration was
+    // available for the reading and was not read.
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "warmdecl", defaultEnabled: false },
+      componentDirs: ["skills/warm-skill"],
+      componentFiles: ["commands/warm-cmd.md"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "warmdecl", scope: "user", cwd });
+    // Three things this pins, in the order they matter (OUT-05 / DOC-02):
+    //
+    // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
+    //    asserted so the absence of the brace is proven alongside the component
+    //    lines and everything else staying put.
+    //
+    // 2. The marketplace entry is the only MANIFEST-side source these surfaces
+    //    read -- `domain/resolver.ts::entryDeclaresInstallDisabled` carries the
+    //    argument for why, and `rowClaimsInstallDisabled` beside it carries the
+    //    other half of the rule (the user's config opinion is weighed first).
+    //
+    // 3. What this test is FOR: it fails the moment either read surface starts
+    //    honoring the clone's own declaration. Such a change would LOOK like a
+    //    bug fix -- it would make these surfaces agree with what the install
+    //    path reads -- and it is not one. It reintroduces the warm/cold
+    //    asymmetry, and the only remedy for that asymmetry is a fetch the
+    //    network-free requirement forbids. OUT-05 / DOC-02 own the rule; do
+    //    not "fix" this toward what install reads.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ warmdecl v1.0.0 (available)",
+        "    commands: warm-cmd",
+        "    skills: warm-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-03: a `(partially-available)` row appends `installs disabled` at the tail of the degrade token it already carries", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "lspplug",
+            source: cloneUrl,
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+        ],
+      },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "lspplug", lspServers: { foo: {} } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "lspplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊖ lspplug v1.0.0 (partially-available) {lsp, installs disabled}",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carries BOTH facts in one brace, failure first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0", defaultEnabled: false }],
+      },
+    });
+
+    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
+      code: "ENOTFOUND",
+    });
+    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // The two facts are ORTHOGONAL and neither suppresses the other: the
+    // failure says the fetch did not succeed, the token says what an install
+    // would do. The token is entry-derived, so it stays true whether or not the
+    // tree could be read -- and the tail position is observable, since the
+    // brace composer joins in array order with no per-row sort.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◌ gplug v1.0.0 (remote) {network unreachable, installs disabled}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUT-03: the info rows that stay clean.
+//
+// Every case below seeds an entry that DOES declare `defaultEnabled: false`.
+// A negative test whose input says nothing proves nothing -- these prove an
+// EXCLUSION, against the one input that would otherwise produce the token.
+// ---------------------------------------------------------------------------
+
+test("OUT-03: an `(unavailable)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+            description: "Remote plugin sourced from an external npm package.",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      // NOT installed -> the not-installed consumer, so this row DOES reach the
+      // composer and is excluded there by status rather than by never arriving.
+    });
+
+    // Nothing will install at all, so the token would describe an install that
+    // cannot happen -- and the brace already carries the blocker that stops it.
+    // Adding a second token here would answer a question the user cannot act on.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
+        "    Remote plugin sourced from an external npm package.",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-03: an `(installed)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "foo",
+            source: "./foo",
+            version: "1.2.3",
+            description: "Foo plugin",
+            skills: "skills",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installed: { foo: { version: "1.2.3" } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+
+    // This row and the two below are clean STRUCTURALLY, not by a runtime
+    // guard: the composer is applied at the not-installed consumer alone, so the
+    // installed bucket never reaches it. The guarantee is the absence of an
+    // edit, which is stronger than a check a later change could relax. The
+    // token is also a claim about a FUTURE install, and on a record the action
+    // is already taken -- the row reports what exists, not what would happen.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● foo v1.2.3 (installed)",
+        "    Foo plugin",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-03: a `(partially-installed)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "degraded",
+            source: "./degraded",
+            version: "1.0.0",
+            lspServers: { foo: { command: "foo-lsp" } },
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installed: { degraded: { version: "1.0.0" } },
+      installablePluginDirs: ["degraded"],
+    });
+
+    // Clean for the reason given on the `(installed)` case above.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (partially-installed) {lsp}"].join("\n"),
+    );
+  });
+});
+
+test("OUT-03: a `(disabled)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "foo",
+            source: "./foo",
+            version: "1.2.3",
+            description: "Foo plugin",
+            skills: "skills",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installed: { foo: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+
+    // The sharpest of the four: this row is disabled AND its entry declares the
+    // install-time default false, so a naive implementation would report the
+    // same idea twice in two tenses. It does not. The row's disabled-ness is a
+    // recorded fact about a record; the token is a prediction about an install
+    // that, here, already happened. Clean for the structural reason given on the
+    // `(installed)` case above.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ foo v1.2.3 (disabled)",
+        "    Foo plugin",
+        "    skills: s1",
+      ].join("\n"),
+    );
   });
 });

@@ -210,15 +210,38 @@ async function buildVanishingPlugin(root) {
   );
   await writeFile(
     path.join(dir, "skills", "vanish-skill", "SKILL.md"),
-    ["---", "name: vanish-skill", "description: A skill that outlives its manifest entry.", "---", "", "Body.", ""].join("\n"),
+    [
+      "---",
+      "name: vanish-skill",
+      "description: A skill that outlives its manifest entry.",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n"),
   );
   await writeFile(
     path.join(dir, "commands", "vanish-command.md"),
-    ["---", "description: A command that outlives its manifest entry.", "---", "", "Prompt body.", ""].join("\n"),
+    [
+      "---",
+      "description: A command that outlives its manifest entry.",
+      "---",
+      "",
+      "Prompt body.",
+      "",
+    ].join("\n"),
   );
   await writeFile(
     path.join(dir, "agents", "vanish-agent.md"),
-    ["---", "name: vanish-agent", "description: An agent that outlives its manifest entry.", "---", "", "Agent body.", ""].join("\n"),
+    [
+      "---",
+      "name: vanish-agent",
+      "description: An agent that outlives its manifest entry.",
+      "---",
+      "",
+      "Agent body.",
+      "",
+    ].join("\n"),
   );
   await writeFile(
     path.join(dir, ".mcp.json"),
@@ -245,7 +268,9 @@ async function buildStayingPlugin(root) {
   );
   await writeFile(
     path.join(dir, "skills", "stay-skill", "SKILL.md"),
-    ["---", "name: stay-skill", "description: The control skill.", "---", "", "Body.", ""].join("\n"),
+    ["---", "name: stay-skill", "description: The control skill.", "---", "", "Body.", ""].join(
+      "\n",
+    ),
   );
 }
 
@@ -266,7 +291,9 @@ async function buildPartialPlugin(root) {
   );
   await writeFile(
     path.join(dir, "skills", "partial-skill", "SKILL.md"),
-    ["---", "name: partial-skill", "description: The supported half.", "---", "", "Body.", ""].join("\n"),
+    ["---", "name: partial-skill", "description: The supported half.", "---", "", "Body.", ""].join(
+      "\n",
+    ),
   );
   await writeFile(path.join(dir, "themes", "dark.json"), JSON.stringify({ name: "dark" }, null, 2));
 }
@@ -352,7 +379,11 @@ function rowFor(text, pluginName) {
 function assertManifestAbsenceRows(after) {
   const vanishingRows = rowFor(after.text, VANISHING);
   if (vanishingRows.length === 0) {
-    fail("A1", `the installed plugin vanished from list output when its manifest entry was dropped.`, after.text);
+    fail(
+      "A1",
+      `the installed plugin vanished from list output when its manifest entry was dropped.`,
+      after.text,
+    );
   }
   if (!vanishingRows.some((l) => l.includes(NOT_IN_MANIFEST))) {
     fail("A1", `the surviving row does not carry "${NOT_IN_MANIFEST}".`, vanishingRows.join("\n"));
@@ -364,7 +395,11 @@ function assertManifestAbsenceRows(after) {
     fail("A2", "the control plugin disappeared from list output.", after.text);
   }
   if (stayingRows.some((l) => l.includes(NOT_IN_MANIFEST))) {
-    fail("A2", `the still-declared control plugin was ALSO stamped "${NOT_IN_MANIFEST}" -- the reason is tracking the read, not the entry.`, stayingRows.join("\n"));
+    fail(
+      "A2",
+      `the still-declared control plugin was ALSO stamped "${NOT_IN_MANIFEST}" -- the reason is tracking the read, not the entry.`,
+      stayingRows.join("\n"),
+    );
   }
   pass(`A2 (BOUND-03): the still-declared control plugin is NOT stamped`);
 }
@@ -380,15 +415,21 @@ async function assertRecordBackedSurfaces(run) {
   const info = await run(`info ${VANISHING}@${MARKETPLACE_NAME} --scope user`);
   show("info on the manifest-absent plugin", info.text);
   if (info.text.includes("(failed)")) {
-    fail("A3", "info returned (failed) instead of falling through to the installation record.", info.text);
+    fail(
+      "A3",
+      "info returned (failed) instead of falling through to the installation record.",
+      info.text,
+    );
   }
-  const reconstructed = ["vanish-skill", "vanish-command", "vanish-agent", "vanish-mcp"].filter((n) =>
-    info.text.includes(n),
+  const reconstructed = ["vanish-skill", "vanish-command", "vanish-agent", "vanish-mcp"].filter(
+    (n) => info.text.includes(n),
   );
   if (reconstructed.length === 0) {
     fail("A3", "info rendered no component inventory from the installation record.", info.text);
   }
-  pass(`A3 (INFO-09..11): info renders from the record; components reconstructed: ${reconstructed.join(", ")}`);
+  pass(
+    `A3 (INFO-09..11): info renders from the record; components reconstructed: ${reconstructed.join(", ")}`,
+  );
 
   const fetched = await run(`info ${VANISHING}@${MARKETPLACE_NAME} --scope user --fetch`);
   show("info --fetch on the manifest-absent plugin", fetched.text);
@@ -396,7 +437,11 @@ async function assertRecordBackedSurfaces(run) {
     fail("A4", "info --fetch returned (failed) on the record-backed arm.", fetched.text);
   }
   if (!/skip/i.test(fetched.text)) {
-    fail("A4", "info --fetch emitted no skip note -- the network guard is not visible to the user.", fetched.text);
+    fail(
+      "A4",
+      "info --fetch emitted no skip note -- the network guard is not visible to the user.",
+      fetched.text,
+    );
   }
   pass(`A4 (INFO-12): info --fetch emits the skip note instead of reaching the network`);
 
@@ -411,7 +456,11 @@ async function assertRecordBackedSurfaces(run) {
   const skillsBefore = await readdir(locations.skillsTargetDir).catch(() => []);
   const staged = skillsBefore.filter((n) => n.includes("vanish"));
   if (staged.length === 0) {
-    fail("A6", "no staged skill artifact was found on disk before uninstall -- the flow proves nothing.", skillsBefore.join(", "));
+    fail(
+      "A6",
+      "no staged skill artifact was found on disk before uninstall -- the flow proves nothing.",
+      skillsBefore.join(", "),
+    );
   }
 
   const uninstalled = await run(`uninstall ${VANISHING}@${MARKETPLACE_NAME} --scope user`);
@@ -450,7 +499,11 @@ async function flowA(ext, root) {
   const before = await run(`list --scope user`);
   show("list BEFORE the manifest entry disappears", before.text);
   if (before.text.includes(NOT_IN_MANIFEST)) {
-    fail("A0", `a freshly installed, still-declared plugin was stamped "${NOT_IN_MANIFEST}".`, before.text);
+    fail(
+      "A0",
+      `a freshly installed, still-declared plugin was stamped "${NOT_IN_MANIFEST}".`,
+      before.text,
+    );
   }
   pass(`A0 baseline: both declared plugins render without "${NOT_IN_MANIFEST}"`);
 
@@ -493,7 +546,9 @@ async function flowB(ext) {
       installed.text,
     );
   }
-  pass(`B0: ${PARTIAL} installed partially (compatibility.installable=false) -- the repaired record shape`);
+  pass(
+    `B0: ${PARTIAL} installed partially (compatibility.installable=false) -- the repaired record shape`,
+  );
 
   const disabled = await run(`disable ${PARTIAL}@${MARKETPLACE_NAME} --scope user`);
   show("disable on the partial", disabled.text);
@@ -605,7 +660,12 @@ async function flowC() {
   // here; that is a real failure, distinct from "no provider configured".
   const extensionError = /pi-claude-marketplace.*(error|failed)/i.test(combined);
   if (extensionError) {
-    return { ok: false, hard: true, reason: "the extension reported an error under a real pi host.", detail: combined.slice(0, 4000) };
+    return {
+      ok: false,
+      hard: true,
+      reason: "the extension reported an error under a real pi host.",
+      detail: combined.slice(0, 4000),
+    };
   }
   if (run.code !== 0) {
     return {
@@ -653,7 +713,9 @@ async function main() {
     console.log(`\n[manifest-absence] === Flow C: live pi host smoke ===`);
     cSummary = await flowC();
     if (cSummary.ok) {
-      pass(`C (NFR-2): pi ${cSummary.version} loaded the extension and settled without an extension error`);
+      pass(
+        `C (NFR-2): pi ${cSummary.version} loaded the extension and settled without an extension error`,
+      );
     }
   } finally {
     await teardown(ext, root);
@@ -671,7 +733,9 @@ async function main() {
     throw new UatExit("host smoke requires a configured provider");
   }
 
-  console.log(`\n[manifest-absence] OK -- manifest absence and disabled-partial flows proven end to end.`);
+  console.log(
+    `\n[manifest-absence] OK -- manifest absence and disabled-partial flows proven end to end.`,
+  );
 }
 
 main().then(

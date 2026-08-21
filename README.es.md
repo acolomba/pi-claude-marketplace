@@ -157,6 +157,8 @@ Cada ámbito almacena su configuración declarativa de mercados y complementos e
 
 Estos archivos son el registro definitivo de los mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
 
+Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
+
 ### Archivos de configuración local
 
 Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto al archivo base.

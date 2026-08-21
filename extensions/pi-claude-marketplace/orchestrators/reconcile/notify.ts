@@ -807,6 +807,13 @@ function applyPluginOutcomeToBlock(
         status: "disabled",
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
+        // DFEN-04 / OUT-01 / OUT-04: forwarded when the producer supplied them,
+        // which is the install-disabled cascade and nothing else. The toggle
+        // path omits both and renders the byte-frozen bare row. Conditional
+        // spreads because `exactOptionalPropertyTypes` rejects an explicit
+        // `undefined`.
+        ...(outcome.reasons !== undefined && { reasons: outcome.reasons }),
+        ...(outcome.enableHint === true && { enableHint: true }),
         // D-03/D-06: a realized disable transition -> info, reloads.
         severity: "info",
         needsReload: true,

@@ -65,6 +65,7 @@ function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginI
       agents: [],
     },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 

@@ -25,11 +25,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
-  _resetForTest,
-  _routingTableForTest,
-  registerHooksBridge,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+  resetRoutingState,
+  routingTableEntries,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -176,9 +176,9 @@ async function withHermeticPiHome<T>(
 }
 
 test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -221,7 +221,7 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // The routing table's SessionStart bucket must contain the plugin's
     // entry after the sequential per-scope rebuild (the cross-scope wipe
     // regression flipped this back to 0 after the project-scope rebuild).
-    const sessionStartBucket = _routingTableForTest().get("SessionStart") ?? [];
+    const sessionStartBucket = routingTableEntries().get("SessionStart") ?? [];
     assert.equal(
       sessionStartBucket.length,
       1,
@@ -250,9 +250,9 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
 });
 
 test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -294,7 +294,7 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     // Bug condition: no SessionStart entries are dispatchable right after
     // boot, because the factory could not hydrate project scope against the
     // real project cwd.
-    const bucketBefore = _routingTableForTest().get("SessionStart") ?? [];
+    const bucketBefore = routingTableEntries().get("SessionStart") ?? [];
     assert.equal(
       bucketBefore.length,
       0,
@@ -322,9 +322,9 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
 });
 
 test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -369,9 +369,9 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
 });
 
 test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {

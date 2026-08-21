@@ -28,18 +28,18 @@ import test, { mock } from "node:test";
 import lockfile from "proper-lockfile";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import {
-  __test_applyBackfillForScopeIsolated,
-  __test_scanForceInstalledBackfills,
-  applyReconcile,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+  applyBackfillForScopeIsolated,
+  scanForceInstalledBackfills,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
   type ExtensionState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
@@ -62,11 +62,11 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
   const cwd = await mkdtemp(path.join(tmpdir(), "backfill-cwd-"));
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  __resetCacheForTests();
+  resetCompletionCache();
   try {
     return await fn({ cwd });
   } finally {
-    __resetCacheForTests();
+    resetCompletionCache();
     if (originalHome === undefined) {
       delete process.env.HOME;
     } else {
@@ -568,7 +568,7 @@ test("WR-02: a held scope lock on the stamp write is coerced to a structured row
 
     try {
       // Must NOT throw: the lock-held throw is coerced into a structured row.
-      await __test_applyBackfillForScopeIsolated(
+      await applyBackfillForScopeIsolated(
         { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
         "project",
         { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted: true },
@@ -614,7 +614,7 @@ test("WR-03: a plugin already touched by applyPlan this load is not double-emitt
       { kind: "plugin-enabled", scope: "project", marketplace: "mp", plugin: "hello" },
     ];
 
-    await __test_scanForceInstalledBackfills(
+    await scanForceInstalledBackfills(
       { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
       "project",
       state,
@@ -657,7 +657,7 @@ test("ENBL-08: the backfill scan skips a DISABLED partial whose supported set gr
     const ctx = makeCtx();
     const outcomes: PerEntryOutcome[] = [];
 
-    await __test_scanForceInstalledBackfills(
+    await scanForceInstalledBackfills(
       { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
       "project",
       state,
@@ -702,7 +702,7 @@ test("ENBL-08 control: the SAME grown-set fixture with an ENABLED record still b
     const ctx = makeCtx();
     const outcomes: PerEntryOutcome[] = [];
 
-    await __test_scanForceInstalledBackfills(
+    await scanForceInstalledBackfills(
       { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
       "project",
       state,
@@ -808,7 +808,7 @@ test("BFILL-01: a concurrent uninstall (skipped partition) emits no promotion ro
 
     const ctx = makeCtx();
     const outcomes: PerEntryOutcome[] = [];
-    await __test_scanForceInstalledBackfills(
+    await scanForceInstalledBackfills(
       { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
       "project",
       snapshot,

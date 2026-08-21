@@ -18,11 +18,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
-  _resetForTest,
-  _routingTableForTest,
-  registerHooksBridge,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+  resetRoutingState,
+  routingTableEntries,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -84,9 +84,9 @@ function buildStateWithSingleHooksPlugin(opts: {
 }
 
 test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hooks-plugin entries in BOTH scopes", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -170,7 +170,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
 
     // Sanity: after boot, the routing table holds both scopes' PreToolUse
     // entries. This is the pre-condition the regression broke.
-    const preBucket = _routingTableForTest().get("PreToolUse") ?? [];
+    const preBucket = routingTableEntries().get("PreToolUse") ?? [];
     assert.equal(
       preBucket.length,
       2,
@@ -191,7 +191,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
     // This is the regression gate -- if the per-scope rebuild ever
     // returns to a scope-filtered cache walk, the test red-fails because
     // one of the two entries goes missing.
-    const postBucket = _routingTableForTest().get("PreToolUse") ?? [];
+    const postBucket = routingTableEntries().get("PreToolUse") ?? [];
     assert.equal(
       postBucket.length,
       2,

@@ -211,14 +211,7 @@ const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, prob
  * stay hard-coded false (ENBL-15 / D-100-06).
  */
 const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
-  joinTokens([
-    ICON_DISABLED,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
-    renderVersion(p.version),
-    "(disabled)",
-    composeReasons(p.reasons, false, false, probe),
-  ]);
+  pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe);
 
 /**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the

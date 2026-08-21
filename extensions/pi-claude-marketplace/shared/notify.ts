@@ -2,7 +2,7 @@ import { softDepStatus } from "../platform/pi-api.ts";
 
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { softDepMarkers } from "./concerns/soft-dep.ts";
-import { assertNever, causeChainTrailer, ManualRecoveryError } from "./errors.ts";
+import { assertNever, causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
@@ -82,7 +82,7 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 38-entry membership AND order are catalog-stable and MUST NOT change (new
+ * 39-entry membership AND order are catalog-stable and MUST NOT change (new
  * tokens append at the tail; existing entries never reorder). The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
@@ -177,6 +177,26 @@ export const REASONS = [
   // plugin surfacing; a dedicated token rather than a shared bucket so the reason
   // row names the malformed component kind truthfully.
   "malformed command",
+  // OUT-01 / OUT-02 / OUT-03 / DFEN-04: an install that landed, OR WOULD land,
+  // DISABLED because the plugin's OWN `defaultEnabled` declaration said so. It
+  // names the CAUSE of the disabled state, and only the author-declared cause.
+  // Distinct from the `(disabled)` STATUS token, which names the state and says
+  // nothing about who chose it, and from `already disabled` (the idempotent
+  // no-op a `disable` verb reports over a record that already matched the
+  // request).
+  //
+  // Two row families make two different claims about two different subjects,
+  // and only one of them carries this token. An INSTALLED-RECORD inventory row
+  // -- a row describing a record that already EXISTS, whose disabled-ness the
+  // USER chose: a `disable` verb row, a steady-state list / info inventory row,
+  // a reconcile-driven disable -- MUST NOT carry it. A NOT-INSTALLED CANDIDATE
+  // row on the `list` / `info` read surfaces DOES carry it (OUT-02 / OUT-03),
+  // stating what an install WOULD do to a record that does not exist yet.
+  //
+  // The durable-versus-transient rule is what separates them (D-95-01 /
+  // D-95-02): a steady-state inventory row states durable facts about a record,
+  // and a statement about an action not yet taken is not one of those.
+  "installs disabled",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -730,8 +750,9 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  *
  * ENBL-16 / D-100-07: `reasons` is OPTIONAL here, exactly as on
  * `PluginInstalledMessage`, `PluginUpdatedMessage` and
- * `PluginReinstalledMessage`, and it admits exactly one member --
- * `not in manifest`. The governing rule: render durable facts that constrain
+ * `PluginReinstalledMessage`. It admits `not in manifest` and -- since OUT-01 --
+ * `installs disabled`, the install surface's author-declared cause marker.
+ * The governing rule: render durable facts that constrain
  * what the user can do next; suppress facts about runtime behavior that is
  * currently suspended. Manifest absence is the first kind: `plugin enable`
  * re-runs the install ledger, which resolves from the marketplace manifest, so
@@ -761,38 +782,72 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
+  // OUT-04 / D-102-10: set ONLY by the install surface, and only when the
+  // install landed disabled because the plugin's own `defaultEnabled`
+  // declaration said so. The renderer turns it into a fixed 4-space-indented
+  // trailer naming the `enable` verb -- a boolean in, a frozen literal out, no
+  // interpolation (T-69-01). Every list / info inventory `(disabled)` row and
+  // the `disable` verb's own row omit it and stay byte-frozen.
+  readonly enableHint?: boolean;
 }
 
 /**
  * `(available)` -- list-surface row for installable, not-yet-installed
  * plugins. NO `scope` (SNM-11 carve-out: MSG-PL-6 omits `[<scope>]`
- * brackets on available rows); no `reasons`; no `dependencies`. PL-4:
+ * brackets on available rows); no `dependencies`. PL-4:
  * optional `description` rendered as a second 4-space-indented line,
  * truncated at column 66.
+ *
+ * OUT-02: `reasons` is OPTIONAL here, exactly as on
+ * `PluginInstalledMessage`, `PluginUpdatedMessage`, `PluginReinstalledMessage`
+ * and `PluginDisabledMessage`. It admits exactly ONE member: `installs
+ * disabled`, the author-declared install-time-state token. This row describes a
+ * NOT-INSTALLED candidate, so the token states what an install WOULD do rather
+ * than what one did; `domain/resolver.ts::rowClaimsInstallDisabled` owns which
+ * declarations decide that. Which reasons a surface stamps is an ORCHESTRATOR
+ * decision (D-95-01) -- the render path holds no allowlist, which is what makes
+ * this an addition rather than a widening of the render contract. Absent
+ * `reasons` renders the legacy brace-less row byte-for-byte: `composeReasons`
+ * returns `""` for an undefined list and `joinTokens` collapses the empty slot.
+ *
+ * `PluginRemoteMessage` below admits the same member on the same terms and
+ * cites this block rather than restating them.
  */
 export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
  * `(remote)` -- list/info-surface row for a not-installed git-source plugin
  * whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03).
  * Replaces the manifest-only `(available)` over-claim for unfetched git
- * sources. Modeled on `PluginAvailableMessage`: bare row -- NO `scope`
- * (SNM-11 carve-out family, joining `available | partially-available |
- * unavailable`); NO `reasons` (the REASONS closed set does not grow for this
- * row -- parity with `available`); NO `dependencies`. Uses the dedicated
- * `ICON_REMOTE` (`◌`) glyph. PL-4: optional `description` rendered as a second
- * 4-space-indented line, truncated at column 66.
+ * sources. Modeled on `PluginAvailableMessage`: NO `scope` (SNM-11 carve-out
+ * family, joining `available | partially-available | unavailable`); NO
+ * `dependencies`. Uses the dedicated `ICON_REMOTE` (`◌`) glyph. PL-4: optional
+ * `description` rendered as a second 4-space-indented line, truncated at
+ * column 66.
+ *
+ * OUT-02 / OUT-05 / RSTA-01: `reasons` is OPTIONAL here, which NARROWS
+ * D-80-03's bare-row rule rather than reversing it. What the row still refuses
+ * is every probe-derived reason and every soft-dependency marker: there is no
+ * materialized tree to derive either from, so a row that carried one would be
+ * claiming more than it can substantiate. What it now admits is the single
+ * `installs disabled` member `PluginAvailableMessage` admits, on exactly the
+ * terms stated there. That token is derived from declarations rather than from
+ * a tree, which is what lets an UNFETCHED row say what an install would do.
+ * The closed REASONS set does not grow: the token already exists (OUT-01),
+ * so parity with `available` survives the narrowing.
  */
 export interface PluginRemoteMessage extends MessageBase {
   readonly status: "remote";
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -2086,15 +2141,21 @@ export function composeReasons(
 
 /**
  * Compose a scope-bearing, reasons-bearing plugin row that carries NO
- * soft-dep marker. Folds the four structurally-identical `renderPluginRow`
- * arms (`upgradable` / `skipped` / `failed` / `manual recovery`) that differ
- * only in their icon and their parenthesized status `label`. `label` is the
- * FULL parenthesized token (the caller passes `"(upgradable)"` etc., INCLUDING
- * the parens, so the `"(manual recovery)"` literal keeps its space verbatim).
- * The `p` param is the structural subset those four variants share: a required
- * `name`, an optional `scope` / `version`, and a required
- * `readonly ContentReason[]` reasons. Both declares-flags are `false` (these
- * arms never carry `dependencies`).
+ * soft-dep marker. Folds the structurally-identical `renderPluginRow` arms
+ * (`upgradable` / `skipped` / `failed` / `manual recovery` / `disabled`) that
+ * differ only in their icon and their parenthesized status `label`. `label` is
+ * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
+ * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
+ * verbatim). The `p` param is the structural subset those variants share: a
+ * required `name` and an optional `scope` / `version` / `reasons`. Both
+ * declares-flags are `false` (these arms never carry `dependencies`).
+ *
+ * `reasons` is OPTIONAL because `PluginDisabledMessage` declares it so;
+ * `composeReasons` already treats `undefined` as the empty list, so a required
+ * `readonly ContentReason[]` caller is unaffected. This is what lets the
+ * `disabled` arm share this composer instead of restating its body -- the four
+ * command-local copies were byte-identical to it, which is exactly the
+ * property their comments asked a reader to maintain by hand.
  */
 export function pluginRow(
   icon: string,
@@ -2102,7 +2163,7 @@ export function pluginRow(
     readonly name: string;
     readonly scope?: Scope;
     readonly version?: string;
-    readonly reasons: readonly ContentReason[];
+    readonly reasons?: readonly ContentReason[];
   },
   mpScope: Scope,
   label: string,
@@ -2240,11 +2301,26 @@ export function renderUninstalledRow(
   ]);
 }
 
-/** MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field. */
+/**
+ * MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
+ *
+ * OUT-02: `reasons` is a REQUIRED parameter rather than a read of `p.reasons`,
+ * because whether this row carries a reason brace is a fact about the calling
+ * SURFACE, not about the status. Only the list surface's producer stamps the
+ * entry-derived `installs disabled` token; every other surface that composes an
+ * `(available)` row builds it without reasons and always has, so forwarding
+ * there would be plumbing with no producer behind it. Making the parameter
+ * required rather than optional is what forces each surface to state its own
+ * answer at the call site instead of inheriting one silently.
+ *
+ * Both soft-dep flags stay hard-coded false: the SNM-11 no-scope-bracket
+ * carve-out family never emits soft-dependency markers.
+ */
 export function renderAvailableRow(
   p: PluginAvailableMessage,
   probe: SoftDepStatus,
   mpScope: Scope,
+  reasons: readonly ContentReason[] | undefined,
 ): string {
   return joinTokens([
     ICON_AVAILABLE,
@@ -2252,23 +2328,40 @@ export function renderAvailableRow(
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(available)",
-    composeReasons(undefined, false, false, probe),
+    composeReasons(reasons, false, false, probe),
   ]);
 }
 
 /**
  * RSTA-01 / D-80-03: a not-installed git-source row whose clone or mirror is
  * not materialized locally. It is the `available` row with the glyph swapped
- * (`○` -> `◌`) and the token swapped, and it is a BARE row -- no reasons brace
- * (D-80-03), hence no `probe` parameter. SNM-11 carve-out: no `scope?` field.
+ * (`○` -> `◌`) and the token swapped. SNM-11 carve-out: no `scope?` field.
+ *
+ * OUT-02 / OUT-05: D-80-03's bare-row rule NARROWS here rather than reversing.
+ * What the row still refuses is every probe-derived reason and every soft-dep
+ * marker -- there is no materialized tree to derive either from, which is why
+ * both soft-dep flags stay hard-coded false. What it admits is the one
+ * entry-derived token, `installs disabled`, which needs no tree at all because
+ * the marketplace entry is readable with no clone (DOC-02). That is what lets
+ * an unfetched row state what an install would do.
+ *
+ * `reasons` is a REQUIRED parameter for the reason given on
+ * `renderAvailableRow`: only the list surface's producer stamps the token, and
+ * each surface states its own answer at the call site.
  */
-export function renderRemoteRow(p: PluginRemoteMessage, mpScope: Scope): string {
+export function renderRemoteRow(
+  p: PluginRemoteMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+  reasons: readonly ContentReason[] | undefined,
+): string {
   return joinTokens([
     ICON_REMOTE,
     p.name,
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(remote)",
+    composeReasons(reasons, false, false, probe),
   ]);
 }
 
@@ -2490,9 +2583,19 @@ function renderPluginRow(
     case "uninstalled":
       return renderUninstalledRow(p, probe, mpScope);
     case "available":
-      return renderAvailableRow(p, probe, mpScope);
+      // OUT-02: no producer that renders through THIS arm stamps `reasons`, so
+      // the `undefined` is the drop stated by construction, not an omission.
+      return renderAvailableRow(p, probe, mpScope, undefined);
     case "remote":
-      return renderRemoteRow(p, mpScope);
+      // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is
+      // not materialized locally. Clones the `available` arm, swapping the
+      // glyph (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11
+      // carve-out: `remote` has NO `scope?` field, so the scope bracket is
+      // omitted. D-80-03 as narrowed by OUT-05: the row refuses probe- and
+      // soft-dep-derived reasons and admits only the entry-derived `installs
+      // disabled` token. No producer that renders through THIS arm stamps it,
+      // so the `undefined` is the drop stated by construction, not an omission.
+      return renderRemoteRow(p, probe, mpScope, undefined);
     case "unavailable":
       return renderUnavailableRow(p, probe, mpScope);
     case "partially-available":
@@ -2626,6 +2729,16 @@ const PARTIAL_UPDATE_HINT_TRAILER =
  * docs/output-catalog.md and docs/messaging-style-guide.md.
  */
 const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, then enable it again.";
+
+/**
+ * OUT-04 / D-102-10: the enable-hint trailer literal, rendered below an
+ * install-disabled `(disabled)` row. The install materialized nothing the user
+ * can reach, so the row alone leaves them with a fact and no next step; this
+ * names the real, runnable `enable` verb. Interpolates no plugin / marketplace
+ * / version identifier and no filesystem path (T-69-01), and names no flag that
+ * does not exist. This byte form is FROZEN -- do not change the wording.
+ */
+const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
 
 /**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
@@ -3157,32 +3270,6 @@ function composeRollbackPartialLines(p: PluginNotificationMessage): string[] {
   }
 
   return lines;
-}
-
-/**
- * AS-7: walk the cause chain (depth-bounded, mirroring causeChainTrailer)
- * and collect the leaked file paths from the first ManualRecoveryError that
- * carries any. The bridges produce the leak set as STRUCTURED data on
- * `ManualRecoveryError.leaks`; this surfaces it on the rendered manual-recovery
- * row so the user is told which files to clean up by hand. Returns an empty
- * array when no ManualRecoveryError with leaks is in the chain.
- */
-function collectManualRecoveryLeaks(cause: unknown): readonly string[] {
-  const MAX_DEPTH = 5;
-  let current: unknown = cause;
-  for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    if (current instanceof ManualRecoveryError && current.leaks.length > 0) {
-      return current.leaks;
-    }
-
-    if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
-      current = current.cause;
-    } else {
-      break;
-    }
-  }
-
-  return [];
 }
 
 /**
@@ -3952,13 +4039,22 @@ function composePluginLinesWith(
     lines.push(`    ${hint}`);
   }
 
+  // OUT-04 / D-102-10: the install-disabled row carries a 4-space-indented
+  // trailer naming the `enable` verb. Only the install surface stamps
+  // `enableHint`, so the list / info inventory `(disabled)` rows and the
+  // `disable` verb's own row stay byte-frozen. The byte form is FROZEN and
+  // interpolates nothing (T-69-01).
+  if (p.status === "disabled" && p.enableHint === true) {
+    lines.push(`    ${ENABLE_HINT_TRAILER}`);
+  }
+
   if (p.status === "failed" || p.status === "manual recovery") {
     const trailer = renderIndentedCauseChain(p.cause, "    ");
     if (trailer !== "") {
       lines.push(trailer);
     }
 
-    for (const leak of collectManualRecoveryLeaks(p.cause)) {
+    for (const leak of manualRecoveryLeaks(p.cause)) {
       lines.push(`    leaked: ${leak}`);
     }
   }

@@ -19,10 +19,12 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
-  __test_classifyEntityShapeError,
-  __test_classifyInstallFailure,
-  __test_composeInstallFailureMessage,
-  __test_narrowResolverReasons,
+  classifyEntityShapeError,
+  classifyInstallFailure,
+  composeInstallFailureMessage,
+  narrowResolverReasons,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import {
   installPlugin,
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
@@ -32,7 +34,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
@@ -233,6 +235,91 @@ function conflictingMarketplaceRecord(
  * The marketplace manifest is written under `<marketplaceRoot>/.claude-plugin/marketplace.json`.
  * The plugin tree lives at `<marketplaceRoot>/plugins/<plugin>/`.
  */
+/**
+ * The plugin's OWN `.claude-plugin/plugin.json`. SNM-34 fixture knob: its
+ * `version` is distinct from the marketplace `entry.version` (`pluginVersion`)
+ * -- `undefined` preserves the legacy `0.0.1` shape, a string sets that
+ * version, and `null` omits the field so the tier-1 read finds none.
+ */
+function buildSeededPluginManifest(
+  pluginName: string,
+  opts: {
+    pluginJsonVersion?: string | null;
+    experimental?: object;
+    pluginJsonDefaultEnabled?: boolean;
+  },
+): Record<string, unknown> {
+  return {
+    name: pluginName,
+    ...(opts.pluginJsonVersion === undefined
+      ? { version: "0.0.1" }
+      : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
+    // D-64-06: declaring experimental kinds drives `resolveStrict` to the
+    // `unsupported` (force-degradable) arm without a structural defect.
+    ...(opts.experimental !== undefined && { experimental: opts.experimental }),
+    ...(opts.pluginJsonDefaultEnabled !== undefined && {
+      defaultEnabled: opts.pluginJsonDefaultEnabled,
+    }),
+  };
+}
+
+/** The plugin's entry in the seeded marketplace manifest. */
+function buildSeededMarketplaceEntry(
+  pluginName: string,
+  opts: {
+    rawSourceOverride?: unknown;
+    pluginVersion?: string;
+    declareDependencies?: boolean;
+    entryDefaultEnabled?: boolean;
+  },
+): Record<string, unknown> {
+  return {
+    name: pluginName,
+    source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
+    ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
+    // PI-13: the exact dependency shape is not validated; presence is.
+    ...(opts.declareDependencies === true && { dependencies: { "some-other-plugin": "*" } }),
+    ...(opts.entryDefaultEnabled !== undefined && { defaultEnabled: opts.entryDefaultEnabled }),
+  };
+}
+
+/**
+ * DFEN-08: seed each sibling's plugin tree and return its manifest entry.
+ * Siblings share the manifest, the marketplace record and the scope, so the
+ * only thing that can differ between their installs is the declaration under
+ * test.
+ */
+async function seedSiblingPlugins(
+  marketplaceRoot: string,
+  opts: {
+    pluginVersion?: string;
+    siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
+  },
+): Promise<Record<string, unknown>[]> {
+  const entries: Record<string, unknown>[] = [];
+  for (const sibling of opts.siblingPlugins ?? []) {
+    const siblingRoot = path.join(marketplaceRoot, "plugins", sibling.name);
+    await mkdir(path.join(siblingRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(siblingRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: sibling.name, version: "0.0.1" }),
+    );
+    const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
+    await mkdir(siblingSkillDir, { recursive: true });
+    await writeFile(path.join(siblingSkillDir, "SKILL.md"), `---\nname: tool\n---\n\nBody.\n`);
+    entries.push({
+      name: sibling.name,
+      source: `./plugins/${sibling.name}`,
+      ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
+      ...(sibling.entryDefaultEnabled !== undefined && {
+        defaultEnabled: sibling.entryDefaultEnabled,
+      }),
+    });
+  }
+
+  return entries;
+}
+
 async function seedPathMarketplaceWithPlugin(opts: {
   cwd: string;
   marketplaceRoot: string;
@@ -251,6 +338,21 @@ async function seedPathMarketplaceWithPlugin(opts: {
    *    tier-1 read finds no version and falls through.
    */
   pluginJsonVersion?: string | null;
+  /**
+   * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE entry -- the side that
+   * WINS the precedence rule. Both sides are named, unlike the version pair
+   * above, because picking the wrong one yields a fixture that resolves through
+   * the fallback instead of the winner and passes for the wrong reason.
+   * Absent -> the entry is written exactly as it is without this knob.
+   */
+  entryDefaultEnabled?: boolean;
+  /**
+   * DFEN-01: stamp `defaultEnabled` on the plugin's own
+   * `.claude-plugin/plugin.json` -- the precedence FALLBACK, consulted only
+   * when `entryDefaultEnabled` is absent.
+   * Absent -> plugin.json is written exactly as it is without this knob.
+   */
+  pluginJsonDefaultEnabled?: boolean;
   /**
    * D-64-06: declare unsupported component kinds in the plugin's own
    * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
@@ -287,6 +389,15 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * orchestrators run their parsed-config-cache mutation path.
    */
   hooksJson?: object;
+  /**
+   * DFEN-08: additional entries seeded into the SAME marketplace manifest
+   * beside `pluginName`, each with its own plugin tree carrying one skill.
+   * Only the enablement declaration varies between them, which is what lets a
+   * parity fixture install several plugins whose sole difference is the
+   * declaration and compare the resulting rows inside one run. Absent -> the
+   * manifest carries `pluginName` alone, exactly as before.
+   */
+  siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
   const scope = opts.scope ?? "project";
@@ -296,45 +407,19 @@ async function seedPathMarketplaceWithPlugin(opts: {
   const pluginRoot = path.join(marketplaceRoot, "plugins", pluginName);
   await mkdir(pluginRoot, { recursive: true });
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-  // SNM-34 fixture knob: the plugin's OWN plugin.json version, distinct from
-  // the marketplace entry.version (`pluginVersion`). `undefined` preserves the
-  // legacy `0.0.1` shape; a string sets that version; `null` omits the field.
-  const pluginManifest: Record<string, unknown> = { name: pluginName };
-  if (opts.pluginJsonVersion === undefined) {
-    pluginManifest.version = "0.0.1";
-  } else if (opts.pluginJsonVersion !== null) {
-    pluginManifest.version = opts.pluginJsonVersion;
-  }
-
-  // D-64-06: declaring experimental kinds drives `resolveStrict` to the
-  // `unsupported` (force-degradable) arm without a structural defect.
-  if (opts.experimental !== undefined) {
-    pluginManifest.experimental = opts.experimental;
-  }
-
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify(pluginManifest),
+    JSON.stringify(buildSeededPluginManifest(pluginName, opts)),
   );
 
   await writePluginComponents(pluginRoot, opts);
 
-  // Marketplace manifest
-  const entry: Record<string, unknown> = {
-    name: pluginName,
-    source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
-  };
-  if (opts.pluginVersion !== undefined) {
-    entry.version = opts.pluginVersion;
-  }
-
-  if (opts.declareDependencies === true) {
-    entry.dependencies = { "some-other-plugin": "*" };
-  }
-
   const manifest = {
     name: marketplaceName,
-    plugins: [entry],
+    plugins: [
+      buildSeededMarketplaceEntry(pluginName, opts),
+      ...(await seedSiblingPlugins(marketplaceRoot, opts)),
+    ],
   };
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await writeFile(manifestPath, JSON.stringify(manifest));
@@ -782,6 +867,1360 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.version, "1.2.3");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DFEN-04 / OUT-04 -- a declared `defaultEnabled: false` install lands disabled
+//
+// The standalone install honors the declaration: the record carries
+// `enabled: false` while KEEPING its inventory (ENBL-18), no artifact survives
+// on disk, `claude-plugins.json` gains the write-through, and the single
+// notification is the info-severity `(disabled) {installs disabled}` row with
+// the enable hint. The two declaration sites differ only in WHICH seeder knob
+// carries the declaration, so they share one body -- "the two sites behave
+// identically" is then enforced by construction rather than asserted in two
+// copies that can drift apart.
+//
+// The recorded resources are asserted alongside the flag and against the disk,
+// so "recorded disabled with its inventory" cannot be confused with "recorded
+// but never materialized": those are separate outcomes, and a change that
+// conflated them would otherwise pass on the flag alone.
+// ───────────────────────────────────────────────────────────────────────────
+
+const DFEN_DECLARATION_SITES = [
+  {
+    label: "marketplace entry declares defaultEnabled false",
+    tmpPrefix: "install-dfen-entry-",
+    seedKnob: { entryDefaultEnabled: false },
+  },
+  {
+    // The entry stays silent, so the manifest declaration is the one the
+    // resolver's precedence rule falls through to.
+    label: "plugin.json declares defaultEnabled false with a silent entry",
+    tmpPrefix: "install-dfen-manifest-",
+    seedKnob: { pluginJsonDefaultEnabled: false },
+  },
+] as const;
+
+for (const site of DFEN_DECLARATION_SITES) {
+  test(`DFEN-04 / OUT-04: ${site.label} -> records disabled, drops the artifacts, writes through, and says so`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), site.tmpPrefix));
+      try {
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          skills: [{ sourceName: "tool" }],
+          commands: [{ sourceName: "deploy" }],
+          ...site.seedKnob,
+        });
+
+        const { ctx, pi, notifications } = makeCtx();
+        await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          applyDefaultEnabled: true,
+        });
+
+        const errs = notifications.filter((n) => n.severity === "error");
+        assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+        const after = await loadState(locations.extensionRoot);
+        const record = after.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        assert.equal(record.enabled, false);
+
+        // ENBL-18: the record keeps its inventory. It describes WHAT the plugin
+        // contains, which stays true while the plugin is disabled; emptiness is
+        // never the disabled marker.
+        assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+        assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
+
+        // ...and nothing the record names is on disk. Asserting the inventory
+        // without this would pass on a state-phase-only implementation that
+        // never materialized, which is a different (and rejected) outcome.
+        await assert.rejects(
+          stat(path.join(locations.skillsTargetDir, "hello-tool")),
+          "the staged skill directory must be gone",
+        );
+        await assert.rejects(
+          stat(path.join(locations.promptsTargetDir, "hello:deploy.md")),
+          "the staged command must be gone",
+        );
+
+        // DFEN-04: the state record is only half the contract. Without the
+        // write-through the next reload reads the entry's absent `enabled` as
+        // enabled, finds the record disabled, and plans a re-enable -- the
+        // silent re-enable this behavior exists to close.
+        const { loadConfig } =
+          await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        const cfg = await loadConfig(locations.configJsonPath);
+        assert.equal(cfg.status, "valid");
+        if (cfg.status === "valid") {
+          assert.deepEqual(cfg.config.plugins?.["hello@mp"], { enabled: false });
+        }
+
+        // OUT-04 / D-102-07: one notification, informational -- the desired
+        // state WAS reached -- naming the state, the author-declared cause and
+        // the remedy, with no filesystem path anywhere in it (T-102-04).
+        assert.equal(notifications.length, 1);
+        const note = notifications[0]!;
+        assert.equal(note.severity, undefined);
+        assert.equal(
+          note.message,
+          "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        );
+        assert.ok(
+          !note.message.includes(cwd),
+          `MUST NOT leak an absolute filesystem path, got: ${note.message}`,
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// OUT-04 -- the install-disabled notification's observable contract
+//
+// The block above proves the terminal state. These pin what the user actually
+// reads: how many notifications there are, at what severity, in what token
+// ORDER, with which markers suppressed, and with a remedy that names something
+// runnable and interpolates nothing.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** The frozen D-102-10 trailer, restated here so a wording drift goes red. */
+const ENABLE_HINT_TRAILER_BYTES = "Run enable on this plugin to use its components.";
+
+test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission in subject-first order with no soft-dep marker", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-row-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        entryDefaultEnabled: false,
+        // All three artifact-bearing kinds, so the row is asserted against a
+        // record that retained agent AND mcp inventory rather than an empty one.
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+        agents: [{ sourceName: "bot" }],
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+
+      // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If the
+      // `disabled` render arm ever threaded the real soft-dep flags instead of
+      // hard-coding them false, this fixture is the one that would emit
+      // `{requires pi-subagents, requires pi-mcp}` and fail below.
+      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // IL-2: one install, one notification.
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      // D-102-07: the desired state WAS reached, so the cascade reduces to info
+      // and `notify()` passes no severity arg at all.
+      assert.equal(note.severity, undefined);
+
+      // Subject-first row grammar, asserted as ONE anchored ordered match so a
+      // reordering of glyph / name / version / status / reasons cannot pass by
+      // satisfying a set of independent substring checks.
+      assert.match(note.message, /^ {2}◍ hello v1\.0\.0 \(disabled\) \{installs disabled\}$/m);
+
+      // The record kept `agents` and `mcpServers`, and the row still carries no
+      // companion marker: those markers state a runtime concern that is
+      // suspended while the plugin is disabled.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.enabled, false);
+      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...record.resources.mcpServers], ["server1"]);
+      assert.ok(
+        !note.message.includes("requires pi-"),
+        `a disabled row must carry no soft-dep marker, got: ${note.message}`,
+      );
+
+      // T-102-04: plugin / marketplace / version tokens only.
+      assert.ok(
+        !note.message.includes(cwd),
+        `MUST NOT leak an absolute filesystem path, got: ${note.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer under the row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-hint-"));
+    try {
+      // Deliberately distinctive names: a two-letter marketplace such as `mp`
+      // is a substring of the trailer's own prose, so the non-interpolation
+      // assertions below would fail for a reason that has nothing to do with
+      // interpolation.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "acme-registry",
+        pluginName: "widget",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "acme-registry",
+        plugin: "widget",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const lines = (notifications[0]?.message ?? "").split("\n");
+      const rowAt = lines.findIndex((l) => l.includes("(disabled)"));
+      assert.notEqual(rowAt, -1, "the disabled row must be present");
+
+      // Its own line, directly below the row, indented 4 spaces.
+      const trailer = lines[rowAt + 1];
+      assert.equal(trailer, `    ${ENABLE_HINT_TRAILER_BYTES}`);
+
+      // T-69-01: the remedy names a runnable verb and nothing else. A trailer
+      // that interpolated the ref would drift from the catalog byte form and
+      // would have to be re-frozen per plugin.
+      assert.ok(!trailer.includes("widget"), "the trailer must not name the plugin");
+      assert.ok(!trailer.includes("acme-registry"), "the trailer must not name the marketplace");
+      assert.ok(!trailer.includes("1.0.0"), "the trailer must not name the version");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint trailer", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-nohint-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      // Without this the gate would be satisfiable by an unconditional append.
+      assert.ok(
+        !(notifications[0]?.message ?? "").includes(ENABLE_HINT_TRAILER_BYTES),
+        `a clean install must not advertise the enable remedy, got: ${notifications[0]?.message ?? ""}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradations the enable it advertises would inherit", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-degraded-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        entryDefaultEnabled: false,
+        // One skill whose frontmatter cannot be parsed (installed in degraded,
+        // synthesized form) and two experimental kinds the resolver drops. Both
+        // facts are durable and both constrain what the advertised `enable`
+        // will produce -- unlike the soft-dep markers, whose runtime concern is
+        // suspended while the plugin is disabled.
+        skills: [{ sourceName: "bad", frontmatterName: "[unterminated", body: "# Bad\n" }],
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        partial: true,
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      // WARN-01: a degrade this ledger run produced is a shortfall, and landing
+      // disabled does not undo it.
+      assert.equal(note.severity, "warning");
+      assert.match(
+        note.message,
+        /^ {2}◍ p1 v1\.0\.0 \(disabled\) \{installs disabled, malformed skill, unsupported component\}$/m,
+        `expected the cause first and both degradation facts after it; got:\n${note.message}`,
+      );
+      // ENBL-15 / D-100-06: the suppressed half stays suppressed.
+      assert.ok(
+        !note.message.includes("requires pi-"),
+        `a disabled row must carry no soft-dep marker, got: ${note.message}`,
+      );
+      assert.ok(
+        note.message.includes(`    ${ENABLE_HINT_TRAILER_BYTES}`),
+        `expected the enable-hint trailer; got:\n${note.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DFEN-05 -- an explicit `enabled` in the user's config wins over the plugin
+// author's `defaultEnabled`, in either direction, and is never rewritten.
+//
+// The gate is a THREE-valued read of one key: `true`, `false`, and ABSENT. Only
+// the absent value is the manifest's to answer, which is why the question is
+// `entry.enabled !== undefined` rather than `isDeclaredEnabled(entry)` -- the
+// two agree on `true` and on `false` and disagree exactly on absent. A matrix
+// that exercised only the two present values would therefore pass while the
+// gate asked the wrong question, so all three are covered below.
+//
+// Every case asserts the config entry as a WHOLE OBJECT. The threat DFEN-05
+// closes is a plugin release silently moving a value the user typed; an
+// assertion on the flag alone would miss a write that added or removed some
+// other key in the same entry, which is the same trust problem one field over.
+//
+// `seedLocal` puts the declaration in `claude-plugins.local.json`. CFG-02 makes
+// that entry the effective one whatever the write target is, so the gate has to
+// read both files; D-103-16 then aims the write at the file the declaration
+// lives in, so the local-declared rows write the LOCAL file.
+// `expectSiblingEntryAfter` / `expectSiblingKeyAbsent` pin what the untargeted
+// file holds afterwards.
+// ───────────────────────────────────────────────────────────────────────────
+
+interface DfenPrecedenceCase {
+  readonly label: string;
+  readonly tmpPrefix: string;
+  /** Seed the declaration into `claude-plugins.local.json` instead of the base file. */
+  readonly seedLocal?: boolean;
+  readonly seededEntry: Record<string, unknown>;
+  readonly manifestDefaultEnabled: boolean;
+  readonly expectRecordEnabled: boolean;
+  readonly expectArtifacts: boolean;
+  /** The whole entry the SEEDED file holds after the install. */
+  readonly expectEntryAfter: Record<string, unknown>;
+  /** The whole entry the OTHER physical file holds after the install, when asserted. */
+  readonly expectSiblingEntryAfter?: Record<string, unknown>;
+  /**
+   * D-103-16: the OTHER physical file holds NO entry for the key. Distinct from
+   * `expectSiblingEntryAfter: {}` -- which asserts the file exists and carries a
+   * fieldless entry -- because a file the install never targets may not exist at
+   * all, and `loadConfig` answers `absent` rather than `valid` for it.
+   */
+  readonly expectSiblingKeyAbsent?: boolean;
+  /**
+   * Seed this entry into the file `seedLocal` does NOT name, so the fixture
+   * declares the key in BOTH physical files -- the shape that separates a
+   * write target chosen by file identity from one chosen by the caller's flag.
+   */
+  readonly alsoSeedSiblingEntry?: Record<string, unknown>;
+  /**
+   * D-103-03: run ONE reconcile pass after the install and assert it drives the
+   * record to disabled and drops the artifacts, leaving `expectEntryAfter`
+   * byte-identical. Opt-in per case: only the row whose install deliberately
+   * lands ENABLED under a declaration saying otherwise has a divergence to
+   * close, and the other rows would be asserting a no-op pass.
+   */
+  readonly expectReconcileConverges?: boolean;
+}
+
+const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
+  {
+    label: "an explicit `enabled: true` beats a manifest declaring defaultEnabled false",
+    tmpPrefix: "install-dfen05-true-wins-",
+    seededEntry: { enabled: true },
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+  },
+  {
+    // The mirror of the case above, and the direction that matters most: the
+    // manifest says `true` and the user said `false`. The install verb still
+    // materializes -- running `install` IS the user asking for the install --
+    // so the contract asserted here is the CONFIG one DFEN-05 actually states:
+    // the entry the user wrote comes back byte-for-byte.
+    //
+    // To the reader about to make the two directions symmetric: that edit is
+    // the one this comment exists to stop. The symmetric shape is to widen the
+    // landed-disabled verdict so it ALSO fires on an explicit `enabled: false`,
+    // letting the config value decide in both directions at the install
+    // boundary. DFEN-08 forbids it (D-103-01). That requirement demands that a
+    // plugin whose manifest declares `defaultEnabled: true`, and a plugin whose
+    // manifest never mentions the field at all, behave and render
+    // byte-identically to the pre-`defaultEnabled` releases across install,
+    // update, reinstall, list, info and reconcile. Widening changes `install`
+    // for the silent manifests: a config `enabled: false` with no declaration
+    // anywhere would begin installing disabled. Gating the widening on the
+    // manifest declaring the field does not rescue it -- `defaultEnabled: true`
+    // plus a config `false` is exactly this row, and it would change too. There
+    // is no form of the widening that leaves DFEN-08 intact, so the verdict
+    // keeps firing only on the ABSENT value.
+    //
+    // What makes the asymmetry tolerable rather than merely deliberate is that
+    // the divergence it leaves -- a materialized, enabled record under a
+    // declaration saying otherwise -- is TRANSIENT by construction.
+    // `expectReconcileConverges` proves it below: one reconcile pass drives the
+    // record to disabled and removes the artifacts, and it does so by acting on
+    // the RECORD. The user's entry is still byte-identical afterwards; a pass
+    // that "fixed" the config instead would be the overwrite DFEN-05 forbids.
+    label:
+      "an explicit `enabled: false` is not rewritten by a defaultEnabled-true manifest (DFEN-08), and the next pass converges the record",
+    tmpPrefix: "install-dfen05-false-kept-",
+    seededEntry: { enabled: false },
+    manifestDefaultEnabled: true,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: false },
+    expectReconcileConverges: true,
+  },
+  {
+    // The only case the manifest gets to answer, and the one that separates
+    // `entry.enabled !== undefined` from `isDeclaredEnabled(entry)`: a bare
+    // `{}` reads as ENABLED under the second predicate, which would suppress
+    // the declaration entirely. Its sibling directly above shares the fixture
+    // apart from the seeded key and expects the opposite outcome -- do not
+    // reconcile the two toward each other.
+    label: "a hand-authored entry with no `enabled` key is the one the manifest answers",
+    tmpPrefix: "install-dfen05-absent-",
+    seededEntry: {},
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: false,
+    expectArtifacts: false,
+    expectEntryAfter: { enabled: false },
+  },
+  {
+    // The trivially-enabled control: both sides agree on `true`, so a gate that
+    // was simply inverted would still have to fail somewhere, and this is where.
+    label:
+      "an explicit `enabled: true` under a manifest declaring defaultEnabled true is an ordinary install",
+    tmpPrefix: "install-dfen05-both-true-",
+    seededEntry: { enabled: true },
+    manifestDefaultEnabled: true,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+  },
+  {
+    // CFG-02: the declaration lives in the LOCAL file. A local entry replaces
+    // the same-keyed base entry wholesale, so the user HAS stated an opinion
+    // and the manifest never gets to answer -- reading only one file would
+    // report the key absent, install the plugin disabled against that opinion,
+    // and stamp an `enabled: false` the user never typed.
+    label:
+      "CFG-02 / D-103-16: an `enabled: true` in the local file wins, and the stamp follows it there",
+    tmpPrefix: "install-dfen05-local-true-wins-",
+    seedLocal: true,
+    seededEntry: { enabled: true },
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+    // D-103-16: the write-back addresses the file the declaration LIVES in, so
+    // it goes to the local file and the base file gains nothing -- it is never
+    // created here at all. CR-02's adopted marketplace declaration rides that
+    // same target in one atomic save rather than being split across the two
+    // files; the adoption arm only fires when the marketplace is declared in
+    // neither file, so there is no base-file declaration for it to contradict.
+    expectSiblingKeyAbsent: true,
+  },
+  {
+    // The case that fails if the effective-declaration label is derived from
+    // the caller's `--local` flag instead of from the SELECTED file's identity.
+    //
+    // Both files declare the key: base bare `{}`, local `enabled: true`. The
+    // key is in the local file, so the target is local, the local entry is the
+    // effective declaration, its `enabled` is true, the verdict never fires and
+    // the plugin installs ENABLED with both entries left exactly as seeded.
+    //
+    // Label the local target with the flag (false, since none was typed) and
+    // the two files swap identities: the BASE bare `{}` is read as the
+    // effective declaration, `enabled` comes back undefined, the verdict fires
+    // against a manifest declaring false, and the install lands DISABLED while
+    // stamping `enabled: false` over the `enabled: true` the user typed. The
+    // entry is selected by physical-file identity BEFORE its `enabled` field is
+    // read, which is why the label decides the answer rather than merely
+    // describing it -- and why it is derived from the path the selector
+    // returned, not from the flag.
+    label:
+      "CFG-02 / D-103-16: with the key in BOTH files the LOCAL entry decides, and neither file moves",
+    tmpPrefix: "install-dfen05-both-files-",
+    seedLocal: true,
+    seededEntry: { enabled: true },
+    alsoSeedSiblingEntry: {},
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+    expectSiblingEntryAfter: {},
+  },
+];
+
+for (const precedence of DFEN_PRECEDENCE_CASES) {
+  test(`DFEN-05: ${precedence.label}`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), precedence.tmpPrefix));
+      try {
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          entryDefaultEnabled: precedence.manifestDefaultEnabled,
+          skills: [{ sourceName: "tool" }],
+        });
+
+        const { loadConfig, saveConfig } =
+          await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        const seededPath =
+          precedence.seedLocal === true ? locations.configLocalJsonPath : locations.configJsonPath;
+        const siblingPath =
+          precedence.seedLocal === true ? locations.configJsonPath : locations.configLocalJsonPath;
+        // The entry pre-exists, as it does for a user who hand-authored
+        // `claude-plugins.json` before running the install.
+        await saveConfig(
+          seededPath,
+          { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.seededEntry } } },
+          locations.scopeRoot,
+        );
+        if (precedence.alsoSeedSiblingEntry !== undefined) {
+          await saveConfig(
+            siblingPath,
+            { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.alsoSeedSiblingEntry } } },
+            locations.scopeRoot,
+          );
+        }
+
+        const { ctx, pi, notifications } = makeCtx();
+        await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          applyDefaultEnabled: true,
+        });
+
+        const errs = notifications.filter((n) => n.severity === "error");
+        assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+        const after = await loadState(locations.extensionRoot);
+        const record = after.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        assert.equal(record.enabled, precedence.expectRecordEnabled);
+
+        const skillDir = path.join(locations.skillsTargetDir, "hello-tool");
+        if (precedence.expectArtifacts) {
+          assert.ok((await stat(skillDir)).isDirectory(), "the staged skill must be on disk");
+        } else {
+          await assert.rejects(stat(skillDir), "the staged skill directory must be gone");
+        }
+
+        // The whole entry, not just the flag: a write that added, changed or
+        // removed any other key would make the user's own file untrustworthy.
+        const cfg = await loadConfig(seededPath);
+        assert.equal(cfg.status, "valid");
+        if (cfg.status === "valid") {
+          assert.deepEqual(cfg.config.plugins?.["hello@mp"], precedence.expectEntryAfter);
+        }
+
+        if (precedence.expectSiblingEntryAfter !== undefined) {
+          const siblingCfg = await loadConfig(siblingPath);
+          assert.equal(siblingCfg.status, "valid");
+          if (siblingCfg.status === "valid") {
+            assert.deepEqual(
+              siblingCfg.config.plugins?.["hello@mp"],
+              precedence.expectSiblingEntryAfter,
+            );
+          }
+        }
+
+        // The untargeted file may legitimately not exist -- asserting
+        // `status === "valid"` on it would fail against correct behavior.
+        if (precedence.expectSiblingKeyAbsent === true) {
+          const siblingCfg = await loadConfig(siblingPath);
+          const siblingPlugins =
+            siblingCfg.status === "valid" ? siblingCfg.config.plugins : undefined;
+          assert.equal(siblingPlugins?.["hello@mp"], undefined);
+        }
+
+        if (precedence.expectReconcileConverges === true) {
+          const { loadMergedScopeConfig } =
+            await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+          const { planReconcile } =
+            await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+          const { applyReconcile } =
+            await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+
+          // Two fixture preconditions, asserted rather than assumed, because
+          // either one silently turns the pass below into a no-op that would
+          // "prove" convergence by never planning anything. The config must
+          // declare the MARKETPLACE -- an entry naming an undeclared one is a
+          // dangling reference and gets no disable -- and the merged read must
+          // not be an invalid arm, which aborts the pass under CFG-03 before
+          // the planner runs at all.
+          const { merged } = await loadMergedScopeConfig(locations);
+          const planned = planReconcile(merged, after, "project");
+          assert.deepEqual(
+            planned.sourceMismatches,
+            [],
+            "the marketplace must be declared -- a dangling reference plans no disable",
+          );
+          assert.deepEqual(planned.pluginsToDisable, [
+            { scope: "project", plugin: "hello", marketplace: "mp" },
+          ]);
+
+          const reload = makeCtx();
+          await applyReconcile({ ctx: reload.ctx, pi: reload.pi, cwd, scope: "project" });
+          assert.deepEqual(
+            reload.notifications.filter((n) => n.severity === "error"),
+            [],
+          );
+
+          // The record moved to match the declaration, and a disable is
+          // materially the artifacts leaving disk.
+          const converged = await loadState(locations.extensionRoot);
+          assert.equal(converged.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
+          await assert.rejects(stat(skillDir), "the disable must remove the staged skill");
+
+          // The half that makes the divergence defensible rather than merely
+          // temporary: convergence acted on the RECORD. The entry the user
+          // wrote is still the whole object it was, so nothing rewrote a value
+          // it does not own.
+          const cfgConverged = await loadConfig(seededPath);
+          assert.equal(cfgConverged.status, "valid");
+          if (cfgConverged.status === "valid") {
+            assert.deepEqual(
+              cfgConverged.config.plugins?.["hello@mp"],
+              precedence.expectEntryAfter,
+            );
+          }
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+/**
+ * DFEN-08: the overwhelming majority of plugins say nothing about install-time
+ * enablement, and what they are owed is that NOTHING moved for them. The triple
+ * is what makes that checkable instead of assumed: `beta` declares the
+ * install-time default TRUE, `gamma` declares nothing at all, and the two must
+ * render the same row as each other AND as the row this surface produced before
+ * the field existed. `alpha`, declaring FALSE, is the third arm -- a precedence
+ * fixture over a three-valued key that covers two of its values passes while
+ * asking the wrong question -- and it doubles as the CONTROL proving these
+ * installs reached the path that reads the declaration at all.
+ *
+ * This is the arm the DFEN-05 cases above do NOT cover. Every one of them seeds
+ * an explicit `enabled` value, so each exercises the precedence rule and none
+ * ever reaches the silent-user arm, which is the only arm the declaration can
+ * answer. `install` is also the one verb that legitimately reads the field, so
+ * it is where a parity regression is most likely.
+ *
+ * A standalone install emits ONE notification per call, so the three rows arrive
+ * in three bodies rather than one cascade. The rows are still compared against
+ * EACH OTHER with the plugin name normalized out, because a drift that two
+ * independently-correct literals would both stay green through is exactly what
+ * a parity claim has to catch.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical install rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen08-parity-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "alpha",
+        // No entry version: every plugin tree the seeder writes stamps the same
+        // `plugin.json` version, which is tier 1 of the version ladder, so all
+        // three rows carry the same version and the declaration stays the only
+        // difference between them.
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+        siblingPlugins: [
+          { name: "beta", entryDefaultEnabled: true },
+          // No knob at all: the conditional spread writes NO `defaultEnabled`
+          // key on this entry, which is the arm every plugin that never heard
+          // of the field lands on.
+          { name: "gamma" },
+        ],
+      });
+
+      // The user states nothing anywhere -- neither configuration file is
+      // seeded -- because a stated value short-circuits the install's own gate
+      // and would collapse the three arms onto one outcome.
+      const install = async (plugin: string): Promise<NotifyRecord[]> => {
+        const run = makeCtx();
+        await installPlugin({
+          ctx: run.ctx,
+          pi: run.pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin,
+          applyDefaultEnabled: true,
+        });
+        assert.deepEqual(
+          run.notifications.filter((n) => n.severity === "error"),
+          [],
+        );
+        return run.notifications;
+      };
+
+      const alphaNotifications = await install("alpha");
+      const betaNotifications = await install("beta");
+      const gammaNotifications = await install("gamma");
+
+      // Whole-body rather than a substring match: the literal pins the header,
+      // the row, the reload trailer and the absence of one.
+      assert.equal(alphaNotifications.length, 1);
+      assert.equal(
+        alphaNotifications[0]?.message,
+        "● mp [project]\n" +
+          "  ◍ alpha v0.0.1 (disabled) {installs disabled}\n" +
+          "    Run enable on this plugin to use its components.",
+      );
+
+      assert.equal(betaNotifications.length, 1);
+      assert.equal(
+        betaNotifications[0]?.message,
+        "● mp [project]\n  ● beta v0.0.1 (installed)\n\n/reload to pick up changes",
+      );
+      assert.equal(gammaNotifications.length, 1);
+      assert.equal(
+        gammaNotifications[0]?.message,
+        "● mp [project]\n  ● gamma v0.0.1 (installed)\n\n/reload to pick up changes",
+      );
+      // Severity is part of the row's observable form: an install that landed
+      // as its author declared is the desired state reached, not a shortfall.
+      assert.equal(alphaNotifications[0]?.severity, undefined);
+      assert.equal(betaNotifications[0]?.severity, undefined);
+      assert.equal(gammaNotifications[0]?.severity, undefined);
+
+      // The parity claim itself, stated apart from the whole-body literals.
+      // Before the field was consumed it was an unknown key under the lenient
+      // manifest tolerance and therefore inert, so a declared-true entry and a
+      // silent entry were LITERALLY the same input -- which is what makes these
+      // literals the pre-`defaultEnabled` row form as well.
+      const rowFor = (notifications: NotifyRecord[], name: string): string =>
+        (notifications[0]?.message ?? "")
+          .split("\n")
+          .find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+      const betaRow = rowFor(betaNotifications, "beta");
+      const gammaRow = rowFor(gammaNotifications, "gamma");
+      assert.equal(betaRow, "  ● beta v0.0.1 (installed)");
+      assert.equal(gammaRow, "  ● gamma v0.0.1 (installed)");
+      assert.equal(
+        betaRow.replaceAll("beta", "<plugin>"),
+        gammaRow.replaceAll("gamma", "<plugin>"),
+        "DFEN-08: the declared-true install row and the silent install row must COINCIDE",
+      );
+
+      // The records the rows report on. `alpha` is the control: without it a
+      // fixture whose declarations never reached the install would satisfy
+      // every assertion above.
+      const after = await loadState(locations.extensionRoot);
+      const plugins = after.marketplaces["mp"]?.plugins ?? {};
+      assert.equal(
+        plugins["alpha"]?.enabled,
+        false,
+        "control: the declared-false arm proves the declaration was read at all",
+      );
+      assert.equal(plugins["beta"]?.enabled, true, "DFEN-08: a declared-true entry moves nothing");
+      assert.equal(plugins["gamma"]?.enabled, true, "DFEN-08: a silent entry moves nothing");
+
+      // And the configuration entries the write-through authored. Only the
+      // declaring arm gains a key; the other two are left bare, which is what
+      // the reload convergence loop reads as enabled (D-04).
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(cfg.config.plugins?.["alpha@mp"], { enabled: false });
+        assert.deepEqual(cfg.config.plugins?.["beta@mp"], {});
+        assert.deepEqual(cfg.config.plugins?.["gamma@mp"], {});
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// D-103-16 / DFEN-06 / CFG-02 -- the install stamp follows the DECLARATION.
+//
+// A user hand-writes `"hello@mp": {}` into `claude-plugins.local.json` and runs
+// the install with no flag. The read half was already correct: the merged view
+// says `enabled` is absent, so a plugin declaring `defaultEnabled: false` lands
+// disabled. Aiming the WRITE by the flag instead put the `enabled: false` stamp
+// in the base file, where CFG-02's wholesale per-key replacement shadows it --
+// the merged entry still reads `enabled` absent, `isDeclaredEnabled` answers
+// true, and every reload from then on plans an enable for a plugin the author
+// declared off. Unattended, permanent, and reported as success each time.
+//
+// `enable` and `disable` carried the same defect at their own write site and
+// were fixed with the same helper; treat the three as one rule, not as three
+// coincidences. The rule is that a verb AUTHORING an enablement declaration
+// writes where the declaration lives -- said as a rule rather than as a claim
+// about coverage, because `maybeWritePluginConfigBack` still aims by the flag.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL file and moves the merged view", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-stamp-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { loadConfig, saveConfig, isDeclaredEnabled } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+
+      // The declaration lives ONLY in the local file, and it is bare: the user
+      // named the plugin without stating an opinion about enablement, which is
+      // the one shape the manifest's `defaultEnabled` gets to answer.
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+      assert.deepEqual(
+        notifications.filter((n) => n.severity === "error"),
+        [],
+      );
+
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
+
+      // The stamp landed in the declaring file, as a whole entry.
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], { enabled: false });
+      }
+
+      // The base file gained nothing -- and was never created, so the `absent`
+      // arm is the correct outcome rather than a `valid` file with no key.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
+      assert.equal(basePlugins?.["hello@mp"], undefined);
+
+      // The load-bearing assertion. "The local file gained the key" would also
+      // hold if the stamp went to the base file and something else wrote the
+      // local one; only the MERGED read distinguishes a correct stamp from one
+      // CFG-02 shadows, and the merged view is the planner's only input.
+      const { merged } = await loadMergedScopeConfig(locations);
+      const mergedEntry = merged.plugins["hello@mp"];
+      assert.ok(mergedEntry !== undefined);
+      assert.equal(mergedEntry.source, "local");
+      assert.equal(mergedEntry.entry.enabled, false);
+      assert.equal(isDeclaredEnabled(mergedEntry.entry), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install plans nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-reload-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { applyReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { emptyReconcilePlan } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts");
+
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+
+      const install = makeCtx();
+      await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+      const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+
+      // What this half proves that the stamp half cannot: a write can land in
+      // the right FILE and still leave the loop open, because whether the
+      // planner sees it depends on the MERGED view rather than on the file. The
+      // planner is the only witness that settles it -- so run a real reload and
+      // then read the plan directly.
+      const reload = makeCtx();
+      await applyReconcile({ ctx: reload.ctx, pi: reload.pi, cwd, scope: "project" });
+      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+
+      const { merged } = await loadMergedScopeConfig(locations);
+      assert.deepEqual(planReconcile(merged, after, "project"), emptyReconcilePlan("project"));
+
+      // The base file is not asserted absent here: a reload materializes a base
+      // config from recorded state when none exists, and its plugin entry is
+      // FIELDLESS. The local entry keeps replacing it wholesale (CFG-02), which
+      // is why the merged view above does not move -- pinned rather than
+      // glossed, so a future change that writes a FIELD there fails a test
+      // instead of silently reversing the user.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
+      const baseEntry = basePlugins?.["hello@mp"];
+      assert.ok(baseEntry === undefined || Object.keys(baseEntry).length === 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// D-102-03 -- a caller that does not opt in installs the plugin ENABLED.
+//
+// The opt-in is an explicit caller option rather than something derived from
+// the config, and it has to be: on the `import` path the config entry does not
+// exist yet when the install runs -- import writes every entry in a post-pass,
+// after all installs return -- so an absent-entry inference would read "the
+// user has stated no opinion" for every imported plugin and install the lot
+// disabled, under declarations that say `enabled: true`.
+//
+// This case pins the orchestrator-level default every non-opting caller
+// inherits. `update` and `reinstall` come through here; the `enable` branch of
+// the enable/disable verb reaches `runInstallLedger` directly and never passes
+// this point at all.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("D-102-03: an install that does not opt in ignores defaultEnabled and lands enabled", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d10203-optout-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // The same declaration the opting-in cases install DISABLED from. The
+      // only difference below is the missing `applyDefaultEnabled`.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.enabled, true);
+
+      // The artifacts survive: nothing disabled them on the way out.
+      assert.ok(
+        (await stat(path.join(locations.skillsTargetDir, "hello-tool"))).isDirectory(),
+        "the staged skill must be on disk",
+      );
+      assert.ok(
+        (await stat(path.join(locations.promptsTargetDir, "hello:deploy.md"))).isFile(),
+        "the staged command must be on disk",
+      );
+
+      // The ordinary success row, with neither the token nor the remedy.
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.equal(note.severity, undefined);
+      assert.match(note.message, /^ {2}● hello v0\.0\.1 \(installed\)$/m);
+      assert.ok(
+        !note.message.includes("installs disabled"),
+        `a non-opting install must not carry the token, got: ${note.message}`,
+      );
+      assert.ok(
+        !note.message.includes(ENABLE_HINT_TRAILER_BYTES),
+        `a non-opting install must not advertise the enable remedy, got: ${note.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// T-102-01 -- a plugin the user's configuration says is disabled must not
+// execute code in the session that installed it.
+//
+// The post-save hooks parsed-config cache add predates any notion of an install
+// landing disabled: its gate asks "does this plugin declare hooks", not "is this
+// plugin live". Left ungated it would register routing entries for a plugin that
+// just had its on-disk hooks.json removed, and nothing short of the next hydrate
+// would clear them.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async () => {
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
+    try {
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        entryDefaultEnabled: false,
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+
+      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hooky",
+        applyDefaultEnabled: true,
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(summary.includes("(disabled)"), `expected a disabled row; got: ${summary}`);
+
+      // No routing entry: dispatch cannot reach this plugin.
+      assert.deepEqual([...getRoutingBucket("PreToolUse")], []);
+      // ...and the staged config the routing table is rebuilt from is gone too,
+      // so even a rebuild from disk could not resurrect it.
+      await assert.rejects(
+        stat(path.join(locations.hooksDir, "hooky", "hooks.json")),
+        "the staged hooks.json must be gone",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
+    try {
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // The contrast case: identical fixture, no `defaultEnabled` declaration.
+      // Without it the assertion above could pass because the cache was never
+      // populated for ANY install.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hooky",
+        applyDefaultEnabled: true,
+      });
+
+      const bucket = getRoutingBucket("PreToolUse");
+      assert.equal(bucket.length, 1);
+      assert.equal(bucket[0]?.pluginId, "hooky");
+      assert.ok((await stat(path.join(locations.hooksDir, "hooky", "hooks.json"))).isFile());
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// D-102-02 / NFR-3 -- the one failure window this composition creates: the
+// ledger succeeded, and the disable cascade then threw.
+//
+// The terminal state is deliberately characterized rather than repaired. An
+// install that reports failure while leaving a recorded, ENABLED, partially
+// unstaged plugin is precisely what an `install` followed by a failed `disable`
+// produces, and the disable verb has the same asymmetry: a cascade that throws
+// never reaches the disabled-record producer, so the record keeps
+// `enabled: true`. Naming that here is what stops a later reader from inventing
+// new failure semantics, a new reason token, or a new rollback composition for
+// a path that already has an answer.
+//
+// What must hold is NFR-3: state.json describes what is still on disk. The
+// bridges that ran cleanly removed their artifacts, so their axes are folded
+// out of the record; the axes whose bridges never ran are retained, because
+// those artifacts are still there.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves the record shrunk to what survived", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d10202-cascade-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        // Skills and commands run first in the cascade and drop cleanly, so the
+        // fold has something to subtract. The mcp axis is the one the throw
+        // never reaches, so it has something to retain. The plugin declares NO
+        // agents: the foreign row seeded below must survive the ledger's agents
+        // phase, and a declared agent under the same generated name would
+        // replace the foreign file on the way in and defuse the fault.
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+
+      // The fault: AG-5 foreign content under the agent's target name, with an
+      // agents-index row claiming it. The two paths treat that row differently
+      // -- the install ledger routes it to `failed[]` and proceeds (AS-7),
+      // while the cascade turns a non-empty `failed[]` into a throw -- which is
+      // exactly the asymmetry this case needs: the ledger must succeed and the
+      // cascade must then fail. The agents bridge runs third in the cascade's
+      // skills -> commands -> agents -> hooks -> mcp order, so the two bridges
+      // ahead of it drop cleanly and the two behind it never run.
+      await mkdir(locations.agentsDir, { recursive: true });
+      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
+      await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
+      await writeFile(
+        locations.agentsIndexPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          agents: [
+            {
+              plugin: "hello",
+              marketplace: "mp",
+              sourceAgent: "bot",
+              generatedName: foreignAgentName,
+              sourcePath: "/orig/bot.md",
+              targetPath: foreignAgentPath,
+              sourceHash: "deadbeef",
+              droppedFields: [],
+              droppedTools: [],
+              warnings: [],
+            },
+          ],
+        }),
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.equal(note.severity, "error");
+      assert.match(note.message, /\(failed\)/);
+
+      // The failure is the DISABLE-side one. An install rollback would have
+      // left no record at all, and would surface the rollback vocabulary.
+      assert.ok(
+        !note.message.includes("rollback partial"),
+        `expected a disable-side failure, not an install rollback, got: ${note.message}`,
+      );
+      // ...and it names the bridge that threw, so the case cannot pass on some
+      // other failure that happens to reach the same row.
+      assert.match(note.message, /Failed to remove 1 agent\(s\)/);
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined, "the install itself succeeded, so the record must exist");
+
+      // Never reached the disabled-record producer, so it is still enabled --
+      // the same asymmetry the disable verb has on this path.
+      assert.equal(record.enabled, true);
+
+      // NFR-3: what the record claims is what is on disk. The skills and
+      // commands bridges ran cleanly and removed their artifacts, so those axes
+      // are folded out; mcp never ran, so its inventory stands.
+      assert.deepEqual([...record.resources.skills], []);
+      assert.deepEqual([...record.resources.prompts], []);
+      assert.deepEqual([...record.resources.mcpServers], ["server1"]);
+      await assert.rejects(
+        stat(path.join(locations.skillsTargetDir, "hello-tool")),
+        "the skills bridge ran, so its artifact must be gone",
+      );
+      await assert.rejects(
+        stat(path.join(locations.promptsTargetDir, "hello:deploy.md")),
+        "the commands bridge ran, so its artifact must be gone",
+      );
+      const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+        mcpServers?: Record<string, unknown>;
+      };
+      assert.ok(
+        "server1" in (mcp.mcpServers ?? {}),
+        "the mcp bridge never ran, so its artifact must still be there",
+      );
+
+      assert.notEqual(record.updatedAt, record.installedAt, "updatedAt must have moved");
+
+      // NFR-3: the declaration is written on this path too. A saved record with
+      // no declaration is a state neither convergence path can act on -- the
+      // standalone retry is rejected by the PI-15 already-installed gate, and a
+      // bare reconcile entry over a recorded, enabled, not-disabled record is
+      // steady state for the planner. `enabled: false` is what makes the next
+      // pass plan the disable this one could not finish.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(
+          cfg.config.plugins?.["hello@mp"],
+          { enabled: false },
+          "a failed disable cascade must still declare enabled:false",
+        );
+      }
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2013,7 +3452,7 @@ test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommit
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-cache-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -2189,7 +3628,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d03inv-"));
     try {
-      __resetCacheForTests();
+      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -2250,7 +3689,7 @@ test("classifyEntityShapeError dispatches on kind=already-installed -> failed/{a
     plugin: "p",
     marketplace: "mp",
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2268,7 +3707,7 @@ test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not
     plugin: "p",
     marketplace: "mp",
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2303,7 +3742,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
     reasons: ["contains hooks", "contains lspServers"],
     partialable: false,
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2325,7 +3764,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable with source no
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2336,7 +3775,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable with source no
 });
 
 test("classifyEntityShapeError returns undefined for non-PluginShapeError input (fallback to bare errorMessage)", () => {
-  const row = __test_classifyEntityShapeError(new Error("random failure"), {
+  const row = classifyEntityShapeError(new Error("random failure"), {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2359,7 +3798,7 @@ test("IN-02 / RSTATE-05: hooks-only unsupported (typed kind, no notes) renders {
     partialable: true,
     unsupportedKinds: ["hooks"],
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2379,7 +3818,7 @@ test("IN-02 / RSTATE-05: lsp unsupported (typed kind) renders {lsp} on the failu
     partialable: true,
     unsupportedKinds: ["lspServers"],
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2404,7 +3843,7 @@ test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their note
     partialable: false,
     unsupportedKinds: [],
   });
-  const row = __test_classifyEntityShapeError(err, {
+  const row = classifyEntityShapeError(err, {
     plugin: "p",
     marketplace: "mp",
     scope: "project",
@@ -2418,7 +3857,7 @@ test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the th
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  const partialable = __test_classifyEntityShapeError(
+  const partialable = classifyEntityShapeError(
     new PluginShapeError({
       kind: "not-installable",
       plugin: "p",
@@ -2431,7 +3870,7 @@ test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the th
   assert.equal(partialable.status, "unavailable");
   assert.equal(partialable.partialable, true);
 
-  const structural = __test_classifyEntityShapeError(
+  const structural = classifyEntityShapeError(
     new PluginShapeError({
       kind: "not-installable",
       plugin: "p",
@@ -2458,14 +3897,14 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
     reasons: ["contains lspServers"],
     partialable: true,
   });
-  const partialableMsg = __test_composeInstallFailureMessage({
+  const partialableMsg = composeInstallFailureMessage({
     err: partialableErr,
     plugin: "helper",
     scope: "project",
     version: undefined,
     rolledBackPartial: false,
     rollbackPartials: [],
-    entityErrorRow: __test_classifyEntityShapeError(partialableErr, {
+    entityErrorRow: classifyEntityShapeError(partialableErr, {
       plugin: "helper",
       marketplace: "mp",
       scope: "project",
@@ -2484,14 +3923,14 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  const structuralMsg = __test_composeInstallFailureMessage({
+  const structuralMsg = composeInstallFailureMessage({
     err: structuralErr,
     plugin: "helper",
     scope: "project",
     version: undefined,
     rolledBackPartial: false,
     rollbackPartials: [],
-    entityErrorRow: __test_classifyEntityShapeError(structuralErr, {
+    entityErrorRow: classifyEntityShapeError(structuralErr, {
       plugin: "helper",
       marketplace: "mp",
       scope: "project",
@@ -2513,12 +3952,12 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
     reasons: ["contains lspServers"],
     partialable: true,
   });
-  const partialableRow = __test_classifyEntityShapeError(partialableErr, {
+  const partialableRow = classifyEntityShapeError(partialableErr, {
     plugin: "helper",
     marketplace: "mp",
     scope: "project",
   });
-  const withVersion = __test_composeInstallFailureMessage({
+  const withVersion = composeInstallFailureMessage({
     err: partialableErr,
     plugin: "helper",
     scope: "project",
@@ -2537,12 +3976,12 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
     reasons: ["source dir does not exist"],
     partialable: false,
   });
-  const structuralRow = __test_classifyEntityShapeError(structuralErr, {
+  const structuralRow = classifyEntityShapeError(structuralErr, {
     plugin: "helper",
     marketplace: "mp",
     scope: "project",
   });
-  const unavailableWithVersion = __test_composeInstallFailureMessage({
+  const unavailableWithVersion = composeInstallFailureMessage({
     err: structuralErr,
     plugin: "helper",
     scope: "project",
@@ -2556,7 +3995,7 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
   assert.equal(unavailableWithVersion.version, "2.0.0", "the unavailable arm carries the version");
 
   // An empty-string version (a placeholder resolve) is OMITTED from both arms.
-  const emptyPartial = __test_composeInstallFailureMessage({
+  const emptyPartial = composeInstallFailureMessage({
     err: partialableErr,
     plugin: "helper",
     scope: "project",
@@ -2568,7 +4007,7 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
   assert.ok(emptyPartial.status === "partially-available");
   assert.equal(emptyPartial.version, undefined, "empty-string version is omitted");
 
-  const emptyStructural = __test_composeInstallFailureMessage({
+  const emptyStructural = composeInstallFailureMessage({
     err: structuralErr,
     plugin: "helper",
     scope: "project",
@@ -2582,7 +4021,7 @@ test("composeInstallFailureMessage threads a resolved version onto both not-inst
 });
 
 test("composeInstallFailureMessage runtime arm: a non-Error throw yields the bare failed row (no cause) with the version threaded", () => {
-  const msg = __test_composeInstallFailureMessage({
+  const msg = composeInstallFailureMessage({
     err: "disk exploded",
     plugin: "helper",
     scope: "project",
@@ -2713,8 +4152,8 @@ test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher g
 
 // ───────────────────────────────────────────────────────────────────────────
 // SEV-01 / SEV-02 / D-71-06 -- the partial-hook plugin now resolves
-// `unsupported` (force-degradable), so it flows through the Phase 65/69 gates
-// with no severity-layer source change: WITHOUT `--force` it blocks at error
+// `unsupported` (force-degradable), so it flows through the force-degradation
+// gates with no severity-layer source change: WITHOUT `--force` it blocks at error
 // severity carrying the `--force` hint (SEV-02); WITH `--force` it degrades to
 // an info `force-installed` row with NO summary line (SEV-01 / D-71-06).
 // ───────────────────────────────────────────────────────────────────────────
@@ -2833,7 +4272,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     plugin: "p",
     marketplace: "mp",
   });
-  const notInManifest = __test_classifyInstallFailure(notInManifestErr, "formatted");
+  const notInManifest = classifyInstallFailure(notInManifestErr, "formatted");
   assert.equal(notInManifest.status, "failed");
   assert.ok(notInManifest.status === "failed");
   assert.equal(notInManifest.error, notInManifestErr);
@@ -2844,7 +4283,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     plugin: "p",
     marketplace: "mp",
   });
-  const alreadyInstalled = __test_classifyInstallFailure(alreadyInstalledErr, "formatted");
+  const alreadyInstalled = classifyInstallFailure(alreadyInstalledErr, "formatted");
   assert.equal(alreadyInstalled.status, "failed");
   assert.ok(alreadyInstalled.status === "failed");
   assert.equal(alreadyInstalled.error, alreadyInstalledErr);
@@ -2855,7 +4294,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     reasons: ["hooks"],
     partialable: false,
   });
-  const notInstallable = __test_classifyInstallFailure(notInstallableErr, "formatted");
+  const notInstallable = classifyInstallFailure(notInstallableErr, "formatted");
   assert.equal(notInstallable.status, "failed");
   assert.ok(notInstallable.status === "failed");
   assert.equal(notInstallable.error, notInstallableErr);
@@ -2866,14 +4305,14 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     reasons: ["unsupported source"],
     partialable: false,
   });
-  const noLongerInstallable = __test_classifyInstallFailure(noLongerInstallableErr, "formatted");
+  const noLongerInstallable = classifyInstallFailure(noLongerInstallableErr, "formatted");
   assert.equal(noLongerInstallable.status, "failed");
   assert.ok(noLongerInstallable.status === "failed");
   assert.equal(noLongerInstallable.error, noLongerInstallableErr);
 
   // Non-PluginShapeError input is preserved verbatim on `error`.
   const opaque = new Error("random");
-  const unexpected = __test_classifyInstallFailure(opaque, "formatted");
+  const unexpected = classifyInstallFailure(opaque, "formatted");
   assert.equal(unexpected.status, "failed");
   assert.ok(unexpected.status === "failed");
   assert.equal(unexpected.error, opaque);
@@ -2902,13 +4341,13 @@ test("PHOOK-05 / D-71-04: narrowResolverReasons routes the `contains hooks` toke
   // partially-available arm -- pass the arm discriminant (`true`) so the
   // `contains <kind>` token routes through the component-axis helper.
   assert.deepEqual(
-    [...__test_narrowResolverReasons(["contains hooks"], ["hooks"], true)],
+    [...narrowResolverReasons(["contains hooks"], ["hooks"], true)],
     ["unsupported hooks"],
   );
 });
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
-  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
+  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
 test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as the sole remaining manifest-field carve-out", () => {
@@ -2917,7 +4356,7 @@ test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as t
   // dropped (dead under v1.13). The `lspServers` detection token maps
   // to the `lsp` Reason per SNM-36 / D-24-04; the catalog row form is
   // `(unavailable) {lsp}`.
-  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
+  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
 test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-out-kind>` to {unsupported component}", () => {
@@ -2932,48 +4371,46 @@ test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-o
   // available arm, so pass the arm discriminant (`true`); on the structural
   // `unavailable` arm the same note stays on the source axis (covered by the
   // cross-surface parity suite).
-  const reasons = __test_narrowResolverReasons(["contains monitors"], ["monitors"], true);
+  const reasons = narrowResolverReasons(["contains monitors"], ["monitors"], true);
   assert.deepEqual([...reasons], ["unsupported component"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
   assert.deepEqual(
-    [...__test_narrowResolverReasons(["unsupported source kind: foo"])],
+    [...narrowResolverReasons(["unsupported source kind: foo"])],
     ["unsupported source"],
   );
 });
 
 test("260525-cjr B2: narrowResolverReasons -> EACCES note surfaces as `permission denied` (NOT `unsupported source`)", () => {
-  const reasons = __test_narrowResolverReasons([
-    "EACCES: permission denied opening '/.pi/agent/...'",
-  ]);
+  const reasons = narrowResolverReasons(["EACCES: permission denied opening '/.pi/agent/...'"]);
   assert.deepEqual([...reasons], ["permission denied"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> EPERM also classifies as `permission denied`", () => {
-  const reasons = __test_narrowResolverReasons(["EPERM: operation not permitted"]);
+  const reasons = narrowResolverReasons(["EPERM: operation not permitted"]);
   assert.deepEqual([...reasons], ["permission denied"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> ENOENT note surfaces as `source missing`", () => {
-  const reasons = __test_narrowResolverReasons(["ENOENT: no such file or directory"]);
+  const reasons = narrowResolverReasons(["ENOENT: no such file or directory"]);
   assert.deepEqual([...reasons], ["source missing"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> SyntaxError note surfaces as `unparseable`", () => {
-  const reasons = __test_narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
+  const reasons = narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
   assert.deepEqual([...reasons], ["unparseable"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> empty notes -> `unsupported source` (permissive fallback)", () => {
-  assert.deepEqual([...__test_narrowResolverReasons([])], ["unsupported source"]);
+  assert.deepEqual([...narrowResolverReasons([])], ["unsupported source"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `unsupported source` (permissive fallback)", () => {
   // No carve-out, no `source` substring, no errno substring -- the
   // permissive `unsupported source` fallback runs only here.
   assert.deepEqual(
-    [...__test_narrowResolverReasons(["something genuinely unclassifiable"])],
+    [...narrowResolverReasons(["something genuinely unclassifiable"])],
     ["unsupported source"],
   );
 });
@@ -3094,6 +4531,191 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// WB-01 / UAT-05 / D-103-16 -- the three arms the declaration-following write
+// target must NOT have moved. Together they bound its blast radius to the one
+// case it fixes: a stamp that used to land in a file CFG-02 shadows.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the base file, local not created", async () => {
+  // The majority path -- the shape every fresh `/claude:plugin install` has --
+  // and the reason this change is narrow: the membership probe finds no local
+  // entry, so the selection falls through to today's answer, the base file.
+  //
+  // Contrast with the locally-declared stamp regression above: the fixture is
+  // identical apart from the seeded local declaration, and only that
+  // declaration moves the target. Do not reconcile the two toward each other.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-undeclared-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.deepEqual(baseCfg.config.plugins?.["hello@mp"], { enabled: false });
+      }
+
+      assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / UAT-05 / D-103-16: a typed --local still targets the local file over a BASE declaration", async () => {
+  // The flag is the user naming the file they want written, and a per-machine
+  // override that shadows a shared base declaration is the local file's whole
+  // purpose. The declaration-following rule answers the question the user did
+  // NOT answer; it never overrules the one they did.
+  //
+  // Contrast with the control above: there the flag is absent AND no
+  // declaration exists, so both roads lead to the base file. Here they
+  // disagree, and the flag wins.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-flag-wins-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": { enabled: true } } },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+        local: true,
+      });
+
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      }
+
+      // The base entry keeps its pre-call value.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.deepEqual(baseCfg.config.plugins?.["hello@mp"], { enabled: true });
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const arm of [
+  { configSource: "local" as const, tmpPrefix: "install-wb01-orch-local-" },
+  { configSource: "base" as const, tmpPrefix: "install-wb01-orch-base-" },
+]) {
+  test(`WB-01 / UAT-05 / D-103-16: the orchestrated stamp targets the ${arm.configSource} file, unchanged`, async () => {
+    // The reconcile apply path passes `local: op.configSource === "local"`, and
+    // the argument that this arm cannot move is airtight: a "local" source sets
+    // the flag, and a "base" source implies the key is ABSENT from the local
+    // file, because a local entry would have made the merged source "local"
+    // (CFG-02). There is no third case. An argument is not a test, though, and
+    // this is the arm a future change to `configSource` could break silently.
+    //
+    // The end-to-end half -- planner through apply through the on-disk file --
+    // is owned by the reconcile suite's DFEN-04 / D-102-04 base-declared and
+    // locally-declared stamp cases. This asserts the narrower orchestrator
+    // fact: given the flag the apply path derives, the stamp lands in the file
+    // it lands in today. The two are not duplicates.
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), arm.tmpPrefix));
+      try {
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          entryDefaultEnabled: false,
+          skills: [{ sourceName: "tool" }],
+        });
+
+        const { loadConfig, saveConfig } =
+          await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        const declaringPath =
+          arm.configSource === "local" ? locations.configLocalJsonPath : locations.configJsonPath;
+        const otherPath =
+          arm.configSource === "local" ? locations.configJsonPath : locations.configLocalJsonPath;
+        await saveConfig(
+          declaringPath,
+          { schemaVersion: 1, plugins: { "hello@mp": {} } },
+          locations.scopeRoot,
+        );
+
+        const { ctx, pi, notifications } = makeCtx();
+        const outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          applyDefaultEnabled: true,
+          local: arm.configSource === "local",
+          notifications: { mode: "orchestrated" },
+        });
+        assert.equal(outcome.status, "installed");
+        assert.deepEqual(notifications, []);
+
+        const declaringCfg = await loadConfig(declaringPath);
+        assert.equal(declaringCfg.status, "valid");
+        if (declaringCfg.status === "valid") {
+          assert.deepEqual(declaringCfg.config.plugins?.["hello@mp"], { enabled: false });
+        }
+
+        // The other file is never created: the orchestrated arm writes ONE
+        // entry to ONE file and skips the batched write-back entirely (WR-09).
+        assert.equal((await loadConfig(otherPath)).status, "absent");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-fail-"));
@@ -3167,6 +4789,149 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
       // WR-04: state.json bytes + mtime unchanged on the CFG-03 abort.
       assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
       assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install rather than aiming the stamp at the shadowed base file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // The local file is what DECIDES the destination on a flagless call, and
+      // this one cannot be read (a truncated mid-save write; an EACCES or a
+      // schema violation arrive through the same `invalid` arm). Whether it
+      // declares `hello@mp` is unknowable, and the two answers select different
+      // files -- so there is no destination to write to. Reading `invalid` as
+      // "not declared locally" stamped the base file, which a local entry
+      // replaces wholesale under CFG-02: the install reported success while the
+      // merged view the reconcile planner reads never moved.
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(
+        locations.configLocalJsonPath,
+        '{"plugins": {"hello@mp": {"enabled": tru',
+        "utf8",
+      );
+
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const stateBytesPre = await readFile(statePath, "utf8");
+      const stateMtimePre = (await stat(statePath)).mtimeMs;
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\{invalid manifest\}/);
+      // The row names the file that could not be read -- the one the user has
+      // to repair -- not the file the stamp would have landed in.
+      assert.match(
+        note.message,
+        /claude-plugins\.local\.json/,
+        "the abort must name the unreadable local file",
+      );
+      assert.ok(
+        !note.message.includes(locations.configLocalJsonPath),
+        `MUST NOT leak the absolute path, got: ${note.message}`,
+      );
+
+      // Nothing was written anywhere: no base file was created, no state
+      // mutation, and the no-save abort discipline holds byte for byte.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"], undefined);
+      assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
+      assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoption write instead of counting as a file that declares nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-unreadable-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // The declaration lives in the local file, so that file is the target and
+      // the BASE file is the sibling the UAT-05 membership gate consults. The
+      // base file declares the marketplace with `autoupdate: false` -- and is
+      // schema-invalid on an unrelated entry, so the gate cannot read it.
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const baseBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src", autoupdate: false } },
+        plugins: { "other@mp": { enabled: "no" } },
+      });
+      await writeFile(locations.configJsonPath, baseBytes, "utf8");
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status !== "valid") {
+        return;
+      }
+
+      // The plugin entry still lands in its declaring file -- the install is
+      // correctly targeted and is not what is in doubt.
+      assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      // The load-bearing assertion. Coercing the unreadable sibling to an empty
+      // config made the gate conclude the marketplace was undeclared, and the
+      // synthesized bare `{source}` entry replaces the base entry wholesale
+      // under CFG-02 -- so once the base file is repaired the user's
+      // `autoupdate: false` is gone and the marketplace starts auto-updating,
+      // a network-touching setting flipped with no command and no prompt.
+      assert.equal(
+        localCfg.config.marketplaces?.["mp"],
+        undefined,
+        "an unreadable sibling must not be read as a file that declares nothing",
+      );
+      // The unreadable file was never written to either.
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3381,15 +5146,15 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -3478,12 +5243,12 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json via the hooks bridge slot", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -3524,12 +5289,12 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
 });
 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but no asyncRewake surfaces `(installed) {orphan rewake}`", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -3581,12 +5346,12 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
 });
 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND asyncRewake: true does NOT surface `{orphan rewake}`", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 

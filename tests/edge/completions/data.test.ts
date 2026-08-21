@@ -12,7 +12,7 @@ import {
   getPluginToMarketplacesMap,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
-import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -23,7 +23,7 @@ import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/typ
  *
  * Each test builds a hermetic LocationsResolver mock with in-memory state +
  * manifest fixtures and a fresh tmpdir-rooted cache path. Tests call
- * `__resetCacheForTests()` to clear the shared module-level memory maps
+ * `resetCompletionCache()` to clear the shared module-level memory maps
  * between cases.
  */
 
@@ -86,7 +86,7 @@ async function makeResolver(spec: {
 // ---------------------------------------------------------------------------
 
 test("buildItem :: reconstructs argumentText prefix + chosen text + trailing space", () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const empty = buildItem("", "install", true);
   assert.deepEqual(empty, { label: "install", value: "install " });
 
@@ -98,13 +98,13 @@ test("buildItem :: reconstructs argumentText prefix + chosen text + trailing spa
 });
 
 test("splitCompletionInput :: trailing space yields empty current and full tokens", () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const out = splitCompletionInput("install foo@bar ");
   assert.deepEqual(out, { tokens: ["install", "foo@bar"], current: "" });
 });
 
 test("splitCompletionInput :: no trailing space yields last token as current", () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const out = splitCompletionInput("install fo");
   assert.deepEqual(out, { tokens: ["install"], current: "fo" });
 
@@ -113,7 +113,7 @@ test("splitCompletionInput :: no trailing space yields last token as current", (
 });
 
 test("extractPositionals :: skips --scope <value> pairs", () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const out = extractPositionals(["install", "--scope", "user", "p@mp"]);
   assert.deepEqual(out, ["install", "p@mp"]);
 
@@ -126,7 +126,7 @@ test("extractPositionals :: skips --scope <value> pairs", () => {
 // ---------------------------------------------------------------------------
 
 test("getMarketplaceNamesAcrossScopes :: dedupes overlapping names from user and project", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: {
       user: { mp1: {}, mp2: {} },
@@ -143,7 +143,7 @@ test("getMarketplaceNamesAcrossScopes :: dedupes overlapping names from user and
 });
 
 test("getPluginToMarketplacesMap :: install mode is available-only for target scope", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -168,7 +168,7 @@ test("getPluginToMarketplacesMap :: install mode is available-only for target sc
 });
 
 test("getPluginToMarketplacesMap :: uninstall mode keeps only installed", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -193,7 +193,7 @@ test("getPluginToMarketplacesMap :: uninstall mode keeps only installed", async 
 });
 
 test("getPluginToMarketplacesMap :: update mode keeps only installed", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -216,7 +216,7 @@ test("getPluginToMarketplacesMap :: update mode keeps only installed", async () 
 });
 
 test("getPluginToMarketplacesMap :: cross-marketplace plugin appears with both marketplace names", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: {
       user: { "mp-a": {}, "mp-b": {} },
@@ -247,7 +247,7 @@ test("getPluginToMarketplacesMap :: cross-marketplace plugin appears with both m
 // ---------------------------------------------------------------------------
 
 test("CMP-7 :: install completion excludes plugins already installed in the target scope", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { mp: { plugins: { already: {} } } }, project: {} },
     manifests: {
@@ -270,7 +270,7 @@ test("CMP-7 :: install completion excludes plugins already installed in the targ
 });
 
 test("CMP-8 :: project install completion falls back to user marketplace when project marketplace absent", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { mp: {} }, project: {} },
     manifests: {
@@ -289,7 +289,7 @@ test("CMP-8 :: project install completion falls back to user marketplace when pr
 });
 
 test("CMP-8 :: project marketplace shadows same-named user marketplace for install completion", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { mp: {} }, project: { mp: {} } },
     manifests: {
@@ -309,7 +309,7 @@ test("CMP-8 :: project marketplace shadows same-named user marketplace for insta
 });
 
 test("getPluginRefCompletions :: plugin@ prefix completes matching marketplace suffixes", async () => {
-  __resetCacheForTests();
+  resetCompletionCache();
   const fixture = await makeResolver({
     state: { user: { "mp-a": {}, "mp-b": {}, other: {} }, project: {} },
     manifests: {

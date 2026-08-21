@@ -26,7 +26,7 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -36,6 +36,7 @@ import * as git from "isomorphic-git";
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { listPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
@@ -410,14 +411,23 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
  * minimal installable plugin, so the presence probe resolves `materialized` and
  * `resolveStrict` validates the on-disk tree. Uses a canonical url (no `.git`)
  * so the staged mirror key matches the parse-time canonical url the probe hashes.
+ *
+ * `pluginJson` defaults to the minimal installable manifest every caller wanted
+ * before it existed. It is a parameter because one caller needs to stage a warm
+ * clone whose OWN manifest makes a declaration the marketplace entry does not,
+ * in order to prove the read surfaces ignore that second declaration site.
  */
-async function stageWarmMirror(cwd: string, canonicalUrl: string): Promise<void> {
+async function stageWarmMirror(
+  cwd: string,
+  canonicalUrl: string,
+  pluginJson: Record<string, unknown> = { name: "warm-plugin" },
+): Promise<void> {
   const locations = locationsFor("user", cwd);
   const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
   await mkdir(path.join(mirrorDir, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(mirrorDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "warm-plugin" }),
+    JSON.stringify(pluginJson),
   );
   await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
   await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
@@ -446,9 +456,345 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), no
-    // reason brace (D-80-03).
+    // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), and no
+    // PROBE- or SOFT-DEP-derived reason brace (D-80-03 as narrowed by
+    // OUT-05). This fixture's entry declares nothing, so there is no
+    // entry-derived token either, and the row is bare on both counts.
     assert.equal(out, ["● mp1 [user]", "  ◌ gitplug v1.0.0 (remote)"].join("\n"), out);
+  });
+});
+
+test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabled: false` carries `{installs disabled}` on its `(remote)` row; a silent cold entry stays bare", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "delta",
+            source: "https://example.com/delta.git",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+          { name: "epsilon", source: "https://example.com/epsilon.git", version: "1.0.0" },
+        ],
+      },
+      // No mirror staged for either source: both rows are COLD.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The load-bearing fact is that NO tree exists for either row -- no clone,
+    // no mirror, no plugin manifest to read -- so `delta`'s claim can only have
+    // come from the marketplace ENTRY the cached manifest holds (OUT-05 /
+    // DOC-02).
+    // That is what makes the claim reachable on the row of a marketplace the
+    // user has never fetched from. `epsilon` is the parity half: a silent entry
+    // renders the bare row byte-for-byte, exactly as the assertion above pins.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ◌ delta v1.0.0 (remote) {installs disabled}",
+        "  ◌ epsilon v1.0.0 (remote)",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
+test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO clone directory on disk after the call returns", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "delta",
+            source: "https://example.com/delta.git",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      // No mirror staged: the row is COLD.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.equal(
+      out,
+      ["● mp1 [user]", "  ◌ delta v1.0.0 (remote) {installs disabled}"].join("\n"),
+      out,
+    );
+
+    // The two halves of the guarantee are asserted TOGETHER: the row states what
+    // an install would do, AND nothing was fetched to let it say so. A clone or
+    // any other network touch would have to materialize `plugin-clones/`, so the
+    // directory's absence after the render is the evidence for the second half.
+    // The bytes alone cannot supply it -- a surface that quietly materialized a
+    // clone and read it would render exactly the same row.
+    //
+    // The probe's shape is deliberate on two counts. It asks for path METADATA
+    // rather than file content, because a content read against an EXISTING
+    // directory throws just as it does against a missing one, so a content-read
+    // probe answers "absent" either way. And it runs AFTER the orchestrator
+    // returns, because a probe taken before the call describes the fixture
+    // rather than the render. The caught code is asserted rather than a bare
+    // boolean derived from the try/catch, so a probe that failed for some
+    // unrelated reason cannot pass as an absence.
+    //
+    // A probe carrying either of those faults is unfalsifiable, so this shape
+    // is written this way deliberately rather than by accident.
+    const locations = locationsFor("user", cwd);
+    let probeCode: unknown;
+    try {
+      await stat(locations.pluginClonesDir);
+    } catch (err) {
+      probeCode = (err as { code?: unknown }).code;
+    }
+
+    assert.equal(probeCode, "ENOENT", "plugin-clones/ must not exist after the render");
+  });
+});
+
+test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` row; a declared-true entry and a silent entry stay bare", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0", defaultEnabled: false },
+          { name: "beta", source: "./beta", version: "1.0.0", defaultEnabled: true },
+          { name: "gamma", source: "./gamma", version: "1.0.0" },
+        ],
+      },
+      installablePluginDirs: ["alpha", "beta", "gamma"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Byte-equal over the whole body, so the three rows prove two facts on one
+    // run. `alpha`'s ENTRY declares that installing it would leave it disabled,
+    // so its row carries the brace -- read offline, with no clone materialized
+    // (OUT-05 / DOC-02). `beta` declares the opposite and `gamma` says nothing
+    // at all; both render exactly the bytes they rendered before the token
+    // existed, which is the no-op parity every plugin that does not use the
+    // field is owed.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ○ alpha v1.0.0 (available) {installs disabled}",
+        "  ○ beta v1.0.0 (available)",
+        "  ○ gamma v1.0.0 (available)",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
+test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs disabled}` in EITHER direction, because install checks it first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // All three entries declare the SAME thing, so the only variable across
+      // the rows is what the user's config says about each key.
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0", defaultEnabled: false },
+          { name: "beta", source: "./beta", version: "1.0.0", defaultEnabled: false },
+          { name: "gamma", source: "./gamma", version: "1.0.0", defaultEnabled: false },
+        ],
+      },
+      installablePluginDirs: ["alpha", "beta", "gamma"],
+    });
+    // None of the three is INSTALLED -- these are hand-added declarations for
+    // plugins the user has not reloaded into existence yet, which is exactly
+    // the state in which a candidate row is read.
+    const locations = locationsFor("user", cwd);
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        plugins: { "alpha@mp1": { enabled: true }, "beta@mp1": { enabled: false } },
+      },
+      locations.scopeRoot,
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The row states what an install WOULD do, so it must model the same
+    // precedence `install` applies (install.ts::readDeclaredEnabled), not a
+    // shorter one:
+    //
+    // `alpha` -- the config says `enabled: true`. `install` reads that FIRST,
+    //   never reaches the entry's default, and the plugin lands ENABLED. A row
+    //   claiming otherwise would predict an outcome the install path does not
+    //   produce, which is the one thing this claim exists not to do.
+    //
+    // `beta` -- the config says `enabled: false`. An explicit declaration wins
+    //   in EITHER direction, so the entry's default does not apply here either.
+    //   The bare row is deliberate: the user typed the value, and the token is
+    //   about the manifest's default taking effect, not about the user's own
+    //   declaration being echoed back.
+    //
+    // `gamma` -- no config opinion, so the entry answers and the row claims.
+    //   This is the control: it proves the suppression above comes from the
+    //   config read and not from the entry read having broken.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ○ alpha v1.0.0 (available)",
+        "  ○ beta v1.0.0 (available)",
+        "  ○ gamma v1.0.0 (available) {installs disabled}",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
+test("OUT-02: on a `(partially-available)` row the author-declared token appends at the TAIL, after the degrade tokens", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // `lspServers` + an on-disk dir resolves `partially-available`, so the
+          // row already carries a degrade token before the entry's declaration
+          // is considered.
+          {
+            name: "zeta",
+            source: "./zeta",
+            version: "1.0.0",
+            lspServers: { ls: {} },
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installablePluginDirs: ["zeta"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The ORDER is asserted deliberately, not incidentally: `composeReasons`
+    // joins the array in order and there is no per-row sort, so the tail
+    // position of the author-declared token is observable output. Reversing the
+    // two tokens in the expected value below fails this test, which is the
+    // point -- a later reordering would be a silent behavior change.
+    assert.equal(
+      out,
+      ["● mp1 [user]", "  ⊖ zeta v1.0.0 (partially-available) {lsp, installs disabled}"].join("\n"),
+      out,
+    );
+  });
+});
+
+test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structural resolver arm, not the probe-failure catch -- though both entries declare `defaultEnabled: false`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // A "/" in the name passes the manifest validator but makes
+          // `resolveStrict` THROW, so this row comes out of the probe-failure
+          // catch rather than the resolver's structural arm.
+          {
+            name: "bad/name",
+            source: "./badname",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+          // No on-disk dir seeded, so this row comes out of the resolver's
+          // structural `unavailable` arm.
+          { name: "gone", source: "./gone", version: "1.0.0", defaultEnabled: false },
+        ],
+      },
+      // No installablePluginDirs: neither entry resolves.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Byte-equal rather than a non-match, so absence is proven together with
+    // everything else on both rows staying put. The exclusion is deliberate:
+    // nothing will install at all from either path, so the token would state
+    // what an install does about an install that cannot happen, and each row's
+    // brace already carries the blocker the user came to read.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ⊘ bad/name v1.0.0 (unavailable) {unreadable}",
+        "  ⊘ gone v1.0.0 (unavailable) {unsupported source}",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
+test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, though its entry declares `defaultEnabled: false`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", defaultEnabled: false }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The durable-versus-transient rule (D-95-02): the token is a claim about an
+    // action NOT YET TAKEN, and a steady-state inventory row states durable
+    // facts about an existing record. Once the plugin is installed the row's
+    // subject is the record, and what an install would have done is no longer
+    // news. This holds because the installed-row builder was never taught the
+    // token -- there is no runtime guard to relax.
+    assert.equal(out, ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n"), out);
   });
 });
 
@@ -491,7 +837,7 @@ test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available
       assert.equal(out.includes("gitplug"), false, out);
     }
 
-    // --available --remote: BOTH rows restore the pre-milestone set.
+    // --available --remote: BOTH rows restore the pre-`defaultEnabled` set.
     {
       const { ctx, pi, notifications } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", available: true, remote: true });
@@ -539,6 +885,51 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
       await listPlugins({ ctx: c3, pi: p3, cwd, scope: "user", available: true });
       assert.match(n3[0]!.message, /○ warm-plugin v1\.0\.0 \(available\)/, n3[0]!.message);
     }
+  });
+});
+
+test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const canonicalUrl = "https://example.com/warmdecl";
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The ENTRY says nothing about the install-time default.
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "warmdecl", source: canonicalUrl, version: "1.0.0" }],
+      },
+    });
+    // The warm clone's OWN manifest declares what the entry does not. It is
+    // readable here, fs-only, with no fetch -- which is exactly what makes
+    // ignoring it a decision rather than an inability.
+    await stageWarmMirror(cwd, canonicalUrl, { name: "warmdecl", defaultEnabled: false });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Three things this pins, in the order they matter (OUT-05 / DOC-02):
+    //
+    // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
+    //    asserted so the absence of the brace is proven alongside everything
+    //    else on the row staying put.
+    //
+    // 2. The marketplace entry is the only MANIFEST-side source these surfaces
+    //    read -- `domain/resolver.ts::entryDeclaresInstallDisabled` carries the
+    //    argument for why, and `rowClaimsInstallDisabled` beside it carries the
+    //    other half of the rule (the user's config opinion is weighed first).
+    //
+    // 3. What this test is FOR: it fails the moment either read surface starts
+    //    honoring the clone's own declaration. Such a change would LOOK like a
+    //    bug fix -- it would make these surfaces agree with what the install
+    //    path reads -- and it is not one. It reintroduces the warm/cold
+    //    asymmetry, and the only remedy for that asymmetry is a fetch the
+    //    network-free requirement forbids. OUT-05 / DOC-02 own the rule; do
+    //    not "fix" this toward what install reads.
+    assert.equal(out, ["● mp1 [user]", "  ○ warmdecl v1.0.0 (available)"].join("\n"), out);
   });
 });
 
@@ -2447,7 +2838,7 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a newer manifest an
   });
 });
 
-test("RSTA-01 / NFR-5: list renders an uninstalled git plugin (remote) with no plugin-clones dir on disk (no clone, no network)", async () => {
+test("RSTA-01: list renders an uninstalled git-source plugin as a `(remote)` row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -2460,19 +2851,6 @@ test("RSTA-01 / NFR-5: list renders an uninstalled git plugin (remote) with no p
         plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
       },
     });
-
-    // No plugin-clones/ directory is ever created; a clone (or any network
-    // touch) would have to materialize one. Its absence after the render proves
-    // the surface neither cloned nor fetched.
-    const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
-    let clonesExisted = true;
-    try {
-      await readFile(clonesDir);
-    } catch {
-      clonesExisted = false;
-    }
-
-    assert.equal(clonesExisted, false);
 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });

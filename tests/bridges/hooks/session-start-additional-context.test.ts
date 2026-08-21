@@ -30,11 +30,11 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
+import { beforeAgentStartHandlerFor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
-  _peekPendingSessionStartContextForTest,
-  _resetForTest,
-  beforeAgentStartHandlerFor,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+  pendingSessionStartContextEntries,
+  resetRoutingState,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { currentEpoch } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 
 import type {
@@ -56,7 +56,7 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
 }
 
 beforeEach(() => {
-  _resetForTest();
+  resetRoutingState();
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ test("adaptObservationResultForEvent: SessionStart mutate captures additionalCon
     PROV,
   );
 
-  assert.deepEqual(_peekPendingSessionStartContextForTest(), [{ context: "MARK", ...PROV }]);
+  assert.deepEqual(pendingSessionStartContextEntries(), [{ context: "MARK", ...PROV }]);
 });
 
 test("adaptObservationResultForEvent: SessionStart mutate WITHOUT additionalContext does not append to the buffer", () => {
@@ -82,14 +82,14 @@ test("adaptObservationResultForEvent: SessionStart mutate WITHOUT additionalCont
     PROV,
   );
 
-  assert.deepEqual(_peekPendingSessionStartContextForTest(), []);
+  assert.deepEqual(pendingSessionStartContextEntries(), []);
 });
 
 test("adaptObservationResultForEvent: SessionEnd mutate with additionalContext is silently dropped", () => {
   adaptObservationResultForEvent({ kind: "mutate", additionalContext: "MARK" }, "SessionEnd", PROV);
 
   assert.deepEqual(
-    _peekPendingSessionStartContextForTest(),
+    pendingSessionStartContextEntries(),
     [],
     "SessionEnd has no upstream drain point -- additionalContext must NOT be buffered",
   );
@@ -98,7 +98,7 @@ test("adaptObservationResultForEvent: SessionEnd mutate with additionalContext i
 test("adaptObservationResultForEvent: PreCompact mutate with additionalContext is silently dropped", () => {
   adaptObservationResultForEvent({ kind: "mutate", additionalContext: "MARK" }, "PreCompact", PROV);
 
-  assert.deepEqual(_peekPendingSessionStartContextForTest(), []);
+  assert.deepEqual(pendingSessionStartContextEntries(), []);
 });
 
 test("adaptObservationResultForEvent: PostCompact mutate with additionalContext is silently dropped", () => {
@@ -108,7 +108,7 @@ test("adaptObservationResultForEvent: PostCompact mutate with additionalContext 
     PROV,
   );
 
-  assert.deepEqual(_peekPendingSessionStartContextForTest(), []);
+  assert.deepEqual(pendingSessionStartContextEntries(), []);
 });
 
 test("adaptObservationResultForEvent: SessionStart block / stop arms do NOT touch the buffer", () => {
@@ -116,7 +116,7 @@ test("adaptObservationResultForEvent: SessionStart block / stop arms do NOT touc
   adaptObservationResultForEvent({ kind: "stop", stopReason: "halt" }, "SessionStart", PROV);
   adaptObservationResultForEvent({ kind: "noop" }, "SessionStart", PROV);
 
-  assert.deepEqual(_peekPendingSessionStartContextForTest(), []);
+  assert.deepEqual(pendingSessionStartContextEntries(), []);
 });
 
 test("adaptObservationResultForEvent: SessionStart mutate with EMPTY additionalContext is silently skipped", () => {
@@ -126,7 +126,7 @@ test("adaptObservationResultForEvent: SessionStart mutate with EMPTY additionalC
   adaptObservationResultForEvent({ kind: "mutate", additionalContext: "" }, "SessionStart", PROV);
 
   assert.deepEqual(
-    _peekPendingSessionStartContextForTest(),
+    pendingSessionStartContextEntries(),
     [],
     "empty additionalContext must not enter the buffer (would render as a stray '\\n\\n' on drain)",
   );
@@ -148,7 +148,7 @@ test("beforeAgentStartHandlerFor: drains the buffer and returns { systemPrompt: 
 
   assert.deepEqual(result, { systemPrompt: "BASE\n\nMARK" });
   assert.deepEqual(
-    _peekPendingSessionStartContextForTest(),
+    pendingSessionStartContextEntries(),
     [],
     "buffer must be drained after the first before_agent_start handler call",
   );
@@ -206,30 +206,30 @@ test("beforeAgentStartHandlerFor: epoch mismatch returns undefined and does NOT 
 
   assert.equal(result, undefined);
   assert.deepEqual(
-    _peekPendingSessionStartContextForTest(),
+    pendingSessionStartContextEntries(),
     [{ context: "MARK", ...PROV }],
     "stale-epoch closure must not drain the live buffer (zombie defense)",
   );
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block C: _resetForTest clears the buffer (proxy for the registerHooksBridge
+// Block C: resetRoutingState clears the buffer (proxy for the registerHooksBridge
 // reload-clears-buffer contract).
 // ──────────────────────────────────────────────────────────────────────────
 
-test("_resetForTest clears the pending SessionStart buffer (proxy for the reload-clears-buffer contract)", () => {
+test("resetRoutingState clears the pending SessionStart buffer (proxy for the reload-clears-buffer contract)", () => {
   adaptObservationResultForEvent(
     { kind: "mutate", additionalContext: "STALE" },
     "SessionStart",
     PROV,
   );
-  assert.deepEqual(_peekPendingSessionStartContextForTest(), [{ context: "STALE", ...PROV }]);
+  assert.deepEqual(pendingSessionStartContextEntries(), [{ context: "STALE", ...PROV }]);
 
-  _resetForTest();
+  resetRoutingState();
 
   assert.deepEqual(
-    _peekPendingSessionStartContextForTest(),
+    pendingSessionStartContextEntries(),
     [],
-    "_resetForTest must clear the pending SessionStart buffer",
+    "resetRoutingState must clear the pending SessionStart buffer",
   );
 });

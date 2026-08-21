@@ -22,6 +22,7 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
+import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
   updatePlugins,
   updateSinglePlugin,
@@ -192,6 +193,23 @@ async function seedPathMarketplace(opts: {
       hasMcp?: boolean;
       /** WR-03: seed `<pluginRoot>/hooks/hooks.json` with this payload. */
       hooksJson?: object;
+      /**
+       * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE entry -- the side
+       * that WINS the DFEN-02 precedence rule. Stamping the plugin's own
+       * `plugin.json` instead would resolve through the fallback, so a fixture
+       * aimed at the wrong side can pass for the wrong reason.
+       * Absent -> the entry is written exactly as it is without this knob.
+       */
+      entryDefaultEnabled?: boolean;
+      /**
+       * Write the plugin's own `.claude-plugin/plugin.json` WITHOUT a
+       * `version` field. That field is tier 1 of the SNM-34 ladder and
+       * outranks `entry.version`, so omitting it hands the decision to tier 2
+       * and makes a manifest-side version bump observable on the record.
+       * Absent or false (default) -> the legacy seeded shape, which mirrors
+       * `version` into plugin.json.
+       */
+      omitPluginJsonVersion?: boolean;
     }
   >;
   /** Map of plugin name -> existing state record version. Absent -> no prior install. */
@@ -208,7 +226,10 @@ async function seedPathMarketplace(opts: {
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: pluginName, version: spec.version }),
+      JSON.stringify({
+        name: pluginName,
+        ...(spec.omitPluginJsonVersion !== true && { version: spec.version }),
+      }),
     );
 
     if (spec.hasSkill !== false) {
@@ -255,6 +276,7 @@ async function seedPathMarketplace(opts: {
     name,
     source: spec.rawSourceOverride ?? `./plugins/${name}`,
     version: spec.version,
+    ...(spec.entryDefaultEnabled !== undefined && { defaultEnabled: spec.entryDefaultEnabled }),
   }));
   const manifest = { name: marketplaceName, plugins: entries };
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
@@ -293,12 +315,24 @@ async function seedPathMarketplace(opts: {
 async function rewriteManifest(
   manifestPath: string,
   name: string,
-  plugins: Record<string, { version?: string; rawSourceOverride?: unknown }>,
+  plugins: Record<
+    string,
+    {
+      version?: string;
+      rawSourceOverride?: unknown;
+      /**
+       * DFEN-01: same knob as the seeder's, on the same winning side of the
+       * DFEN-02 precedence, so a rewrite can MOVE the declaration.
+       */
+      entryDefaultEnabled?: boolean;
+    }
+  >,
 ): Promise<void> {
   const entries = Object.entries(plugins).map(([n, spec]) => ({
     name: n,
     source: spec.rawSourceOverride ?? `./plugins/${n}`,
     ...(spec.version !== undefined && { version: spec.version }),
+    ...(spec.entryDefaultEnabled !== undefined && { defaultEnabled: spec.entryDefaultEnabled }),
   }));
   await writeFile(manifestPath, JSON.stringify({ name, plugins: entries }));
 }
@@ -3199,6 +3233,284 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
   });
 });
 
+/**
+ * DFEN-07 / D-103-10: `defaultEnabled` is third-party content. A plugin author
+ * who could flip it in a release and thereby flip every existing user's
+ * enablement would make the field a remote switch over code already installed.
+ * `update` therefore never re-consults it.
+ *
+ * The fixture flips the declaration BETWEEN the install and the update because
+ * installing and updating against the SAME manifest cannot tell "never re-read
+ * the field" apart from "re-read it and got the same answer". Only a flip
+ * separates the two.
+ *
+ * The version bump rides in the SAME rewrite as the control. The marketplace
+ * manifest is served from a process-lifetime cache keyed on `(mtimeMs, size)`,
+ * so a rewrite the cache declines to notice would leave `update` looking at the
+ * OLD entry -- and the enablement assertion below would then pass for the wrong
+ * reason, proving nothing. The plugin's own `plugin.json` carries no version
+ * here, so `entry.version` is what reaches the record: a version that moved is
+ * proof the flipped manifest was read.
+ */
+test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the version, not the enablement", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-dfen07-flip-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.2.3",
+            hasSkill: true,
+            hasCommand: true,
+            omitPluginJsonVersion: true,
+            entryDefaultEnabled: false,
+          },
+        },
+      });
+
+      // Install for real rather than hand-seeding a disabled record: the DFEN-04
+      // record keeps the inventory ENBL-18 preserves, which a hand-seeded
+      // disabled record leaves empty.
+      const seed = makeCtx();
+      await installPlugin({
+        ctx: seed.ctx,
+        pi: seed.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      const before = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(before !== undefined);
+      assert.equal(
+        before.enabled,
+        false,
+        "precondition: the entry's declared false reached the DFEN-04 path",
+      );
+      assert.equal(before.version, "1.2.3");
+
+      // ONE rewrite carrying both halves: the version is the control, the
+      // declaration is the subject.
+      await rewriteManifest(manifestPath, "mp", {
+        hello: { version: "2.0.0", entryDefaultEnabled: true },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const after = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"];
+      assert.ok(after !== undefined);
+      assert.equal(
+        after.version,
+        "2.0.0",
+        "CONTROL: the version moved, so `update` genuinely re-read the manifest and saw the flipped declaration -- a stale cache would leave it at 1.2.3",
+      );
+      assert.equal(
+        after.enabled,
+        false,
+        "DFEN-07: the flipped declaration was seen and NOT applied -- a release cannot re-enable a plugin the install recorded disabled",
+      );
+
+      // ENBL-09 / WR-02: the truthful row -- the pin moved, nothing was
+      // materialized, and the reason token says why.
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]!.message, /\(skipped\) \{already disabled\}/);
+
+      // ENBL-18: a disabled refresh moves the pin, never the inventory. Compared
+      // against the pre-update record rather than an assumed empty shape,
+      // because a DFEN-04 record carries what the install wrote.
+      assert.deepEqual([...after.resources.skills], [...before.resources.skills]);
+      assert.deepEqual([...after.resources.prompts], [...before.resources.prompts]);
+      assert.deepEqual([...after.resources.agents], [...before.resources.agents]);
+      assert.deepEqual([...after.resources.mcpServers], [...before.resources.mcpServers]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * DFEN-08: the overwhelming majority of plugins say nothing about install-time
+ * enablement, so what DFEN-08 owes them is that NOTHING moved. The
+ * triple is what makes that checkable instead of assumed: `beta` declares the
+ * install-time default TRUE, `gamma` declares nothing at all, and the two must
+ * render the same row as each other AND as the row this surface produced before
+ * the field existed. The declaring sibling is present precisely so the
+ * comparison happens inside one live run rather than against a captured
+ * baseline that would rot. `alpha`, declaring FALSE, is the third arm: a
+ * precedence fixture over a three-valued key that covers two of the values
+ * passes while asking the wrong question.
+ *
+ * Every declaration is flipped between the install and the update, and the
+ * version bump rides the SAME rewrite, for the reason the single-plugin case
+ * above states: a manifest the `(mtimeMs, size)` cache declined to re-read
+ * would leave the verb looking at the OLD entry, and every enablement
+ * assertion here would then pass for the wrong reason.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical update rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-dfen08-parity-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          alpha: {
+            version: "1.0.0",
+            hasSkill: true,
+            omitPluginJsonVersion: true,
+            entryDefaultEnabled: false,
+          },
+          beta: {
+            version: "1.0.0",
+            hasSkill: true,
+            omitPluginJsonVersion: true,
+            entryDefaultEnabled: true,
+          },
+          // No knob at all: the seeder's conditional spread writes NO
+          // `defaultEnabled` key on this entry, which is the arm every plugin
+          // that never heard of the field lands on.
+          gamma: { version: "1.0.0", hasSkill: true, omitPluginJsonVersion: true },
+        },
+      });
+
+      // Install all three through the production path, each carrying the
+      // install-time opt-in that the real install handler and the reconcile
+      // apply pass both set. The whole point is that it changes nothing for two
+      // of the three.
+      const install = async (plugin: string): Promise<void> => {
+        const seed = makeCtx();
+        await installPlugin({
+          ctx: seed.ctx,
+          pi: seed.pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin,
+          applyDefaultEnabled: true,
+        });
+      };
+
+      await install("alpha");
+      await install("beta");
+      await install("gamma");
+
+      const pluginsNow = async (): Promise<Record<string, PluginRecord>> =>
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {};
+
+      // Precondition: without it the update assertions below can pass over a
+      // fixture that never reached the path under test.
+      const before = await pluginsNow();
+      assert.equal(
+        before["alpha"]?.enabled,
+        false,
+        "precondition: declared false installs disabled",
+      );
+      assert.equal(before["beta"]?.enabled, true, "precondition: declared true installs enabled");
+      assert.equal(before["gamma"]?.enabled, true, "precondition: a silent entry installs enabled");
+      assert.equal(before["alpha"]?.version, "1.0.0");
+      assert.equal(before["beta"]?.version, "1.0.0");
+      assert.equal(before["gamma"]?.version, "1.0.0");
+
+      // ONE rewrite carrying both halves: the version is the CONTROL that
+      // proves the manifest was genuinely re-read, the declaration is the
+      // subject. Every declaration inverts -- `alpha` to true, `beta` to false,
+      // and `gamma` gains the explicit false it never carried.
+      await rewriteManifest(manifestPath, "mp", {
+        alpha: { version: "2.0.0", entryDefaultEnabled: true },
+        beta: { version: "2.0.0", entryDefaultEnabled: false },
+        gamma: { version: "2.0.0", entryDefaultEnabled: false },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      // Two benign `updated` rows beside one info-severity skip -> info
+      // (severity unset).
+      assert.equal(notifications[0]?.severity, undefined);
+
+      // Whole-body rather than per-row `includes`: the literal pins the row
+      // ORDER, the tally and the trailer, none of which a substring check
+      // constrains. The tally legitimately reads two where a tree without
+      // `defaultEnabled` read three -- `alpha` is skipped, so the fixture's own third arm
+      // moved the count. That is why the parity claim below is about ROWS.
+      const body = notifications[0]?.message ?? "";
+      assert.equal(
+        body,
+        "● mp [project]\n" +
+          "  ⊘ alpha (skipped) {already disabled}\n" +
+          "  ● beta v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● gamma v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Plugin update: 2 updated\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+
+      // The parity claim itself, stated apart from the whole-body literal.
+      // Before the field was consumed it was an unknown key under the lenient
+      // manifest tolerance and therefore inert, so a declared-true entry and a
+      // silent entry were LITERALLY the same input -- which is what makes the
+      // two literals below the pre-existing row form as well. Asserting the two
+      // rendered rows against EACH OTHER catches a drift that two
+      // independently-correct literals would both stay green through.
+      const rows = body.split("\n");
+      const rowFor = (name: string): string =>
+        rows.find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+      const betaRow = rowFor("beta");
+      const gammaRow = rowFor("gamma");
+      assert.equal(betaRow, "  ● beta v1.0.0 → v2.0.0 (updated)");
+      assert.equal(gammaRow, "  ● gamma v1.0.0 → v2.0.0 (updated)");
+      assert.equal(
+        betaRow.replaceAll("beta", "<plugin>"),
+        gammaRow.replaceAll("gamma", "<plugin>"),
+        "DFEN-08: the declared-true row and the silent row must COINCIDE, not merely each match a literal",
+      );
+
+      const after = await pluginsNow();
+      assert.equal(
+        after["alpha"]?.enabled,
+        false,
+        "DFEN-07: a release flipping the declaration to true cannot re-enable a plugin the install recorded disabled",
+      );
+      assert.equal(after["beta"]?.enabled, true, "DFEN-08: a flipped declaration moves nothing");
+      assert.equal(after["gamma"]?.enabled, true, "DFEN-08: a gained declaration moves nothing");
+      // CONTROL: all three versions moved, so the flipped manifest was genuinely
+      // re-read. A stale manifest cache would have left every record at 1.0.0
+      // and the enablement assertions above would prove nothing.
+      assert.equal(after["alpha"]?.version, "2.0.0");
+      assert.equal(after["beta"]?.version, "2.0.0");
+      assert.equal(after["gamma"]?.version, "2.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── ENBL-09: update vs a DISABLED PARTIAL ──────────────────────────────────
 //
 // WR-04 / D-98-04: the disabled-record short-circuit is reachable BOTH ways.
@@ -3930,8 +4242,10 @@ test("S5: update success + invalid config write-back surfaces a warning row (no 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the new hooks config without /reload", async () => {
-  const { _resetForTest, addPluginConfigToCache } =
+  const { addPluginConfigToCache } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { compileIfPredicate } =
@@ -3942,7 +4256,7 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr03-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const oldHooksJson = {
@@ -4046,12 +4360,12 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<plugin>/hooks.json atomically with version B's content", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-overwrite-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const oldHooksJson = {
@@ -4116,12 +4430,12 @@ test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<pl
 });
 
 test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes the stale hooks file", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-remove-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const oldHooksJson = {
@@ -4195,12 +4509,12 @@ test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes t
 });
 
 test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes the new hooks.json", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-add-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const seeded = await seedPathMarketplace({
@@ -5802,12 +6116,12 @@ test("WR-01 / SURF-05: an update that materializes an orphan-rewake handler name
   // that INHERITS the shared signal shape, so a bare row here made the
   // inheritance's own claim false. The token names itself and moves NO severity
   // channel: the update was carried out in full.
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-orphan-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       await seedPathMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),

@@ -6,7 +6,11 @@
 //
 // Per D-04: TWO distinct functions, no shared branching.
 //   - resolveStrict (MM-5):   union of entry + manifest + implicit + standalone
-//   - resolveLoose  (MM-6/7): entry-only; manifest/standalone declarations conflict
+//   - resolveLoose  (MM-6/7): entry-only for COMPONENT declarations;
+//                             manifest/standalone declarations conflict.
+//                             D-101-08: METADATA (description, version,
+//                             defaultEnabled) is outside that rule and is never
+//                             conflict material -- see `resolveLoose`'s own doc.
 //
 // Type.Union([...]) takes NO `discriminator` option in TypeBox 1.x.
 // Literal-tagged variants ARE the discriminator -- TypeScript narrowing
@@ -187,6 +191,12 @@ const MATERIALIZABLE_FIELDS = {
   // unsupportable. Threaded for the `info` enumeration (D-71-05). Absent when
   // no hooks.json exists, the parse failed structurally, or nothing dropped.
   droppedHooks: Type.Optional(Type.Array(DroppedHookSchema)),
+  // DFEN-02 / DFEN-03: the resolved install-time enablement. NON-optional,
+  // unlike the three fields above -- they are optional because absence is
+  // meaningful, whereas this one always has an answer once the entry and the
+  // manifest have been read. Keeping it required is what stops every consumer
+  // from re-deriving the rule behind a `?? true` fallback.
+  defaultEnabled: Type.Boolean(),
 } as const;
 
 const ResolvedPluginInstallableSchema = Type.Object({
@@ -443,6 +453,7 @@ function materializableFields(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
+  defaultEnabled: boolean,
 ): Omit<ResolvedPluginInstallable, "state"> {
   return {
     name,
@@ -455,6 +466,7 @@ function materializableFields(
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
+    defaultEnabled,
   };
 }
 
@@ -462,8 +474,12 @@ function installable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
+  defaultEnabled: boolean,
 ): ResolvedPluginInstallable {
-  return { state: "installable", ...materializableFields(name, pluginRoot, partial) };
+  return {
+    state: "installable",
+    ...materializableFields(name, pluginRoot, partial, defaultEnabled),
+  };
 }
 
 // D-64-06: the partially-available arm. Identical payload to `installable`
@@ -472,8 +488,12 @@ function partiallyAvailable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
+  defaultEnabled: boolean,
 ): ResolvedPluginPartiallyAvailable {
-  return { state: "partially-available", ...materializableFields(name, pluginRoot, partial) };
+  return {
+    state: "partially-available",
+    ...materializableFields(name, pluginRoot, partial, defaultEnabled),
+  };
 }
 
 function nestedExperimentalValue(
@@ -614,6 +634,118 @@ async function readManifest(
 }
 
 /**
+ * OUT-02 / OUT-03 / OUT-05 / DOC-02: the MANIFEST-side half of the read surfaces'
+ * answer to "would installing this leave it disabled". The other half is the
+ * user's own config declaration, which outranks this one -- `rowClaimsInstallDisabled`
+ * below composes the two and is what the surfaces actually call. This is the
+ * canonical home of the entry-only argument; call sites cite it rather than
+ * restate it. `docs/plugin-enablement.md` is the durable home of the full
+ * argument, including the precedence table this half belongs to.
+ *
+ * `list` and `info` source their manifest-side answer from the marketplace
+ * ENTRY and nothing else -- never from the plugin's own `plugin.json`, not even
+ * where a warm clone makes it readable with no network at all. The entry is the
+ * one source readable for EVERY plugin regardless of clone state, which is what
+ * lets an unfetched `(remote)` row carry the claim, and it is what makes the
+ * same plugin render identically warm and cold. Where the entry is silent, the
+ * surfaces DECLINE to claim; that is the answer, not a gap. OUT-05: closing the
+ * gap the other way would require a fetch these surfaces may not make.
+ *
+ * The strict comparison against the `false` literal IS the rule, not a
+ * shorthand for it. `!entry.defaultEnabled` is true for an ABSENT field and
+ * would claim on every silent entry; `entry.defaultEnabled !== true` is true
+ * for a non-boolean, which OUT-05 / DOC-02 rules silent. Only the strict comparison
+ * says "a literal `false`, and nothing else, is a declaration".
+ *
+ * A non-boolean smuggled past PLUGIN_ENTRY_VALIDATOR therefore degrades to
+ * SILENT, with deliberately no error path -- the mirror of the degradation
+ * `resolveDefaultEnabled` below applies at its own `typeof` narrows.
+ *
+ * OUT-05 / DOC-02: this is a SEPARATE function rather than an exported
+ * `resolveDefaultEnabled` called with a null manifest. The one-parameter
+ * signature is the containment mechanism: there is no second parameter a later
+ * caller could feed a plugin manifest through, so no call site can reopen the
+ * warm/cold asymmetry. An exported two-source function invites exactly that.
+ *
+ * The name leads with the SOURCE rather than taking an `is*` prefix because the
+ * source is the load-bearing fact: a reader at the call site needs to know WHICH
+ * declaration was consulted, not merely that a boolean came back.
+ */
+function entryDeclaresInstallDisabled(entry: PluginEntry): boolean {
+  return entry.defaultEnabled === false;
+}
+
+/**
+ * OUT-02 / OUT-03 / DFEN-04 / DFEN-05: the WHOLE rule behind the read surfaces'
+ * `{installs disabled}` claim, in one place because `list` and `info` must not
+ * be able to answer it differently.
+ *
+ * The row predicts an install, so it models the install path's precedence and
+ * not a shorter one. `install` gates the disable on the user having stated NO
+ * `enabled` opinion for the `<plugin>@<marketplace>` key, because an explicit
+ * declaration wins in EITHER direction and is never overwritten
+ * (install.ts::readDeclaredEnabled). Only where the user is silent does the
+ * marketplace entry answer, via `entryDeclaresInstallDisabled` above.
+ *
+ * Dropping the `declaredEnabled` conjunct is the failure this function exists
+ * to prevent: a config saying `enabled: true` over an entry saying
+ * `defaultEnabled: false` installs ENABLED, so a row claiming otherwise states
+ * a falsehood on the one surface built to inform the install decision.
+ *
+ * `declaredEnabled` arrives as a resolved `boolean | undefined` rather than as
+ * a config object, so this stays a pure domain predicate with no persistence
+ * dependency: `undefined` means "the user stated nothing", which is the only
+ * distinction the rule draws.
+ */
+export function rowClaimsInstallDisabled(
+  entry: PluginEntry,
+  declaredEnabled: boolean | undefined,
+): boolean {
+  return declaredEnabled === undefined && entryDeclaresInstallDisabled(entry);
+}
+
+/**
+ * DFEN-02: decide the declared install-time enablement. The marketplace ENTRY
+ * value wins over the `plugin.json` value in BOTH directions -- an entry `true`
+ * beats a manifest `false` just as an entry `false` beats a manifest `true`.
+ * Absent at both sites (including a plugin with no `plugin.json` at all, where
+ * `manifest` is null) is `true`.
+ *
+ * DFEN-03: this is the only evaluation of the rule. Callers read the resolved
+ * boolean off the materializable arm and never re-derive it.
+ *
+ * D-101-08: it runs from the shared `preflightStages`, so BOTH modes read
+ * `plugin.json` for it. That is deliberate and is the one place loose mode
+ * honors a manifest declaration a silent entry did not mirror: MM-6 / MM-7
+ * conflict semantics govern component declarations and `mcpServers`, not
+ * metadata. A manifest-only `defaultEnabled` must never push a plugin to
+ * `unavailable`.
+ *
+ * Both `typeof` narrows are defense-in-depth, not validation: the entry has
+ * already passed PLUGIN_ENTRY_VALIDATOR and the manifest PLUGIN_MANIFEST_VALIDATOR,
+ * so only `boolean | undefined` can arrive. They are value tests rather than
+ * key-presence tests because an explicitly-`undefined` property satisfies
+ * `Type.Optional` and must fall through to the next source, and because the
+ * manifest side is typed `unknown` and needs the narrow to type-check at all.
+ * A non-boolean smuggled past a validator degrades to the default; there is
+ * deliberately no error path here.
+ */
+function resolveDefaultEnabled(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+): boolean {
+  if (typeof entry.defaultEnabled === "boolean") {
+    return entry.defaultEnabled;
+  }
+
+  if (typeof manifest?.defaultEnabled === "boolean") {
+    return manifest.defaultEnabled;
+  }
+
+  return true;
+}
+
+/**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
  *
  * - `path`: resolve under `marketplaceRoot` and run the NFR-10 escape check
@@ -717,6 +849,9 @@ async function preflightStages(
       pluginRoot: string;
       manifest: Record<string, unknown> | null;
       partial: PartialResolution;
+      // DFEN-03: resolved here, in the one stage both resolution modes enter
+      // first, so the evaluation order is mode-independent by construction.
+      defaultEnabled: boolean;
     }
   | { kind: "unavailable"; result: ResolvedPluginUnavailable }
 > {
@@ -770,7 +905,13 @@ async function preflightStages(
     };
   }
 
-  return { kind: "ok", pluginRoot, manifest: manifestResult.manifest, partial };
+  return {
+    kind: "ok",
+    pluginRoot,
+    manifest: manifestResult.manifest,
+    partial,
+    defaultEnabled: resolveDefaultEnabled(entry, manifestResult.manifest),
+  };
 }
 
 /**
@@ -1355,41 +1496,65 @@ export async function resolveStrict(
   entry: PluginEntry,
   ctx: ResolveContext,
 ): Promise<ResolvedPlugin> {
+  return resolveWithMode(entry, ctx, {
+    // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
+    // (entry > manifest order) + implicit-by-convention. Implicit-by-convention
+    // is ADDITIVE rather than fallback-only (cf. PR-4) -- if the conventional
+    // dir exists on disk and is not already declared, it is appended to the
+    // array. First-wins dedup by relative-path string preserves ordering
+    // (declared first, implicit last).
+    collectComponentKind: (args) =>
+      collectStrictComponentKind(
+        args.entry,
+        args.manifest,
+        args.partial,
+        args.pluginRoot,
+        args.ctx,
+        args.kind,
+      ),
+    // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
+    applyMcp: (args) =>
+      applyStrictMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),
+  });
+}
+
+/**
+ * The stage pipeline both resolution modes run, with the two mode-specific
+ * stages injected. Steps 8b, 9 and 10 and the final decision are mode-agnostic
+ * and were byte-identical in both callers, which is what made a shared driver
+ * the honest shape rather than a coincidence worth restating twice.
+ */
+interface ResolveMode {
+  readonly collectComponentKind: (args: {
+    readonly entry: PluginEntry;
+    readonly manifest: Record<string, unknown> | null;
+    readonly partial: PartialResolution;
+    readonly pluginRoot: string;
+    readonly ctx: ResolveContext;
+    readonly kind: SupportedPathKind;
+  }) => Promise<boolean>;
+  readonly applyMcp: (args: {
+    readonly entry: PluginEntry;
+    readonly manifest: Record<string, unknown> | null;
+    readonly partial: PartialResolution;
+    readonly pluginRoot: string;
+    readonly ctx: ResolveContext;
+  }) => Promise<boolean>;
+}
+
+async function resolveWithMode(
+  entry: PluginEntry,
+  ctx: ResolveContext,
+  mode: ResolveMode,
+): Promise<ResolvedPlugin> {
   const pre = await preflightStages(entry, ctx);
 
   if (pre.kind === "unavailable") {
     return pre.result;
   }
 
-  const { pluginRoot, manifest, partial } = pre;
-  // D-64-07: `dirty` is the STRUCTURAL accumulator (component-path /
-  // mcp / hooks defects). The unsupported-component signal lives
-  // separately in `partial.unsupported` -- see the decision below.
-  let dirty = false;
-
-  // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
-  // (entry > manifest order) + implicit-by-convention. Implicit-by-convention
-  // is ADDITIVE rather than fallback-only (cf. PR-4) -- if the conventional
-  // dir exists on disk and is not already declared, it is appended to the
-  // array. First-wins dedup by relative-path string preserves ordering
-  // (declared first, implicit last).
-  //
-  // HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
-  // NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
-  // per-entry component-path semantics. The hooks-config probe in step 8b
-  // owns the discovery + admission of the `hooks` supported kind.
-  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
-    dirty =
-      (await collectStrictComponentKind(entry, manifest, partial, pluginRoot, ctx, kind)) || dirty;
-  }
-
-  // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
-  dirty = (await applyStrictMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
-
-  // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
-  // either add `hooks` to supported (parse OK) or flip installable=false
-  // with the parse-failure detail.
-  dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
+  const { pluginRoot, manifest, partial, defaultEnabled } = pre;
+  const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial, mode });
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
@@ -1398,13 +1563,57 @@ export async function resolveStrict(
   // not a structural defect); it is read separately via `partial.unsupported`
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
+  noteDeclaredDependencies(entry, partial);
 
-  // Step 10 (PR-5): dependencies stay installable but get a note.
+  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
+}
+
+/**
+ * D-64-07: the STRUCTURAL accumulator (component-path / mcp / hooks defects).
+ * The unsupported-component signal lives separately in `partial.unsupported`.
+ * Every stage runs -- the flags are collected and folded at the end rather than
+ * short-circuited, which is what the original `(await stage()) || dirty` chain
+ * did too.
+ *
+ * HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
+ * NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
+ * per-entry component-path semantics. The hooks-config probe in step 8b owns
+ * the discovery + admission of the `hooks` supported kind.
+ */
+async function runStructuralStages(args: {
+  readonly entry: PluginEntry;
+  readonly ctx: ResolveContext;
+  readonly pluginRoot: string;
+  readonly manifest: Record<string, unknown> | null;
+  readonly partial: PartialResolution;
+  readonly mode: ResolveMode;
+}): Promise<boolean> {
+  const { entry, ctx, pluginRoot, manifest, partial, mode } = args;
+  const flags: boolean[] = [];
+
+  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
+    flags.push(
+      await mode.collectComponentKind({ entry, manifest, partial, pluginRoot, ctx, kind }),
+    );
+  }
+
+  flags.push(
+    await mode.applyMcp({ entry, manifest, partial, pluginRoot, ctx }),
+    // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
+    // either add `hooks` to supported (parse OK) or flip installable=false with
+    // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
+    // conflict semantics are deferred, so the convention file is the sole gate.
+    await applyHooksConfig(ctx, pluginRoot, partial),
+  );
+
+  return flags.includes(true);
+}
+
+/** Step 10 (PR-5): dependencies stay installable but get a note. */
+function noteDeclaredDependencies(entry: PluginEntry, partial: PartialResolution): void {
   if ((entry as Record<string, unknown>).dependencies !== undefined) {
     partial.notes.push(`declares dependencies that must be installed manually`);
   }
-
-  return decideResolution(entry.name, pluginRoot, partial, dirty);
 }
 
 /**
@@ -1418,64 +1627,54 @@ function decideResolution(
   pluginRoot: string,
   partial: PartialResolution,
   structuralDirty: boolean,
+  defaultEnabled: boolean,
 ): ResolvedPlugin {
   if (structuralDirty) {
     return unavailable(name, partial.notes);
   }
 
   if (partial.unsupported.length > 0) {
-    return partiallyAvailable(name, pluginRoot, partial);
+    return partiallyAvailable(name, pluginRoot, partial, defaultEnabled);
   }
 
-  return installable(name, pluginRoot, partial);
+  return installable(name, pluginRoot, partial, defaultEnabled);
 }
 
 /**
- * MM-6 / MM-7 loose: entry-only; manifest or standalone declarations conflict.
+ * MM-6 / MM-7 loose: entry-only for COMPONENT declarations -- a manifest or
+ * standalone declaration of a component kind (or of `mcpServers`) with a silent
+ * entry is a conflict and resolves `unavailable`.
+ *
+ * D-101-08: METADATA is outside that rule. `description`, `version` and
+ * `defaultEnabled` are never conflict material, so a manifest-only
+ * `defaultEnabled` with a silent entry is honored here rather than rejected --
+ * it is resolved once in `preflightStages` and reads `plugin.json` in loose mode
+ * exactly as it does in strict mode. The conflict machinery is closed-set by
+ * construction (it iterates SUPPORTED_COMPONENT_PATH_KINDS plus `mcpServers`),
+ * which is what keeps the two classes of field apart.
  */
 export async function resolveLoose(
   entry: PluginEntry,
   ctx: ResolveContext,
 ): Promise<ResolvedPlugin> {
-  const pre = await preflightStages(entry, ctx);
-
-  if (pre.kind === "unavailable") {
-    return pre.result;
-  }
-
-  const { pluginRoot, manifest, partial } = pre;
-  // D-64-07: structural accumulator only (see resolveStrict).
-  let dirty = false;
-
-  // Step 7 (MM-6 entry-only, D-07 array shape): no implicit-by-convention;
-  // manifest declarations without a matching entry-level declaration are a
-  // conflict. Array shape mirrors strict mode, but with first-wins dedup
-  // applied only to entry-declared paths (no convention probing).
-  //
-  // HOOK-01: iterates the PATH-kinds subset only (see strict-mode note above).
-  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
-    dirty = (await collectLooseComponentKind(entry, manifest, partial, pluginRoot, kind)) || dirty;
-    // No implicit-by-convention in loose mode.
-  }
-
-  // Step 8 (MM-7 loose mcpServers).
-  dirty = (await applyLooseMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
-
-  // Step 8b (HOOK-01 / D-57-04): the hooks-config probe is mode-agnostic.
-  // Entry-vs-manifest hooks-FIELD conflict semantics are deferred to future
-  // hooks-dispatch work; here the convention file is the sole gate.
-  dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
-
-  // Step 9 (PR-3 / PR-4): unsupported components -- same as strict. D-64-07:
-  // side-effect only (does not feed `dirty`); read via `partial.unsupported`.
-  await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
-
-  // Step 10 (PR-5): dependencies stay installable but get a note.
-  if ((entry as Record<string, unknown>).dependencies !== undefined) {
-    partial.notes.push(`declares dependencies that must be installed manually`);
-  }
-
-  return decideResolution(entry.name, pluginRoot, partial, dirty);
+  return resolveWithMode(entry, ctx, {
+    // Step 7 (MM-6 entry-only, D-07 array shape): no implicit-by-convention;
+    // manifest declarations without a matching entry-level declaration are a
+    // conflict. Array shape mirrors strict mode, but with first-wins dedup
+    // applied only to entry-declared paths (no convention probing). The loose
+    // collector takes no `ctx` precisely because it never probes disk.
+    collectComponentKind: (args) =>
+      collectLooseComponentKind(
+        args.entry,
+        args.manifest,
+        args.partial,
+        args.pluginRoot,
+        args.kind,
+      ),
+    // Step 8 (MM-7 loose mcpServers).
+    applyMcp: (args) =>
+      applyLooseMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),
+  });
 }
 
 /**

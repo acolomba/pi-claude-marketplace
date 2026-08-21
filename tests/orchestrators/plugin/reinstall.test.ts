@@ -9,6 +9,7 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -20,11 +21,10 @@ import {
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
-  __test_clonePluginRecord,
-  __test_errorWithManualRecovery,
-  __test_findManualRecoveryError,
-  __test_outcomeToPluginMessage,
-  __test_renderReinstallPartitionAndNotify,
+  outcomeToPluginMessage,
+  renderReinstallPartitionAndNotify,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
+import {
   reinstallPlugin,
   reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
@@ -33,8 +33,11 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  findManualRecoveryError,
+  ManualRecoveryError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
@@ -74,11 +77,11 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   const hermeticHome = await mkdtemp(path.join(tmpdir(), "reinstall-home-"));
   const prevHome = process.env.HOME;
   process.env.HOME = hermeticHome;
-  __resetCacheForTests();
+  resetCompletionCache();
   try {
     return await fn();
   } finally {
-    __resetCacheForTests();
+    resetCompletionCache();
     if (prevHome === undefined) {
       delete process.env.HOME;
     } else {
@@ -111,6 +114,19 @@ async function seedMarketplace(opts: {
   readonly resources?: ResourceSet;
   readonly install?: boolean;
   readonly scope?: "user" | "project";
+  /**
+   * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE ENTRY -- the side that
+   * WINS the precedence rule. A knob on the plugin's own plugin.json would
+   * resolve through the fallback instead, so a fixture built there could pass
+   * for the wrong reason. Absent -> the entry is written without the field.
+   */
+  readonly entryDefaultEnabled?: boolean;
+  /**
+   * DFEN-04: let the install honor the resolved declaration, so a record can
+   * land disabled through the production path rather than by hand. Only
+   * meaningful together with `install: true`.
+   */
+  readonly applyDefaultEnabled?: boolean;
 }): Promise<{ readonly pluginRoot: string; readonly manifestPath: string }> {
   const marketplaceName = opts.marketplaceName ?? "mp";
   const pluginName = opts.pluginName ?? "hello";
@@ -125,6 +141,7 @@ async function seedMarketplace(opts: {
     marketplaceName,
     pluginName,
     version,
+    opts.entryDefaultEnabled,
   );
 
   const locations = locationsFor(scope, opts.cwd);
@@ -156,6 +173,9 @@ async function seedMarketplace(opts: {
       cwd: opts.cwd,
       marketplace: marketplaceName,
       plugin: pluginName,
+      ...(opts.applyDefaultEnabled !== undefined && {
+        applyDefaultEnabled: opts.applyDefaultEnabled,
+      }),
     });
   }
 
@@ -218,16 +238,26 @@ async function mergeManifestEntry(
   marketplaceName: string,
   pluginName: string,
   version: string,
+  /** DFEN-01: stamped on this plugin's entry; absent leaves the field off. */
+  defaultEnabled?: boolean,
 ): Promise<string> {
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   const plugins: Record<string, string> = {};
+  const declarations: Record<string, boolean> = {};
   try {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      readonly plugins?: readonly { readonly name?: unknown; readonly version?: unknown }[];
+      readonly plugins?: readonly {
+        readonly name?: unknown;
+        readonly version?: unknown;
+        readonly defaultEnabled?: unknown;
+      }[];
     };
     for (const entry of manifest.plugins ?? []) {
       if (typeof entry.name === "string" && typeof entry.version === "string") {
         plugins[entry.name] = entry.version;
+        if (typeof entry.defaultEnabled === "boolean") {
+          declarations[entry.name] = entry.defaultEnabled;
+        }
       }
     }
   } catch (err) {
@@ -237,13 +267,18 @@ async function mergeManifestEntry(
   }
 
   plugins[pluginName] = version;
-  return writeManifest(marketplaceRoot, marketplaceName, plugins);
+  if (defaultEnabled !== undefined) {
+    declarations[pluginName] = defaultEnabled;
+  }
+
+  return writeManifest(marketplaceRoot, marketplaceName, plugins, declarations);
 }
 
 async function writeManifest(
   marketplaceRoot: string,
   marketplaceName: string,
   plugins: Record<string, string>,
+  declarations: Record<string, boolean> = {},
 ): Promise<string> {
   const manifestDir = path.join(marketplaceRoot, ".claude-plugin");
   await mkdir(manifestDir, { recursive: true });
@@ -256,6 +291,7 @@ async function writeManifest(
         name,
         version,
         source: `./plugins/${name}`,
+        ...(Object.hasOwn(declarations, name) && { defaultEnabled: declarations[name] }),
       })),
     }),
   );
@@ -1286,7 +1322,7 @@ test("D-19-02: outcomeToPluginMessage maps failureClass=manual-recovery -> Plugi
   };
   // marketplace scope matches outcome.scope -> per-row scope orphan-folded
   // (omitted from the variant).
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   // manual-recovery is its own discriminated variant per D-19-02 -- NOT
   // a `failed` row carrying `{rollback partial}`. The status discriminator
   // is the literal "manual recovery" WITH a space per shared/grammar/
@@ -1308,7 +1344,7 @@ test("ATTR-09 / D-47-B: outcomeToPluginMessage without failureClass falls back t
     scope: "project",
     notes: ["something opaque"],
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["unreadable"]);
@@ -1326,7 +1362,7 @@ test("D-19-02: outcomeToPluginMessage rollback substring still maps to rollback 
     scope: "project",
     notes: ["rollback failed at phase X"],
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["rollback partial"]);
@@ -1350,7 +1386,7 @@ test("D-19-02: outcomeToPluginMessage prefers typed `outcome.reasons` (`permissi
     notes: ["EACCES: permission denied at some/.pi/agent/file"],
     reasons: ["permission denied"] as const,
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["permission denied"]);
@@ -1365,7 +1401,7 @@ test("D-19-02: outcomeToPluginMessage `source missing` typed reason wins over no
     notes: ["ENOENT: no such file or directory"],
     reasons: ["source missing"] as const,
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["source missing"]);
@@ -1383,7 +1419,7 @@ test("ATTR-09 / D-47-B: outcomeToPluginMessage without `reasons` falls back to t
     scope: "project",
     notes: ["something opaque without a matching substring"],
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
   assert.deepEqual([...row.reasons], ["unreadable"]);
@@ -1406,116 +1442,11 @@ test("D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins 
     failureClass: "manual-recovery",
     reasons: ["permission denied"] as const,
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   // (1) wins -- the manual-recovery structural tag is highest priority.
   assert.equal(row.status, "manual recovery");
   assert.ok(row.status === "manual recovery");
   assert.deepEqual([...row.reasons], ["rollback partial"]);
-});
-
-/**
- * CMC-16 / F-5 dedup regression guard.
- *
- * `errorWithManualRecovery` MAY be called twice in the bridge cascade: once
- * when a bridge throws ManualRecoveryError with its own `.leaks`, and again
- * at the orchestrator-source rollback site with the merged leak set. The
- * F-5 invariant: even if the same leak string appears in both sources, the
- * final `.leaks` payload counts it ONCE. The implementation uses a
- * `Set`-dedup on the merged array.
- */
-test("CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
-  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
-  const wrapped = __test_errorWithManualRecovery(inner, ["agents: foo"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.equal(
-    wrapped.leaks.length,
-    1,
-    `expected dedup; got: ${JSON.stringify([...wrapped.leaks])}`,
-  );
-  assert.equal(wrapped.leaks[0], "agents: foo");
-  // Cause-chain preserved so the depth-5 walker still surfaces the inner.
-  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
-});
-
-test("CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
-  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
-  const wrapped = __test_errorWithManualRecovery(inner, ["skills: bar"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.deepEqual([...wrapped.leaks], ["agents: foo", "skills: bar"]);
-});
-
-test("CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
-  const inner = new Error("raw error");
-  const wrapped = __test_errorWithManualRecovery(inner, ["x: leak"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.equal(wrapped.message, "raw error");
-  assert.deepEqual([...wrapped.leaks], ["x: leak"]);
-  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
-});
-
-test("CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
-  const inner = new Error("raw error");
-  const wrapped = __test_errorWithManualRecovery(inner, []);
-  // Zero-leak fast path preserves the original Error reference verbatim.
-  assert.equal(wrapped, inner);
-});
-
-/**
- * CMC-16 / WR-01 regression guard.
- *
- * When `withScopeLock`'s body throw is a `ManualRecoveryError` AND
- * `release()` also throws, the lock helper wraps the original in a plain
- * `new Error(combinedMsg, { cause: base })`. A direct
- * `err instanceof ManualRecoveryError` check would see a plain Error and
- * silently downgrade the cascade row's Reason from `{rollback partial}`
- * to the `narrowReason` last-resort fallback. WR-01 uses a cause-chain walk
- * instead of the direct `instanceof` check so the class identity survives the
- * wrapping.
- *
- * These tests pin both directions: positive (the walker finds the wrapped
- * MRE) and negative (no MRE in the chain returns undefined; cycles and
- * the depth bound terminate cleanly).
- */
-test("WR-01: findManualRecoveryError returns the wrapped MRE when release-also-failed wrapper sits on top", () => {
-  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
-  const wrapped = new Error("staging failed (lock release also failed: chmod denied)", {
-    cause: inner,
-  });
-  const found = __test_findManualRecoveryError(wrapped);
-  assert.equal(found, inner);
-});
-
-test("WR-01: findManualRecoveryError returns the MRE directly when it is the top-level error", () => {
-  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
-  assert.equal(__test_findManualRecoveryError(inner), inner);
-});
-
-test("WR-01: findManualRecoveryError returns undefined when no MRE is in the chain", () => {
-  const inner = new Error("opaque inner");
-  const wrapped = new Error("opaque outer", { cause: inner });
-  assert.equal(__test_findManualRecoveryError(wrapped), undefined);
-});
-
-test("WR-01: findManualRecoveryError terminates cleanly on self-referencing cause cycles", () => {
-  const cyclic = new Error("cyclic") as Error & { cause: unknown };
-  cyclic.cause = cyclic;
-  assert.equal(__test_findManualRecoveryError(cyclic), undefined);
-});
-
-test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
-  // Build a 6-link chain with the MRE at the deepest position; the walker
-  // visits depth 0..4 inclusive, so a MRE at depth 5 is unreachable.
-  const mre = new ManualRecoveryError("deep", ["x"]);
-  const l5 = new Error("l5", { cause: mre });
-  const l4 = new Error("l4", { cause: l5 });
-  const l3 = new Error("l3", { cause: l4 });
-  const l2 = new Error("l2", { cause: l3 });
-  const l1 = new Error("l1", { cause: l2 });
-  const l0 = new Error("l0", { cause: l1 });
-  // l0 -> l1 -> l2 -> l3 -> l4 -> l5 -> mre (mre is at depth 6 from l0;
-  // 5 hops via .cause). The walker visits l0, l1, l2, l3, l4 (5 slots);
-  // mre is unreachable.
-  assert.equal(__test_findManualRecoveryError(l0), undefined);
 });
 
 /**
@@ -1569,7 +1500,7 @@ test("D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginMan
     },
   ];
 
-  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes, "plural");
+  renderReinstallPartitionAndNotify(ctx, pi, outcomes, "plural");
 
   // Exactly one notification was emitted; severity routes via notify()'s
   // content-derived ladder (D-16-11): manual-recovery in plugins[] -> warning.
@@ -1609,7 +1540,7 @@ test("D-19-02: outcomeToPluginMessage stays correct when the orchestrator catche
   const releaseWrapped = new Error("staging failed (lock release also failed: chmod denied)", {
     cause: inner,
   });
-  const mre = __test_findManualRecoveryError(releaseWrapped);
+  const mre = findManualRecoveryError(releaseWrapped);
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1618,7 +1549,7 @@ test("D-19-02: outcomeToPluginMessage stays correct when the orchestrator catche
     notes: ["staging failed (lock release also failed: chmod denied)"],
     ...(mre !== undefined && { failureClass: "manual-recovery" as const }),
   };
-  const row = __test_outcomeToPluginMessage(outcome, "project");
+  const row = outcomeToPluginMessage(outcome, "project");
   // The canonical CMC-11 Reason is preserved across the release-failure
   // wrapping path, and the variant is a PluginManualRecoveryMessage per
   // D-19-02.
@@ -1755,18 +1686,6 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
       await rm(cwd, { recursive: true, force: true });
     }
   });
-});
-
-test("GAP-05: errorWithManualRecovery instanceof-ManualRecoveryError branch merges leaks deduped", () => {
-  // When the input error is already a ManualRecoveryError, errorWithManualRecovery
-  // merges the new leaks into the existing leaks (deduped) and wraps with cause.
-  const inner = new ManualRecoveryError("stage failed", ["agents: old"]);
-  const wrapped = __test_errorWithManualRecovery(inner, ["agents: old", "skills: new"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  const mre = wrapped;
-  assert.deepEqual([...mre.leaks].sort(), ["agents: old", "skills: new"]);
-  assert.equal(mre.message, "stage failed");
-  assert.equal(mre.cause, inner);
 });
 
 test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and wraps error", async () => {
@@ -2503,15 +2422,15 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2578,12 +2497,12 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hooks.json from the resolved manifest", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-rewrite-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const hooksJson = {
@@ -2635,12 +2554,12 @@ test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hook
 });
 
 test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<plugin>/ subtree", async () => {
-  const { _resetForTest } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-drop-"));
     try {
-      _resetForTest();
+      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       // Seed a plugin WITHOUT hooks.
@@ -3617,7 +3536,7 @@ test("WR-09: the bulk cascade mapper composes the same brace and raise as the st
   // mapper -- and they read the same outcome. One naming the degrade while the
   // other renders a bare success row would be the very drift the shared signal
   // exists to close, so the mapper is pinned beside the verb.
-  const degraded = __test_outcomeToPluginMessage(
+  const degraded = outcomeToPluginMessage(
     {
       partition: "reinstalled",
       name: "good",
@@ -3640,7 +3559,7 @@ test("WR-09: the bulk cascade mapper composes the same brace and raise as the st
 
   // And the clean arm keeps the field absent, not present-and-empty: an empty
   // array would render the same today but is a different shape to reason about.
-  const clean = __test_outcomeToPluginMessage(
+  const clean = outcomeToPluginMessage(
     {
       partition: "reinstalled",
       name: "good",
@@ -3801,45 +3720,384 @@ test("PRL-10: a source that stopped being installable fails with the typed reaso
   });
 });
 
-// D-100-01 / ENBL-10: `clonePluginRecord` enumerates the record's fields
-// rather than spreading it, so a key it forgets vanishes from the old-record
-// snapshot silently -- no compile error, no failing assertion elsewhere. These
-// two clauses are the alarm for the hook description specifically.
-test("D-100-01 / ENBL-10: the reinstall old-record snapshot preserves hookEntries", () => {
-  const record = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "/plugins/hello",
-    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
+// ───────────────────────────────────────────────────────────────────────────
+// ENBL-05: reinstall over a record the user disabled
+// ───────────────────────────────────────────────────────────────────────────
 
-  const snapshot = __test_clonePluginRecord(record);
+/**
+ * Overwrite the installed record's enablement marker in place, keeping every
+ * other field the install wrote. ENBL-18: a disabled record KEEPS its
+ * `resources.*` inventory, so this is the shape production actually produces --
+ * an empty-inventory stand-in would let a re-materialization hide.
+ */
+async function markRecordedPluginDisabled(
+  cwd: string,
+  marketplace: string,
+  plugin: string,
+): Promise<void> {
+  const locations = locationsFor("project", cwd);
+  const state = await loadState(locations.extensionRoot);
+  const mp = state.marketplaces[marketplace];
+  assert.ok(mp !== undefined);
+  const record = mp.plugins[plugin];
+  assert.ok(record !== undefined);
+  await saveState(locations.extensionRoot, {
+    ...state,
+    marketplaces: {
+      ...state.marketplaces,
+      [marketplace]: {
+        ...mp,
+        plugins: { ...mp.plugins, [plugin]: { ...record, enabled: false } },
+      },
+    },
+  });
+}
 
-  assert.deepEqual(snapshot.hookEntries, [
-    { event: "PreToolUse", matcher: "Bash" },
-    { event: "SessionStart" },
-  ]);
-  // Deep copy, not an alias: the snapshot is read after the live record has
-  // been overwritten in place, so a shared element would report the new value.
-  assert.notEqual(snapshot.hookEntries?.[0], record.hookEntries[0]);
+/**
+ * Seed, install, disable the record, and delete the staged skill directory so
+ * the fixture matches a real disabled plugin: the record is retained, the
+ * artifacts are gone. A re-materialization is then visible as the directory
+ * coming back.
+ */
+async function seedDisabledInstall(
+  cwd: string,
+  opts: { readonly pluginName?: string; readonly marketplaceRoot?: string } = {},
+): Promise<{ readonly skillDir: string }> {
+  const pluginName = opts.pluginName ?? "hello";
+  await seedMarketplace({
+    cwd,
+    marketplaceRoot: opts.marketplaceRoot ?? path.join(cwd, "mp-src"),
+    pluginName,
+    resources: { skill: "old skill", command: "old command" },
+    install: true,
+  });
+  await markRecordedPluginDisabled(cwd, "mp", pluginName);
+
+  const skillDir = path.join(locationsFor("project", cwd).skillsTargetDir, `${pluginName}-tool`);
+  await rm(skillDir, { recursive: true, force: true });
+  return { skillDir };
+}
+
+// A reinstall of a disabled plugin used to re-stage its artifacts, flip the
+// record to enabled, and report `(reinstalled)` over a configuration that still
+// said the plugin was off -- so a verb invoked to repair a plugin silently
+// turned it back on until the next reload undid that.
+test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes nothing and stages nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { skillDir } = await seedDisabledInstall(cwd);
+
+      const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(recordBefore !== undefined);
+      assert.equal(recordBefore.enabled, false);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      assert.equal(outcome.partition, "skipped");
+      assert.deepEqual(outcome.notes, ["already disabled"]);
+
+      // The stronger statement than record equality: the verb did not write at
+      // all, so `state.json`'s mtime is untouched and the load-time no-op
+      // detection that reads it still sees a quiet file (RECON-05).
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      const recordAfter = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepEqual(recordAfter, recordBefore);
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), configBefore);
+      assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });
 
-test("D-100-01 / ENBL-10: a record with no hookEntries clones without inventing the key", () => {
-  const record = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "/plugins/hello",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
+// The two reinstall surfaces compose their rows through different code paths,
+// so a fix applied to one would leave the other telling the old, untruthful
+// story. The shared closed-set narrowing is what makes them agree; these two
+// cases are what stop them from drifting apart again.
+test("DFEN-07 / D-103-12: the standalone reinstall renders one benign skipped row for a disabled plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-row-"));
+    try {
+      await seedDisabledInstall(cwd);
+      const { ctx, pi, notifications } = makeCtx();
 
-  const snapshot = __test_clonePluginRecord(record);
+      await reinstallDefault(cwd, ctx, pi);
 
-  assert.equal(Object.hasOwn(snapshot, "hookEntries"), false);
+      // IL-2: one emission for the whole reinstall. The mock records a severity
+      // only when the producer passes one, so an absent severity is the info
+      // row -- the reason is benign and idempotent, so it must neither raise
+      // nor take the error flip the absent-target skip takes.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      // Subject-first, and asserted whole rather than as independent
+      // `includes` checks a reordering could survive. No summary line (an info
+      // cascade emits none) and no reload hint (nothing was materialized).
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ⊘ hello (skipped) {already disabled}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstalled row together", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-bulk-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "keeper",
+        resources: { skill: "keeper skill" },
+        install: true,
+      });
+      await seedDisabledInstall(cwd, { marketplaceRoot, pluginName: "sleeper" });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.deepEqual(
+        outcomes.map((o) => `${o.name}:${o.partition}`),
+        ["keeper:reinstalled", "sleeper:skipped"],
+      );
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /● keeper v[^\n]* \(reinstalled\)/);
+      assert.match(body, /⊘ sleeper \(skipped\) \{already disabled\}/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * DFEN-08: the overwhelming majority of plugins say nothing about install-time
+ * enablement, so what DFEN-08 owes them is that NOTHING moved. The
+ * triple is what makes that checkable instead of assumed: `beta` declares the
+ * install-time default TRUE, `gamma` declares nothing at all, and the two must
+ * render the same row as each other AND as the row this surface produced before
+ * the field existed. The declaring sibling `alpha` is present precisely so the
+ * comparison happens inside one live run rather than against a captured
+ * baseline that would rot, and because a precedence fixture over a three-valued
+ * key that covers two of the values passes while asking the wrong question.
+ *
+ * No declaration flip is staged here. The flip discipline separates "never
+ * re-read the field" from "re-read it and got the same answer", which is the
+ * lifecycle claim the case below this one already pins for this verb. DFEN-08's
+ * claim is narrower and the triple proves it in one run.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical reinstall rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-dfen08-parity-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+
+      // One marketplace built by repeat calls against a shared root:
+      // `mergeManifestEntry` reads the existing manifest and merges, so the
+      // three entries accumulate. Every arm carries the same version and the
+      // same single skill, so the ONLY difference between them is the
+      // declaration. `applyDefaultEnabled` is set on all three because that is
+      // what the real install handler passes -- and the claim is that it
+      // changes nothing for two of the three.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        version: "1.0.0",
+        resources: { skill: "alpha skill" },
+        install: true,
+        entryDefaultEnabled: false,
+        applyDefaultEnabled: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "beta",
+        version: "1.0.0",
+        resources: { skill: "beta skill" },
+        install: true,
+        entryDefaultEnabled: true,
+        applyDefaultEnabled: true,
+      });
+      // No knob at all: the seeder's conditional merge writes NO
+      // `defaultEnabled` key on this entry, which is the arm every plugin that
+      // never heard of the field lands on.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "gamma",
+        version: "1.0.0",
+        resources: { skill: "gamma skill" },
+        install: true,
+        applyDefaultEnabled: true,
+      });
+
+      const pluginsNow = async (): Promise<Record<string, { enabled?: boolean }>> =>
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {};
+
+      // Precondition: without it the cascade assertions below can pass over a
+      // fixture that never reached the path under test.
+      const before = await pluginsNow();
+      assert.equal(
+        before["alpha"]?.enabled,
+        false,
+        "precondition: declared false installs disabled",
+      );
+      assert.equal(before["beta"]?.enabled, true, "precondition: declared true installs enabled");
+      assert.equal(before["gamma"]?.enabled, true, "precondition: a silent entry installs enabled");
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.deepEqual(
+        outcomes.map((o) => `${o.name}:${o.partition}`),
+        ["alpha:skipped", "beta:reinstalled", "gamma:reinstalled"],
+      );
+
+      assert.equal(notifications.length, 1);
+      // Two benign `reinstalled` rows beside one info-severity skip -> info
+      // (severity unset).
+      assert.equal(notifications[0]?.severity, undefined);
+
+      // Whole-body rather than per-row `includes`: the literal pins the row
+      // ORDER, the tally and the trailer, none of which a substring check
+      // constrains.
+      //
+      // The tally counts THREE successes over two reinstalled rows and one
+      // skip. That is correct, not a mis-count: OUT-03 / D-04 count operation
+      // rows uniformly by STAMPED severity, and the `already disabled` reason
+      // is idempotent and therefore info (D-01), so it lands in the success
+      // bucket. The catalog documents the identical arithmetic for a different
+      // idempotent skip, where `(skipped) {up-to-date}` is one of the two
+      // successes in `Plugin reinstall: 1 failure, 2 successes`.
+      const body = notifications[0]?.message ?? "";
+      assert.equal(
+        body,
+        "● mp [project]\n" +
+          "  ⊘ alpha (skipped) {already disabled}\n" +
+          "  ● beta v1.0.0 (reinstalled)\n" +
+          "  ● gamma v1.0.0 (reinstalled)\n" +
+          "\n" +
+          "Plugin reinstall: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+
+      // The parity claim itself, stated apart from the whole-body literal.
+      // Before the field was consumed it was an unknown key under the lenient
+      // manifest tolerance and therefore inert, so a declared-true entry and a
+      // silent entry were LITERALLY the same input -- which is what makes the
+      // two literals below the pre-existing row form as well. Asserting the two
+      // rendered rows against EACH OTHER catches a drift that two
+      // independently-correct literals would both stay green through.
+      const rows = body.split("\n");
+      const rowFor = (name: string): string =>
+        rows.find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+      const betaRow = rowFor("beta");
+      const gammaRow = rowFor("gamma");
+      assert.equal(betaRow, "  ● beta v1.0.0 (reinstalled)");
+      assert.equal(gammaRow, "  ● gamma v1.0.0 (reinstalled)");
+      assert.equal(
+        betaRow.replaceAll("beta", "<plugin>"),
+        gammaRow.replaceAll("gamma", "<plugin>"),
+        "DFEN-08: the declared-true row and the silent row must COINCIDE, not merely each match a literal",
+      );
+
+      const after = await pluginsNow();
+      assert.equal(
+        after["alpha"]?.enabled,
+        false,
+        "DFEN-07: a reinstall over a disabled record leaves it disabled",
+      );
+      assert.equal(after["beta"]?.enabled, true, "DFEN-08: a declared-true entry moves nothing");
+      assert.equal(after["gamma"]?.enabled, true, "DFEN-08: a silent entry moves nothing");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// Installing and reinstalling against the SAME manifest cannot distinguish
+// "never re-read the declaration" from "re-read it and got the same answer".
+// Only a flip between the two calls separates those.
+test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall does not move the record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-flip-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill", command: "old command" },
+        install: true,
+        entryDefaultEnabled: false,
+        applyDefaultEnabled: true,
+      });
+
+      // Precondition and anti-vacuity anchor: the record landed disabled
+      // through the production install path, not by hand.
+      const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(recordBefore !== undefined);
+      assert.equal(recordBefore.enabled, false);
+
+      const skillDir = path.join(locations.skillsTargetDir, "hello-tool");
+      await rm(skillDir, { recursive: true, force: true });
+
+      await mergeManifestEntry(marketplaceRoot, "mp", "hello", "1.0.0", true);
+
+      // THE CONTROL. A verb that short-circuits moves no version, so there is
+      // no record field to read the flip out of. Read the manifest directly
+      // instead: that read goes through the same process-lifetime cache the
+      // orchestrator uses, so a flipped value here proves the cache is serving
+      // the rewritten bytes to THIS process -- the property a version bump
+      // would otherwise have proven. The parse is returned by reference and
+      // must be treated as read-only (D-03).
+      const manifest = await loadMarketplaceManifest(manifestPath);
+      assert.equal(
+        manifest.plugins.find((e) => e.name === "hello")?.defaultEnabled,
+        true,
+        "the rewritten declaration must be visible to this process",
+      );
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      assert.equal(outcome.partition, "skipped");
+      const recordAfter = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.equal(recordAfter?.enabled, false);
+      assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

@@ -162,6 +162,35 @@ test("MM-2 PLUGIN_ENTRY accepts metadata fields", () => {
   );
 });
 
+test("DFEN-01 PLUGIN_ENTRY accepts defaultEnabled false", () => {
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({ name: "p", source: "./local", defaultEnabled: false }),
+    true,
+  );
+});
+
+test("DFEN-01 PLUGIN_ENTRY accepts defaultEnabled true", () => {
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({ name: "p", source: "./local", defaultEnabled: true }),
+    true,
+  );
+});
+
+test("DFEN-01 PLUGIN_ENTRY accepts an unrelated unknown key alongside defaultEnabled", () => {
+  // D-09: the entry schema tolerates keys it does not name. Adding a named
+  // optional property must not narrow that -- a marketplace.json author can
+  // still carry vendor keys the extension knows nothing about.
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({
+      name: "p",
+      source: "./local",
+      defaultEnabled: false,
+      vendorSpecificTelemetryKnob: { sampleRate: 3 },
+    }),
+    true,
+  );
+});
+
 test("MM-2 PLUGIN_ENTRY accepts opaque unsupported components", () => {
   assert.equal(
     PLUGIN_ENTRY_VALIDATOR.Check({
@@ -275,6 +304,47 @@ test("MCPR-03 marketplace with a broken string-ref plugin + valid sibling loads 
   }
 });
 
+test("DFEN-01 one malformed defaultEnabled rejects the WHOLE marketplace.json", async () => {
+  // Contrast with the MCPR-03 case above, which loads fine and keeps its
+  // sibling: there the schema ACCEPTS the value and the defect surfaces later,
+  // at resolution time, isolated to one plugin. Here the entry schema itself
+  // rejects, and because it is validated as a member of the marketplace schema
+  // there is no per-plugin skip to fall back to -- the valid sibling below does
+  // NOT survive. DFEN-01 asks for a failure "the same way any other schema
+  // violation does", so a non-boolean here behaves exactly as a non-string
+  // `version` already would. Do not make this test behave like MCPR-03.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-defaultenabled-"));
+  try {
+    const manifestPath = path.join(tmp, "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "bad", source: "./bad", defaultEnabled: "false" },
+          { name: "sibling", source: "./sibling" },
+        ],
+      }),
+      "utf8",
+    );
+
+    await assert.rejects(
+      () => loadMarketplaceManifest(manifestPath),
+      (err: unknown) => {
+        assert.ok(
+          err instanceof InvalidMarketplaceManifestError,
+          "a non-boolean defaultEnabled must throw a typed InvalidMarketplaceManifestError",
+        );
+        assert.match(err.message, /marketplace\.json schema invalid/);
+        assert.match(err.message, /\/plugins\/0\/defaultEnabled/);
+        return true;
+      },
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("MM-2 PLUGIN_ENTRY rejects missing name", () => {
   assert.equal(PLUGIN_ENTRY_VALIDATOR.Check({ source: "./local" }), false);
 });
@@ -285,6 +355,24 @@ test("MM-2 PLUGIN_ENTRY rejects missing source", () => {
 
 test("MM-2 PLUGIN_ENTRY rejects name as number", () => {
   assert.equal(PLUGIN_ENTRY_VALIDATOR.Check({ name: 1, source: "./local" }), false);
+});
+
+test("DFEN-01 PLUGIN_ENTRY rejects defaultEnabled as string", () => {
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({ name: "p", source: "./local", defaultEnabled: "false" }),
+    false,
+  );
+});
+
+// `null` is the likelier authoring mistake than a string -- a template or a
+// codegen step that emits every known key writes `null` for the ones it has no
+// value for. `Type.Optional(Type.Boolean())` admits `undefined` and `boolean`
+// only, so it is rejected exactly like any other wrong type.
+test("DFEN-01 PLUGIN_ENTRY rejects defaultEnabled as null", () => {
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({ name: "p", source: "./local", defaultEnabled: null }),
+    false,
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -313,8 +401,36 @@ test("MCPR-02 PLUGIN_MANIFEST accepts mcpServers as a string reference", () => {
   assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ mcpServers: "./x.mcp.json" }), true);
 });
 
+test("DFEN-01 PLUGIN_MANIFEST accepts defaultEnabled false", () => {
+  assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ name: "p", defaultEnabled: false }), true);
+});
+
+test("DFEN-01 PLUGIN_MANIFEST accepts an unrelated unknown key alongside defaultEnabled", () => {
+  // D-09 again, from the plugin.json side: a plugin author's own vendor keys
+  // stay legal after the named optional property was added.
+  assert.equal(
+    PLUGIN_MANIFEST_VALIDATOR.Check({
+      name: "p",
+      defaultEnabled: true,
+      vendorSpecificTelemetryKnob: { sampleRate: 3 },
+    }),
+    true,
+  );
+});
+
 test("PLUGIN_MANIFEST rejects name as number", () => {
   assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ name: 42 }), false);
+});
+
+test("DFEN-01 PLUGIN_MANIFEST rejects defaultEnabled as string", () => {
+  assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ name: "p", defaultEnabled: "false" }), false);
+});
+
+// The plugin.json side of the null case above. Rejection here downgrades that
+// one plugin to `unavailable` with a `malformed plugin.json` note, rather than
+// invalidating a whole marketplace.json as the entry-side rejection does.
+test("DFEN-01 PLUGIN_MANIFEST rejects defaultEnabled as null", () => {
+  assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ name: "p", defaultEnabled: null }), false);
 });
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -46,7 +46,7 @@ import {
   parseFlagNames,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { BOOLEAN_FLAGS } from "../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
-import { __resetCacheForTests } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { CatalogVerb } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
@@ -84,7 +84,7 @@ function sorted(values: Iterable<string>): string[] {
 
 test("catalog vs completion: per-verb complete-set equals emitted labels (scope excluded)", async () => {
   for (const { head, verb } of COMPLETION_HEADS) {
-    __resetCacheForTests();
+    resetCompletionCache();
     const items = await getArgumentCompletions(`${head} -`, EMPTY_RESOLVER);
     assert.ok(items !== null, `expected flag completions for "${head} -"`);
 

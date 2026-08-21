@@ -10,9 +10,8 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
+import { outcomeToCascadePluginMessage } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 import {
-  __test_outcomeToCascadePluginMessage,
-  __test_snapshotAfterRefresh,
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -25,7 +24,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
@@ -1508,7 +1507,7 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
   // source. Test pattern: pre-warm memory + delete the on-disk file ->
   // run update -> next read MUST re-invoke rebuild (proves memory cleared).
   await withHermeticHome(async ({ cwd }) => {
-    __resetCacheForTests();
+    resetCompletionCache();
     await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
     const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
@@ -1564,7 +1563,7 @@ test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage wit
     declaresAgents: true,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "updated");
   assert.equal(msg.name, "p");
   assert.equal(msg.scope, "project");
@@ -1595,7 +1594,7 @@ test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginParti
     declaresMcp: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   if (msg.status !== "partially-installed") {
     throw new Error("unreachable: narrowed above");
@@ -1625,7 +1624,7 @@ test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stam
     declaresMcp: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   // A previously-clean plugin silently degraded by the auto-update is
   // actionable -> warning (drives the `needs attention` summary line).
@@ -1644,7 +1643,7 @@ test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) 
     declaresMcp: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   // Re-degrading a plugin that was already force-installed is benign -> info.
   assert.equal(msg.severity, "info");
@@ -1668,7 +1667,7 @@ test("CR-01: an autoupdate outcome that drops a kind AND degrades a component na
     degradedKinds: ["skill"],
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "partially-installed");
   if (msg.status !== "partially-installed") {
     throw new Error("unreachable: narrowed above");
@@ -1690,7 +1689,7 @@ test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updat
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  const msg = outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "updated");
 });
 
@@ -1766,7 +1765,7 @@ test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage w
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "skipped");
   if (msg.status !== "skipped") {
     throw new Error("unreachable: narrowed above");
@@ -1788,7 +1787,7 @@ test("outcomeToCascadePluginMessage: skipped outcome with typed reasons reads th
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "skipped");
   if (msg.status !== "skipped") {
     throw new Error("unreachable: narrowed above");
@@ -1808,7 +1807,7 @@ test("outcomeToCascadePluginMessage: failed outcome with typed reasons + cause -
     declaresMcp: false,
     cause,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "failed");
   if (msg.status !== "failed") {
     throw new Error("unreachable: narrowed above");
@@ -1833,7 +1832,7 @@ test("outcomeToCascadePluginMessage: skipped outcome without typed reasons falls
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "skipped");
   if (msg.status !== "skipped") {
     throw new Error("unreachable: narrowed above");
@@ -1851,7 +1850,7 @@ test("outcomeToCascadePluginMessage: failed outcome without typed reasons falls 
     declaresAgents: false,
     declaresMcp: false,
   };
-  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  const msg = outcomeToCascadePluginMessage(outcome, "project");
   assert.equal(msg.status, "failed");
   if (msg.status !== "failed") {
     throw new Error("unreachable: narrowed above");
@@ -2126,51 +2125,6 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {not a
   });
 });
 
-test("CR-01 TOCTOU: marketplace removed between pre-guard read and snapshotAfterRefresh's fresh load returns undefined (silent no-op), never throws raw nor emits `{network unreachable}`", async () => {
-  // CR-01: there is a TOCTOU window between resolveScopeOrNotifyNotAdded's
-  // pre-guard `loadState` (which proved the marketplace exists) and
-  // snapshotAfterRefresh's withStateGuard fresh `loadState`. If a concurrent
-  // `marketplace remove` lands in that window, the guard's fresh load sees
-  // `record === undefined`. The PREVIOUS code threw a raw
-  // MarketplaceNotFoundError there, which refreshOneMarketplace's generic catch
-  // misattributed (reasonsFromCascadeError -> undefined -> `?? network
-  // unreachable`) as the LYING `(failed) {network unreachable}` row -- exactly
-  // the NFR-5/ATTR-10 misattribution class this change closes.
-  //
-  // The fix mirrors remove.ts:235-244: snapshotAfterRefresh returns `undefined`
-  // (sentinel) instead of throwing, and refreshOneMarketplace returns silently.
-  // We drive the seam directly with an empty on-disk state (the concurrent-
-  // removal end-state) and assert it returns `undefined` rather than rejecting.
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    // Persist an empty state -- this is the post-concurrent-removal disk state
-    // the guard's fresh `loadState` observes.
-    await saveState(locations.extensionRoot, { schemaVersion: 1, marketplaces: {} });
-
-    const { ctx, pi } = makeCtx();
-    const { gitOps, state: gitState } = makeMockGitOps();
-
-    const snapshot = await __test_snapshotAfterRefresh({
-      ctx,
-      pi,
-      name: "vanished",
-      scope: "project",
-      locations,
-      gitOps,
-      credentialOps: makeMockCredentialOps().credOps,
-    });
-
-    // The sentinel: undefined, NOT a thrown MarketplaceNotFoundError. The
-    // record-absent arm never reaches refreshRecord, so zero gitOps fire
-    // (NFR-5: the concurrent-removal no-op touches no network).
-    assert.equal(snapshot, undefined);
-    assert.equal(gitState.cloneCalls.length, 0);
-    assert.equal(gitState.fetchCalls.length, 0);
-    assert.equal(gitState.checkoutCalls.length, 0);
-  });
-});
-
 test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketplace -- no `{network unreachable}`, no second notification", async () => {
   // End-to-end companion to the seam test: drive updateMarketplace with state
   // whose marketplace exists at the pre-guard read but whose guard-time fresh
@@ -2184,11 +2138,17 @@ test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketpla
   // `{not added}` convergence row and NEVER `{network unreachable}`.
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps();
+    const { gitOps, state: gitState } = makeMockGitOps();
 
     await assert.doesNotReject(async () =>
       updateMarketplace({ ctx, pi, name: "vanished", scope: "project", cwd, gitOps }),
     );
+
+    // NFR-5: the record-absent arm never reaches refreshRecord, so the
+    // concurrent-removal no-op touches no network.
+    assert.equal(gitState.cloneCalls.length, 0);
+    assert.equal(gitState.fetchCalls.length, 0);
+    assert.equal(gitState.checkoutCalls.length, 0);
 
     const composed = notifications.map((n) => n.message).join("\n");
     assert.doesNotMatch(

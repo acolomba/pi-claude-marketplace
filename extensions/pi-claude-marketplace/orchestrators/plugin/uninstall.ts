@@ -48,7 +48,7 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -190,17 +190,6 @@ function narrowCascadeFailure(cause: Error): ContentReason {
   // former `"not in manifest"` was a false assertion; `"unreadable"` is the
   // truthful existing member.
   return "unreadable";
-}
-
-/**
- * Structural predicate for `NodeJS.ErrnoException`. The `.code` property
- * is the locale-independent discriminator (NFR-4 floor `>= 22`). Avoids
- * matching English-language error text that varies across Node versions.
- */
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return (
-    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
-  );
 }
 
 /**

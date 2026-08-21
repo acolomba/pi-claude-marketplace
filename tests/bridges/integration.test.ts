@@ -79,6 +79,7 @@ function makeResolved(): ResolvedPluginInstallable {
       agents: ["agents"],
     },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 

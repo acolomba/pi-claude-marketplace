@@ -85,6 +85,7 @@ import {
   readAndCachePluginHooks,
   rebuildRoutingTables,
   removeHookConfig,
+  removePluginConfigFromCache,
   writeHookConfig,
 } from "../../bridges/hooks/index.ts";
 import {
@@ -108,20 +109,13 @@ import {
 } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
-import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import {
-  assertNever,
-  causeChainTrailer,
-  ConcurrentInstallError,
-  errorMessage,
-  PluginShapeError,
-} from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import {
   companionSeverity,
@@ -134,6 +128,7 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import {
   canonicalCloneUrl,
@@ -143,17 +138,24 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
-import { INSTALL_CONTEXT, type EntityErrorRow, type InstallMsg } from "./install.messaging.ts";
 import {
+  INSTALL_CONTEXT,
+  classifyEntityShapeError,
+  classifyInstallFailure,
+  composeInstallFailureMessage,
+  formatOrchestratedCause,
+  type InstallMsg,
+} from "./install.messaging.ts";
+import {
+  applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
   pickAgentsSourceDir,
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
-  selectConfigWriteTarget,
-  synthesizeAdoptedMarketplaceSource,
-  type LedgerDegradationSignals,
+  selectDeclaringConfigWriteTarget,
+  writeAdoptingConfigEntries,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -169,87 +171,11 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginUnavailableMessage,
-  PluginPartiallyAvailableMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-
-/**
- * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is
- * the edge layer's responsibility; this orchestrator entrypoint
- * accepts already-parsed strings + the resolved scope.
- *
- * `pi` is REQUIRED -- `notify(ctx, pi, message)` consumes it for the
- * single `softDepStatus(pi)` probe per call. The renderer
- * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
- * markers from the per-row `dependencies: readonly Dependency[]`
- * declaration combined with the threaded probe. Making `pi`
- * optional would force a runtime branch the type checker cannot reason
- * about.
- *
- * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
- * `dependencies: readonly Dependency[]` (the closed-set
- * `"agents" | "mcp"` per SNM-04). The orchestrator derives the
- * array at the success-return site from
- * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`) and
- * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`); the
- * `declaresAgents`/`declaresMcp` predicates on `InstallPluginOutcome`
- * remain (consumed by `orchestrators/import/execute.ts` for its
- * cascade-row composition) -- NFR-7's discriminated-outcome contract
- * is unchanged.
- *
- * IN-07 / D-98-01: the `installed` arm INTERSECTS the shared
- * `LedgerDegradationSignals` shape rather than re-declaring the ledger's
- * degradation fields, so the enable branch and this one read ONE vocabulary for
- * the same ledger run. Each field is omitted when empty, so a clean install's
- * outcome shape is unchanged (NREG-01).
- *
- * WR-03: the intersection EXCLUDES the two staged-count verdicts, and every
- * field it keeps is populated below. WR-11: the type operator is an EXCLUSION,
- * so it cannot state that second half on its own -- a signal added to the shared
- * shape would widen this arm with a field nothing here writes. The key set is
- * pinned bidirectionally by `COMPAT-01: the install outcome inherits exactly the
- * signals installPlugin populates` in
- * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
- * either a widening or a narrowing. Each field of the shared shape is optional,
- * so intersecting all five never made a missing one a compile error -- it only
- * advertised `stagedAgents` / `stagedMcpServers` that `installPlugin` never
- * writes, which a consumer reads as `undefined` and takes for "no agents
- * staged". Those two facts already ride the REQUIRED `declaresAgents` /
- * `declaresMcp` predicates below (consumed by `orchestrators/import/execute.ts`
- * and the reconcile projection), so excluding the optional twins removes a
- * duplicate vocabulary rather than a signal. The dropped-component
- * `unsupported` kind list stays and is populated: an install admitted through
- * the partial gate drops component kinds, and an outcome silent about them would
- * contradict the `(partially-installed)` row `list` renders one command later --
- * the same contradiction the shared shape exists to prevent on the enable side.
- */
-export type InstallPluginOutcome =
-  | ({
-      readonly status: "installed";
-      readonly resourcesChanged: boolean;
-      readonly declaresAgents: boolean;
-      readonly declaresMcp: boolean;
-      /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
-      readonly postCommitWarnings?: readonly string[];
-    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">)
-  | {
-      /**
-       * Collapsed failure shape. All failure variants (`already-installed`,
-       * `unavailable`, `uninstallable`, `unexpected-failure`) map here.
-       * `error` is the typed dispatch surface -- consumers narrow on
-       * `instanceof PluginShapeError` and `.shape.kind` to recover the
-       * specific failure class. `cause` preserves the formatted user-visible
-       * text for callers in orchestrated mode that render it directly.
-       */
-      readonly status: "failed";
-      readonly error: Error;
-      readonly cause: string;
-    };
+import type { UnstageOutcome } from "../marketplace/shared.ts";
+import type { InstallPluginOutcome } from "../types.ts";
 
 /**
  * Controls how `installPlugin` surfaces notifications.
@@ -316,8 +242,47 @@ export interface InstallPluginOptions {
    * of `claude-plugins.json`. The base file is NEVER touched on the
    * --local path; loadConfig's `absent` arm yields an empty starting
    * shape that saveConfig writes back to the local path.
+   *
+   * D-103-16: the flag is not the sole determinant of the write target. It
+   * answers which file the caller WANTS written, and it still wins outright.
+   * When it is absent the target follows the file the plugin's declaration
+   * already lives in, and only a key declared in neither file lands in the base
+   * file -- the rule `selectDeclaringConfigWriteTarget` states, shared with
+   * `enable` and `disable` so the three verbs that author an enablement
+   * declaration cannot disagree about where one lives.
+   *
+   * Two callers set it. The edge handler passes the user's `--local` flag.
+   * The reconcile apply loop derives it from
+   * `PlannedPluginInstall.configSource`, the merge provenance the planner
+   * records, so BOTH the DFEN-05 precedence read and the DFEN-04 /
+   * D-102-04 stamp address the physical file the declaration actually lives
+   * in. Getting that wrong is silent in both directions: reading the base
+   * file for a locally-declared plugin reports `enabled` absent even when
+   * the local entry says `enabled: true`, installing the plugin disabled
+   * against the user's explicit word; and stamping the base file under a
+   * local declaration changes nothing the merged view can see, because a
+   * local entry replaces the base entry for that key wholesale (CFG-02).
    */
   readonly local?: boolean;
+  /**
+   * DFEN-04 / D-102-03 / D-102-04: when true, the install honors the resolved
+   * `defaultEnabled` -- a plugin declaring `false` lands recorded disabled with
+   * `enabled: false` written through to the target config entry. The standalone
+   * edge handler and the reconcile apply loop set it; `import` deliberately
+   * does NOT.
+   *
+   * The decision cannot be inferred from the config, which is why it is a
+   * caller-supplied option rather than a read: on the import path the plugin's
+   * config entry does not exist yet when `installPlugin` runs (the cascade
+   * writes every entry in a post-pass), so an absent-entry inference would
+   * install every imported plugin disabled -- and every plugin reaching import
+   * arrived because the source settings said `enabled: true`, an explicit user
+   * setting that DFEN-05 says wins.
+   *
+   * Absent or false means today's behavior exactly: the resolved value is read
+   * and not acted on.
+   */
+  readonly applyDefaultEnabled?: boolean;
   /**
    * Test-only clone-cache seam override (see InstallLedgerOptions.cloneCacheSeam).
    * Production callers leave this undefined.
@@ -1308,6 +1273,193 @@ function buildInstallLedgerOptions(
 }
 
 /**
+ * Drop the hooks parsed-config cache entry for a plugin whose install landed
+ * disabled, and rebuild the routing table in lockstep, so the running process
+ * cannot dispatch events to a plugin the user's configuration says is
+ * disabled. Wrapped in try/catch: the install itself succeeded, so a cache
+ * mutation throw must not escalate it into a failure -- the next `/reload`'s
+ * factory-time hydrate rebuilds the cache from state.json (D-59-02).
+ *
+ * Deliberately NOT the disable verb's helper: this file must not import from
+ * `enable-disable.ts` (that module already imports `runInstallLedger` from
+ * here, so the reverse edge closes a cycle), and the debug message names the
+ * install surface so the log says which command left the routing table stale.
+ */
+function dropInstallDisabledHooks(scope: Scope, marketplace: string, plugin: string): void {
+  try {
+    removePluginConfigFromCache(scope, marketplace, plugin);
+    rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `install: hooks cache/routing drop failed for install-disabled ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- this plugin's hooks may keep dispatching in the running process until the next /reload rebuilds the routing table from state.json`,
+    );
+  }
+}
+
+/**
+ * DFEN-04 / D-102-01: the disable half of a materialize-then-disable install.
+ * Runs INSIDE the caller's `withLockedStateTransaction` closure, after the
+ * ledger and before the config write-back, and composes exactly the primitives
+ * the `disable` verb composes -- `cascadeUnstagePlugin`, then
+ * `applyPartialCascadeFold` on a partial cascade, then `toDisabledRecord` --
+ * so the terminal state is byte-identical to an `install` followed by a
+ * `disable` by construction rather than by careful re-implementation.
+ *
+ * It does NOT call `setPluginEnabled`: `proper-lockfile` is `retries: 0` and
+ * not re-entrant, so a nested guard on the same scope would self-deadlock.
+ *
+ * D-102-02: a failed cascade behaves exactly as a failed disable cascade does
+ * today -- the dropped artifacts are folded out of the record, `updatedAt`
+ * bumps, the hooks cache drops when hooks dropped, and the cause is returned
+ * so the caller can SAVE the shrunken record before surfacing the failure. A
+ * throw would be wrong: the guard discards a mutated snapshot on throw (ST-7),
+ * leaving state.json claiming artifacts the cascade already removed from disk
+ * (NFR-3).
+ *
+ * ENBL-02 / ENBL-18: `toDisabledRecord` is the sole sanctioned producer of the
+ * disabled shape, and its `resources: R` passthrough keeps the record's
+ * inventory. The map slot is REPLACED rather than mutated in place so the
+ * branded return type survives to the assignment.
+ */
+async function disableFreshlyInstalledPlugin(args: {
+  readonly state: ExtensionState;
+  readonly scope: Scope;
+  readonly locations: ScopedLocations;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): Promise<{ readonly ok: true } | { readonly ok: false; readonly cause: Error }> {
+  const { state, scope, locations, marketplace, plugin } = args;
+  const target = locateFreshlyInstalledRecord(state, marketplace, plugin);
+  if (target === undefined) {
+    return {
+      ok: false,
+      cause: new Error(
+        `installPlugin: internal error -- the state phase left no record for plugin "${plugin}" to disable.`,
+      ),
+    };
+  }
+
+  const cascade = await cascadeUnstagePlugin(plugin, marketplace, locations, target.installed);
+  if (!cascade.ok) {
+    return foldFailedDisableCascade({ ...args, installed: target.installed, cascade });
+  }
+
+  target.mp.plugins[plugin] = toDisabledRecord(target.installed, new Date().toISOString());
+  dropInstallDisabledHooks(scope, marketplace, plugin);
+  return { ok: true };
+}
+
+/**
+ * Resolve the record the state phase just wrote. Both slots must be present:
+ * a marketplace with no plugin entry is the same internal error as no
+ * marketplace at all, so the pair is returned together or not at all.
+ */
+function locateFreshlyInstalledRecord(
+  state: ExtensionState,
+  marketplace: string,
+  plugin: string,
+): { readonly mp: MarketplaceStateRecord; readonly installed: InstalledPluginRecord } | undefined {
+  const mp = state.marketplaces[marketplace];
+  const installed = mp?.plugins[plugin];
+  if (mp === undefined || installed === undefined) {
+    return undefined;
+  }
+
+  return { mp, installed };
+}
+
+/**
+ * D-102-02: fold a failed cascade into the record and hand the cause back. The
+ * record keeps whatever the cascade actually removed so the caller can SAVE the
+ * shrunken shape rather than let the guard discard it on a throw (ST-7, NFR-3).
+ */
+function foldFailedDisableCascade(args: {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly installed: InstalledPluginRecord;
+  readonly cascade: UnstageOutcome;
+}): { readonly ok: false; readonly cause: Error } {
+  const { scope, marketplace, plugin, installed, cascade } = args;
+  applyPartialCascadeFold(installed, cascade.dropped);
+  installed.updatedAt = new Date().toISOString();
+  if (cascade.dropped.hooks.length > 0) {
+    dropInstallDisabledHooks(scope, marketplace, plugin);
+  }
+
+  return {
+    ok: false,
+    cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`),
+  };
+}
+
+/**
+ * DFEN-05: the effective `enabled` declaration for one plugin key, read across
+ * BOTH physical config files of the scope.
+ *
+ * CFG-02 / D-01: a `claude-plugins.local.json` entry REPLACES the same-keyed
+ * base entry WHOLESALE and unconditionally. The merge never consults the
+ * caller's `--local` flag -- that flag says which file to WRITE, not which file
+ * the declaration is IN. Reading only the write target therefore reports
+ * `enabled` absent for a locally-declared plugin installed without `--local`,
+ * and the precedence gate then installs it disabled against the user's explicit
+ * word while stamping an `enabled: false` the user never typed into the OTHER
+ * file (the failure `InstallPluginOptions.local`'s own doc comment describes).
+ *
+ * The local file wins by IDENTITY, not by precedence: whichever of the two
+ * paths is `claude-plugins.local.json` answers the key, and the entry is
+ * selected before its `enabled` field is read, because a wholesale replacement
+ * shadows the base entry's `enabled` too. Both parses arrive from
+ * `selectDeclaringConfigWriteTarget`, read fresh INSIDE the caller's lock
+ * (WB-01) for this test only -- never written, never serialized back.
+ *
+ * An UNREADABLE sibling (`sibling === undefined`) contributes nothing, and on
+ * the flagless path that costs no signal: the selector aborts when the LOCAL
+ * file is unreadable, and when the target IS the local file the key is declared
+ * there by construction, so the base file is never the one that answers.
+ * A typed `--local` over an unreadable BASE file is the sole arm where an
+ * `enabled` value could be missed -- the flag names the destination outright,
+ * so no abort is owed there, and the arm reads exactly as it did before the
+ * sibling parse was threaded.
+ */
+type PluginConfigMap = ScopeConfig["plugins"];
+type PluginConfigEntry = NonNullable<PluginConfigMap>[string];
+type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
+type InstalledPluginRecord = MarketplaceStateRecord["plugins"][string];
+
+/**
+ * Sort the two parsed configs into the local-then-base pair the identity rule
+ * consumes. `targetIsLocal` names which of the two the CALLER is holding, so
+ * the sibling takes the other slot.
+ */
+function declaringPluginMaps(args: {
+  readonly current: ScopeConfig;
+  readonly sibling: ScopeConfig | undefined;
+  readonly targetIsLocal: boolean;
+}): { readonly local: PluginConfigMap; readonly base: PluginConfigMap } {
+  const siblingPlugins = args.sibling?.plugins;
+
+  return args.targetIsLocal
+    ? { local: args.current.plugins, base: siblingPlugins }
+    : { local: siblingPlugins, base: args.current.plugins };
+}
+
+function entryFor(plugins: PluginConfigMap, key: string): PluginConfigEntry | undefined {
+  return plugins?.[key];
+}
+
+function readDeclaredEnabled(args: {
+  readonly current: ScopeConfig;
+  readonly sibling: ScopeConfig | undefined;
+  readonly targetIsLocal: boolean;
+  readonly key: string;
+}): boolean | undefined {
+  const { local, base } = declaringPluginMaps(args);
+
+  return (entryFor(local, args.key) ?? entryFor(base, args.key))?.enabled;
+}
+
+/**
  * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
  * AS-7 / WARN-01). The state record is already committed, so every arm is
  * defensive: a failure here must not strand a successful install. Per
@@ -1383,6 +1535,76 @@ async function collectPostCommitWarnings(
  * the just-completed install -- not the persisted `compatibility.unsupported`
  * record the `list` / non-path `info` derivers read.
  */
+/**
+ * WARN-01 / D-86-03: one `{malformed skill}` / `{malformed command}` token per
+ * plugin regardless of how many components of that kind degraded. Hoisted out
+ * of the row composers so the success row and the DFEN-04 disabled row read
+ * the SAME list -- a malformed component is a durable fact about what the
+ * plugin will materialize, so both rows owe it to the user; only the row's own
+ * status decides which of them is rendered. The free-text parse-error detail
+ * rides `postCommitWarnings` (orchestrated only).
+ */
+function malformedRowReasons(installCtx: InstallCtx): readonly ContentReason[] {
+  return malformedReasonsForKinds(installCtx.frontmatterDegradations.map((d) => d.kind));
+}
+
+/**
+ * FSTAT-07 / D-66-04: the dropped-component kinds, read off the LIVE resolved
+ * state of the just-completed install -- NOT the persisted
+ * `compatibility.unsupported` record the `list` / non-path `info` derivers
+ * read. The two agree here only because the install just wrote that record.
+ * Empty on a fully-supported install (FSTAT-03: no lingering partial state).
+ * Shared by both row composers on the same grounds as `malformedRowReasons`.
+ */
+function droppedKindRowReasons(installCtx: InstallCtx): readonly ContentReason[] {
+  return installCtx.resolved.state === "partially-available"
+    ? narrowUnsupportedKinds(installCtx.resolved.unsupported)
+    : [];
+}
+
+/**
+ * OUT-04 / DFEN-04: the install-disabled row. D-102-07 stamps `info` -- the
+ * desired state WAS reached, because an install-disabled plugin is the
+ * author's declared intent, not a shortfall; severity is the desired-state
+ * axis, not a something-is-unusual axis. WARN-01 raises it to `warning` on a
+ * frontmatter degrade for the same reason the success row does: a synthesized
+ * skill or a neutralized command is a shortfall this ledger run just produced,
+ * and the disabled status does not undo it.
+ *
+ * The reasons brace carries the durable facts alongside the cause, per the
+ * governing rule quoted on `PluginDisabledMessage`: render facts that
+ * constrain what the user can do next, suppress facts about runtime behavior
+ * that is suspended. A dropped component kind and a malformed component are
+ * both durable and both constrain the very `enable` this row advertises -- it
+ * will produce a degraded install. Only the soft-dep markers belong in the
+ * suppressed half, and the `disabled` render arm hard-codes those false
+ * (ENBL-15 / D-100-06). In standalone mode `postCommitWarnings` are dropped by
+ * D-19-01, so this row is the only surface those facts have.
+ *
+ * `needsReload: false`: nothing net entered or left Pi's resource view inside
+ * the command, since the ledger staged and the cascade unstaged before the
+ * process returned. D-102-10's `enableHint` adds the frozen trailer naming the
+ * remedy. Row-level `scope` is OMITTED exactly as on the installed row -- the
+ * marketplace block carries it. No `dependencies`: the `disabled` arm has none
+ * by construction.
+ */
+function composeDisabledRow(installCtx: InstallCtx): InstallMsg {
+  return {
+    status: "disabled",
+    name: installCtx.plugin,
+    version: installCtx.version,
+    // The author-declared cause leads: it is why the row exists at all.
+    reasons: [
+      "installs disabled",
+      ...malformedRowReasons(installCtx),
+      ...droppedKindRowReasons(installCtx),
+    ],
+    severity: installCtx.frontmatterDegradations.length > 0 ? "warning" : "info",
+    needsReload: false,
+    enableHint: true,
+  };
+}
+
 function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallMsg {
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
@@ -1406,9 +1628,7 @@ function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallM
     reasons.push("orphan rewake");
   }
 
-  // WARN-01 / D-86-03: one `{malformed skill}` / `{malformed command}` token
-  // per plugin regardless of how many components of that kind degraded.
-  reasons.push(...malformedReasonsForKinds(installCtx.frontmatterDegradations.map((d) => d.kind)));
+  reasons.push(...malformedRowReasons(installCtx));
 
   // SEV-01: a declared-but-unloaded soft-dep companion silently degrades an
   // otherwise-clean install, so raise info to warning. WARN-01: a
@@ -1428,7 +1648,7 @@ function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallM
       name: plugin,
       dependencies,
       version: installCtx.version,
-      reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
+      reasons: [...reasons, ...droppedKindRowReasons(installCtx)],
       severity,
       needsReload: true,
     };
@@ -1453,6 +1673,8 @@ function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallM
 function buildInstalledOutcome(
   installCtx: InstallCtx,
   postCommitWarnings: readonly string[],
+  /** DFEN-04: true when the DFEN-04 cascade unstaged everything the ledger staged. */
+  landedDisabled: boolean,
 ): InstallPluginOutcome {
   // PI-9 corollary: `resourcesChanged` is consumed by import/execute.ts as a
   // structural predicate, so it tracks whether ANY phase staged something.
@@ -1467,9 +1689,17 @@ function buildInstalledOutcome(
 
   return {
     status: "installed",
-    resourcesChanged: stagedAny,
+    version: installCtx.version,
+    // DFEN-04: the ledger DID stage on the install-disabled path, but the
+    // cascade removed every artifact before the command returned, so the net
+    // Pi-visible resource delta is zero. `import/execute.ts` consumes this as a
+    // structural predicate and would otherwise claim a change that did not
+    // survive. `declaresAgents` / `declaresMcp` stay truthful: they are
+    // DECLARATION predicates, and a disabled plugin still declares.
+    resourcesChanged: !landedDisabled && stagedAny,
     declaresAgents: installCtx.stagedAgentNames.length > 0,
     declaresMcp: installCtx.stagedMcpServerNames.length > 0,
+    ...(landedDisabled && { landedDisabled: true as const }),
     ...(postCommitWarnings.length > 0 && { postCommitWarnings: [...postCommitWarnings] }),
     // WR-03: the LIVE dropped-component kinds. An install admitted through
     // the partial gate materializes a degraded plugin, so an outcome that
@@ -1651,16 +1881,41 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // WB-01 / CFG-03: invalid-config sentinel; populated inside the guard so
   // the post-guard branch emits the failed row with a basename-only cause.
   let configInvalid = false;
+  // DFEN-04 / D-102-01: the install-disabled verdict and, on D-102-02's failure
+  // window, the disable cascade's cause. Both are decided inside the lock --
+  // the config precedence read and the resolved `defaultEnabled` are only
+  // legible there -- and read by the post-guard row / outcome composition.
+  // Carried on an object rather than two bare `let`s so the guard closure's
+  // writes stay visible to the post-guard reads without a narrowing override at
+  // every site.
+  const disabledInstall: { landed: boolean; cascadeError?: Error } = { landed: false };
 
-  // WB-01: target-path selection happens ONCE before the lock so the
-  // orchestrator NEVER falls back to the base file on ENOENT. The base
-  // file is NEVER touched on the --local path; loadConfig's `absent` arm
-  // yields an empty starting shape that saveConfig writes back to the
-  // local path. UAT-05: the sibling path is the scope's OTHER physical
-  // file, read fresh inside the lock for the merged-view membership test
-  // ONLY -- never written, never serialized back.
-  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
-  const configBasename = path.basename(targetConfigPath);
+  // WB-01: target-path selection happens ONCE, and both write arms below read
+  // that one decision, so they cannot drift onto different files. The
+  // orchestrator NEVER falls back to the base file on ENOENT: the base file is
+  // NEVER touched on the --local path, and loadConfig's `absent` arm yields an
+  // empty starting shape that saveConfig writes back to the local path. UAT-05:
+  // the sibling path is the scope's OTHER physical file, read fresh inside the
+  // lock for the merged-view membership test ONLY -- never written, never
+  // serialized back.
+  //
+  // D-103-16: the selection now happens INSIDE the lock, because absent the
+  // flag it READS the local config to find where the declaration lives. A
+  // typed `--local` still targets the local file unconditionally; with no flag
+  // the target follows the DECLARATION, and only a key declared in neither file
+  // falls through to the base file (the shape of every fresh install). CFG-02
+  // replaces a same-keyed base entry WHOLESALE, so a stamp written to the base
+  // file under a local declaration moves no merged value: the install reports
+  // success, the merged view the reconcile planner reads is unchanged, and
+  // every reload from then on plans an enable for a plugin that declared
+  // itself off.
+  //
+  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
+  // that row renders after the lock closes, so the basename escapes the closure
+  // through this `let`. It starts at the base file -- the value the no-flag,
+  // no-declaration arm yields -- so the pre-assignment value is never wrong and
+  // the type stays definite.
+  let configBasename = path.basename(locations.configJsonPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
 
   try {
@@ -1674,16 +1929,58 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
     await withLockedStateTransaction(locations, async (tx) => {
+      // D-103-16: ONE selection, made before anything reads a config path, so
+      // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
+      // address the same physical file. It runs inside the lock because it
+      // READS the local config -- the WB-01 discipline that sibling reads
+      // happen fresh under the lock the write also holds.
+      //
+      // `targetIsLocal` comes back from the selector rather than being
+      // re-derived here: `readDeclaredEnabled` picks the effective ENTRY by
+      // physical-file IDENTITY before it reads that entry's `enabled` field, so
+      // labelling the selected file with the caller's flag instead of with its
+      // own identity swaps which of `current` and the sibling is treated as the
+      // local file. Under a local declaration and no flag that inversion reads
+      // the base file's bare entry as the effective one, reports `enabled`
+      // absent, fires the landed-disabled verdict against the user's explicit
+      // `enabled: true`, and then stamps `enabled: false` over it (a DFEN-05
+      // violation). The selector computed the locality; asking it is exact
+      // where any second derivation is a chance to disagree.
+      const selection = await selectDeclaringConfigWriteTarget({
+        locations,
+        local: opts.local,
+        key: `${plugin}@${marketplace}`,
+      });
+
       const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
       // basename-only message prevents an absolute-path information leak.
       // NO tx.save() -- state.json bytes and mtime are untouched.
-      const cfg = await loadConfig(targetConfigPath);
-      if (cfg.status === "invalid") {
+      //
+      // The arm covers the TARGETED file being unreadable and, on the flagless
+      // path, the local file being unreadable while the base file is fine: the
+      // local file is what DECIDES the destination there, so an unreadable one
+      // leaves the destination unknown. Naming that file in a row the user can
+      // act on beats writing to the file CFG-02 would then shadow.
+      if (selection.kind === "unreadable") {
+        configBasename = path.basename(selection.filePath);
         configInvalid = true;
         return;
       }
 
+      // DFEN-05: the TARGET physical config, parsed ONCE by the selector and
+      // shared by the precedence gate below and the write-back further down --
+      // as is the sibling, so one operation reads each file once and no two
+      // decisions can rest on different bytes of the same file. Never a merged
+      // view -- `config-write-back.ts` is forbidden from importing
+      // `config-merge.ts`, and serializing a merged view back would copy the
+      // local file's entries into the base file (SPLIT-02).
+      const { targetConfigPath, targetIsLocal, current, sibling } = selection;
+      configBasename = path.basename(targetConfigPath);
+
+      // The guard-free BODY, not the public `runInstallLedger`: this closure
+      // already holds the scope lock, and the post-guard path below reads
+      // context fields the outward summary withholds.
       const result = await runInstallLedgerBody(
         state,
         locations,
@@ -1700,12 +1997,72 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // compose the user-visible notification without re-entering the closure.
       installCtx = result.installCtx;
 
+      // DFEN-04 / DFEN-05: the install lands disabled only when all three hold
+      // -- the caller opted in, the user has stated NO opinion in EITHER of the
+      // scope's two physical config files (an explicit `enabled` wins in either
+      // direction and is never overwritten; `isDeclaredEnabled` answers "is it
+      // enabled", which is a different question), and the plugin's resolved
+      // declaration says false. `defaultEnabled` is a plain boolean on the
+      // materializable arms, so there is no `?? true` fallback to re-derive
+      // here. CFG-02: the read spans both files because a local entry replaces
+      // the base entry wholesale whatever the write target is; `current` stays
+      // the TARGET file and steers the write arms below and nothing else.
+      const declaredEnabled = readDeclaredEnabled({
+        current,
+        sibling,
+        targetIsLocal,
+        key: `${plugin}@${marketplace}`,
+      });
+      disabledInstall.landed =
+        opts.applyDefaultEnabled === true &&
+        declaredEnabled === undefined &&
+        !result.installCtx.resolved.defaultEnabled;
+
+      if (disabledInstall.landed) {
+        // D-102-01: the six-phase ledger already ran and the state phase wrote
+        // `enabled: true`; the disable half runs here, after `runPhases` and
+        // before the write-back, and overwrites that value. No seventh phase,
+        // no edit to any of the six phase bodies.
+        const disableResult = await disableFreshlyInstalledPlugin({
+          state,
+          scope,
+          locations,
+          marketplace,
+          plugin,
+        });
+        if (!disableResult.ok) {
+          // D-102-02: record the cause and fall through. The fold already
+          // subtracted what DID drop, so the `tx.save()` below persists the
+          // shrunken record and the post-guard path surfaces the existing
+          // install failure row; not throwing is what keeps state.json honest
+          // about what is still on disk (NFR-3).
+          //
+          // NFR-3: falling through rather than returning early is what makes
+          // the write-back arms below stamp `enabled: false` on this path too.
+          // Saving a record while writing no declaration leaves a state neither
+          // convergence path can act on -- the entry that reached the reconcile
+          // install bucket is bare, so the planner reads declared-enabled +
+          // recorded + not-disabled and calls it steady state forever, while
+          // the plugin's artifacts are already gone from disk. The stamp turns
+          // that into the divergence the disable bucket closes on the next pass.
+          disabledInstall.cascadeError = disableResult.cause;
+        }
+      }
+
       // WB-01 / WR-09: write-back the plugin entry to the user-authored
       // config. SKIPPED in orchestrated mode (reconcile derives desired
       // state FROM the merged config; writing back would clobber a
-      // per-machine override). The plugin patch is `{}` because the plugin
-      // entry shape today carries no install-time field beyond the implicit
-      // declaration -- D-04 keeps the "enabled" default at consume time.
+      // per-machine override).
+      //
+      // DFEN-04: the plugin patch carries `enabled: false` when the install
+      // landed disabled -- the first field this patch has ever carried. That
+      // includes the D-102-02 window where the disable cascade FAILED: the
+      // declaration states what the plugin should be, and it is what lets a
+      // later reconcile pass retry the disable. It stays `{}` otherwise,
+      // because the entry shape carries no other
+      // install-time field beyond the implicit declaration and D-04 keeps the
+      // "enabled" default at consume time. The patch merges over the existing
+      // entry, so no key the user already wrote is disturbed.
       //
       // CR-02: when the scope's MERGED config view does
       // not declare the marketplace -- the CMP-3 user-scope fallback adopted
@@ -1720,31 +2077,63 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // (base ∪ local), not just the target. A `--local` install against a
       // base-declared marketplace must NOT re-declare it in the local file:
       // the bare `{source}` entry would shadow the base entry wholesale
-      // (CFG-02) and silently flip merged `autoupdate`. The sibling file is
-      // read fresh INSIDE the lock and used for the membership test only.
+      // (CFG-02) and silently flip merged `autoupdate`. Both files are read
+      // fresh INSIDE the lock and used for the membership test only, and an
+      // UNREADABLE sibling skips the adoption write rather than counting as a
+      // file that declares nothing.
       if (opts.notifications?.mode !== "orchestrated") {
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+        await writeAdoptingConfigEntries({
           current,
-          siblingConfigPath,
+          sibling,
           state,
           marketplace,
+          plugin,
+          targetConfigPath,
+          scopeRoot: locations.scopeRoot,
+          // DFEN-04: the plugin key alone unless the install actually landed
+          // disabled, in which case the declaration carries it through.
+          //
+          // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
+          // arms collapse -- benign (already declared) and dangerous (no string
+          // `source.raw` to synthesize from). This site therefore still writes a
+          // dangling declaration in the dangerous arm; acknowledged trade-off
+          // pending a widen of the helper's return that would route it to a
+          // (failed) row.
+          pluginPatch: { ...(disabledInstall.landed && { enabled: false }) },
         });
-        // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
-        // collapses two arms -- benign (already-declared, no synthesis
-        // needed) and dangerous (no string `source.raw` on the state
-        // record, so we cannot synthesize at all). The current write-back
-        // proceeds with the plugin key alone in BOTH arms; the dangerous
-        // arm therefore writes a dangling declaration the next reconcile
-        // converts into a destructive plan. Acknowledged trade-off for
-        // this PR; a future PR should widen the helper's return to
-        // disambiguate and route the dangerous arm to a (failed) row.
-        await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
-          ...(adoptedSource !== undefined && {
-            marketplaces: { [marketplace]: { source: adoptedSource } },
-          }),
-          plugins: { [`${plugin}@${marketplace}`]: {} },
-        });
+      } else if (disabledInstall.landed) {
+        // DFEN-04 / D-102-04: the orchestrated-mode stamp. An orchestrated
+        // caller skips the batched write-back above (WR-09), so without this
+        // the record lands disabled while the entry the reconcile planner reads
+        // still says nothing about enablement -- the next reload reads
+        // absent-as-enabled (D-04), finds the record disabled, and plans an
+        // enable, re-enabling a plugin whose author declared it off.
+        //
+        // The condition is the landed-disabled verdict and nothing else. That
+        // verdict already required the caller's opt-in (so `import` never
+        // reaches here, D-102-03) and an ABSENT `enabled` key (so a value the
+        // user wrote is never rewritten, D-102-04). Re-testing either here
+        // would be a second, drift-prone copy of the same gate.
+        //
+        // SPLIT-02 / D-102-09: the sole sanctioned single-entry writer, whose
+        // patch is spread over the existing entry -- so the one field carried
+        // here disturbs no forward-compat key (D-09) and no sibling entry. It
+        // writes `targetConfigPath`, which for reconcile is the file the
+        // declaration lives in (see `InstallPluginOptions.local`).
+        //
+        // WR-09 is NOT widened. The guard above keeps its exact condition, and
+        // this arm writes ONE field of ONE entry instead of the full write-back
+        // an orchestrated caller must never run. It is an `else` arm rather
+        // than a second `if` on the same condition purely to stay under the
+        // closure's cognitive-complexity budget; the two are equivalent.
+        await writePluginConfigEntry(
+          current,
+          targetConfigPath,
+          locations.scopeRoot,
+          plugin,
+          marketplace,
+          { enabled: false },
+        );
       }
 
       // WR-04: the SOLE mutating arm saves explicitly. Ordering preserved
@@ -1782,7 +2171,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // factory-time hydrate (D-59-03) rebuilds the cache from
       // state.json, closing any divergence. Failures route through
       // `hookDebugLog`.
-      if (installCtx.resolved.hooksConfigPath !== undefined) {
+      //
+      // DFEN-04: SKIPPED entirely when the install landed disabled. The disable
+      // cascade above has just removed the on-disk hooks.json, so this block
+      // would either re-read a deleted file or -- worse -- register routing
+      // entries for a plugin the user's configuration says is disabled, giving
+      // live hook dispatch against disabled code that nothing short of the next
+      // hydrate would clear. `disableFreshlyInstalledPlugin` already dropped
+      // the cache entry, which is the correct mutation on that path.
+      if (!disabledInstall.landed && installCtx.resolved.hooksConfigPath !== undefined) {
         try {
           await readAndCachePluginHooks({
             scope,
@@ -1868,6 +2265,40 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     return { status: "failed", error: new Error(cause), cause };
   }
 
+  // D-102-02: the ledger succeeded and the disable cascade then failed. The
+  // shrunken record was already saved inside the lock, so state.json describes
+  // what is still on disk. Surface the EXISTING install failure row carrying
+  // the cascade's own cause -- no new failure semantics, no new rollback
+  // composition, and no new reason token. The record stays `enabled: true` with
+  // a shrunken inventory, which is exactly what an install followed by a failed
+  // disable produces, and the config entry the write-back arms just stamped
+  // says `enabled: false` -- the divergence a later reconcile pass closes by
+  // planning the disable this one could not finish.
+  const cascadeError = disabledInstall.cascadeError;
+  if (cascadeError !== undefined) {
+    const cause = errorMessage(cascadeError);
+    if (orchestrated) {
+      return { status: "failed", error: cascadeError, cause };
+    }
+
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            severity: "error" as const,
+            name: plugin,
+            reasons: [] as const,
+            cause: cascadeError,
+          },
+        ],
+      },
+    ]);
+    return { status: "failed", error: cascadeError, cause };
+  }
+
   // Defensive: the success path always populates installCtx; if it did not,
   // surface the inconsistency rather than silently emit a missing message.
   if (installCtx === undefined) {
@@ -1901,16 +2332,24 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // PR-5 free-form prose has no clean MarketplaceNotificationMessage
     // representation. The resolver still appends it to `installable.notes`
     // so downstream surfaces can continue to consume it.
+    //
+    // Exactly ONE notification per install (IL-2), whichever row the install
+    // produced -- the DFEN-04 disabled row when the cascade unstaged
+    // everything, the success row otherwise.
     notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
       {
         name: marketplace,
         scope,
-        plugins: [composeInstalledRow(installCtx, pi)],
+        plugins: [
+          disabledInstall.landed
+            ? composeDisabledRow(installCtx)
+            : composeInstalledRow(installCtx, pi),
+        ],
       },
     ]);
   }
 
-  return buildInstalledOutcome(installCtx, postCommitWarnings);
+  return buildInstalledOutcome(installCtx, postCommitWarnings, disabledInstall.landed);
 }
 
 // D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
@@ -1950,492 +2389,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // cause-chain composition (e.g. to disambiguate a same-named plugin
 // across marketplaces), add it back here with a comment marking the
 // dependency.
-/**
- * SEV-02 / D-69-03 / D-70-02 / XSURF-01: build the install-failure row,
- * branching on the three-way `partialable` discriminant the resolver stamped on
- * the throw. BOTH arms render at error severity (so the leading summary line
- * fires) -- an install failure must read as an error, not a benign info row.
- * The partially-available arm surfaces as the resolver-state-driven `partially-available`
- * token (XSURF-01: consistent with how `list` / `info` describe the same
- * plugin) and ALSO carries the `--partial` hint trailer (`--partial` can degrade-install
- * it). The structural arm stays the `unavailable` token with NO hint (force
- * cannot degrade-install a structural defect). The split keys on
- * `entityErrorRow.partialable`, NOT the reason brace -- `{unsupported source}`
- * appears on both arms; only the resolver verdict distinguishes them. Neither
- * message carries a `cause?` field per D-15-01 -- the reason text carries the
- * explanation.
- */
-function composeNotInstallableMessage(
-  plugin: string,
-  version: string | undefined,
-  entityErrorRow: EntityErrorRow,
-): PluginUnavailableMessage | PluginPartiallyAvailableMessage {
-  if (entityErrorRow.partialable === true) {
-    return {
-      status: "partially-available",
-      name: plugin,
-      reasons: entityErrorRow.reasons,
-      ...(version !== undefined && version !== "" && { version }),
-      severity: "error" as const,
-      partialHint: true,
-    };
-  }
-
-  return {
-    status: "unavailable",
-    name: plugin,
-    reasons: entityErrorRow.reasons,
-    ...(version !== undefined && version !== "" && { version }),
-    severity: "error" as const,
-  };
-}
-
-/**
- * PROV-04 / D-76-08 / D-79-03: classify a git-source clone auth challenge into
- * the EXISTING closed-set `authentication required` REASON -- no new token. A
- * private clone on a no-provider host (or a still-401 after a fresh credential,
- * D-79-02) throws the isomorphic-git `HttpError` with a 401/403 status; an
- * unsuccessful device flow (denied / expired / poll network error) makes
- * platform/git.ts's onAuth return `{ cancel: true }`, which isomorphic-git
- * throws as `UserCanceledError` instead. The seam append-leak-rethrows either
- * up to the install catch; both shapes narrow through the shared
- * `classifyGitTransportFailure` ladder. Install keeps ONLY its auth
- * classification: a network-class transport failure stays undefined here so it
- * rides the generic-runtime cause-chain fallthrough.
- *
- * D-79-03 (amended): the install row is the BARE `(failed) {authentication
- * required}` -- no `no auth provider is registered for <host>` cause line (the
- * plugin failure grammar has no cause-chain trailer slot that renders on the
- * SUBJECT row; the cause line lives ONLY on the update path's synthetic
- * failed-plugin child row). Returns undefined for a non-auth throw so the caller
- * keeps its generic-runtime cause-chain fallthrough.
- */
-function classifyGitAuthFailure(err: unknown): "authentication required" | undefined {
-  return classifyGitTransportFailure(err) === "authentication required"
-    ? "authentication required"
-    : undefined;
-}
-
-function composeInstallFailureMessage(args: {
-  err: unknown;
-  plugin: string;
-  scope: Scope;
-  version: string | undefined;
-  rolledBackPartial: boolean;
-  rollbackPartials: readonly RollbackPartial[];
-  entityErrorRow: EntityErrorRow | undefined;
-}): InstallMsg {
-  const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
-  const cause = err instanceof Error ? err : undefined;
-  const isPathContainment = err instanceof PathContainmentError;
-
-  // Branch 1: PI-14 PathContainmentError. Bare failed row with cause
-  // trailer; no rollback-partial children, no entity-shape narrowing.
-  if (isPathContainment) {
-    const failed: PluginFailedMessage = {
-      status: "failed",
-      name: plugin,
-      reasons: [] as const,
-      ...(version !== undefined && version !== "" && { version }),
-      scope,
-      ...(cause !== undefined && { cause }),
-      // D-03/D-06: a failed install -> error, no reload (nothing landed).
-      severity: "error",
-      needsReload: false,
-    };
-    return failed;
-  }
-
-  // Branch 2: rollback-partial. Thread RollbackPartial.cause directly
-  // -- no synthesis from the free-form .msg.
-  if (rolledBackPartial) {
-    const failed: PluginFailedMessage = {
-      status: "failed",
-      name: plugin,
-      reasons: ["rollback partial"] as const,
-      ...(version !== undefined && version !== "" && { version }),
-      scope,
-      ...(cause !== undefined && { cause }),
-      // D-03/D-06: a failed install -> error, no reload (nothing landed).
-      severity: "error",
-      needsReload: false,
-      rollbackPartial: rollbackPartials.map((p) => ({
-        phase: p.phase,
-        ...(p.cause !== undefined && { cause: p.cause }),
-      })),
-    };
-    return failed;
-  }
-
-  // Branch 3: entity-shape error. Preserve the classifier's status
-  // discriminator (`failed` | `unavailable`) so the catalog byte forms
-  // round-trip. The classifier's reasons array is closed-set Reason[]
-  // already; thread it verbatim. PluginUnavailableMessage has no `cause?`
-  // field per D-15-01 -- the reason text carries the explanation.
-  if (entityErrorRow !== undefined) {
-    if (entityErrorRow.status === "unavailable") {
-      return composeNotInstallableMessage(plugin, version, entityErrorRow);
-    }
-
-    const failed: PluginFailedMessage = {
-      status: "failed",
-      name: plugin,
-      reasons: entityErrorRow.reasons,
-      ...(version !== undefined && version !== "" && { version }),
-      scope,
-      ...(cause !== undefined && { cause }),
-      // D-03/D-06: a failed install -> error, no reload (nothing landed).
-      severity: "error",
-      needsReload: false,
-    };
-    return failed;
-  }
-
-  // Branch 4: runtime throw. A PROV-04 git-source clone auth challenge maps to
-  // the bare `(failed) {authentication required}` row (amended D-79-03: the
-  // closed-set REASON carries the classification and NO cause line renders on
-  // the install subject row -- the no-provider cause line lives only on the
-  // update path's child row), so `cause` is omitted for it. Every other runtime
-  // throw keeps an empty reasons array and rides the cause-chain trailer (the
-  // renderer suppresses the `{}` brace per D-15-01).
-  const authReason = classifyGitAuthFailure(err);
-  const failed: PluginFailedMessage = {
-    status: "failed",
-    name: plugin,
-    reasons: authReason !== undefined ? ([authReason] as const) : ([] as const),
-    ...(version !== undefined && version !== "" && { version }),
-    scope,
-    ...(authReason === undefined && cause !== undefined && { cause }),
-    // D-03/D-06: a failed install -> error, no reload (nothing landed).
-    severity: "error",
-    needsReload: false,
-  };
-  return failed;
-}
-
-/**
- * Format the orchestrated-mode `cause` string for the
- * `InstallPluginOutcome.cause` field. The import cascade caller at
- * `orchestrators/import/execute.ts` reads this string for its
- * `dispatchFailedOutcome` rendering. Follows the D-CMC-12 join
- * discipline: `<errorMessage>` plus the depth-5 cause-chain trailer
- * (shared/errors.ts::causeChainTrailer) joined with a blank line when
- * present. Standalone-mode trailers are emitted by `notify()` from
- * the structural `PluginFailedMessage.cause` field; this helper exists
- * solely to preserve the orchestrated-mode string contract.
- */
-function formatOrchestratedCause(err: unknown): string {
-  const head = errorMessage(err);
-  const trailer = causeChainTrailer(err);
-  return trailer === "" ? head : `${head}\n\n${trailer}`;
-}
-
-/**
- * CMC-34 / MSG-NC-1 entity-shape error classifier for the single-plugin
- * install failure surface. Returns an `EntityErrorRow` when the orchestrator's
- * thrown error matches a recognised entity-shape pattern (PI-3 / PI-4 / PI-5);
- * returns `undefined` for generic runtime errors which surface via
- * bare `errorMessage(err)` + the cause-chain trailer.
- *
- * Pattern map (PRD §5.2.1 + catalog §"/claude:plugin install"):
- *   - "not found in marketplace"       -> (failed)      {not in manifest}
- *   - "is already installed"           -> (failed)      {already installed}
- *   - "is not installable: <notes>"    -> (unavailable) {<narrowed reasons from notes>}
- *
- * The `is not installable` notes are split on `; ` and each segment narrowed
- * to a closed `Reason`: manifest field names (`hooks` / `lspServers` etc.)
- * pass verbatim per the MSG-GR-4 manifest-field carve-out; the catch-all
- * is `unsupported source` (closed REASONS member).
- */
-function classifyEntityShapeError(
-  err: unknown,
-  ctx: { plugin: string; marketplace: string; scope: Scope },
-): EntityErrorRow | undefined {
-  // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
-  // substring-matching `.message`. The throw sites carry their structural
-  // classification verbatim, so the catch site does not need to reparse text.
-  if (!(err instanceof PluginShapeError)) {
-    return undefined;
-  }
-
-  switch (err.shape.kind) {
-    case "already-installed":
-      return {
-        kind: "entity-error",
-        name: ctx.plugin,
-        marketplace: ctx.marketplace,
-        scope: ctx.scope,
-        status: "failed",
-        reasons: ["already installed"] as const,
-      };
-    case "not-in-manifest":
-      return {
-        kind: "entity-error",
-        name: ctx.plugin,
-        marketplace: ctx.marketplace,
-        scope: ctx.scope,
-        status: "failed",
-        reasons: ["not in manifest"] as const,
-      };
-    case "not-installable":
-    case "no-longer-installable":
-      return {
-        kind: "entity-error",
-        name: ctx.plugin,
-        marketplace: ctx.marketplace,
-        scope: ctx.scope,
-        status: "unavailable",
-        // Resolver `r.notes` are free-form strings; narrow to closed
-        // `Reason` members for the renderer. Reading from `err.shape`
-        // (the typed discriminated union) means the narrow on
-        // `.kind === "not-installable" | "no-longer-installable"`
-        // guarantees `.reasons` is present -- no `?? []` fallback
-        // needed.
-        reasons: narrowResolverReasons(
-          err.shape.reasons,
-          err.shape.unsupportedKinds,
-          err.shape.partialable,
-        ),
-        // SEV-02 / D-69-03: thread the three-way distinction the resolver
-        // stamped on the throw so the composer conditions the `--partial` hint.
-        partialable: err.shape.partialable,
-      };
-    default:
-      return assertNever(err.shape);
-  }
-}
-
-// Manifest field names detected through the MSG-GR-4 carve-out. The closed
-// set holds the BARE camelCase token (`lspServers`) -- the DETECTION key
-// sliced from the resolver note, derived from the real `.claude-plugin/
-// plugin.json` JSON key. The resolver prefixes the kind with `"contains "`
-// when populating `r.notes` (the `addUnsupportedKindNotes` helper pushes
-// a `contains ${kind}` note for every UNSUPPORTED_COMPONENT_KINDS member
-// it detects).
-// The carve-out: `startsWith("contains ")` strips the resolver's prefix,
-// then checks the remaining token against the set.
-// HOOK-04 / D-58-02: `lspServers` is now the SOLE manifest-field
-// carve-out. `hooks` was a supported component kind under v1.13 (the
-// `SUPPORTED_COMPONENT_KINDS` extension) so the resolver no longer
-// emits a `"contains hooks"` note; the dead carve-out entry was
-// dropped. The `{unsupported hooks}` reason is now a normal 2-word
-// REASON sourced through `shared/probe-classifiers.ts::narrowResolverNotes`
-// against the `parseHooksConfig` prefix tokens, not a manifest-field
-// carve-out emitted here.
-// New detection tokens added here MUST also have an entry in
-// `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
-// `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
-const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["lspServers"]);
-const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
-
-/**
- * Extract the bare manifest-field token from a resolver `"contains <kind>"`
- * note and map it to the emitted closed-set `Reason`. Returns `undefined`
- * when the note does not start with the prefix or the token is not a
- * recognized per-kind unsupported marker.
- *
- * SNM-36 / D-24-04 detection-vs-emission seam: the DETECTION token stays
- * camelCase (matches the resolver note derived from the JSON manifest key);
- * the EMITTED closed-set Reason is the user-rendered value. `lspServers`
- * detects but renders as `lsp`.
- *
- * D-64-02 / RSTATE-05: the token -> Reason mapping is the single shared
- * render helper `narrowUnsupportedKinds`, so the install error surface emits
- * the same per-kind marker `list` and `info` do (SURF-01 cross-surface
- * parity); install no longer carries its own per-kind mapping table.
- */
-function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
-  if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
-    return undefined;
-  }
-
-  const token = note.slice(MANIFEST_FIELD_NOTE_PREFIX.length);
-  // DETECT: gate on the camelCase manifest-field token (STAYS camelCase --
-  // it matches the resolver note derived from the JSON manifest key).
-  if (!MANIFEST_FIELD_REASONS.has(token)) {
-    return undefined;
-  }
-
-  // EMIT: map the detected camelCase token to its closed-set Reason via the
-  // shared render helper (D-64-02). The detection gate above admits only
-  // `lspServers`, so this always resolves to `lsp`.
-  return narrowUnsupportedKinds([token])[0];
-}
-
-/**
- * Cross-surface parity with `shared/probe-classifiers.ts::narrowResolverNotes`.
- * The resolver emits four `hooks.json`-prefix families when `parseHooksConfig`
- * rejects an on-disk hooks config (HOOK-03 / LIFE-01); both this install-side
- * classifier and the read-only probe classifier MUST emit the same
- * `unsupported hooks` token for the same on-disk condition (SURF-01). Mirrors
- * the probe-side prefix set verbatim -- if a prefix is added or renamed on one
- * side, the other side MUST follow in lockstep (pinned by
- * tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
- */
-function isHooksResolverNote(reason: string): boolean {
-  return (
-    reason.startsWith("hooks.json is not valid JSON:") ||
-    reason.startsWith("hooks.json failed schema validation:") ||
-    reason.startsWith("unsupported hooks:") ||
-    reason.startsWith("malformed hooks.json:")
-  );
-}
-
-/**
- * Defensive errno-substring fallback for notes already serialised by deeper
- * helpers. The preferred path is typed errno-bearing Errors dispatched at the
- * orchestrator catch site via `.code`, so this only catches what slipped
- * through as prose. Returns undefined when nothing matches.
- */
-function errnoReasonFromNote(reason: string): ContentReason | undefined {
-  if (reason.includes("EACCES") || reason.includes("EPERM")) {
-    return "permission denied";
-  }
-
-  if (reason.includes("ENOENT") || reason.includes("ENOTDIR")) {
-    return "source missing";
-  }
-
-  if (reason.includes("SyntaxError") || reason.includes("Unexpected token")) {
-    return "unparseable";
-  }
-
-  return undefined;
-}
-
-/**
- * Map ONE resolver note to its closed-set reason tokens. Arm order is
- * load-bearing and documented on `narrowResolverReasons`; returns an empty
- * list for a note that classifies to nothing.
- */
-function classifyResolverReason(reason: string, partialable: boolean): readonly ContentReason[] {
-  if (reason === "") {
-    return [];
-  }
-
-  if (isHooksResolverNote(reason)) {
-    return ["unsupported hooks"];
-  }
-
-  // The resolver emits `"contains hooks"` / `"contains lspServers"` -- extract
-  // the bare token via the typed helper for the MSG-GR-4 carve-out.
-  const manifestFieldToken = manifestFieldTokenFromNote(reason);
-  if (manifestFieldToken !== undefined) {
-    return [manifestFieldToken];
-  }
-
-  // SURF-01 / WR-01 / D-64-07: a `contains <kind>` note for a kind OTHER than
-  // the `lspServers` carve-out (e.g. `monitors`, `themes`) is arm-dependent.
-  // On the partially-available arm it is a per-kind COMPONENT marker, routed
-  // through the SAME shared helper `list`/`info` consume so a multi-kind
-  // plugin emits a byte-identical marker set on every surface (CR-01 /
-  // D-64-02 / D-90-05). On the structural `unavailable` arm the note stays on
-  // the SOURCE axis, mirroring `narrowResolverNotes`'s permissive catch-all.
-  // The component axis belongs to the partially-available arm ONLY (D-64-07
-  // structural precedence); leaking it onto the structural arm was the
-  // SURF-01 divergence.
-  if (reason.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
-    return partialable
-      ? narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)])
-      : ["unsupported source"];
-  }
-
-  // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
-  // `mcpServers` string reference renders `{malformed mcp}` here too. Placed
-  // BEFORE the `Unexpected token` arm so a JSON-parse-error reference maps to
-  // `malformed mcp` rather than `{unparseable}`, and before the
-  // `includes("source")` catch-all.
-  if (reason.startsWith("malformed mcp reference")) {
-    return ["malformed mcp"];
-  }
-
-  if (reason.includes("source")) {
-    return ["unsupported source"];
-  }
-
-  const errnoReason = errnoReasonFromNote(reason);
-  return errnoReason === undefined ? [] : [errnoReason];
-}
-
-/**
- * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
- * for renderer consumption. Classification order:
- *   0. four `hooks.json` prefix families
- *      (`hooks.json is not valid JSON:` / `hooks.json failed schema validation:` /
- *      `unsupported hooks:` / `malformed hooks.json:`) -> `unsupported hooks`
- *      -- mirrors `shared/probe-classifiers.ts::narrowResolverNotes` for
- *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
- *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
- *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
- *   1b. any other `contains <kind>` note (e.g. `monitors`, `themes`) is arm-
- *      dependent: on the partially-available arm (`partialable`) it routes its
- *      bare token through the shared `narrowUnsupportedKinds` helper so the
- *      install surface emits the same per-kind `unsupported component` marker
- *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
- *      `unavailable` arm it stays on the source axis as `unsupported source`,
- *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
- *   2. "source" substring -> `unsupported source`
- *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
- *   4. permissive fallback: `unsupported source`
- * Steps 3-4 are defensive for notes already serialised by deeper helpers;
- * the preferred path is typed errno-bearing Errors dispatched at the
- * orchestrator catch site via `.code`.
- *
- * IN-02 / RSTATE-05: `unsupportedKinds` is the resolver's typed `unsupported[]`
- * component-kind list (carried on the thrown `PluginShapeError`). It is narrowed
- * FIRST, through the shared `narrowUnsupportedKinds` helper, so the failure row
- * renders the same per-kind markers `list`/`info` do. This is the ONLY reason
- * source for a `hooks`-only partially-available plugin (which carries no `contains hooks`
- * note), and it is deduped against the note-derived markers (e.g. a `lspServers`
- * plugin yields one `lsp`, sourced from both the note and the typed kind). The
- * permissive `unsupported source` fallback fires only when BOTH sources are empty.
- *
- * SURF-01 / WR-01 / D-64-07: `partialable` is the resolver arm discriminant
- * (`err.shape.partialable`). It defaults to the structural `unavailable` arm
- * (`false`) and only affects the non-carve-out `contains <kind>` note handler
- * (step 1b) -- the component-axis `unsupported component` token is emitted for
- * such a note ONLY on the partially-available arm; the structural arm keeps it on
- * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
- */
-function narrowResolverReasons(
-  reasons: readonly string[],
-  unsupportedKinds: readonly string[] = [],
-  partialable = false,
-): readonly ContentReason[] {
-  const out: ContentReason[] = [...narrowUnsupportedKinds(unsupportedKinds)];
-  for (const reason of reasons) {
-    out.push(...classifyResolverReason(reason, partialable));
-  }
-
-  if (out.length === 0) {
-    // Conservative fallback: at least one Reason is required for the
-    // EntityErrorRow `reasons` field. `unsupported source` is the
-    // documented permissive default for an unclassifiable PI-4 cause.
-    out.push("unsupported source");
-  }
-
-  // Dedup, preserving first-seen order: a multi-note resolver failure can
-  // map several notes to the same closed Reason, and the row must not
-  // render a duplicate token.
-  return [...new Set(out)];
-}
-
-function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
-  // All failure variants collapse to `{ status: "failed"; error; cause }`.
-  // `error` is the dispatch surface (narrow on `instanceof PluginShapeError`
-  // to recover `.shape.kind`); `cause` is the formatted user-visible text.
-  // `ConcurrentInstallError` is preserved as a distinct typed branch (PI-15);
-  // non-Error inputs are wrapped so the contract guarantees `error instanceof Error`.
-  const wrapped = err instanceof Error ? err : new Error(formattedCause);
-  return { status: "failed", error: wrapped, cause: formattedCause };
-}
 
 /**
  * Test seam for the catch-site dispatch helpers. Helpers stay private to
  * the orchestrator; tests exercise the `instanceof PluginShapeError` +
  * `.kind` dispatch branches directly via this re-export.
  */
-export { classifyEntityShapeError as __test_classifyEntityShapeError };
-export { classifyInstallFailure as __test_classifyInstallFailure };
-export { composeInstallFailureMessage as __test_composeInstallFailureMessage };
-export { narrowResolverReasons as __test_narrowResolverReasons };

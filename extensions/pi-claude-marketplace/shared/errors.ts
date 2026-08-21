@@ -5,12 +5,63 @@ export function errorMessage(err: unknown): string {
 }
 
 /**
+ * Structural predicate for `NodeJS.ErrnoException`. The `.code` property is
+ * what every errno-dispatching narrower keys on, and `instanceof` cannot see
+ * it because Node throws plain `Error` objects with the field attached.
+ *
+ * One definition: byte-identical copies previously sat in `uninstall.ts` and
+ * `marketplace/remove.ts`, each private to its own narrower.
+ */
+export function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return (
+    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
+  );
+}
+
+/**
  * Exhaustiveness check helper for discriminated unions.
  * Call in the `default` case of a switch to get a compile-time error if a new
  * variant is added without updating the switch.
  */
 export function assertNever(x: never): never {
   throw new Error(`Unexpected value: ${String(x)}`);
+}
+
+/**
+ * Depth bound shared by every `Error.cause` walk in the codebase (T-13-04 DoS
+ * mitigation). One constant rather than a literal per walker: three walkers
+ * previously each declared their own `MAX_DEPTH = 5` and each documented
+ * itself as "mirroring" the others, which is a contract maintained by comment.
+ */
+const CAUSE_CHAIN_MAX_DEPTH = 5;
+
+/** Whether a chain link carries a further, non-self-referencing cause. */
+function hasOnwardCause(err: unknown): boolean {
+  return err instanceof Error && err.cause !== undefined && err.cause !== err;
+}
+
+/**
+ * Walk an `Error.cause` chain, yielding each link including the head.
+ *
+ * The SOLE traversal primitive: the depth bound and the self-reference cycle
+ * guard live here once, so a change to either lands in one place. Callers
+ * differ only in what they look for -- `causeChainTrailer` renders every link,
+ * `findManualRecoveryError` takes the first link of a class, and
+ * `manualRecoveryLeaks` takes the first link that carries a payload.
+ *
+ * Stops after `CAUSE_CHAIN_MAX_DEPTH` links, or earlier when a link has no
+ * onward cause or its `.cause` references itself.
+ */
+function* causeChain(err: unknown): Generator {
+  let current: unknown = err;
+  for (let depth = 0; depth < CAUSE_CHAIN_MAX_DEPTH; depth++) {
+    yield current;
+    if (!hasOnwardCause(current)) {
+      return;
+    }
+
+    current = (current as Error).cause;
+  }
 }
 
 /**
@@ -47,29 +98,17 @@ export function causeChainTrailer(err: unknown): string {
 
   const PREFIX = "cause: ";
   const JOINER = " -> ";
-  const MAX_DEPTH = 5;
-  const links: string[] = [];
-  let current: unknown = err;
-  let truncated = false;
-  for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    links.push(linkMessage(current));
-    if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
-      current = current.cause;
-      if (depth === MAX_DEPTH - 1) {
-        // We just consumed the depth-bound slot but `current` still has more
-        // chain to walk. Mark the rendered output truncated.
-        truncated = true;
-      }
-    } else {
-      break;
-    }
+  const links = [...causeChain(err)];
+  // The walk stops either because the chain ended or because it hit the depth
+  // bound. Only the second case leaves the LAST yielded link still carrying an
+  // onward cause, which is exactly the truncation condition -- so it is read
+  // off the walk's result rather than tracked inside a hand-rolled loop.
+  const rendered = links.map(linkMessage);
+  if (hasOnwardCause(links.at(-1))) {
+    rendered[rendered.length - 1] = `${rendered.at(-1)} (truncated)`;
   }
 
-  if (truncated) {
-    links[links.length - 1] = `${links.at(-1)} (truncated)`;
-  }
-
-  return `${PREFIX}${links.join(JOINER)}`;
+  return `${PREFIX}${rendered.join(JOINER)}`;
 }
 
 function linkMessage(c: unknown): string {
@@ -362,6 +401,76 @@ export class ManualRecoveryError extends Error {
     this.name = "ManualRecoveryError";
     this.leaks = leaks;
   }
+}
+
+/**
+ * CMC-16 / F-5: wrap a thrown value as a `ManualRecoveryError` carrying
+ * `leaks`, merging with any leak set the value already carries.
+ *
+ * Zero leaks is not a manual-recovery condition, so the value passes through
+ * (normalized to an `Error`) rather than being promoted. When the value is
+ * ALREADY a `ManualRecoveryError` -- a bridge threw one and an orchestrator
+ * added its own leaks on top -- the two arrays are `Set`-deduped, which is the
+ * F-5 no-double-count invariant: a `rollbackReplacements` cascade can
+ * structurally re-report a leak the inner bridge already surfaced, and the
+ * user must not be told to clean the same path twice.
+ */
+export function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error {
+  if (leaks.length === 0) {
+    return err instanceof Error ? err : new Error(errorMessage(err));
+  }
+
+  if (err instanceof ManualRecoveryError) {
+    const merged = Object.freeze([...new Set([...err.leaks, ...leaks])]);
+    return new ManualRecoveryError(err.message, merged, { cause: err });
+  }
+
+  const base = err instanceof Error ? err : new Error(errorMessage(err));
+  return new ManualRecoveryError(base.message, leaks, { cause: base });
+}
+
+/**
+ * CMC-16 / WR-01: find a `ManualRecoveryError` anywhere in the cause chain.
+ *
+ * Why a walk and not `instanceof`: `withScopeLock`
+ * (`transaction/with-state-guard.ts`) wraps a body-thrown error in a plain
+ * `new Error(..., { cause: body })` when BOTH the body throw AND `release`
+ * throw. A bare `err instanceof ManualRecoveryError` at the orchestrator catch
+ * then sees the plain wrapper and silently downgrades the cascade row's reason
+ * from `{rollback partial}` to `{not in manifest}` via the `narrowReason`
+ * fallback. Walking `.cause` recovers the class identity the wrapping
+ * discarded, so the CMC-16 `failureClass: "manual-recovery"` tag survives the
+ * release-also-failed path.
+ */
+export function findManualRecoveryError(err: unknown): ManualRecoveryError | undefined {
+  for (const link of causeChain(err)) {
+    if (link instanceof ManualRecoveryError) {
+      return link;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * AS-7: the leaked paths from the first `ManualRecoveryError` in the chain
+ * that carries any, so a rendered manual-recovery row can name the files the
+ * user must clean up by hand. Empty when the chain holds none.
+ *
+ * Distinct from `findManualRecoveryError` in its predicate, deliberately: an
+ * outer wrapper can be a `ManualRecoveryError` with an EMPTY leak set over an
+ * inner one that has the paths, and stopping at the outer would render a
+ * manual-recovery row that names no file to recover. The class question and
+ * the payload question have different answers on the same chain.
+ */
+export function manualRecoveryLeaks(err: unknown): readonly string[] {
+  for (const link of causeChain(err)) {
+    if (link instanceof ManualRecoveryError && link.leaks.length > 0) {
+      return link.leaks;
+    }
+  }
+
+  return [];
 }
 
 /**

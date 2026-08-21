@@ -35,7 +35,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  */
 
 const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
-const INSTALL_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+// The MANIFEST_FIELD_REASONS declaration moved to install.messaging.ts with
+// the rest of install's error-classification family; the gate follows the
+// constant rather than the folder it used to sit in.
+const INSTALL_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 const LIST_ORCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 const LIST_EDGE_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 const PLUGIN_EDGE_DIR_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin";
@@ -169,7 +172,7 @@ test('HOOK-04: REASONS contains "unsupported hooks" in shared/notify.ts (D-58-01
   );
 });
 
-test('HOOK-04: MANIFEST_FIELD_REASONS excludes "hooks" in orchestrators/plugin/install.ts (D-58-01 atomic supersession)', async () => {
+test('HOOK-04: MANIFEST_FIELD_REASONS excludes "hooks" in install.messaging.ts (D-58-01 atomic supersession)', async () => {
   const source = await readFile(path.join(REPO_ROOT, INSTALL_REL), "utf8");
   const lines = source.split(/\r?\n/);
   const matched = lines.filter((line) => line.includes("MANIFEST_FIELD_REASONS"));

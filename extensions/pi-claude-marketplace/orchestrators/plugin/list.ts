@@ -54,9 +54,13 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict, type ResolveContext } from "../../domain/resolver.ts";
+import {
+  resolveStrict,
+  rowClaimsInstallDisabled,
+  type ResolveContext,
+} from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
@@ -84,6 +88,7 @@ import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-c
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
+  ContentReason,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginFailedMessage,
@@ -658,159 +663,291 @@ function narrowProbeError(err: unknown): ListReason {
  * `(unavailable)` row's `reasons` array. The user sees the cause CLASS on
  * the per-row line -- there is NO separate trailing summary notification
  * per D-19-01.
+ *
+ * `declaredEnabled` is the user's own `enabled` opinion for this
+ * `<plugin>@<marketplace>` key, taken from the PLUGIN scope's merged
+ * base+local config view. It gates the install-time claim -- see the
+ * `installsDisabledField` computation below.
+ *
+ * PURL-08 / D-78-03: exported because it is a cross-surface contract, not
+ * because a test wanted in. The output-parity drift guard in
+ * tests/orchestrators/edge-deps.test.ts feeds the SAME git-source manifest
+ * through this builder and through the completion bucketizer and asserts the
+ * two agree on the status bucket, which is what holds the list `(available)`
+ * versus completion `unavailable` divergence class closed. Both surfaces are
+ * callers of a shared classification; the guard needs to name it.
  */
-async function availableRowMessage(
+export async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
   locations: ScopedLocations,
-): Promise<{
+  declaredEnabled: boolean | undefined,
+): Promise<CandidateRow> {
+  // OUT-02 / DFEN-04: both inputs of the claim -- the user's config opinion and
+  // the marketplace entry -- are weighed by the shared `rowClaimsInstallDisabled`
+  // so this surface and `info` cannot answer the question differently. Read that
+  // function for the precedence and for why the plugin's own manifest is never
+  // consulted.
+  //
+  // OUT-02: the token rides NOT-INSTALLED candidate rows, and only those whose
+  // install would actually happen. Both `unavailable` arms are permanently
+  // excluded: nothing installs there, so the token would state what an install
+  // does about an install that cannot occur, and those rows' braces already
+  // carry why. Every installed-record row is untouched by construction -- they
+  // are built elsewhere and never see this field.
+  const claimsInstallDisabled = rowClaimsInstallDisabled(manifestEntry, declaredEnabled);
+
+  try {
+    const outcome = await resolveCandidateEntry(manifestEntry, marketplaceRoot, locations);
+    if (outcome.kind === "cold") {
+      // OUT-02 / OUT-05 / RSTA-01: the cold row is the hardest case for the
+      // entry-only rule, and the one that justifies it. Nothing is
+      // materialized here -- no clone, no manifest, no tree to resolve -- and
+      // the row can still say what an install would do, because the claim
+      // comes from the marketplace entry the cached `marketplace.json`
+      // already holds. A user browsing a marketplace they have never fetched
+      // from is furthest from having run the install, so a silent row would
+      // put the warning only where it is least needed.
+      return {
+        message: {
+          status: "remote",
+          ...candidateRowFields(manifestEntry),
+          ...installsDisabledField(claimsInstallDisabled),
+        },
+        bucket: "remote",
+      };
+    }
+
+    return resolvedCandidateRow(manifestEntry, outcome.resolved, claimsInstallDisabled);
+  } catch (probeErr) {
+    return probeFailureRow(manifestEntry, probeErr);
+  }
+}
+
+/**
+ * The `{ message, bucket }` pair every not-installed row resolves to. Exported
+ * because `availableRowMessage` returns it: a same-file private type in
+ * an exported signature is a leak the build refuses, and naming the pair is
+ * what lets the three builders below share one return type instead of
+ * restating the union.
+ */
+export interface CandidateRow {
   message:
     | PluginRemoteMessage
     | PluginAvailableMessage
     | PluginPartiallyAvailableMessage
     | PluginUnavailableMessage;
   bucket: FilterBucket;
-}> {
-  // PL-4: description flows from the manifest entry onto the row for every
-  // not-installed variant (remote / available / partially-available / unavailable).
-  const descriptionField: { readonly description?: string } =
-    manifestEntry.description === undefined ? {} : { description: manifestEntry.description };
+}
 
-  // RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry derives from its
-  // fs-only clone/mirror presence. A cold clone (`not-cached`) is `(remote)` --
-  // a valid install target with no local tree to resolve. A warm clone
-  // (`materialized`) resolves the real three-way verdict against the on-disk tree
-  // via `resolveStrict` with the presence probe injected (D-80-02). No network,
-  // no clone (imports only `makePresenceProbe` + `resolveStrict`).
-  const parsedSource = parsePluginSource(manifestEntry.source);
-  const isGitSource =
+type ResolvedCandidate =
+  | { readonly kind: "cold" }
+  | { readonly kind: "resolved"; readonly resolved: Awaited<ReturnType<typeof resolveStrict>> };
+
+/**
+ * PL-4: the fields every not-installed variant carries (remote / available /
+ * partially-available / unavailable). Under `exactOptionalPropertyTypes` an
+ * optional field is added by spreading a conditionally empty object, never by
+ * `version: cond ? x : undefined`.
+ */
+function candidateRowFields(manifestEntry: MarketplaceManifest["plugins"][number]): {
+  readonly name: string;
+  readonly version?: string;
+  readonly description?: string;
+} {
+  return {
+    name: manifestEntry.name,
+    ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+    ...(manifestEntry.description !== undefined && { description: manifestEntry.description }),
+  };
+}
+
+/**
+ * INV-01: same conditional-spread idiom as `candidateRowFields`. The annotation
+ * names the DOMAIN reason type rather than either consumer. This field is
+ * spread into an `available` literal AND a `remote` literal, which declare
+ * `reasons` identically today. Indexing into one of them would tie the holder's
+ * own type to that one consumer, so a future narrowing there would drag the
+ * holder with it and report the break at THIS declaration rather than at the
+ * message literal that actually stopped accepting the token.
+ */
+function installsDisabledField(claimsInstallDisabled: boolean): {
+  readonly reasons?: readonly ContentReason[];
+} {
+  return claimsInstallDisabled ? { reasons: ["installs disabled"] } : {};
+}
+
+/** The three source kinds `makePresenceProbe` accepts, named off the probe itself. */
+type GitPluginSource = Parameters<ReturnType<typeof makePresenceProbe>>[0];
+
+function isGitPluginSource(
+  parsedSource: ReturnType<typeof parsePluginSource>,
+): parsedSource is GitPluginSource {
+  return (
     parsedSource.kind === "url" ||
     parsedSource.kind === "git-subdir" ||
-    parsedSource.kind === "github";
+    parsedSource.kind === "github"
+  );
+}
 
-  try {
-    let resolved: Awaited<ReturnType<typeof resolveStrict>>;
-    if (isGitSource) {
-      const probe = makePresenceProbe(locations);
-      const presence = await probe(parsedSource);
-      if (presence.kind === "not-cached") {
-        return {
-          message: {
-            status: "remote",
-            name: manifestEntry.name,
-            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-            ...descriptionField,
-          },
-          bucket: "remote",
-        };
-      }
-
-      resolved = await resolveStrict(manifestEntry, {
-        marketplaceRoot,
-        resolveGitPluginRoot: probe,
-      });
-    } else {
-      resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
-    }
-
-    // D-67-02 / LIST-02: the filter BUCKET is derived by the SHARED
-    // `classifyManifestEntry` (the same classifier the completion bucketizer
-    // consumes) -- the `available | partially-available | unavailable` member maps
-    // 1:1 onto a {@link FilterBucket}, so the `--partial` / `--unavailable`
-    // partition keys on the pre-collapse classification without a second
-    // classifier on this surface.
-    const bucket = classifyManifestEntry(resolved);
-
-    // USTAT-01 / D-64-01: the render now de-collapses by resolver STATE. The
-    // `installable` arm is `(available)`; the `partially-available` arm emits the
-    // distinct `(partially-available)` / `⊖` row (partially-available: components would be
-    // dropped under `--partial`); the structural `unavailable` arm keeps
-    // `(unavailable)` / `⊘`. The split follows `resolved.state`, NEVER the
-    // reason brace (the same `{unsupported hooks}` brace can appear on both
-    // arms). The filter `bucket` is unchanged -- `classifyManifestEntry` keeps
-    // `--partial` / `--unavailable` partitioning on the pre-collapse class.
-    //
-    // WR-03: discriminate the three-way union with an exhaustive
-    // `switch (resolved.state)` + `assertNever` so a future fourth
-    // `ResolvedPlugin` arm becomes a compile-time error here rather than
-    // silently falling through into the `unavailable`/`notes` path.
-    switch (resolved.state) {
-      case "installable":
-        return {
-          message: {
-            status: "available",
-            name: manifestEntry.name,
-            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-            ...descriptionField,
-          },
-          bucket,
-        };
-      case "partially-available":
-        // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the
-        // typed `unsupported[]` component-kind list via the shared render
-        // helper.
-        return {
-          message: {
-            status: "partially-available",
-            name: manifestEntry.name,
-            reasons: narrowUnsupportedKinds(resolved.unsupported),
-            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-            ...descriptionField,
-          },
-          // D-67-01: `partially-available` -> the partially-available candidate bucket.
-          bucket,
-        };
-      case "unavailable":
-        // The structural `unavailable` arm's reasons stay on the `notes` path.
-        return {
-          message: {
-            status: "unavailable",
-            name: manifestEntry.name,
-            reasons: sharedNarrowResolverNotes(resolved.notes),
-            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-            ...descriptionField,
-          },
-          // D-67-01: the structural `unavailable` resolver arm -> the
-          // structural bucket.
-          bucket,
-        };
-
-      default:
-        return assertNever(resolved);
-    }
-  } catch (probeErr) {
-    // TR-08 / D-19-01: per-row probe-failure narrowing. Probe failures
-    // during list are diagnostic noise, NOT actionable user errors --
-    // the user sees the cause class on the `(unavailable)` row's
-    // `reasons[]` and decides whether to act. There is no module-level
-    // capture-buffer or summary warning.
-    //
-    // Resolver notes route through `narrowResolverNotes` (the path that produces
-    // them is `resolveStrict` returning the structural `unavailable` arm with
-    // structured notes -- handled above on the `case "unavailable"` arm of
-    // `switch (resolved.state)`; the `case "partially-available"` arm instead narrows its
-    // typed component kinds via `narrowUnsupportedKinds`). Thrown probe failures
-    // route through `narrowProbeError` so the row reports the actual cause class
-    // (EACCES, JSON parse failures, and programming bugs are not hidden behind
-    // `{unsupported source}`).
-    //
-    // TR-08 architecture test at tests/orchestrators/plugin/list.test.ts
-    // asserts no module-level `PROBE_FAILURES`-style state may reappear.
-    const reason = narrowProbeError(probeErr);
-    return {
-      message: {
-        status: "unavailable",
-        name: manifestEntry.name,
-        reasons: [reason],
-        ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-        ...descriptionField,
-      },
-      // D-67-01 / A2: a probe failure is STRUCTURAL unavailability (could not
-      // read/resolve the source), not a `partially-available` classification -- the
-      // `--unavailable` filter owns it.
-      bucket: "unavailable",
-    };
+/**
+ * RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry derives from its
+ * fs-only clone/mirror presence. A cold clone (`not-cached`) is `(remote)` --
+ * a valid install target with no local tree to resolve. A warm clone
+ * (`materialized`) resolves the real three-way verdict against the on-disk tree
+ * via `resolveStrict` with the presence probe injected (D-80-02). No network,
+ * no clone (imports only `makePresenceProbe` + `resolveStrict`).
+ */
+async function resolveCandidateEntry(
+  manifestEntry: MarketplaceManifest["plugins"][number],
+  marketplaceRoot: string,
+  locations: ScopedLocations,
+): Promise<ResolvedCandidate> {
+  const parsedSource = parsePluginSource(manifestEntry.source);
+  if (!isGitPluginSource(parsedSource)) {
+    return { kind: "resolved", resolved: await resolveStrict(manifestEntry, { marketplaceRoot }) };
   }
+
+  const probe = makePresenceProbe(locations);
+  const presence = await probe(parsedSource);
+  if (presence.kind === "not-cached") {
+    return { kind: "cold" };
+  }
+
+  return {
+    kind: "resolved",
+    resolved: await resolveStrict(manifestEntry, {
+      marketplaceRoot,
+      resolveGitPluginRoot: probe,
+    }),
+  };
+}
+
+/**
+ * USTAT-01 / D-64-01: the render de-collapses by resolver STATE. The
+ * `installable` arm is `(available)`; the `partially-available` arm emits the
+ * distinct `(partially-available)` / `⊖` row (components would be dropped under
+ * `--partial`); the structural `unavailable` arm keeps `(unavailable)` / `⊘`.
+ * The split follows `resolved.state`, NEVER the reason brace (the same
+ * `{unsupported hooks}` brace can appear on both arms).
+ *
+ * D-67-02 / LIST-02: the filter BUCKET is derived by the SHARED
+ * `classifyManifestEntry` (the same classifier the completion bucketizer
+ * consumes) -- the `available | partially-available | unavailable` member maps
+ * 1:1 onto a {@link FilterBucket}, so the `--partial` / `--unavailable`
+ * partition keys on the pre-collapse classification without a second classifier
+ * on this surface.
+ *
+ * WR-03: discriminate the three-way union with an exhaustive
+ * `switch (resolved.state)` + `assertNever` so a future fourth `ResolvedPlugin`
+ * arm becomes a compile-time error here rather than silently falling through
+ * into the `unavailable`/`notes` path.
+ */
+function resolvedCandidateRow(
+  manifestEntry: MarketplaceManifest["plugins"][number],
+  resolved: Awaited<ReturnType<typeof resolveStrict>>,
+  claimsInstallDisabled: boolean,
+): CandidateRow {
+  const bucket = classifyManifestEntry(resolved);
+
+  switch (resolved.state) {
+    case "installable":
+      return {
+        message: {
+          status: "available",
+          ...candidateRowFields(manifestEntry),
+          ...installsDisabledField(claimsInstallDisabled),
+        },
+        bucket,
+      };
+    case "partially-available":
+      return {
+        message: {
+          status: "partially-available",
+          ...candidateRowFields(manifestEntry),
+          reasons: partialCandidateReasons(resolved.unsupported, claimsInstallDisabled),
+        },
+        // D-67-01: `partially-available` -> the partially-available candidate bucket.
+        bucket,
+      };
+    case "unavailable":
+      // The structural `unavailable` arm's reasons stay on the `notes` path.
+      //
+      // OUT-02: this arm is PERMANENTLY excluded from the author-declared
+      // `installs disabled` token, and so is the probe-failure row. Nothing
+      // will install at all from either path, so the token would describe an
+      // install that cannot happen; the row's brace already carries the
+      // blocker, which is the one thing a user reads this row for.
+      return {
+        message: {
+          status: "unavailable",
+          ...candidateRowFields(manifestEntry),
+          reasons: sharedNarrowResolverNotes(resolved.notes),
+        },
+        // D-67-01: the structural `unavailable` resolver arm -> the structural
+        // bucket.
+        bucket,
+      };
+
+    default:
+      return assertNever(resolved);
+  }
+}
+
+/**
+ * D-64-02 / RSTATE-05: per-kind unsupported markers derive from the typed
+ * `unsupported[]` component-kind list via the shared render helper.
+ *
+ * OUT-02: this arm's `reasons` is REQUIRED and already populated, so the
+ * author-declared token composes into the existing array instead of spreading
+ * `installsDisabledField`. The TAIL position is deliberate and observable:
+ * `composeReasons` joins in array order and there is no per-row sort, so the
+ * degrade tokens lead and the author-declared cause follows. A row that does
+ * not claim yields the untouched array.
+ */
+function partialCandidateReasons(
+  unsupported: Parameters<typeof narrowUnsupportedKinds>[0],
+  claimsInstallDisabled: boolean,
+): ContentReason[] {
+  return [
+    ...narrowUnsupportedKinds(unsupported),
+    ...(claimsInstallDisabled ? (["installs disabled"] as const) : []),
+  ];
+}
+
+/**
+ * TR-08 / D-19-01: per-row probe-failure narrowing. Probe failures during list
+ * are diagnostic noise, NOT actionable user errors -- the user sees the cause
+ * class on the `(unavailable)` row's `reasons[]` and decides whether to act.
+ * There is no module-level capture-buffer or summary warning.
+ *
+ * Resolver notes route through `narrowResolverNotes` (the path that produces
+ * them is `resolveStrict` returning the structural `unavailable` arm with
+ * structured notes -- handled on the `case "unavailable"` arm of
+ * `resolvedCandidateRow`; the `case "partially-available"` arm instead narrows
+ * its typed component kinds via `narrowUnsupportedKinds`). Thrown probe
+ * failures route through `narrowProbeError` so the row reports the actual cause
+ * class (EACCES, JSON parse failures, and programming bugs are not hidden
+ * behind `{unsupported source}`).
+ *
+ * TR-08 architecture test at tests/orchestrators/plugin/list.test.ts asserts no
+ * module-level `PROBE_FAILURES`-style state may reappear.
+ */
+function probeFailureRow(
+  manifestEntry: MarketplaceManifest["plugins"][number],
+  probeErr: unknown,
+): CandidateRow {
+  return {
+    message: {
+      status: "unavailable",
+      ...candidateRowFields(manifestEntry),
+      reasons: [narrowProbeError(probeErr)],
+    },
+    // D-67-01 / A2: a probe failure is STRUCTURAL unavailability (could not
+    // read/resolve the source), not a `partially-available` classification --
+    // the `--unavailable` filter owns it.
+    bucket: "unavailable",
+  };
 }
 
 /**
@@ -842,14 +979,30 @@ async function availableRowMessage(
  * Returns the rows in stable (state-iteration + manifest-order) order;
  * the orchestrator applies the final MSG-GR-3 sort at the block boundary.
  */
-async function enumerateMarketplacePlugins(
-  opts: ListPluginsOptions,
-  mpRecord: ExtensionState["marketplaces"][string],
-  pluginScope: Scope,
-  marketplaceScope: Scope,
-  scopedManifest: ScopedManifest,
-  excludeFromAvailable: ReadonlySet<string> = new Set(),
-): Promise<ListMsg[]> {
+async function enumerateMarketplacePlugins(args: {
+  opts: ListPluginsOptions;
+  mpName: string;
+  mpRecord: ExtensionState["marketplaces"][string];
+  pluginScope: Scope;
+  marketplaceScope: Scope;
+  scopedManifest: ScopedManifest;
+  /**
+   * DFEN-04: the PLUGIN scope's merged base+local config view. Candidate rows
+   * read the user's `enabled` opinion out of it -- see `availableRowMessage`.
+   */
+  pluginScopeConfig: MergedConfig;
+  excludeFromAvailable?: ReadonlySet<string> | undefined;
+}): Promise<ListMsg[]> {
+  const {
+    opts,
+    mpName,
+    mpRecord,
+    pluginScope,
+    marketplaceScope,
+    scopedManifest,
+    pluginScopeConfig,
+    excludeFromAvailable = new Set<string>(),
+  } = args;
   const rows: ListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
@@ -893,10 +1046,15 @@ async function enumerateMarketplacePlugins(
 
     // RSTA-01 / NFR-5: thread the plugin-scope locations so the git-source
     // presence probe reads the WARM clone/mirror cache fs-only (no network).
+    //
+    // DFEN-04 / D-01: the config key is the flat `<plugin>@<marketplace>` form,
+    // and the merged view resolves base-vs-local by the same identity rule
+    // `install` applies (a local entry replaces the base entry wholesale).
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
       mpRecord.marketplaceRoot,
       locationsFor(pluginScope, opts.cwd),
+      pluginScopeConfig.plugins[`${manifestEntry.name}@${mpName}`]?.entry.enabled,
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
@@ -1043,20 +1201,29 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
  */
 async function computeOrphanFold(
   opts: ListPluginsOptions,
+  mpName: string,
   projectMp: ExtensionState["marketplaces"][string] | undefined,
+  /**
+   * DFEN-04: the PROJECT scope's merged config view. The folded rows are
+   * project-scope rows, so the `enabled` opinion they read must come from the
+   * project scope's config, not the user scope's.
+   */
+  projectConfig: MergedConfig,
 ): Promise<OrphanFold> {
   if (projectMp === undefined) {
     return EMPTY_ORPHAN_FOLD;
   }
 
   const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
-  const projectSideRows = await enumerateMarketplacePlugins(
+  const projectSideRows = await enumerateMarketplacePlugins({
     opts,
-    projectMp,
-    "project",
-    "user",
-    projectScopedManifest,
-  );
+    mpName,
+    mpRecord: projectMp,
+    pluginScope: "project",
+    marketplaceScope: "user",
+    scopedManifest: projectScopedManifest,
+    pluginScopeConfig: projectConfig,
+  });
   const folded = projectSideRows.filter(
     (r) =>
       r.status === "installed" ||
@@ -1079,10 +1246,21 @@ async function buildMarketplaceMessage(args: {
   mpRecord: ExtensionState["marketplaces"][string];
   /** SPLIT-01 rewire: autoupdate read from MergedConfig at the caller. */
   autoupdate: boolean;
+  /** DFEN-04: `mpScope`'s merged config view -- the enumeration's plugin scope. */
+  scopeConfig: MergedConfig;
   extraPlugins: readonly ListMsg[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
-  const { opts, mpName, mpScope, mpRecord, autoupdate, extraPlugins, excludeFromAvailable } = args;
+  const {
+    opts,
+    mpName,
+    mpScope,
+    mpRecord,
+    autoupdate,
+    scopeConfig,
+    extraPlugins,
+    excludeFromAvailable,
+  } = args;
   // Bind the WHOLE load result once: the same value feeds the failed-header
   // guard below and the enumeration's absence gate (D-95-04).
   const scopedManifest = await loadMarketplaceManifestSoftly(mpRecord);
@@ -1109,14 +1287,16 @@ async function buildMarketplaceMessage(args: {
   }
 
   // Normal header + enumerated plugins (own scope) + folded extras.
-  const ownPlugins = await enumerateMarketplacePlugins(
+  const ownPlugins = await enumerateMarketplacePlugins({
     opts,
+    mpName,
     mpRecord,
-    mpScope,
-    mpScope,
+    pluginScope: mpScope,
+    marketplaceScope: mpScope,
     scopedManifest,
+    pluginScopeConfig: scopeConfig,
     excludeFromAvailable,
-  );
+  });
   const merged: readonly ListMsg[] = [...ownPlugins, ...extraPlugins];
 
   // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The
@@ -1188,6 +1368,7 @@ export async function loadPluginListPayload(
       mpScope: "project",
       mpRecord,
       autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      scopeConfig: projectMerged,
       extraPlugins: [],
     });
     blocks.push(built);
@@ -1203,7 +1384,7 @@ export async function loadPluginListPayload(
     // is a clone (per D-13-17 semantics) and exists.
     const projectMp = projectState.marketplaces[mpName];
     const { folded, foldedNames } = isCloneOfUserMarketplace(projectMp, mpRecord)
-      ? await computeOrphanFold(opts, projectMp)
+      ? await computeOrphanFold(opts, mpName, projectMp, projectMerged)
       : EMPTY_ORPHAN_FOLD;
 
     const built = await buildMarketplaceMessage({
@@ -1212,6 +1393,7 @@ export async function loadPluginListPayload(
       mpScope: "user",
       mpRecord,
       autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
     });
@@ -1405,10 +1587,3 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
  */
 const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
 const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
-
-// PURL-08 / D-78-03: test-only re-export of the not-installed row builder. The
-// output-parity drift-guard (tests/orchestrators/edge-deps.test.ts) feeds the
-// SAME git-source manifest through this list-surface builder and the completion
-// bucketizer and asserts identical status buckets, guarding the list
-// `(available)` vs completion `unavailable` divergence class.
-export { availableRowMessage as __test_availableRowMessage };

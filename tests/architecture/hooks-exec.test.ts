@@ -33,11 +33,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
-import {
-  _resetForTest,
-  registerHooksBridge,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { resetRoutingState } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -739,7 +737,7 @@ async function seedSessionStartPlugin(extensionRoot: string): Promise<void> {
 }
 
 test("Block F / D-60-06: _shared dir exists after registerHooksBridge under both scopes (when SessionStart plugin present)", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   const { agentDir, cwd } = await relocateAgent(t);
 
   // Seed user + project scopes each with a SessionStart hook so the
@@ -759,7 +757,7 @@ test("Block F / D-60-06: _shared dir exists after registerHooksBridge under both
 });
 
 test("Block F / D-60-06 / WR-05: clean scope -> NO _shared dir, NO scope file is created", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   const { agentDir, cwd } = await relocateAgent(t);
 
   const { pi } = makePiMock();
@@ -782,7 +780,7 @@ test("Block F / D-60-06 / WR-05: clean scope -> NO _shared dir, NO scope file is
 });
 
 test("Block F / D-60-06: registerHooksBridge twice does not throw (idempotent)", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   const { agentDir, cwd } = await relocateAgent(t);
 
   // Seed both scopes so the mkdir actually fires; idempotency is the
@@ -797,7 +795,7 @@ test("Block F / D-60-06: registerHooksBridge twice does not throw (idempotent)",
 });
 
 test("registerHooksBridge tolerates a corrupt project-scope state.json (hydrate falls back to default state)", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   const { cwd } = await relocateAgent(t);
 
   // Invalid JSON makes loadState throw (non-ENOENT) during factory-time

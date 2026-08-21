@@ -22,7 +22,7 @@ import {
   loadState,
   saveState,
 } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { __resetCacheForTests } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { resetCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -56,11 +56,11 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
   const home = await mkdtemp(path.join(tmpdir(), "reinstall-shim-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-shim-cwd-"));
   process.env.HOME = home;
-  __resetCacheForTests();
+  resetCompletionCache();
   try {
     return await fn({ cwd });
   } finally {
-    __resetCacheForTests();
+    resetCompletionCache();
     if (originalHome === undefined) {
       delete process.env.HOME;
     } else {

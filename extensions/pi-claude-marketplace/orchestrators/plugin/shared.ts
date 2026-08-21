@@ -18,7 +18,10 @@ import path from "node:path";
 
 import { computeHashVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import {
+  writeBatchedConfigEntries,
+  writePluginConfigEntry,
+} from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import {
@@ -30,7 +33,11 @@ import { notify } from "../../shared/notify.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type {
+  ConfigLoadResult,
+  PluginConfigEntry,
+  ScopeConfig,
+} from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -398,13 +405,20 @@ function synthesizeUndeclaredMarketplaceSource(
 }
 
 /**
- * WB-01 / UAT-05: select the targeted physical config file and
- * its sibling (the scope's OTHER file). Target-path selection happens ONCE
+ * WB-01 / UAT-05: pair the targeted physical config file with its sibling (the
+ * scope's OTHER file) for a given locality. Target-path selection happens ONCE
  * at the orchestrator boundary so the write path never falls back to the
  * base file on ENOENT; the sibling path exists ONLY for the UAT-05
  * merged-view membership test (read fresh inside the lock, never written).
+ *
+ * NOT exported: `selectDeclaringConfigWriteTarget` is the orchestrator-facing
+ * selector, and this one answers a strictly narrower question -- which files a
+ * locality names, with no say in what that locality should be. A caller who
+ * reached for it would be aiming the write with the flag alone, which is the
+ * defect D-103-13 removed from three call sites. The compiler keeps the module's
+ * public surface down to the one selector that answers the whole question.
  */
-export function selectConfigWriteTarget(
+function selectConfigWriteTarget(
   locations: ScopedLocations,
   local: boolean | undefined,
 ): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
@@ -422,27 +436,242 @@ export function selectConfigWriteTarget(
 }
 
 /**
- * UAT-05 convenience seam over `synthesizeUndeclaredMarketplaceSource`:
- * reads the scope's sibling config file FRESH (callers hold the scope lock
- * -- WB-01 discipline) and runs the merged-view membership gate against
- * BOTH physical files. The sibling load is membership-test-only input; it
- * is never serialized back. `absent` / `invalid` sibling arms
- * contribute an empty config, mirroring the D-18 merge fallback.
+ * D-103-13 write-target selection outcome. Discriminated rather than a bare
+ * record because ONE of the two answers is "there is no answer": when the file
+ * that DETERMINES the destination cannot be read, no destination may be
+ * guessed, and a caller must be unable to ignore that (NFR-7 precedent).
+ *
+ * The `selected` arm carries both physical files' parses, so the caller reads
+ * each file ONCE per operation. `sibling` is `undefined` when the sibling could
+ * not be read -- and `undefined` is NOT "declares nothing": a consumer that
+ * would conclude ABSENCE from it must refuse to act instead. That distinction
+ * is the whole point of the field's nullability; collapsing it back into an
+ * empty config is what let an unreadable file be read as an empty one.
  */
-export async function synthesizeAdoptedMarketplaceSource(opts: {
+export type DeclaringConfigWriteTarget =
+  | { readonly kind: "unreadable"; readonly filePath: string }
+  | {
+      readonly kind: "selected";
+      readonly targetConfigPath: string;
+      readonly targetIsLocal: boolean;
+      /** The TARGET file's parse; an absent file yields the empty shape. */
+      readonly current: ScopeConfig;
+      /** The OTHER file's parse, or `undefined` when it could not be read. */
+      readonly sibling: ScopeConfig | undefined;
+    };
+
+/** A readable file's config (`absent` counts as readable), else `undefined`. */
+function readableConfig(result: ConfigLoadResult): ScopeConfig | undefined {
+  if (result.status === "invalid") {
+    return undefined;
+  }
+
+  return result.status === "valid" ? result.config : { schemaVersion: 1 };
+}
+
+/**
+ * D-103-13: select the physical config file a verb that AUTHORS an enablement
+ * declaration must write to, and hand back both files' parses.
+ *
+ * The rule: an explicit `--local` targets the local file; absent the flag,
+ * target the file the plugin's declaration already lives in; absent both a flag
+ * and a declaration, target the base file.
+ *
+ * `--local` says which file to WRITE. It does not say which file a declaration
+ * already lives IN, and those are different questions -- a caller who typed no
+ * flag has answered neither, and answering the second one with the first is
+ * what makes the write a no-op. CFG-02: a `claude-plugins.local.json` entry
+ * replaces the same-keyed base entry WHOLESALE, so a write into the base file
+ * under a local declaration changes no merged value. The verb reports success,
+ * the merged view the reconcile planner reads is unmoved, and the next pass
+ * plans the opposite of the command the user just ran.
+ *
+ * The local file is inspected for KEY MEMBERSHIP only -- the key's PRESENCE
+ * decides the file, never its `enabled` value. A local entry shadows the base
+ * entry's `enabled` too, so a bare `{}` is still the effective declaration;
+ * reading the value here would re-open a precedence question the caller has
+ * already settled.
+ *
+ * CFG-03: an UNREADABLE local file returns the `unreadable` arm instead of a
+ * target. `loadConfig` never throws, so an EACCES, a truncated mid-save file
+ * and a schema violation all arrive as `invalid` -- and none of them answer the
+ * membership question. Reading `invalid` as "not declared locally" would aim
+ * the write at the base file on exactly the configuration where the local file
+ * shadows it, which is the no-op write this selector exists to prevent. This
+ * does NOT mirror the D-18 merge fallback: that fallback coerces an invalid
+ * file's CONTRIBUTION while preserving the invalid SIGNAL for the caller
+ * (`config-merge.ts::loadMergedScopeConfig`), and it computes a read rather
+ * than choosing a write target. `absent` is a real answer ("not declared
+ * there") and still yields the base target; this never throws and never
+ * creates a file.
+ *
+ * This is the WRITE-side counterpart of the READ-side rule
+ * `install.ts::readDeclaredEnabled` states -- the local file wins by IDENTITY,
+ * not by precedence. `targetIsLocal` reports the selection's locality so
+ * callers reading across both files do not re-derive it by comparing paths.
+ *
+ * WB-01 / UAT-05: both reads are decision-input only and neither is serialized
+ * back. Callers hold the scope's state lock, which excludes other extension
+ * processes; it does NOT exclude a user editing these files, which are
+ * hand-authored by design, so a concurrent edit between this read and the write
+ * is possible. The write itself is atomic, so the worst case is a target chosen
+ * from a config one edit old, not a torn file.
+ */
+export async function selectDeclaringConfigWriteTarget(opts: {
+  readonly locations: ScopedLocations;
+  readonly local: boolean | undefined;
+  readonly key: string;
+}): Promise<DeclaringConfigWriteTarget> {
+  const [baseCfg, localCfg] = await Promise.all([
+    loadConfig(opts.locations.configJsonPath),
+    loadConfig(opts.locations.configLocalJsonPath),
+  ]);
+
+  if (localFileLeavesTargetUnknowable(opts.local, localCfg)) {
+    return { kind: "unreadable", filePath: localCfg.filePath };
+  }
+
+  const targetIsLocal = resolveTargetIsLocal(opts.local, localCfg, opts.key);
+  // Delegate the file pairing to the flag-only selector so `--local`'s pairing
+  // -- and its ENOENT fresh-create contract -- keeps exactly one definition,
+  // then key the two parses off those PATHS rather than off `targetIsLocal` a
+  // second time, so a parse can never be paired with the other file's path.
+  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(
+    opts.locations,
+    targetIsLocal,
+  );
+  const parseFor = (p: string): ConfigLoadResult =>
+    p === opts.locations.configLocalJsonPath ? localCfg : baseCfg;
+  const targetCfg = parseFor(targetConfigPath);
+  if (targetCfg.status === "invalid") {
+    return { kind: "unreadable", filePath: targetCfg.filePath };
+  }
+
+  return {
+    kind: "selected",
+    targetConfigPath,
+    targetIsLocal,
+    current: configOrEmpty(targetCfg),
+    sibling: readableConfig(parseFor(siblingConfigPath)),
+  };
+}
+
+/**
+ * A typed flag names the destination outright, so no file has to be read to
+ * find it and an unreadable local file cannot make the answer unknowable.
+ * Absent the flag the local file IS the determinant, and an unreadable one
+ * leaves the destination unknown -- abort rather than guess the shadowed file.
+ */
+function localFileLeavesTargetUnknowable(
+  local: boolean | undefined,
+  localCfg: ConfigLoadResult,
+): localCfg is InvalidConfigLoad {
+  return local !== true && localCfg.status === "invalid";
+}
+
+/**
+ * CFG-02 / D-01: the local file answers the key when the caller typed
+ * `--local`, or when it declares the key itself -- a local entry REPLACES the
+ * same-keyed base entry wholesale, so its mere presence decides the target.
+ */
+function resolveTargetIsLocal(
+  local: boolean | undefined,
+  localCfg: ConfigLoadResult,
+  key: string,
+): boolean {
+  if (local === true) {
+    return true;
+  }
+
+  return localCfg.status === "valid" && localCfg.config.plugins?.[key] !== undefined;
+}
+
+type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
+
+function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
+  return result.status === "valid" ? result.config : { schemaVersion: 1 };
+}
+
+/**
+ * UAT-05 seam over `synthesizeUndeclaredMarketplaceSource`: runs the
+ * merged-view membership gate against BOTH physical files of the scope. Both
+ * parses come from `selectDeclaringConfigWriteTarget` (read fresh inside the
+ * caller's lock -- WB-01 discipline); neither is serialized back.
+ *
+ * An UNREADABLE sibling (`sibling === undefined`) SKIPS the adoption write. It
+ * is not read as "declares nothing": the file may well declare the marketplace,
+ * and synthesizing a bare `{source}` entry into the other file would shadow
+ * that declaration wholesale under CFG-02 -- silently dropping the user's
+ * `autoupdate: false` once the file is repaired, a network-touching setting
+ * flipped with no command and no prompt. Refusing to adopt is the conservative
+ * half: the plugin entry itself is still targeted correctly, and a marketplace
+ * that really is undeclared stays visible as the reconcile planner's
+ * `<marketplace not declared>` row rather than being papered over from a file
+ * nobody could read.
+ */
+function synthesizeAdoptedMarketplaceSource(opts: {
   readonly current: ScopeConfig;
-  readonly siblingConfigPath: string;
+  readonly sibling: ScopeConfig | undefined;
   readonly state: ExtensionState;
   readonly marketplace: string;
-}): Promise<string | undefined> {
-  const siblingCfg = await loadConfig(opts.siblingConfigPath);
-  const sibling: ScopeConfig =
-    siblingCfg.status === "valid" ? siblingCfg.config : { schemaVersion: 1 };
+}): string | undefined {
+  if (opts.sibling === undefined) {
+    return undefined;
+  }
+
   return synthesizeUndeclaredMarketplaceSource(
-    [opts.current, sibling],
+    [opts.current, opts.sibling],
     opts.state,
     opts.marketplace,
   );
+}
+
+/**
+ * CMP-3 / UAT-05: write a plugin declaration and, when the scope's MERGED
+ * config view does not already declare the owning marketplace, adopt the
+ * marketplace in the SAME batched patch. A bare plugin key would otherwise be a
+ * dangling declaration the planner converts into a marketplace removal plus a
+ * perpetual failed row.
+ *
+ * The membership gate considers BOTH physical files (base union local), so a
+ * `--local` write never re-declares a base-declared marketplace -- the bare
+ * `{source}` entry would shadow the base entry wholesale (CFG-02) and silently
+ * flip merged `autoupdate`. An UNREADABLE sibling skips the adoption write
+ * rather than counting as a file that declares nothing.
+ *
+ * S4 (PR #51): `adoptedSource === undefined` collapses two arms -- benign
+ * (already declared, no synthesis needed) and dangerous (no string `source.raw`
+ * on the state record, so synthesis is impossible). The write proceeds with the
+ * plugin key alone in BOTH arms, so the dangerous arm writes a dangling
+ * declaration. Acknowledged trade-off pending a widen of the helper's return.
+ *
+ * `pluginPatch` is the caller's own field set: `enable`/`disable` writes an
+ * explicit `enabled`, while `install` writes `enabled: false` only when the
+ * install actually landed disabled and otherwise writes an empty patch.
+ */
+export async function writeAdoptingConfigEntries(opts: {
+  readonly current: ScopeConfig;
+  readonly sibling: ScopeConfig | undefined;
+  readonly state: ExtensionState;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly targetConfigPath: string;
+  readonly scopeRoot: string;
+  readonly pluginPatch: Partial<PluginConfigEntry>;
+}): Promise<void> {
+  const adoptedSource = synthesizeAdoptedMarketplaceSource({
+    current: opts.current,
+    sibling: opts.sibling,
+    state: opts.state,
+    marketplace: opts.marketplace,
+  });
+
+  await writeBatchedConfigEntries(opts.current, opts.targetConfigPath, opts.scopeRoot, {
+    ...(adoptedSource !== undefined && {
+      marketplaces: { [opts.marketplace]: { source: adoptedSource } },
+    }),
+    plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
+  });
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */

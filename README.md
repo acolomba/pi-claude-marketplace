@@ -157,6 +157,8 @@ Each scope stores its declarative configuration for marketplaces and plugins in 
 
 These files are the authoritative record of the installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
 
+Whether Pi applies a declared plugin's components depends on the entry's optional `enabled` key and on the install-time default the plugin author declares. For more information, see [Plugin enablement](docs/plugin-enablement.md).
+
 ### Local configuration files
 
 Each scope can also have a `claude-plugins.local.json` file alongside the base file.

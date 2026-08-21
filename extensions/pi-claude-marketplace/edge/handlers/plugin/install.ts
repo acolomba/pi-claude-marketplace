@@ -88,6 +88,11 @@ export function makeInstallHandler(
       cwd: ctx.cwd,
       marketplace: ref.marketplace,
       plugin: ref.plugin,
+      // DFEN-04 / D-102-03: the standalone user path honors the plugin's
+      // declared `defaultEnabled`. Unconditional -- there is no flag to parse,
+      // and `import` reaches `installPlugin` through its own cascade, which
+      // leaves this off.
+      applyDefaultEnabled: true,
       ...(mapModel && { mapModel: true }),
       ...(partial && { partial: true }),
       ...(localFlag.local && { local: true }),

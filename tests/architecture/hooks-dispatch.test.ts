@@ -13,7 +13,7 @@
 //     synthetic ExtensionState + hand-built HooksConfig fixture.
 //   - Block 3: cross-plugin sort order + within-plugin declaration order,
 //     against multi-plugin fixtures spanning user + project scopes.
-//   - Block 4: epoch-mismatch no-op via _bumpEpochForTest; pinned at the
+//   - Block 4: epoch-mismatch no-op via bumpEpoch; pinned at the
 //     composite-handler boundary so the contract holds at the same surface
 //     a future Pi loader reload would exercise.
 //   - Block 5: tool_result event.isError split into PostToolUse vs.
@@ -40,12 +40,14 @@ import {
   addPluginConfigToCache,
   rebuildRoutingTables,
   registerHooksBridge,
-  _bumpEpochForTest,
-  _resetForTest,
-  _routingTableForTest,
-  _setRoutingBucketForTest,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  bumpEpoch,
+  resetRoutingState,
+  routingTableEntries,
+  setRoutingBucket,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
   currentEpoch,
   type RoutingEntry,
@@ -177,7 +179,7 @@ async function collectExtensionTsFiles(dir: string): Promise<string[]> {
 // ──────────────────────────────────────────────────────────────────────────
 
 test("DISP-01: registerHooksBridge calls pi.on exactly 11 times with the locked Pi event names (input twice)", async () => {
-  _resetForTest();
+  resetRoutingState();
 
   // WR-04: hermetic env. Without this, the user-scope hydrate arm resolves
   // `getAgentDir()` which reads `PI_CODING_AGENT_DIR` or defaults to
@@ -256,7 +258,7 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 11 times with the locked 
 // ──────────────────────────────────────────────────────────────────────────
 
 test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset (10 buckets)", () => {
-  _resetForTest();
+  resetRoutingState();
 
   const config = makeConfig([
     { event: "SessionStart", handlers: 1 },
@@ -279,7 +281,7 @@ test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset 
 
   rebuildRoutingTables();
 
-  const tableKeys = Array.from(_routingTableForTest().keys()).sort();
+  const tableKeys = Array.from(routingTableEntries().keys()).sort();
   const expectedKeys = [...BUCKET_A_EVENTS].sort();
   assert.deepEqual(tableKeys, expectedKeys, "routingTable keyset drifted from BUCKET_A_EVENTS");
 });
@@ -289,7 +291,7 @@ test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset 
 // ──────────────────────────────────────────────────────────────────────────
 
 test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, project breaks ties)", () => {
-  _resetForTest();
+  resetRoutingState();
 
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
@@ -329,7 +331,7 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
   // full cross-scope cache so the resulting bucket carries all three
   // entries.
   rebuildRoutingTables();
-  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = routingTableEntries().get("PreToolUse") ?? [];
   assert.deepEqual(
     bucket.map((e) => e.pluginId),
     ["alpha", "beta", "gamma"],
@@ -338,7 +340,7 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
 });
 
 test("DISP-04: within-plugin declaration order preserved via monotonic declarationIndex", () => {
-  _resetForTest();
+  resetRoutingState();
 
   // Two PreToolUse groups in the same plugin: group 0 has 2 handlers,
   // group 1 has 1. Flattened bucket order MUST preserve the (group, handler)
@@ -358,7 +360,7 @@ test("DISP-04: within-plugin declaration order preserved via monotonic declarati
 
   rebuildRoutingTables();
 
-  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = routingTableEntries().get("PreToolUse") ?? [];
   assert.equal(bucket.length, 3, "expected 3 handler entries flattened from 2 groups");
   assert.deepEqual(
     bucket.map((e) => e.declarationIndex),
@@ -377,7 +379,7 @@ test("DISP-04: within-plugin declaration order preserved via monotonic declarati
 // ──────────────────────────────────────────────────────────────────────────
 
 test("DISP-03: composite handler with stale capturedEpoch no-ops without invoking dispatchHookExec", async () => {
-  _resetForTest();
+  resetRoutingState();
 
   const fired: string[] = [];
   const injectedExecutor: HookExecutor = (entry) => {
@@ -385,7 +387,7 @@ test("DISP-03: composite handler with stale capturedEpoch no-ops without invokin
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
+  setRoutingBucket("PreToolUse", [makeEntry({ pluginId: "p1" })]);
 
   // Capture an epoch value, then bump the live cell so the handler's
   // captured value is stale. Per the dispatch.ts epoch defense, the
@@ -395,7 +397,7 @@ test("DISP-03: composite handler with stale capturedEpoch no-ops without invokin
   // belt-and-suspenders epoch path in isolation against an in-process
   // simulated reload.
   const stale = currentEpoch();
-  _bumpEpochForTest();
+  bumpEpoch();
   assert.notEqual(stale, currentEpoch(), "epoch must advance to simulate reload");
 
   const handler = compositeHandlerFor("PreToolUse", stale, undefined, injectedExecutor);
@@ -413,7 +415,7 @@ test("DISP-03: composite handler with stale capturedEpoch no-ops without invokin
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFailure bucket", async () => {
-  _resetForTest();
+  resetRoutingState();
 
   const fired: string[] = [];
   const injectedExecutor: HookExecutor = (entry) => {
@@ -423,8 +425,8 @@ test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFail
 
   // Pre-populate BOTH buckets so the test pins which one is selected by
   // event.isError truthy, not coincidental empty-bucket fall-through.
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
   const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
@@ -444,7 +446,7 @@ test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFail
 });
 
 test("D-59-01: toolResultCompositeHandler routes isError=false to PostToolUse bucket", async () => {
-  _resetForTest();
+  resetRoutingState();
 
   const fired: string[] = [];
   const injectedExecutor: HookExecutor = (entry) => {
@@ -452,8 +454,8 @@ test("D-59-01: toolResultCompositeHandler routes isError=false to PostToolUse bu
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
   const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(

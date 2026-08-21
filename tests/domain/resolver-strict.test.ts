@@ -690,6 +690,173 @@ test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// DFEN-01 / DFEN-02: install-time enablement -- the precedence truth table
+//
+// The marketplace entry wins over `plugin.json` in BOTH directions; absent at
+// both declaration sites is `true`. The whole table lives here so a reader
+// meets every cell at once rather than inferring the unstated ones.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("DFEN-02 entry false + manifest true -> installable carrying false (entry wins)", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: true }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-07: the direction a reader is most likely to guess wrong. Nothing about
+// the false-wins case implies this one, so it is pinned separately.
+test("DFEN-02 entry true + manifest false -> installable carrying true (entry wins both ways)", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: true }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// Agreement between the two declaration sites is not a conflict and not a
+// redundancy worth reporting: the resolved value carries, and nothing about the
+// field reaches `notes`. Asserting the value alone would not catch a diagnostic.
+test("DFEN-02 entry false + manifest false -> installable carrying false, no diagnostic", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("defaultEnabled")),
+    `agreement must emit no note, notes: ${r.notes.join(" / ")}`,
+  );
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+test("DFEN-02 entry true + manifest true -> installable carrying true, no diagnostic", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: true }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: true }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("defaultEnabled")),
+    `agreement must emit no note, notes: ${r.notes.join(" / ")}`,
+  );
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+test("DFEN-02 entry silent + manifest false -> installable carrying false", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// A `plugin.json` that exists but declares nothing is a DIFFERENT code path from
+// no `plugin.json` at all (the next test): this one reaches the precedence rule
+// with a parsed manifest object, that one with `manifest: null`. Both must
+// answer `true`, so both are pinned.
+test("DFEN-02 entry silent + manifest present but silent -> installable carrying true", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1" }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// D-101-09: no `plugin.json` on disk -- `readManifest` reports `manifest: null`
+// as a normal non-failing outcome, and the fallback chain runs to its end.
+test("DFEN-02 entry silent + no plugin.json on disk -> installable carrying true", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// DFEN-02 / DFEN-03: the entry-declared value survives the whole resolution
+// path -- schema acceptance, the precedence helper, and the materializable arm
+// -- and declaring it false does NOT make the plugin non-installable.
+test("DFEN-02 entry declares defaultEnabled false with no plugin.json -> installable carrying false", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-01: the resolved value lives in `MATERIALIZABLE_FIELDS`, so it has to
+// carry on the `partially-available` arm exactly as it does on `installable`.
+// Declaring an unsupported component kind reaches that arm with NO structural
+// defect, which is the shape a `--partial` consumer narrows to -- and it is the
+// only arm whose carried value nothing else asserts, so hardcoding the argument
+// at the `partiallyAvailable()` call site would otherwise go unnoticed.
+test("DFEN-02 partially-available arm carries the entry-resolved defaultEnabled", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({ source: "./local", defaultEnabled: false, themes: "./themes" }),
+    ctx,
+  );
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-10: a non-boolean is an ordinary schema violation caught by
+// PLUGIN_MANIFEST_VALIDATOR inside readManifest -- no bespoke error class, no
+// coercion, and precedence is never consulted. Assert only the note PREFIX:
+// the trailing detail is validator-generated and would make this brittle.
+test("DFEN-01 non-boolean defaultEnabled in plugin.json -> unavailable + malformed plugin.json", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: "yes" }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed plugin.json")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+// D-101-13 / D-09 -- that adding a named optional property did not narrow the
+// lenient unknown-key posture is pinned in `tests/domain/manifest.test.ts`,
+// which runs PLUGIN_ENTRY_VALIDATOR / PLUGIN_MANIFEST_VALIDATOR directly. The
+// resolver never calls either validator on the entry (it reads named fields and
+// casts the rest to `Record<string, unknown>`), so a resolver-level test cannot
+// observe schema leniency and would pass even under `additionalProperties: false`.
+
+// ──────────────────────────────────────────────────────────────────────────
 // MCPR-01..04: string mcpServers references (wrapped .mcp.json, D-01/D-04)
 // ──────────────────────────────────────────────────────────────────────────
 

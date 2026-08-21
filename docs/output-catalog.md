@@ -133,27 +133,27 @@ ______________________________________________________________________
 
 The table below holds ONE row per member of the 19-member `PLUGIN_STATUSES` tuple. Two members that render the same glyph get two rows and the Icon column repeats the character: `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, `(partially-upgradable)` and `(will install)` / `(will enable)` all render `●`, and each keeps its own row, because the token is what the reader looks up and the glyph alone does not identify it.
 
-| Token                    | Icon | Where it appears                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`            | ●    | Plugin row -- `list` (steady-state inventory), install, import cascade, reinstall (rare), update (rare). On the list surface the same token is the steady-state inventory row; it does not trigger the reload-hint per SNM-15 / G-21-01, while the install/cascade transition does.                                                                                                                                        |
-| `(partially-installed)`  | ◉    | Plugin row -- list / info inventory surfaces AND the install / update / enable success cascades for a recorded-installed plugin that currently re-resolves `partially-available` (FSTAT-02 / D-66-03). DERIVED, never persisted. Carries the dropped-component kinds in the brace; the success rows also thread `dependencies`, so the soft-dep markers can follow the kinds in the same brace.                            |
-| `(updated)`              | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                                                                                                                                                                     |
-| `(reinstalled)`          | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                                                                                                                                                                                                                                                            |
-| `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                                                                                                                                                                                                                                                           |
-| `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). Bare row: no scope bracket (SNM-11), no reasons brace.                                                                                                                                                                                               |
-| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: lsp / hooks / unsupported component); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}`. Would degrade-install under `--partial` (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                     |
-| `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, or a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`); carries the structural reasons.                                                                                                |
-| `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                         |
-| `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen. |
-| `(failed)`               | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                                                                                                                                                                      |
-| `(skipped)`              | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                                                                                                                                                                                                                                                             |
-| `(manual recovery)`      | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                                                                                                                                                                                                                                                             |
-| `(will install)`         | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                                                                                                                                                                                                                                                                    |
-| `(will uninstall)`       | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                                                                                                                                                             |
-| `(will enable)`          | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                                                                                                                                                       |
-| `(will disable)`         | ◍    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                                                              |
-| `(disabled)`             | ◍    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the explicit `enabled: false` marker.                                                                                                                                                                                                                                                        |
+| Token                    | Icon | Where it appears                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(installed)`            | ●    | Plugin row -- `list` (steady-state inventory), install, import cascade, reinstall (rare), update (rare). On the list surface the same token is the steady-state inventory row; it does not trigger the reload-hint per SNM-15 / G-21-01, while the install/cascade transition does.                                                                                                                                                                                                                                                         |
+| `(partially-installed)`  | ◉    | Plugin row -- list / info inventory surfaces AND the install / update / enable success cascades for a recorded-installed plugin that currently re-resolves `partially-available` (FSTAT-02 / D-66-03). DERIVED, never persisted. Carries the dropped-component kinds in the brace; the success rows also thread `dependencies`, so the soft-dep markers can follow the kinds in the same brace.                                                                                                                                             |
+| `(updated)`              | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `(reinstalled)`          | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                             |
+| `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). No scope bracket (SNM-11), and no probe-derived or soft-dependency-derived reason brace -- no materialized tree exists to derive one from. It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, which needs no tree because the marketplace entry is readable from the cached manifest (OUT-05 / RSTA-01). |
+| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: lsp / hooks / unsupported component); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}`. Would degrade-install under `--partial` (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                                                                                      |
+| `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, or a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`); carries the structural reasons.                                                                                                                                                                                                                 |
+| `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen.                                                                                                                  |
+| `(failed)`               | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `(skipped)`              | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `(manual recovery)`      | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `(will install)`         | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `(will uninstall)`       | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `(will enable)`          | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `(will disable)`         | ◍    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `(disabled)`             | ◍    | Plugin row -- list / info inventory surfaces, the `/claude:plugin disable` fresh-cascade row, and the install surfaces (`/claude:plugin install` and the load-time reconcile cascade) when the plugin's own `defaultEnabled: false` declaration made the install land disabled; the install surfaces carry `{installs disabled}` and the enable-hint trailer, the others render bare.                                                                                                                                                       |
 
 Marketplace status tokens (drawn from the 7-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -368,6 +368,17 @@ This surface builds the row from the installation record alone and reads no sour
 
 A manifest that failed to load backs no absence claim (BOUND-01 / D-95-05). Such a marketplace renders a bare `(failed)` header with no plugin rows. Severity `info`; no reload-hint (inventory row, not a state-changer).
 
+### Available inventory row that would install disabled (OUT-02 / DFEN-04)
+
+<!-- catalog-state: available-installs-disabled -->
+
+```text
+● official [user] <autoupdate>
+  ○ helper v1.0.0 (available) {installs disabled}
+```
+
+A not-installed plugin whose marketplace ENTRY declares `defaultEnabled: false` carries the closed-set `{installs disabled}` token on its `(available)` row, so the reader sees the author's install-time declaration BEFORE running the install rather than after it. Two declarations decide the token, in the order `install` itself applies them. Your own `enabled` value for the plugin in `claude-plugins.json` wins: where you have set one, in either direction, the marketplace default does not apply and the row stays bare. Where you have set none, the marketplace entry answers -- and it is readable from the cached `marketplace.json` for every declared plugin whatever its clone state, so this row reads no source tree and fires no network call to make the claim. The post-install row for the same plugin is the `install-disabled` state under `## /claude:plugin install <plugin>@<marketplace>`; the two blocks side by side are the whole story of the token for `helper`. Severity `info`; no reload-hint (inventory row) -- and for a different reason than the install row's: there the desired state WAS reached, while here nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
+
 ### Remote inventory row (RSTA-01 / D-80-03)
 
 <!-- catalog-state: remote-inventory -->
@@ -377,7 +388,7 @@ A manifest that failed to load backs no absence claim (BOUND-01 / D-95-05). Such
   ◌ git-plugin v1.2.3 (remote)
 ```
 
-A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally renders `(remote)` instead of the manifest-only `(available)` over-claim (RSTA-01). The row uses the dedicated `◌` glyph (`ICON_REMOTE`, U+25CC), reassigned from the disabled rows which now wear `◍` (D-80-01). Bare row: no scope bracket (SNM-11 carve-out family, joining `available` / `partially-available` / `unavailable`), no reasons brace (the REASONS closed set does not grow -- parity with `available`, D-80-03). Severity `info`; no reload-hint (inventory row).
+A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally renders `(remote)` instead of the manifest-only `(available)` over-claim (RSTA-01). The row uses the dedicated `◌` glyph (`ICON_REMOTE`, U+25CC), reassigned from the disabled rows which now wear `◍` (D-80-01). Bare row: no scope bracket (SNM-11 carve-out family, joining `available` / `partially-available` / `unavailable`), and no reasons brace. What the row excludes is every reason derived from a tree it does not have -- probe-derived reasons and the soft-dependency markers alike. The closed REASONS set still does not grow either way (parity with `available`, D-80-03), but that is no longer what keeps this row bare. The one token the row family now admits is derived from the marketplace ENTRY rather than from a tree, and this block's own fixture entry declares nothing, which is why its bytes are unchanged; for the declaring case see the `remote-installs-disabled` state below (OUT-05 / RSTA-01). Severity `info`; no reload-hint (inventory row).
 
 ### Remote inventory row with a description (PL-4)
 
@@ -392,6 +403,17 @@ A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose
 Same `remote-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants: 4-space indent, truncated at column 66. Severity `info`; no reload-hint.
 
 Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants (`installed` / `upgradable` / `available` / `unavailable`): 4-space indent, truncated at column 66. The disabled inventory row is steady state, so severity stays `info` and no reload-hint fires.
+
+### Remote inventory row that would install disabled (OUT-02 / OUT-05 / RSTA-01)
+
+<!-- catalog-state: remote-installs-disabled -->
+
+```text
+● official [user] <autoupdate>
+  ◌ git-plugin v1.2.3 (remote) {installs disabled}
+```
+
+The same not-yet-materialized git-source plugin as the `remote-inventory` row above, whose marketplace ENTRY declares `defaultEnabled: false`. This NARROWS that block's bare-row rule rather than reversing it (OUT-05 / RSTA-01). The row still refuses every probe-derived reason and both soft-dependency markers, because no materialized tree exists to derive either from; it admits exactly one declaration-derived token, on the terms the `available-installs-disabled` state above sets out. That token needs no tree at all, which is what lets the reader furthest from having fetched anything still see the author's install-time declaration. Severity `info`; no reload-hint (inventory row): nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
 
 ### Partially-installed inventory row (FSTAT-02 / D-66-03)
 
@@ -524,6 +546,32 @@ A plugin operation needs attention.
 ```
 
 A `--partial` install that succeeds with one or more components dropped (the resolver's `partially-available` arm) renders the `(partially-installed)` row with the dedicated `◉` glyph. The partially-available arm still stages the SUPPORTED components, so a `(partially-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. partially-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`). SEV-01: the unloaded `agents` companion is a silent degradation independent of the dropped components, so the success row stamps `warning` and the cascade carries the `needs attention` summary line (the per-row bytes are unchanged from the info partially-installed form). The direct `--partial` opt-in itself stays benign info -- the warning here is the missing companion, not the partial install.
+
+### Install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
+
+<!-- catalog-state: install-disabled -->
+
+```text
+● official [user]
+  ◍ helper v1.0.0 (disabled) {installs disabled}
+    Run enable on this plugin to use its components.
+```
+
+The plugin's own manifest entry declares `defaultEnabled: false` and the user's config states no opinion, so the ledger ran whole and the disable half then unstaged everything it staged. The `◍` row names the author-declared cause through the closed-set `{installs disabled}` token and carries the frozen enable-hint trailer, which interpolates nothing (T-69-01). Severity `info` -- the desired state WAS reached, because an install-disabled plugin is the author's declared intent, not a shortfall. No reload hint: nothing net entered or left Pi's resource view inside the command.
+
+### Install that lands disabled over a degraded ledger run (WARN-01 / FSTAT-07)
+
+<!-- catalog-state: install-disabled-degraded -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ◍ helper v1.0.0 (disabled) {installs disabled, malformed skill, unsupported component}
+    Run enable on this plugin to use its components.
+```
+
+The same row over a `--partial` install whose skill frontmatter could not be parsed. The cause leads and the durable degradation facts follow it in the same brace: both constrain what the `enable` this row advertises would produce, so suppressing them would leave the user with no surface for them at all (standalone mode drops `postCommitWarnings` per D-19-01). The frontmatter degrade is a shortfall this ledger run just produced, so the row stamps `warning` and the cascade carries the summary line. The soft-dep markers stay suppressed whatever the record retained (ENBL-15 / D-100-06) -- that concern is suspended while the plugin is disabled.
 
 ### Failure -- unsupported features in manifest (partially-available)
 
@@ -728,6 +776,22 @@ Plugin reinstall: 1 warning
 ```
 
 A reinstall drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(reinstalled)` -- a degraded component is reinstalled-but-short, not dropped -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable and backfill rows use. Severity `warning` with the summary line, the same raise those surfaces take for the same class of degrade: this one the reinstall's own ledger just produced. OUT-03/D-04: the tally counts by STAMPED severity, so the raised row lands in `1 warning` rather than `1 success` -- the operation completed, short of ideal, and the tally says so without a second vocabulary. Both reinstall row composers (the standalone verb and the bulk cascade mapper) read the one signal, so the two surfaces cannot disagree. A clean reinstall renders the brace-less rows above unchanged.
+
+### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
+
+<!-- catalog-state: reinstall-disabled-record-cascade -->
+
+```text
+● official [user]
+  ● alpha v1.0.0 (reinstalled)
+  ⊘ beta (skipped) {already disabled}
+
+Plugin reinstall: 2 successes
+
+/reload to pick up changes
+```
+
+A cascade reaching a plugin whose record carries the explicit `enabled: false` marker (ENBL-05) short-circuits before the resolve instead of re-staging, so a verb invoked to repair a plugin cannot silently turn it back on. Nothing is re-materialized and nothing is written: the record is left exactly as the disable wrote it, its `resources.*` component inventory included (ENBL-18), and that retained inventory is bookkeeping rather than evidence that anything sits on disk. Severity is `info` -- the outcome is benign and idempotent, and with every row informational the cascade emits no summary line at all. The reload-hint still fires, because the sibling `(reinstalled)` row IS state-changing. OUT-03/D-04: the plural tally counts the informational skip as a success alongside the reinstalled row, so a cascade that re-materialized one plugin reports `2 successes`; that is the tally's severity rule (idempotent -> info per D-01), not a miscount. The standalone verb renders the same skipped row over the same short-circuit (DFEN-07), but at single cardinality the tally composer returns nothing and the row stands alone -- byte-identical to the update surface's disabled-record refresh block, which is why it carries no separate state of its own.
 
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
 
@@ -1699,6 +1763,20 @@ Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `
     skills: chat-init
 ```
 
+### Success -- available single scope that would install disabled (OUT-03 / DFEN-04)
+
+The same not-installed plugin as the state above, whose marketplace ENTRY declares `defaultEnabled: false`. The `info` surface states the fact through the reason brace its row already had, so this render differs from `available-single-scope` by that brace alone: no extra body line, and the description and per-kind component lines are untouched. The two declarations behind the token, and their order, are the ones the `available-installs-disabled` list state sets out; `info` reads them the same way and reads nothing on disk to do it. Severity `info`; no reload-hint (read-only surface): nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
+
+<!-- catalog-state: available-installs-disabled -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ○ chat-helper v0.5.0 (available) {installs disabled}
+    Quick chat helper plugin; experimental.
+    commands: chat
+    skills: chat-init
+```
+
 ### Success -- remote single scope (RSTA-01 / D-80-04)
 
 Triggered by `plugin info <plugin>@<marketplace>` against a not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally. The status glyph switches to `◌` (`ICON_REMOTE`, per `pluginInfoStatusGlyph`) and the row reads `(remote)`, replacing the manifest-only `(available)` over-claim (RSTA-01). Because nothing is fetched there is no warm tree to resolve, so the `componentsResolved: false` arm fires and emits the `components: not resolved` marker (existing wording preserved, D-80-04). Severity `info`.
@@ -2066,6 +2144,20 @@ The load-time reconcile re-enabled a config-declared-enabled disabled record, an
 ```text
 ● local-mp [user]
   ● hello v1.0.0 (installed) {requires pi-subagents}
+
+Reconcile: 1 success
+```
+
+### Load-time install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
+
+The load-time counterpart of the standalone install-disabled row: the user hand-added a bare `"hello@mp": {}` entry, reloaded, and the plugin's own `defaultEnabled: false` declaration made the install land disabled. This is the COMMON way a plugin arrives inert, and nobody is watching a command run when it happens, so the row carries the same closed-set cause token and the same frozen enable-hint trailer the standalone row carries -- without them it would be indistinguishable from a disable the user asked for. The reload stamp is the one deliberate difference: this row shares the realized-transition arm every other reconcile disable uses, whereas the standalone row stamps `false` because nothing net entered or left Pi's resource view inside that command. The trailing tally counts the row as one success.
+
+<!-- catalog-state: reconcile-install-disabled -->
+
+```text
+● local-mp [user]
+  ◍ hello v1.0.0 (disabled) {installs disabled}
+    Run enable on this plugin to use its components.
 
 Reconcile: 1 success
 ```

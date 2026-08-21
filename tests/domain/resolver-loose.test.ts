@@ -117,6 +117,104 @@ test("MM-6 entry + manifest both absent + <pluginRoot>/skills exists -> installa
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// DFEN-02: install-time enablement in loose mode
+// ──────────────────────────────────────────────────────────────────────────
+
+// D-101-08: structurally the same shape as the MM-6 conflict test above -- a
+// manifest declaration with a silent entry -- but the outcome inverts, because
+// the loose-mode conflict rule is closed-set by construction. It iterates the
+// three supported component-path kinds plus `mcpServers`; `defaultEnabled` is
+// metadata and belongs to none of those sets, exactly as `description` and
+// `version` have never been conflict material. Nothing in the code special-cases
+// this, so this test is the only thing that would notice if a later edit widened
+// the conflict machinery to iterate keys instead of a closed tuple.
+test("DFEN-02 manifest-only defaultEnabled with a silent entry -> resolves carrying false, not a conflict", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: false }) },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  assert.notEqual(r.state, "unavailable", `notes: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("declarations conflict")),
+    `metadata must not be conflict material, notes: ${r.notes.join(" / ")}`,
+  );
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-04: the four precedence shapes, each asserted against the literal the
+// strict-mode suite asserts for the same inputs. The expected value is spelled
+// out rather than obtained by cross-calling the other mode, so a divergence
+// reads directly in the failure output. Both modes take the value from the one
+// shared computation, so the evaluation order is mode-independent.
+test("DFEN-02 loose: entry false + manifest true -> carries false (entry wins)", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: true }) },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+test("DFEN-02 loose: entry true + manifest false -> carries true (entry wins both ways)", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: false }) },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", defaultEnabled: true }), ctx);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+test("DFEN-02 loose: absent at both declaration sites -> carries true", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// The manifest-only cell again, read as a parity row rather than as the
+// non-conflict proof above: the value the entry never declared still carries.
+test("DFEN-02 loose: manifest-only declaration -> carries the manifest value", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: false }) },
+    [path.join(localRoot, "skills")]: "dir",
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", skills: "skills" }), ctx);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-01 / D-101-04: the partial arm in loose mode, with the value coming
+// from the manifest fallback rather than the entry -- the strict-mode sibling
+// covers the entry side. `themes` is an unsupported kind, so it degrades the
+// plugin without a structural defect; it is not a component-path kind, so it is
+// not loose-mode conflict material either.
+test("DFEN-02 loose: partially-available arm carries the manifest-resolved defaultEnabled", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: false }) },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", themes: "./themes" }), ctx);
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // MM-7: mcpServers entry-only
 // ──────────────────────────────────────────────────────────────────────────
 

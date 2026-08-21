@@ -13,6 +13,7 @@ import {
   type EnabledPluginRecord,
   type ExtensionState,
   type PluginInstallRecord,
+  clonePluginRecord,
   loadState,
   saveState,
   toDisabledRecord,
@@ -849,4 +850,55 @@ test("BFILL-02 loadState normalization preserves a stamp present in the raw doc"
   } finally {
     await cleanup();
   }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// clonePluginRecord. These tests lived in the reinstall orchestrator's suite
+// and reached the function through a `__test_*` re-export, because the record
+// snapshot was declared there. The hazard they guard is a field drift against
+// PLUGIN_INSTALL_RECORD_SCHEMA, which is this module's schema, so both the
+// function and its tests moved here (FLOW-09).
+// ───────────────────────────────────────────────────────────────────────────
+
+// D-100-01 / ENBL-10: `clonePluginRecord` enumerates the record's fields
+// rather than spreading it, so a key it forgets vanishes from the old-record
+// snapshot silently -- no compile error, no failing assertion elsewhere. These
+// two clauses are the alarm for the hook description specifically.
+test("D-100-01 / ENBL-10: the reinstall old-record snapshot preserves hookEntries", () => {
+  const record = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "/plugins/hello",
+    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
+    enabled: true,
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  };
+
+  const snapshot = clonePluginRecord(record);
+
+  assert.deepEqual(snapshot.hookEntries, [
+    { event: "PreToolUse", matcher: "Bash" },
+    { event: "SessionStart" },
+  ]);
+  // Deep copy, not an alias: the snapshot is read after the live record has
+  // been overwritten in place, so a shared element would report the new value.
+  assert.notEqual(snapshot.hookEntries?.[0], record.hookEntries[0]);
+});
+
+test("D-100-01 / ENBL-10: a record with no hookEntries clones without inventing the key", () => {
+  const record = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "/plugins/hello",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: true,
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  };
+
+  const snapshot = clonePluginRecord(record);
+
+  assert.equal(Object.hasOwn(snapshot, "hookEntries"), false);
 });

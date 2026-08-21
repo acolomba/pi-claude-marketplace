@@ -108,7 +108,10 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       p.reasons,
       probe,
     ),
-  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope),
+  // OUT-02: the shared composer threads the row's own `reasons`, and this
+  // surface's producer stamps at most `installs disabled` there -- the
+  // not-installed candidate row's statement about what an install WOULD do.
+  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope, p.reasons),
   unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
   // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. The helper differs
@@ -135,9 +138,16 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. The helper differs from the `available` one in glyph
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
-  // `remote` has NO `scope?` field, so the scope bracket is omitted, and the row
-  // is bare -- NO reasons brace (D-80-03), which is why it takes no `probe`.
-  remote: (p, _probe, mpScope) => renderRemoteRow(p, mpScope),
+  // `remote` has NO `scope?` field, so the scope bracket is omitted.
+  //
+  // OUT-02 / OUT-05 / RSTA-01: D-80-03's bare-row rule NARROWS here rather than
+  // reversing. The row still carries no probe-derived reason and no
+  // soft-dependency marker -- there is no materialized tree to derive either
+  // from. It admits exactly one entry-derived token, `installs disabled`, which
+  // needs no tree at all because the marketplace entry is readable with no
+  // clone (OUT-05 / DOC-02). That is what lets an unfetched row state what an
+  // install would do, and this is the surface whose producer stamps it.
+  remote: (p, probe, mpScope) => renderRemoteRow(p, probe, mpScope, p.reasons),
 };
 
 /**

@@ -39,8 +39,12 @@ import path from "node:path";
 import test, { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
-import { notifyUpdateNoOpWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import {
+  notifyUpdateNoOpWithContext,
+  notifyWithContext,
+} from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import {
   notify,
   type NotificationMessage,
@@ -307,6 +311,48 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 // The filter buckets (`--partial` / `--unavailable`) are unchanged; only the
 // rendered token splits.
 // ---------------------------------------------------------------------------
+// OUT-02 / OUT-05 / DFEN-04 / RSTA-01: the two list-surface rows whose reason
+// brace is composed by `LIST_RENDER` rather than by the central
+// `renderPluginRow` arms. Declared once each so the fixture's `message` payload
+// and its `emit` override cannot drift apart -- the driver byte-pairs whatever
+// `emit` produces, and a second copy of the rows would let the documented
+// payload and the emitted one diverge silently.
+const AVAILABLE_INSTALLS_DISABLED_ROWS = [
+  {
+    name: "official",
+    scope: "user",
+    details: { autoupdate: true },
+    plugins: [
+      {
+        status: "available",
+        name: "helper",
+        version: "1.0.0",
+        severity: "info",
+        needsReload: false,
+        reasons: ["installs disabled"],
+      },
+    ],
+  },
+] as const;
+
+const REMOTE_INSTALLS_DISABLED_ROWS = [
+  {
+    name: "official",
+    scope: "user",
+    details: { autoupdate: true },
+    plugins: [
+      {
+        status: "remote",
+        name: "git-plugin",
+        version: "1.2.3",
+        severity: "info",
+        needsReload: false,
+        reasons: ["installs disabled"],
+      },
+    ],
+  },
+] as const;
+
 const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   // /claude:plugin list -- list-surface; mp.status === undefined.
@@ -758,6 +804,35 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // OUT-02 / DFEN-04: list-surface inventory row for a not-installed plugin
+    // whose marketplace ENTRY declares `defaultEnabled: false`. The claim is
+    // entry-derived -- the cached manifest carries it whatever the clone state --
+    // so the `(available)` row names the author's install-time declaration
+    // before the install runs, not after it. The same plugin's post-install row
+    // is the `install-disabled` state on the install surface. Severity `info`;
+    // `needsReload: false`.
+    //
+    // Driven through the list surface's own `CommandContext` via `emit`, for
+    // the same reason the bulk-update no-op states are: the reason brace on a
+    // `(available)` / `(remote)` row is composed by `LIST_RENDER`, while the
+    // central `renderPluginRow` arms omit `composeReasons` by construction --
+    // no producer that renders through THEM stamps `reasons` on those two
+    // statuses (OUT-05 / RSTA-01). `notifyWithContext` is the seam `listPlugins`
+    // itself
+    // calls, so the block below is byte-paired with the real list surface.
+    "available-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
+      emit: (ctx, pi) => {
+        notifyWithContext(
+          ctx as never,
+          pi as never,
+          LIST_CONTEXT,
+          AVAILABLE_INSTALLS_DISABLED_ROWS,
+        );
+      },
+    },
+
     // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
     // git-source plugin whose clone/mirror is not materialized locally. The
     // `(remote)` closed-set token wears the dedicated `◌` glyph. Bare row --
@@ -807,6 +882,22 @@ const FIXTURES: FixtureMap = {
             ],
           },
         ],
+      },
+    },
+
+    // OUT-02 / OUT-05 / RSTA-01: the `remote-inventory` row above
+    // whose marketplace ENTRY declares `defaultEnabled: false`. This NARROWS
+    // the bare-row rule rather than reversing it: the row still refuses every
+    // probe-derived reason and both soft-dependency markers (no materialized
+    // tree exists to derive either from) and admits exactly one entry-derived
+    // token, which needs no tree at all. Severity `info`; `needsReload: false`.
+    // Driven through the list surface's `CommandContext` via `emit`, for the
+    // reason recorded on the `(available)` state above.
+    "remote-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
+      emit: (ctx, pi) => {
+        notifyWithContext(ctx as never, pi as never, LIST_CONTEXT, REMOTE_INSTALLS_DISABLED_ROWS);
       },
     },
 
@@ -1085,6 +1176,60 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 dependencies: ["agents"],
                 reasons: ["lsp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // DFEN-04 / OUT-01 / OUT-04: the install ran whole and then unstaged
+    // because the plugin's own `defaultEnabled` said so. The `◍` row names the
+    // author-declared cause and carries the frozen enable-hint trailer; no
+    // reload hint, because nothing net entered or left Pi's resource view.
+    "install-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["installs disabled"],
+                enableHint: true,
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WARN-01 / FSTAT-07: the same row over a degraded ledger run. The durable
+    // facts ride the same brace after the cause, and the frontmatter degrade
+    // raises the row to warning (so the cascade carries its summary line).
+    "install-disabled-degraded": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["installs disabled", "malformed skill", "unsupported component"],
+                enableHint: true,
+                severity: "warning",
+                needsReload: false,
               },
             ],
           },
@@ -1408,6 +1553,43 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 dependencies: [],
                 reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // ENBL-05 / ENBL-18 / DFEN-07: a cascade reaching an already-disabled
+    // record short-circuits before the resolve, so nothing is re-materialized
+    // and the record keeps its component inventory. The row is benign and
+    // idempotent, hence info severity and no summary line; the reload hint
+    // still fires off the sibling `(reinstalled)` row, and the plural tally
+    // counts the informational skip as a success.
+    "reinstall-disabled-record-cascade": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "info",
+                needsReload: true,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["already disabled"],
+                severity: "info",
+                needsReload: false,
               },
             ],
           },
@@ -3227,6 +3409,34 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // OUT-03 / DFEN-04: the `available-single-scope` row above whose
+    // marketplace ENTRY declares `defaultEnabled: false`. The info surface
+    // states the fact through the reason brace the row already had, so the two
+    // renders differ by that brace alone -- no extra body line, description and
+    // component lines untouched. The claim is entry-derived, so nothing on disk
+    // is read to answer it. Severity `info`; no reload-hint (read-only surface).
+    "available-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "chat-helper",
+          version: "0.5.0",
+          description: "Quick chat helper plugin; experimental.",
+          componentsResolved: true,
+          components: {
+            commands: ["chat"],
+            skills: ["chat-init"],
+          },
+          reasons: ["installs disabled"],
+        },
+      } satisfies NotificationMessage,
+    },
+
     "unavailable-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -4652,6 +4862,36 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // DFEN-04 / OUT-01 / OUT-04: the load-time counterpart of the standalone
+    // install-disabled row. Same cause token and same remedy trailer; the
+    // reload stamp differs (`true` here) because this row shares the arm every
+    // other reconcile disable uses.
+    "reconcile-install-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["installs disabled"],
+                enableHint: true,
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
 
@@ -4784,14 +5024,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 166 is the number of annotated examples in
+  // Exact count, not a floor: 173 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    166,
-    `Expected exactly 166 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    173,
+    `Expected exactly 173 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

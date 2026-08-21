@@ -69,6 +69,7 @@ import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
+  narrowCascadeFailure,
   resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
 
@@ -172,73 +173,6 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
     // Cleanup is a hygienic concern, not part of the state contract.
     // Per D-18-01: never the primary user-facing failure path.
   }
-}
-
-/**
- * Narrow a per-plugin cascade Error.cause to a closed-set Reason for the
- * failed-plugin children block by dispatching on the typed cause
- * (`AgentsUnstageFailureError` or `NodeJS.ErrnoException.code`) rather than
- * substring-matching message text. Falls back to `"not in manifest"` as the
- * permissive default when no typed case matches; bare-Error substring branches
- * are a defensive last resort for cases where the error was already serialised
- * into a notes string.
- */
-function narrowCascadeFailure(cause: Error): ContentReason {
-  if (cause instanceof AgentsUnstageFailureError) {
-    // ATTR-09 / D-NCF: foreign content owned by another process is a
-    // content/ownership mismatch, not a manifest absence. Aligned with
-    // uninstall.ts's mapping (`AgentsUnstageFailureError` -> "source mismatch")
-    // so the two cascade-failure narrowers do not drift.
-    return "source mismatch";
-  }
-
-  if (isErrnoException(cause)) {
-    switch (cause.code) {
-      case "EACCES":
-      case "EPERM":
-        return "permission denied";
-      case "ENOENT":
-        return "source missing";
-      default:
-        // Other errno codes fall through to the textual fallback so
-        // any future-classified error surface can still be picked up
-        // by the substring branches below before landing on the
-        // permissive default.
-        break;
-    }
-  }
-
-  // Defensive textual fallback: bridges may still throw bare `Error`
-  // with diagnostic messages for `unreadable` / `unparseable` /
-  // `not in manifest` conditions. These branches are retained as a
-  // defense-in-depth last resort -- never as the primary
-  // classification path. A future audit may show them dead and they
-  // can be deleted.
-  const text = `${cause.name} ${cause.message}`.toLowerCase();
-  if (text.includes("unreadable")) {
-    return "unreadable";
-  }
-
-  if (text.includes("unparseable")) {
-    return "unparseable";
-  }
-
-  if (text.includes("not in manifest")) {
-    return "not in manifest";
-  }
-
-  return "not in manifest";
-}
-
-/**
- * Structural predicate for `NodeJS.ErrnoException`. The `.code` property
- * is the locale-independent discriminator (NFR-4 floor `>= 22`). Avoids
- * matching English-language error text that varies across Node versions.
- */
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return (
-    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
-  );
 }
 
 /**
@@ -828,13 +762,3 @@ export async function removeMarketplace(
   notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows);
   return undefined;
 }
-
-/**
- * Test seam for the typed-cause cascade-failure narrowing. Mirrors the
- * `__test_outcomeToCascadeRow` re-export precedent in
- * `orchestrators/plugin/reinstall.ts`: the helper stays private to the
- * orchestrator while tests can exercise the `instanceof
- * AgentsUnstageFailureError` / `NodeJS.ErrnoException.code` dispatch
- * branches directly.
- */
-export { narrowCascadeFailure as __test_narrowCascadeFailure };

@@ -69,24 +69,21 @@ import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
-  assertNever,
   composeErrorWithCauseChain,
   errorMessage,
+  errorWithManualRecovery,
+  findManualRecoveryError,
   ManualRecoveryError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
-import {
-  notifyWithContext,
-  type MarketplaceRows,
-  type Plural,
-} from "../../shared/notify-context.ts";
-import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
@@ -99,7 +96,12 @@ import { resolveScopeFromState } from "../marketplace/shared.ts";
 import { canonicalCloneUrl, materializePluginClone, resolveGitSubdirRoot } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { readMirrorHeadSha } from "./git-source-probe.ts";
-import { REINSTALL_CONTEXT, type ReinstallMsg } from "./reinstall.messaging.ts";
+import {
+  REINSTALL_CONTEXT,
+  narrowReasons,
+  reinstalledRowFromOutcome,
+  renderReinstallPartitionAndNotify,
+} from "./reinstall.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
@@ -119,7 +121,6 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type {
   ContentReason,
@@ -771,357 +772,6 @@ function sortReinstallTargets(
 }
 
 /**
- * Render the bulk-reinstall outcome cascade as a single
- * `notify(ctx, pi, NotificationMessage)` call per orchestration.
- *
- * Shape per marketplace (catalog `/claude:plugin reinstall` cascade):
- *
- *  ● <mp> [<scope>]
- *    ● <plugin> v<version> (reinstalled) [{requires <dep>}]
- *    ⊘ <plugin> (skipped) {<reason>}
- *    ⊘ <plugin> (failed) {<reason>}
- *    ⊘ <plugin> (manual recovery) {rollback partial}
- *
- *  /reload to pick up changes
- *
- * - Marketplace headers carry `status: undefined` (the marketplace itself
- *   was NOT updated by reinstall; the header is a pure label).
- * - Manual-recovery outcomes are folded into the cascade `plugins[]` array
- *   as `PluginManualRecoveryMessage` variants.
- * - Severity + reload-hint are computed by notify().
- * - Per-marketplace iteration order is honored end-to-end: the orchestrator
- *   pre-sorts via `compareByNameThenScope`; notify() does NOT sort
- *   marketplaces[] or plugins[].
- */
-// NotificationMessage cascade recipe:
-// - One MarketplaceNotificationMessage per affected marketplace, emitted via
-//   a single notify(ctx, pi, ...) call per orchestration.
-// - plugins: readonly PluginNotificationMessage[] in display order
-//   (orchestrator-controlled iteration; notify does not sort).
-// - Discriminators by status: "reinstalled" / "skipped" / "failed" /
-//   "manual recovery".
-// - Severity + "/reload to pick up changes" trailer are computed by notify();
-//   callers MUST NOT compose them.
-// - Reference: catalog UAT plugin-reinstall fixtures.
-function renderReinstallPartitionAndNotify(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
-  outcomes: readonly ReinstallPluginOutcome[],
-  cardinality: "single" | "plural",
-): void {
-  // Group rows by (scope, marketplace) in input order. Two different scopes
-  // for the same marketplace name render as two separate marketplace
-  // blocks (CMC-21: per-scope rendering, no collapse).
-  interface Block {
-    readonly name: string;
-    readonly scope: Scope;
-    readonly outcomes: ReinstallPluginOutcome[];
-  }
-  const byMp = new Map<string, Block>();
-  for (const outcome of outcomes) {
-    const key = `${outcome.scope}:${outcome.marketplace}`;
-    const existing = byMp.get(key);
-    if (existing === undefined) {
-      byMp.set(key, {
-        name: outcome.marketplace,
-        scope: outcome.scope,
-        outcomes: [outcome],
-      });
-    } else {
-      existing.outcomes.push(outcome);
-    }
-  }
-
-  // Order marketplace blocks via compareByNameThenScope (name primary
-  // case-insensitive, scope secondary project-before-user per MSG-GR-3).
-  // the orchestrator owns the sort; notify does not reorder.
-  const sortedBlocks = [...byMp.values()].sort((a, b) =>
-    compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
-  );
-
-  // OUT-07 / D-12: the reinstall cascade is a bulk op, so its row slot is typed
-  // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
-  // variable-length array, identical at runtime.
-  // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
-  // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
-  // annotation holds without a cast -- a status drift between the producer and
-  // the render map is a compile error here.
-  const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
-    const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
-      outcomeToPluginMessage(o, block.scope),
-    );
-    return { name: block.name, scope: block.scope, plugins };
-  });
-
-  // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
-  // (`@marketplace` / bare) reinstall forms; a single-target `<plugin>@<mp>`
-  // reinstall omits it (the row embeds the outcome). The structural
-  // single-vs-plural signal is the invocation FORM, threaded from
-  // `reinstallPlugins`.
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
-}
-
-/**
- * Test binding seam: exported under the `__test_*` prefix
- * so the cascade-emission regression test in
- * tests/orchestrators/plugin/reinstall.test.ts can verify the cascade
- * payload structure (including the folded-in manual-recovery row) without
- * forcing a real `ManualRecoveryError` through the bridges (which would
- * require fs-permission / saveState dep injection plumbing through the
- * bridge tier).
- */
-export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAndNotify };
-
-/**
- * Type guard narrowing a `ReinstallPluginOutcome` to the `failed` variant
- * tagged with `failureClass: "manual-recovery"`. Used to route manual-
- * recovery outcomes to the `PluginManualRecoveryMessage` variant instead
- * of `PluginFailedMessage` in the cascade payload.
- */
-function isManualRecoveryOutcome(
-  outcome: ReinstallPluginOutcome,
-): outcome is ReinstallFailedOutcome & { readonly failureClass: "manual-recovery" } {
-  return outcome.partition === "failed" && outcome.failureClass === "manual-recovery";
-}
-
-/**
- * Compose the success row for one reinstalled plugin. The SOLE composer for
- * that row: the standalone verb and the bulk cascade mapper both call it, so
- * the two surfaces cannot report the same ledger run differently (WR-09).
- *
- * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
- * `dependencies: Dependency[]` tuple per SNM-06. The renderer's per-row soft-dep
- * probe fires `{requires pi-subagents}` / `{requires pi-mcp}` when the companion
- * extension is unloaded.
- *
- * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
- * takes the info -> warning raise, exactly as on the install, enable and backfill
- * arms. `reinstall` was the last ledger-driven verb whose outcome carried the
- * signal but whose row discarded it -- a bare `(reinstalled)` row over a record
- * `list` renders as degraded one command later. A clean reinstall composes no
- * reasons and stays info, so its row is byte-identical to before (NREG-01).
- *
- * `rowScope` is the caller's orphan-fold decision: `undefined` suppresses the
- * `[<scope>]` bracket per `renderScopeBracket`.
- */
-function reinstalledRowFromOutcome(
-  outcome: ReinstallReinstalledOutcome,
-  rowScope: Scope | undefined,
-): PluginReinstalledMessage {
-  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
-  return {
-    status: "reinstalled",
-    name: outcome.name,
-    dependencies: dependenciesFromOutcome(outcome),
-    // IN-02: the spread is not defensive -- `resolvePluginVersion` always
-    // returns a non-empty string. It keeps a legacy record carrying an empty
-    // version from putting an empty slot in the payload; the renderer suppresses
-    // the `v<version>` token either way.
-    ...(outcome.version !== "" && { version: outcome.version }),
-    ...(rowScope !== undefined && { scope: rowScope }),
-    ...(malformed.length > 0 && { reasons: malformed }),
-    // D-03/D-06: realized reinstall transition -> reloads Pi resources.
-    severity: malformed.length > 0 ? "warning" : "info",
-    needsReload: true,
-  };
-}
-
-/**
- * Map a `ReinstallPluginOutcome` to its `PluginNotificationMessage`
- * representation. The variant set covers `reinstalled` / `skipped` /
- * `failed` / `manual recovery` per the catalog states.
- *
- * Reason-token mapping precedence (failed/manual-recovery variants):
- *  (1) failureClass=manual-recovery -> `["rollback partial"]`
- *  (2) typed `outcome.reasons` (set at the catch site via
- *  `reasonsFromTypedError(err)`) -> verbatim
- *  (3) substring parse on `notes` via `narrowReasons` -> legacy fallback
- *
- * Orphan-fold scope-bracket suppression: per-row `scope?` is
- * OMITTED when it matches the marketplace's scope. The renderer's
- * `renderScopeBracket` contract at `shared/notify.ts` suppresses
- * `[<scope>]` brackets when the row's scope is absent.
- */
-function outcomeToPluginMessage(
-  outcome: ReinstallPluginOutcome,
-  marketplaceScope: Scope,
-): ReinstallMsg {
-  const rowScope = outcome.scope === marketplaceScope ? undefined : outcome.scope;
-  switch (outcome.partition) {
-    case "reinstalled":
-      return reinstalledRowFromOutcome(outcome, rowScope);
-
-    case "skipped": {
-      const reasons = narrowReasons(outcome.notes);
-      const skipped: PluginSkippedMessage = {
-        status: "skipped",
-        name: outcome.name,
-        reasons,
-        ...(rowScope !== undefined && { scope: rowScope }),
-        // D-01: an absent-target reinstall (the named plugin is not installed)
-        // cannot be carried out -> error (severity-only flip; the `(skipped)
-        // {not installed}` per-row grammar is preserved). Otherwise benign
-        // idempotent skip -> info, actionable skip -> warning; never reloads.
-        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
-        needsReload: false,
-      };
-      return skipped;
-    }
-
-    case "failed": {
-      // CMC-16: structural failure-class tag takes priority over
-      // the substring match on `notes` for the manual-recovery
-      // class. Manual-recovery is STRUCTURALLY a
-      // `PluginManualRecoveryMessage` variant, NOT a
-      // `PluginFailedMessage` with a `{rollback partial}` reason. The
-      // status discriminator is the literal `"manual recovery"` WITH a
-      // space per shared/grammar/status-tokens.ts:47.
-      //
-      // Reason precedence (locked):
-      //  (1) failureClass=manual-recovery -> ["rollback partial"]
-      //  (2) typed outcome.reasons -> verbatim
-      //  (3) narrowReasons(outcome.notes) -> substring fallback
-      // WR-04: `narrowReasons([])` and `narrowReasons(undefined)` both return
-      // `[]`, which would render a failed row with no `{<reason>}` brace. Guard
-      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row never
-      // renders bare.
-      const narrowed: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
-        ? (["rollback partial"] as const)
-        : (outcome.reasons ?? narrowReasons(outcome.notes));
-      const reasons: readonly ContentReason[] =
-        narrowed.length > 0 ? narrowed : (["unreadable"] as const);
-
-      if (isManualRecoveryOutcome(outcome)) {
-        const manualRecovery: PluginManualRecoveryMessage = {
-          status: "manual recovery",
-          name: outcome.name,
-          reasons,
-          ...(rowScope !== undefined && { scope: rowScope }),
-          // D-03/D-06: manual-recovery anchor is always actionable -> warning,
-          // no reload.
-          severity: "warning",
-          needsReload: false,
-        };
-        return manualRecovery;
-      }
-
-      const failed: PluginFailedMessage = {
-        status: "failed",
-        name: outcome.name,
-        reasons,
-        ...(rowScope !== undefined && { scope: rowScope }),
-        // D-03/D-06: a failed reinstall -> error, no reload.
-        severity: "error",
-        needsReload: false,
-      };
-      return failed;
-    }
-
-    default:
-      return assertNever(outcome);
-  }
-}
-
-/**
- * Test seam exported under the `__test_*` prefix for the closed-set Reason
- * mapping regression tests. The mapping precedence is manual-recovery > typed
- * reasons > narrowReasons fallback, producing `PluginNotificationMessage`
- * variants.
- */
-export { outcomeToPluginMessage as __test_outcomeToPluginMessage };
-
-/**
- * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp`
- * predicate flags to the `Dependency[]` tuple consumed by
- * `PluginReinstalledMessage.dependencies` per SNM-06. The
- * renderer's per-row soft-dep probe iterates this array to emit
- * `{requires pi-subagents}` / `{requires pi-mcp}` markers when the
- * companion extension is unloaded (MSG-SD-1..2).
- */
-function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly Dependency[] {
-  const deps: Dependency[] = [];
-  if (outcome.declaresAgents) {
-    deps.push("agents");
-  }
-
-  if (outcome.declaresMcp) {
-    deps.push("mcp");
-  }
-
-  return Object.freeze(deps);
-}
-
-/**
- * Closed-set narrowing for skipped/failed outcome notes. Maps the legacy
- * free-form notes to the closed `Reason` set (CMC-11). Unrecognized text
- * falls back to `"unreadable"` (ATTR-09 / D-47-B: a truthful "could not
- * read/reconcile this row" member, never a false manifest-absence claim) when
- * the underlying cause is opaque.
- *
- * The mapping is intentionally narrow -- production code paths that
- * generate notes have known shapes (`"not installed"`, `"not in
- * manifest"`, `MarketplaceNotFoundError.message`, raw `Error.message`
- * from cached-manifest read). catalog UAT is the binding
- * verification that the mapped reason set is sufficient.
- */
-function narrowReasons(notes: readonly string[] | undefined): readonly ContentReason[] {
-  if (notes === undefined || notes.length === 0) {
-    return [];
-  }
-
-  const reasons: ContentReason[] = [];
-  for (const note of notes) {
-    reasons.push(narrowReason(note));
-  }
-
-  return Object.freeze(reasons);
-}
-
-function narrowReason(note: string): ContentReason {
-  // Exact-match first. Order: cheapest predicate to most expensive.
-  if (note === "not installed") {
-    return "not installed";
-  }
-
-  if (note === "not in manifest") {
-    return "not in manifest";
-  }
-
-  if (note === "up-to-date") {
-    return "up-to-date";
-  }
-
-  if (note === "already installed") {
-    return "already installed";
-  }
-
-  // Substring matches for common synthetic messages.
-  if (note.includes("not found in cached manifest")) {
-    return "not in manifest";
-  }
-
-  if (note.includes("not found")) {
-    return "not found";
-  }
-
-  // CMC-16: the orchestrator's catch blocks set the structural
-  // `failureClass: "manual-recovery"` tag on the failed outcome, consumed by
-  // `outcomeToPluginMessage`'s closed-set Reason mapping. This narrowing path
-  // remains for non-manual-recovery rollback scenarios.
-  if (note.includes("rollback")) {
-    return "rollback partial";
-  }
-
-  // ATTR-09 / D-47-B: last-resort fallback for a genuinely unrecognized note.
-  // The cascade could not read/reconcile the on-disk state for this row;
-  // `"unreadable"` is the truthful existing member. The former
-  // `"not in manifest"` LIED that the plugin was absent from the manifest for
-  // any cascade/IO failure whose typed dispatch (`reasonsFromTypedError`)
-  // missed. No new `REASONS` member is introduced (ContentReason only).
-  return "unreadable";
-}
-
-/**
  * Typed-dispatch narrow for thrown errors captured by the reinstall catch
  * sites. Mirrors the
  * `orchestrators/marketplace/remove.ts::narrowCascadeFailure` pattern:
@@ -1198,6 +848,33 @@ async function runLockedReinstall(
   if (mp === undefined || oldRecord === undefined) {
     return {
       outcome: { partition: "skipped", name: plugin, marketplace, scope, notes: ["not installed"] },
+      bridgeWarnings: [],
+    };
+  }
+
+  // ENBL-05: a record carrying an explicit `enabled: false` marker is the
+  // user's standing instruction, read through the single predicate
+  // `persistence/state-io.ts` owns so this site cannot drift from `update`'s.
+  // Re-materializing under it would restore the plugin's hooks, MCP servers and
+  // PATH entries with no command and no prompt, and the record write below
+  // would turn the plugin back on while the configuration still says otherwise.
+  //
+  // The counterpart branch in `update` refreshes the record's pin before it
+  // returns; this one refreshes NOTHING and returns before the resolve, because
+  // reinstall preserves the recorded version (D-68-02) and carries the recorded
+  // git identity forward (PURL-07) -- there is no pin for it to move, so there
+  // is nothing a re-resolve could truthfully write. ENBL-18: the record keeps
+  // its `resources.*` inventory while disabled, so a populated inventory is not
+  // evidence that anything is on disk and must not be read as one.
+  if (isRecordedButDisabled(oldRecord)) {
+    return {
+      outcome: {
+        partition: "skipped",
+        name: plugin,
+        marketplace,
+        scope,
+        notes: ["already disabled"],
+      },
       bridgeWarnings: [],
     };
   }
@@ -1882,99 +1559,6 @@ async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly st
   }
 }
 
-/**
- * CMC-16: wrap an error with bridge-rollback leak data.
- *
- * Short-circuits to the original error when no leaks accumulated (the
- * zero-leak fast path). Otherwise constructs a
- * `ManualRecoveryError` carrying the merged leak set via `Error.cause` so
- * the depth-5 `causeChainTrailer` walker surfaces the original error text
- * at the notify boundary.
- *
- * Merge semantics: when the incoming `err` is already a
- * `ManualRecoveryError` (e.g. a bridge threw and this helper is wrapping
- * at the orchestrator level), the leaks arrays are merged via
- * `Set`-dedup. This binds the F-5 no-double-count invariant for the
- * counterexample case where the bridge-source leak set and the
- * orchestrator-source leak set happen to overlap (structurally possible
- * if a `rollbackReplacements` cascade re-reports a leak the inner bridge
- * already surfaced).
- */
-function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error {
-  if (leaks.length === 0) {
-    return err instanceof Error ? err : new Error(errorMessage(err));
-  }
-
-  if (err instanceof ManualRecoveryError) {
-    const merged = Object.freeze([...new Set([...err.leaks, ...leaks])]);
-    return new ManualRecoveryError(err.message, merged, { cause: err });
-  }
-
-  const base = err instanceof Error ? err : new Error(errorMessage(err));
-  return new ManualRecoveryError(base.message, leaks, { cause: base });
-}
-
-/**
- * CMC-16 / F-5 binding seam: exported under the `__test_*`
- * prefix so the dedicated F-5 dedup regression test in
- * tests/orchestrators/plugin/reinstall.test.ts can verify the
- * no-double-count invariant on the merged `.leaks` payload directly
- * without forcing a contrived bridge cascade.
- *
- * Placement note (WR-02): this re-export sits BELOW the function
- * declaration so its JSDoc does not orphan the primary contract JSDoc on
- * `errorWithManualRecovery` from the IDE hover-doc binding.
- */
-export { errorWithManualRecovery as __test_errorWithManualRecovery };
-
-/**
- * CMC-16 / WR-01: walk the `Error.cause` chain (bounded to
- * depth 5, mirroring `causeChainTrailer`'s DoS-mitigation budget at
- * `shared/errors.ts::causeChainTrailer`) to find a `ManualRecoveryError`
- * anywhere in the chain.
- *
- * Why this exists (regression context): `withScopeLock` (in
- * `transaction/with-state-guard.ts:138-143`) wraps a body-thrown error with a
- * plain `new Error(..., { cause: body })` when BOTH the body throw AND
- * `release` also throw. A bare `err instanceof ManualRecoveryError` at the
- * orchestrator catch then sees the plain wrapper and silently downgrades the
- * cascade row's Reason from `{rollback partial}` to `{not in manifest}`
- * (`narrowReason` fallback). Walking `.cause` recovers the class identity
- * the wrapping discarded, so the structural CMC-16 `failureClass:
- * "manual-recovery"` tag survives the lock-release-also-failed path.
- *
- * Depth/cycle bounds match `causeChainTrailer`: stop at 5 hops, and bail if
- * a link's `.cause` references itself.
- */
-function findManualRecoveryError(err: unknown): ManualRecoveryError | undefined {
-  let current: unknown = err;
-  for (let depth = 0; depth < 5; depth++) {
-    if (current instanceof ManualRecoveryError) {
-      return current;
-    }
-
-    if (!(current instanceof Error) || current.cause === undefined || current.cause === current) {
-      return undefined;
-    }
-
-    current = current.cause;
-  }
-
-  return undefined;
-}
-
-/**
- * CMC-16 / WR-01 binding seam: exported under the
- * `__test_*` prefix so the regression guard in
- * tests/orchestrators/plugin/reinstall.test.ts can directly exercise the
- * release-also-failed wrapping path without standing up a real
- * `withScopeLock` fixture.
- *
- * Placement note (WR-02): this re-export sits BELOW the function
- * declaration so its JSDoc does not orphan the primary contract JSDoc.
- */
-export { findManualRecoveryError as __test_findManualRecoveryError };
-
 function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined): void {
   if (leak !== undefined) {
     leaks.push(`${phase}: ${leak}`);
@@ -2008,46 +1592,3 @@ async function runPostSuccessMaintenance(
 
   return Object.freeze(warnings);
 }
-
-function clonePluginRecord(record: PluginInstallRecord): PluginInstallRecord {
-  return {
-    version: record.version,
-    resolvedSource: record.resolvedSource,
-    // PURL-07 / D-78-02: preserve the recorded resolvedSha across the snapshot so
-    // reinstall's recorded-sha probe (and the carry-forward rewrite) see the pin.
-    ...(record.resolvedSha !== undefined && { resolvedSha: record.resolvedSha }),
-    // D-100-01 / ENBL-10: preserve the recorded hook description across the
-    // snapshot. This function enumerates fields rather than spreading, so an
-    // omission here silently drops the key from the old-record snapshot. Deep
-    // copy, matching the resources arrays below.
-    ...(record.hookEntries !== undefined && {
-      hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
-    }),
-    compatibility: {
-      installable: record.compatibility.installable,
-      notes: [...record.compatibility.notes],
-      supported: [...record.compatibility.supported],
-      unsupported: [...record.compatibility.unsupported],
-    },
-    resources: {
-      skills: [...record.resources.skills],
-      prompts: [...record.resources.prompts],
-      agents: [...record.resources.agents],
-      mcpServers: [...record.resources.mcpServers],
-      // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
-      hooks: [...record.resources.hooks],
-    },
-    enabled: record.enabled,
-    installedAt: record.installedAt,
-    updatedAt: record.updatedAt,
-  };
-}
-
-/**
- * Test binding seam: exported under the `__test_*` prefix, following the
- * sibling seams in this file. The snapshot enumerates fields rather than
- * spreading, so a record key it forgets is dropped with NO compile error and
- * NO observable failure until some future reader wants it. That silence is
- * what the seam exists to break.
- */
-export { clonePluginRecord as __test_clonePluginRecord };

@@ -36,11 +36,18 @@ import {
   applyReconcile,
   surfacePostCommitWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type { PluginConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import type { MergedConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface MockCtx {
@@ -880,6 +887,79 @@ test("WARN-01 / D-86-03 / T-86-03: a degraded plugin-installed outcome carries d
   );
 });
 
+test("DFEN-04 / OUT-01 / OUT-04 / S2: an install-disabled outcome renders its cause, remedy and version, and its post-commit warnings still reach notifyDiagnostic", async () => {
+  // The install-disabled cascade and the toggle path share one outcome kind, so
+  // the three optional fields are what separate the row a user asked for from
+  // the one a bare config entry produced. The post-commit warnings ride the
+  // same outcome: `installPlugin` gates none of its collection sites on the
+  // disabled verdict, so dropping them here discards facts about artifacts that
+  // are still on disk.
+  const { buildReconcileAppliedCascade } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts");
+  const outcome: import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts").PluginDisabledOutcome =
+    {
+      kind: "plugin-disabled",
+      scope: "project",
+      marketplace: "mp-a",
+      plugin: "plugin-a",
+      version: "1.0.0",
+      reasons: ["installs disabled"],
+      enableHint: true,
+      postCommitWarnings: ['Plugin "plugin-a" installed; data dir creation deferred'],
+    };
+
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "disabled");
+  if (row.status === "disabled") {
+    assert.deepEqual([...(row.reasons ?? [])], ["installs disabled"]);
+    assert.equal(row.enableHint, true);
+    assert.equal(row.version, "1.0.0");
+    // The realized-transition stamp is unchanged -- this row shares the arm
+    // every other reconcile disable uses.
+    assert.equal(row.needsReload, true);
+    assert.equal(row.severity, "info");
+  }
+
+  const ctx = makeCtx();
+  surfacePostCommitWarnings(
+    { ctx: ctx as unknown as ExtensionContext } as Parameters<typeof surfacePostCommitWarnings>[0],
+    [outcome],
+  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  assert.ok(
+    args[0].includes("data dir creation deferred"),
+    `expected the post-commit warning to surface; got:\n${args[0]}`,
+  );
+});
+
+test("DFEN-04: a toggle-path disable renders the byte-frozen bare row", async () => {
+  // The negative half of the case above: the shared outcome kind must not have
+  // turned the cause, the remedy or a reload change into something every
+  // disable now carries.
+  const { buildReconcileAppliedCascade } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts");
+  const msg = buildReconcileAppliedCascade([
+    {
+      kind: "plugin-disabled",
+      scope: "project",
+      marketplace: "mp-a",
+      plugin: "plugin-a",
+      version: "1.0.0",
+    },
+  ]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "disabled");
+  if (row.status === "disabled") {
+    assert.equal(row.reasons, undefined);
+    assert.equal(row.enableHint, undefined);
+    assert.equal(row.needsReload, true);
+  }
+});
+
 test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) attributes the failed row to claude-plugins.json basename, not state.json", async () => {
   // Pre-fix `apply.ts:596-603`'s read-pass throw catch always named
   // `state.json` as the failing subject. When the throw originated in
@@ -960,7 +1040,7 @@ test("I6 / PR #51: classifyOrchestratorThrow maps PluginShapeError.kind and Stat
   // typed errors first (mirroring import/execute.ts::dispatchFailedOutcome's
   // instanceof ladder) and returns the catalog-correct token.
   const { classifyOrchestratorThrow } =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts");
   const { PluginShapeError, StateLockHeldError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
@@ -1276,32 +1356,52 @@ test("S10 / PR #51: writeMarketplaceConfigEntry's `as MarketplaceConfigEntry` ca
 async function seedRealPathMarketplace(opts: {
   parentDir: string;
   marketplaceName: string;
-  pluginName: string;
-  version: string;
+  /** Map of plugin name -> { version, entryDefaultEnabled? }. */
+  manifestPlugins: Record<
+    string,
+    {
+      version: string;
+      /**
+       * DFEN-04: stamp `defaultEnabled` onto the MARKETPLACE ENTRY when
+       * supplied. The entry is the side that WINS the precedence rule over the
+       * plugin's own `plugin.json`, so a fixture that declares it here cannot
+       * resolve through the fallback and pass for the wrong reason. Absent
+       * writes NO such key on the entry at all, which is the arm every plugin
+       * that never heard of the field lands on.
+       */
+      entryDefaultEnabled?: boolean;
+    }
+  >;
 }): Promise<{ mpRoot: string; manifestPath: string }> {
   const mpRoot = path.join(opts.parentDir, "mp-src-" + opts.marketplaceName);
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
-  const pluginRoot = path.join(mpRoot, "plugins", opts.pluginName);
-  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-  await writeFile(
-    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: opts.pluginName, version: opts.version }),
-  );
-  const skillDir = path.join(pluginRoot, "skills", "s1");
-  await mkdir(skillDir, { recursive: true });
-  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+
+  for (const [pluginName, spec] of Object.entries(opts.manifestPlugins)) {
+    const pluginRoot = path.join(mpRoot, "plugins", pluginName);
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: pluginName, version: spec.version }),
+    );
+
+    const skillDir = path.join(pluginRoot, "skills", "s1");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+  }
+
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: opts.marketplaceName,
-      plugins: [
-        {
-          name: opts.pluginName,
-          source: `./plugins/${opts.pluginName}`,
-          version: opts.version,
-        },
-      ],
+      plugins: Object.entries(opts.manifestPlugins).map(([pluginName, spec]) => ({
+        name: pluginName,
+        source: `./plugins/${pluginName}`,
+        version: spec.version,
+        ...(spec.entryDefaultEnabled !== undefined && {
+          defaultEnabled: spec.entryDefaultEnabled,
+        }),
+      })),
     }),
   );
   return { mpRoot, manifestPath };
@@ -1325,8 +1425,7 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
     const { mpRoot, manifestPath } = await seedRealPathMarketplace({
       parentDir: home,
       marketplaceName: "mp",
-      pluginName: "foo",
-      version: "1.2.3",
+      manifestPlugins: { foo: { version: "1.2.3" } },
     });
 
     // Base config: declared enabled (an absent `enabled` field defaults to
@@ -1469,8 +1568,7 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
     const { mpRoot, manifestPath } = await seedRealPathMarketplace({
       parentDir: home,
       marketplaceName: "mp",
-      pluginName: "foo",
-      version: "1.2.3",
+      manifestPlugins: { foo: { version: "1.2.3" } },
     });
 
     // Config: marketplace STAYS declared; the plugin entry is DELETED.
@@ -1720,4 +1818,732 @@ test("Y7 / PR #51: index.ts last-ditch error notify uses errorMessage(err) so no
     !indexSrc.includes("(err as Error).message"),
     "Y7: index.ts must NOT retain the pre-fix `(err as Error).message` cast",
   );
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DFEN-04 / DFEN-05 -- the reconcile-driven install of a plugin whose own
+// declaration says `defaultEnabled: false`.
+//
+// The cases below pin three things the stamp must get right: that it fires at
+// all (so the state lands where the planner reads desired enablement from),
+// that it addresses the PHYSICAL file the declaration lives in, and that it
+// never rewrites a value the user wrote.
+// ───────────────────────────────────────────────────────────────────────────
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Seed a project scope in which `foo@mp` is DECLARED but not recorded, so the
+ * planner classifies it into the install bucket, and whose marketplace entry
+ * declares `defaultEnabled: false`.
+ *
+ * The marketplace itself IS recorded, pointing at a real on-disk path clone
+ * outside the scope dir, so the install resolves and materializes with no
+ * network (NFR-5).
+ */
+async function seedDefaultDisabledInstallScope(opts: {
+  cwd: string;
+  home: string;
+  base: Record<string, object>;
+  local?: Record<string, object>;
+}): Promise<{ basePath: string; localPath: string; extensionRoot: string }> {
+  const projectScopeRoot = path.join(opts.cwd, ".pi");
+  const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+  await mkdir(extensionRoot, { recursive: true });
+
+  const { mpRoot, manifestPath } = await seedRealPathMarketplace({
+    parentDir: opts.home,
+    marketplaceName: "mp",
+    manifestPlugins: { foo: { version: "1.2.3", entryDefaultEnabled: false } },
+  });
+
+  const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+  await writeFile(
+    basePath,
+    JSON.stringify(
+      { schemaVersion: 1, marketplaces: { mp: { source: mpRoot } }, plugins: opts.base },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const localPath = path.join(projectScopeRoot, "claude-plugins.local.json");
+  if (opts.local !== undefined) {
+    await writeFile(
+      localPath,
+      JSON.stringify({ schemaVersion: 1, plugins: opts.local }, null, 2),
+      "utf8",
+    );
+  }
+
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify(
+      {
+        schemaVersion: 2,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: { kind: "path", raw: mpRoot, absPath: mpRoot },
+            addedFromCwd: opts.cwd,
+            manifestPath,
+            marketplaceRoot: mpRoot,
+            plugins: {},
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  return { basePath, localPath, extensionRoot };
+}
+
+test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defaultEnabled:false installs disabled AND gains enabled:false in claude-plugins.json; a second pass writes nothing new", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, localPath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": {} },
+    });
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The record exists and is disabled, with its inventory retained: ENBL-18
+    // keeps `resources.*` populated across a disable, so the record still
+    // names what the plugin WOULD materialize once enabled.
+    const persisted = await loadState(extensionRoot);
+    const rec = persisted.marketplaces.mp!.plugins.foo!;
+    assert.equal(rec.enabled, false, "the install must land disabled");
+    assert.ok(
+      rec.resources.skills.length > 0,
+      "ENBL-18: the disabled record must retain its skill inventory",
+    );
+
+    // Nothing the plugin declares is on disk -- the ledger ran whole and then
+    // unstaged.
+    const locations = locationsFor("project", cwd);
+    assert.equal(
+      await pathExists(path.join(locations.skillsTargetDir, "foo-s1")),
+      false,
+      "a disabled install must leave no staged skill behind",
+    );
+
+    // The stamp, read from the PHYSICAL base file. The whole entry is asserted
+    // rather than just the key, so a write that added a second field fails.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      base.plugins["foo@mp"],
+      { enabled: false },
+      "DFEN-04: the declaring base entry must gain enabled:false and nothing else",
+    );
+
+    // The sibling physical file is not conjured into existence by a stamp
+    // that belongs in the base file.
+    assert.equal(
+      await pathExists(localPath),
+      false,
+      "a base-declared stamp must NOT create claude-plugins.local.json",
+    );
+
+    // The cascade says what it did: a (disabled) row, never an (installed) one
+    // over a record that is disabled. OUT-01 / OUT-04: the unattended row names
+    // the author-declared cause and the remedy, or it is indistinguishable from
+    // a disable the user asked for.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.match(
+      args[0],
+      /^ {2}◍ foo v1\.2\.3 \(disabled\) \{installs disabled\}$/m,
+      `expected the full install-disabled row for foo; got:\n${args[0]}`,
+    );
+    assert.ok(
+      args[0].includes("    Run enable on this plugin to use its components."),
+      `expected the enable-hint trailer; got:\n${args[0]}`,
+    );
+    assert.ok(
+      !args[0].includes("(installed)"),
+      `an install that landed disabled must NOT render (installed); got:\n${args[0]}`,
+    );
+
+    // Fixed point AT THIS SEAM: a second pass writes neither the config nor
+    // the record. Whether the planner plans an action at all is a separate
+    // question (DFEN-06) with its own coverage -- asserting it here would
+    // pre-empt it, so this checks only what this seam can observe.
+    const baseAfterFirst = await readFile(basePath, "utf8");
+    await applyReconcile({
+      ctx: makeCtx() as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseAfterFirst,
+      "the second pass must not rewrite the config entry",
+    );
+    assert.deepEqual(
+      (await loadState(extensionRoot)).marketplaces.mp!.plugins.foo,
+      rec,
+      "the second pass must not rewrite the state record",
+    );
+  });
+});
+
+/**
+ * Drive three `applyReconcile` passes over a seeded install-disabled scope and
+ * finish at the planner, over the bytes the install actually wrote.
+ *
+ * `declaringConfigPath` is the PHYSICAL file the plugin is declared in, which
+ * is the file the stamp targets and therefore the one whose bytes must not
+ * move again after the first pass.
+ *
+ * Every silence claim here sits behind pass 1's rendered row, because silence
+ * is also what a fixture that never reached the orchestrator produces, and what
+ * a scope that hit the pristine-scope short-circuit produces.
+ *
+ * Returns the capstone's plan and the merged entry the planner read, so a
+ * caller can add the assertions only its declaration site can make.
+ */
+async function assertInstallDisabledReloadFixedPoint(opts: {
+  cwd: string;
+  extensionRoot: string;
+  declaringConfigPath: string;
+}): Promise<{ plan: ReconcilePlan; effective: MergedConfigEntry<PluginConfigEntry> }> {
+  const first = makeCtx();
+  await applyReconcile({
+    ctx: first as unknown as ExtensionContext,
+    pi: STUB_PI,
+    cwd: opts.cwd,
+    scope: "project",
+  });
+
+  // The anchor for everything below.
+  assert.equal(first.ui.notify.mock.calls.length, 1, "pass 1 must render exactly one cascade");
+  const firstArgs = first.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  assert.match(
+    firstArgs[0],
+    /^ {2}◍ foo v1\.2\.3 \(disabled\) \{installs disabled\}$/m,
+    `expected the full install-disabled row on pass 1; got:\n${firstArgs[0]}`,
+  );
+
+  const declaredAfterFirst = await readFile(opts.declaringConfigPath, "utf8");
+  const recordAfterFirst = (await loadState(opts.extensionRoot)).marketplaces.mp!.plugins.foo!;
+  assert.equal(recordAfterFirst.enabled, false, "the install must land disabled");
+
+  // Two further passes rather than one: a second pass proves only that the
+  // first was not special (D-103-05).
+  for (const pass of [2, 3]) {
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd: opts.cwd,
+      scope: "project",
+    });
+    assert.equal(ctx.ui.notify.mock.calls.length, 0, `pass ${pass} must render nothing`);
+    assert.equal(
+      await readFile(opts.declaringConfigPath, "utf8"),
+      declaredAfterFirst,
+      `pass ${pass} must leave the declaring config byte-identical`,
+    );
+    assert.deepEqual(
+      (await loadState(opts.extensionRoot)).marketplaces.mp!.plugins.foo,
+      recordAfterFirst,
+      `pass ${pass} must not move the state record`,
+    );
+  }
+
+  // The capstone, and only after the LAST pass. `applyReconcile` returns void,
+  // so there is no plan and no state to capture -- a `loadState` hoisted above
+  // the passes would put the planner's verdict over PRE-install state. The read
+  // order mirrors the one the apply path itself makes.
+  const state = await loadState(opts.extensionRoot);
+  const merged = await loadMergedScopeConfig(locationsFor("project", opts.cwd));
+  const plan = planReconcile(merged.merged, state, "project");
+  assert.deepEqual(
+    plan,
+    emptyReconcilePlan("project"),
+    "D-103-06: the plugin must be absent from all seven action buckets",
+  );
+  assert.ok(
+    !plan.pluginsToEnable.some((p) => p.plugin === "foo" && p.marketplace === "mp"),
+    "foo@mp must not appear in the enable bucket",
+  );
+  assert.ok(
+    !plan.pluginsToDisable.some((p) => p.plugin === "foo" && p.marketplace === "mp"),
+    "foo@mp must not appear in the disable bucket",
+  );
+
+  // Without this the empty plan would also be consistent with a merged view in
+  // which the key is absent for some unrelated reason, and the capstone would
+  // be proving the planner quiet over nothing.
+  const effective = merged.merged.plugins["foo@mp"]!;
+  assert.equal(
+    effective.entry.enabled,
+    false,
+    "the merged entry the planner read must itself say enabled:false",
+  );
+
+  return { plan, effective };
+}
+
+test("DFEN-06 / D-103-04 / D-103-05 / D-103-06: three reloads over a base-declared install-disabled plugin render nothing after the first, move nothing, and leave the planner with nothing to plan", async () => {
+  // The case directly above stops at the apply seam on purpose: it proves no
+  // NET MUTATION on one extra pass, which an apply path that planned an enable
+  // and then failed silently would satisfy just as well. This one goes past it
+  // -- a third pass, nothing rendered, and the PLAN itself empty over state and
+  // config re-read from disk rather than over a hand-built twin of them.
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": {} },
+    });
+
+    const { effective } = await assertInstallDisabledReloadFixedPoint({
+      cwd,
+      extensionRoot,
+      declaringConfigPath: basePath,
+    });
+
+    assert.equal(effective.source, "base", "the base declaration must win the merged view");
+  });
+});
+
+test("DFEN-04 / D-102-04: a locally-declared bare entry stamps claude-plugins.local.json, leaves the base file byte-identical, and the MERGED view reads enabled:false", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, localPath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: {},
+      local: { "foo@mp": {} },
+    });
+    const baseBefore = await readFile(basePath, "utf8");
+
+    await applyReconcile({
+      ctx: makeCtx() as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.marketplaces.mp!.plugins.foo!.enabled, false);
+
+    // The stamp followed the declaration into the local file.
+    const local = JSON.parse(await readFile(localPath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(local.plugins["foo@mp"], { enabled: false });
+
+    // WR-09: the base file is the reconcile's input and stays untouched.
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseBefore,
+      "a locally-declared stamp must NOT rewrite the base config",
+    );
+
+    // The case above asserts the physical file because a base declaration and
+    // the merged view agree by construction. Here they can DISAGREE: CFG-02
+    // replaces the whole entry per key, so a stamp written into the base file
+    // would leave the merged view still reading `enabled` absent -- and an
+    // assertion that only asked "did some file gain the key" would pass over
+    // exactly that defect. The merged read is what distinguishes them.
+    const merged = await loadMergedScopeConfig(locationsFor("project", cwd));
+    const effective = merged.merged.plugins["foo@mp"]!;
+    assert.equal(effective.source, "local");
+    assert.equal(
+      effective.entry.enabled,
+      false,
+      "DFEN-04: the effective entry the planner reads must say enabled:false",
+    );
+    assert.equal(isDeclaredEnabled(effective.entry), false);
+  });
+});
+
+test("DFEN-06 / D-103-07: the three-reload fixed point holds identically for a plugin declared ONLY in claude-plugins.local.json, in the MERGED view the planner reads", async () => {
+  // This case, and not its base-declared twin, is the one that can tell a
+  // correct stamp from a silently ineffective one.
+  //
+  // With a base declaration the physical file and the merged view agree by
+  // construction, so reading either answers the question. Here they can
+  // DISAGREE. CFG-02 replaces the whole entry per key, so a stamp mis-aimed at
+  // the base file would leave the merged entry with `enabled` ABSENT:
+  // `isDeclaredEnabled` would return true, the record would still be
+  // recorded-but-disabled, and the planner would push an enable on EVERY pass.
+  // A mis-targeted stamp therefore surfaces here as a non-empty pluginsToEnable
+  // and a non-zero notify count on pass 2 -- loud rather than silent.
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, localPath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: {},
+      local: { "foo@mp": {} },
+    });
+
+    // WR-09: the base file is the reconcile's input, not its output. Captured
+    // before the first pass, it must survive all three unchanged.
+    const baseBefore = await readFile(basePath, "utf8");
+
+    const { effective } = await assertInstallDisabledReloadFixedPoint({
+      cwd,
+      extensionRoot,
+      declaringConfigPath: localPath,
+    });
+
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseBefore,
+      "no pass may rewrite the base config for a locally-declared plugin",
+    );
+    assert.equal(effective.source, "local", "the local declaration must win the merged view");
+    assert.equal(
+      isDeclaredEnabled(effective.entry),
+      false,
+      "the predicate the planner calls must read the merged entry as disabled",
+    );
+  });
+});
+
+/**
+ * DFEN-08: reconcile is the one surface that legitimately READS the
+ * install-time declaration, so no source-level gate can express its boundary --
+ * only behavior can. `beta` declares the default TRUE, `gamma` declares nothing,
+ * and the two must render the same row as each other AND as the row this
+ * surface produced before the field existed. `alpha`, declaring FALSE, is the
+ * third arm: a precedence fixture over a three-valued key that covers two of
+ * the values passes while asking the wrong question. It is also what keeps the
+ * comparison inside one live run rather than against a captured baseline.
+ *
+ * Four things are held constant, because violating any one silently compares
+ * different code paths rather than the boundary:
+ *
+ * 1. All three are declared in config and absent from recorded state, so all
+ *    three reach the fresh-install bucket rather than the enable / disable /
+ *    no-action paths, which never reach the install at all.
+ * 2. No config entry carries an `enabled` key. An explicit one short-circuits
+ *    the install's own precedence gate, which would make the declaring plugin
+ *    behave like the other two and collapse the comparison.
+ * 3. All three are declared in the SAME physical configuration file, because
+ *    the declaration's location selects the write-back target.
+ * 4. All three share one scope and one marketplace, because scope selects the
+ *    writable-path bundle.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical reconcile rows and gain no configuration key", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+
+    const { mpRoot, manifestPath } = await seedRealPathMarketplace({
+      parentDir: home,
+      marketplaceName: "mp",
+      manifestPlugins: {
+        alpha: { version: "1.2.3", entryDefaultEnabled: false },
+        beta: { version: "1.2.3", entryDefaultEnabled: true },
+        // No knob at all: the helper's conditional spread writes NO
+        // `defaultEnabled` key on this entry.
+        gamma: { version: "1.2.3" },
+      },
+    });
+
+    // Invariants 2, 3 and 4: three bare entries, one physical file, one scope,
+    // one marketplace.
+    const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+    await writeFile(
+      basePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpRoot } },
+          plugins: { "alpha@mp": {}, "beta@mp": {}, "gamma@mp": {} },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    // Invariant 1: the marketplace IS recorded (pointing at the real on-disk
+    // clone outside the scope dir, so the installs materialize from cache with
+    // no network per NFR-5), and no plugin is.
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 2,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", raw: mpRoot, absPath: mpRoot },
+              addedFromCwd: cwd,
+              manifestPath,
+              marketplaceRoot: mpRoot,
+              plugins: {},
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = makeCtx();
+    await applyReconcile({
+      ctx: first as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The anchor for everything below: silence is also what a fixture that
+    // never reached the orchestrator produces.
+    assert.equal(first.ui.notify.mock.calls.length, 1, "pass 1 must render exactly one cascade");
+    const body = (first.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+
+    // Whole-body rather than per-row `includes`: the literal pins the row
+    // ORDER, which a substring check does not constrain. Three of its lines
+    // carry the parity claim -- the declaring row with its remedy line, and the
+    // two installed rows, which on this projection carry NO version slot. The
+    // header line and the tally line are FIXTURE-SHAPE lines, not parity
+    // claims: they follow from the marketplace already being recorded here and
+    // from the count of rows this fixture produces, and they were taken from
+    // the run rather than guessed.
+    assert.equal(
+      body,
+      "● mp [project]\n" +
+        "  ◍ alpha v1.2.3 (disabled) {installs disabled}\n" +
+        "    Run enable on this plugin to use its components.\n" +
+        "  ● beta (installed)\n" +
+        "  ● gamma (installed)\n" +
+        "\n" +
+        "Reconcile: 3 successes",
+    );
+
+    // The parity claim itself, stated apart from the whole-body literal.
+    // Before the field was consumed it was an unknown key under the lenient
+    // manifest tolerance and therefore inert, so a declared-true entry and a
+    // silent entry were LITERALLY the same input -- which is what makes the two
+    // literals below the pre-existing row form as well. Asserting the two
+    // rendered rows against EACH OTHER catches a drift that two
+    // independently-correct literals would both stay green through.
+    const rows = body.split("\n");
+    const rowFor = (name: string): string =>
+      rows.find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+    const betaRow = rowFor("beta");
+    const gammaRow = rowFor("gamma");
+    assert.equal(betaRow, "  ● beta (installed)");
+    assert.equal(gammaRow, "  ● gamma (installed)");
+    assert.equal(
+      betaRow.replaceAll("beta", "<plugin>"),
+      gammaRow.replaceAll("gamma", "<plugin>"),
+      "DFEN-08: the declared-true row and the silent row must COINCIDE, not merely each match a literal",
+    );
+
+    // Per-ENTRY, never whole-file. The declaring plugin's write-back rewrites
+    // the ENTIRE configuration file, including its trailing-newline convention,
+    // so a whole-file comparison differs even though every non-declaring entry
+    // is byte-identical to what the fixture wrote.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      base.plugins["alpha@mp"],
+      { enabled: false },
+      "DFEN-04: the declaring entry gains enabled:false and nothing else",
+    );
+    assert.deepEqual(
+      base.plugins["beta@mp"],
+      {},
+      "DFEN-08: a declared-true entry gains no configuration key",
+    );
+    assert.deepEqual(
+      base.plugins["gamma@mp"],
+      {},
+      "DFEN-08: a silent entry gains no configuration key",
+    );
+
+    const plugins = (await loadState(extensionRoot)).marketplaces.mp!.plugins;
+    assert.equal(plugins.alpha!.enabled, false, "the declaring install must land disabled");
+    assert.equal(plugins.beta!.enabled, true, "a declared-true entry installs enabled");
+    assert.equal(plugins.gamma!.enabled, true, "a silent entry installs enabled");
+
+    // Two further passes rather than one: a second pass alone proves only that
+    // the first was not special. The silence covers all three plugins -- a
+    // steady state quiet for one arm and not the others is not a fixed point.
+    const baseAfterFirst = await readFile(basePath, "utf8");
+    for (const pass of [2, 3]) {
+      const ctx = makeCtx();
+      await applyReconcile({
+        ctx: ctx as unknown as ExtensionContext,
+        pi: STUB_PI,
+        cwd,
+        scope: "project",
+      });
+      assert.equal(ctx.ui.notify.mock.calls.length, 0, `pass ${pass} must render nothing`);
+      assert.equal(
+        await readFile(basePath, "utf8"),
+        baseAfterFirst,
+        `pass ${pass} must leave the declaring config byte-identical`,
+      );
+    }
+  });
+});
+
+test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the plugin ENABLED and is left exactly as the user wrote it", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": { enabled: true } },
+    });
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The user's explicit word beats the plugin's declared default, in this
+    // direction as well as the other.
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.marketplaces.mp!.plugins.foo!.enabled, true);
+    const locations = locationsFor("project", cwd);
+    assert.equal(
+      await pathExists(path.join(locations.skillsTargetDir, "foo-s1")),
+      true,
+      "an entry declaring enabled:true must materialize the plugin's artifacts",
+    );
+
+    // The entry is left as pre-seeded -- the stamp answers the ABSENT key only.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(base.plugins["foo@mp"], { enabled: true });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(installed)"),
+      `expected the ordinary (installed) row for foo; got:\n${args[0]}`,
+    );
+  });
+});
+
+test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still declares enabled:false, so the next pass plans and completes the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": {} },
+    });
+    const locations = locationsFor("project", cwd);
+
+    // The fault: AG-5 foreign content under a generated agent name, claimed by
+    // an agents-index row owned by (mp, foo). The install ledger routes it to
+    // `failed[]` and proceeds, while the disable cascade turns a non-empty
+    // `failed[]` into a throw -- so the install succeeds and the disable half
+    // then fails, which is the only window this composition creates.
+    await mkdir(locations.agentsDir, { recursive: true });
+    const foreignAgentPath = path.join(locations.agentsDir, "pi-claude-marketplace-foo-bot.md");
+    await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [
+          {
+            plugin: "foo",
+            marketplace: "mp",
+            sourceAgent: "bot",
+            generatedName: "pi-claude-marketplace-foo-bot",
+            sourcePath: "/orig/bot.md",
+            targetPath: foreignAgentPath,
+            sourceHash: "deadbeef",
+            droppedFields: [],
+            droppedTools: [],
+            warnings: [],
+          },
+        ],
+      }),
+    );
+
+    await applyReconcile({
+      ctx: makeCtx() as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The cascade never reached the disabled-record producer, so the record is
+    // still enabled -- the same asymmetry a failed `disable` leaves behind.
+    const afterFirst = await loadState(extensionRoot);
+    assert.equal(afterFirst.marketplaces.mp!.plugins.foo!.enabled, true);
+
+    // The declaration is written anyway. Without it the entry stays bare, and a
+    // bare entry over a recorded, enabled, not-disabled record is steady state
+    // for the planner: no further pass would ever act, while the plugin's
+    // artifacts are already gone from disk.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      base.plugins["foo@mp"],
+      { enabled: false },
+      "a failed disable cascade must still declare enabled:false",
+    );
+
+    // Clear the fault the way an operator would -- the foreign file goes, and
+    // ENOENT on the target counts as removed (the unstage is idempotent).
+    await rm(foreignAgentPath);
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // Convergence: the declaration/record divergence is exactly what the
+    // disable bucket exists to close, so the second pass plans the disable and
+    // completes it.
+    const afterSecond = await loadState(extensionRoot);
+    assert.equal(
+      afterSecond.marketplaces.mp!.plugins.foo!.enabled,
+      false,
+      "the second pass must complete the disable the first one could not",
+    );
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const secondArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      secondArgs[0].includes("foo") && secondArgs[0].includes("(disabled)"),
+      `expected a (disabled) row for foo on the second pass; got:\n${secondArgs[0]}`,
+    );
+  });
 });

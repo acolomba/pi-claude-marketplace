@@ -424,7 +424,7 @@ Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
 Deliberately NOT acted on in 260816-qov, which left the rule and its three
 pinning tests untouched.
 
-Fallow's 14-zone model is a finer-grained superset of the ESLint 8-zone matrix,
+Fallow's 13-zone model is a finer-grained superset of the ESLint 8-zone matrix,
 and it is the only thing enforcing that cross-bridge imports are forbidden.
 That invites the question of whether the ESLint rule still earns its keep.
 
@@ -436,8 +436,47 @@ keeping the rule would leave a silently-misconfigured lint rule undetected,
 which is the exact failure mode the `import-x/no-cycle` test was written to
 catch.
 
-Settle whether the reachability gap is real on this codebase before removing
-anything.
+**Update 2026-08-18: the reachability gap is not real. Measured, not reasoned.**
+
+Two probes, each a file under `domain/` that imports `orchestrators/` -- a
+forbidden edge -- and that NOTHING imports, so it is unreachable from the
+configured `entry`:
+
+| probe | import form | verdict |
+| --- | --- | --- |
+| unreachable file, runtime import | `import { installPlugin }` | REPORTED |
+| unreachable file, type-only import | `import type { InstallPluginOptions }` | REPORTED |
+
+Both produced `domain/_probe-unreachable.ts:2 -> orchestrators/plugin/install.ts
+(domain -> orchestrators)`. The reason is FLOW-06's setting rather than anything
+about boundaries: under `production: false` fallow promotes every discovered
+file to an entry point, so no file under `extensions/` is unreachable in the
+first place. The gap this item worried about was inherited from a
+`production: true` mental model that the repository no longer runs.
+
+So the FIRST reason to keep the ESLint rule is gone, and the second one does not
+survive on its own -- it argues that deleting the three tests while KEEPING the
+rule is unsafe, which is true and beside the point, because removing the rule
+takes its tests with it and leaves nothing to misconfigure.
+
+**What is still unproven, and what actually blocks removal.** Nobody has shown
+fallow's 13-zone matrix forbids every edge the ESLint 8-zone matrix forbids.
+Superset is asserted in three places and derived from zone COUNT, which proves
+nothing about the allow-lists: fallow is finer-grained on `bridges` (five
+sub-zones) and adds `entry`, but a finer partition can still admit an edge the
+coarser one refuses. Removal needs an edge-by-edge comparison of the two
+matrices, not another count.
+
+**The standing argument against removing it at all.** CONVENTIONS.md keeps TWO
+cognitive-complexity gates on the explicit grounds that ESLint and fallow use
+different algorithms and do not agree, so a function must satisfy both. The same
+reasoning defends two boundary gates: ~90 lines of config and three tests are
+cheap next to an architecture rule silently ceasing to fire, which is exactly
+what happened to `import-x/no-cycle` (FLOW-03). Redundancy between independently
+implemented gates is the feature, not the waste.
+
+Reopen the removal question only with the matrix comparison in hand. The
+reachability half is settled and needs no re-measuring.
 
 ## ~~FLOW-08: barrel re-export hygiene is unenforced~~ -- CLOSED
 
@@ -499,6 +538,99 @@ Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
 ## FLOW-09: internals exported only for tests
+
+**Status 2026-08-18: the seams are at ZERO. The item is NOT closed -- see the
+`production: true` measurement below, which is what it was actually named
+after.**
+
+All 27 exported `__test_*` re-exports and `_*ForTest` accessors are gone,
+resolved site by site under the item's own (a)/(b) rule rather than swept:
+
+- **Moved to the module that owns the concept (a).** The `ManualRecoveryError`
+  protocol to `shared/errors.ts`; `clonePluginRecord` to `state-io.ts` beside
+  the schema it copies; reinstall's and marketplace-update's outcome-to-row
+  projections and install's error-classification family to their own
+  `*.messaging.ts` siblings; `narrowCascadeFailure` beside the error class it
+  dispatches on; the enable/disable failure narrowing to
+  `enable-disable.messaging.ts`; and the ~450-line reconcile backfill pass to
+  its own `reconcile/backfill.ts`, which already had a test file of its own.
+- **Deleted, the behavior tested through the public interface (b).**
+  `snapshotAfterRefresh`'s seam test was a narrower duplicate of an end-to-end
+  companion sitting directly beneath it; the companion took over its NFR-5
+  no-network assertion and the seam went.
+- **Renamed to the honest contract.** The six `event-router.ts` accessors were
+  pass-throughs to functions `routing-state.ts` already exported, so the
+  wrappers went and the tests call the real ones; `_resetForTest` became
+  `resetRoutingState` in the module that owns all four cells. The remaining
+  read accessors in `settle.ts`, `registry.ts` and `completion-cache.ts` became
+  `settleCacheSnapshot` / `loopProtectionState` / `asyncRewakeEntries` /
+  `awaitPidTablePersist` / `resetCompletionCache`. `availableRowMessage` lost
+  its `__test_` prefix, which this item had already called for.
+
+**Four duplications were hiding behind seams**, which is the item's thesis
+paid out. Three depth-5 `Error.cause` walkers, each with its own `MAX_DEPTH = 5`
+and each documenting itself as "mirroring" the others, now share one
+`causeChain` generator. Three byte-identical `isErrnoException` type guards
+(uninstall.ts, marketplace/remove.ts, enable-disable.ts) are one definition in
+`shared/errors.ts`. `errorMessageOf` in reconcile/apply.ts was a fourth verbatim
+copy of `errorMessage`. None of these was visible while the third copy was
+reachable only through a `__test_` export.
+
+**The payoff this item was named for is NOT unlocked, and the seams were not
+what blocked it.** Measured after the sweep:
+
+| Configuration | Findings |
+|---|---|
+| `production: true`, at this item's filing | 288 |
+| `production: true`, now | 94 unused exports + 2 unused files |
+| `production: false` + `includeEntryExports: true` (shipping) | 0 |
+
+So the 27 seams were roughly a fifth of the gap. The remaining ~94 are the
+item's OTHER population -- ordinary internal helpers exported so a test can
+reach them, spread thin (the worst file contributes one). That is the ~84-site
+decision pass the item explicitly warns must not be done mechanically, and it
+is what still stands between here and `production: true`.
+
+**Status 2026-08-18: 27 seams down to 24; `reinstall.ts` went 5 to 2.**
+
+One pass on the `defaults-enabled` branch, applying the item's own (a)/(b) rule
+rather than sweeping. All three were outcome (a) -- the code was a coherent unit
+sitting in the wrong module, and moving it gave it a public interface for free:
+
+- `errorWithManualRecovery` and `findManualRecoveryError` were declared in
+  `reinstall.ts` but are the `ManualRecoveryError` PROTOCOL: three bridges throw
+  the class and the notify renderer reads it. Both moved to `shared/errors.ts`
+  beside the class, and their ten tests moved to `tests/shared/errors.test.ts`
+  against the public interface.
+- `clonePluginRecord` moved to `persistence/state-io.ts`, beside the
+  `PLUGIN_INSTALL_RECORD_SCHEMA` it copies field by field. Its own comment warns
+  that a forgotten key vanishes silently; the point of the move is that the
+  schema and the enumeration are now adjacent, so whoever adds a field sees the
+  clone that must copy it. Its two tests moved to `tests/persistence/`.
+
+The move surfaced something the seam had been hiding. THREE separate depth-5
+`Error.cause` walkers existed -- `causeChainTrailer` in `errors.ts`,
+`collectManualRecoveryLeaks` in `notify.ts`, and `findManualRecoveryError` in
+`reinstall.ts` -- each declaring its own `MAX_DEPTH = 5` and each documenting
+itself as "mirroring" the others. That is a contract maintained by comment
+across three modules. They now share one `causeChain` generator and one
+`CAUSE_CHAIN_MAX_DEPTH`, with the walkers differing only in their predicate.
+Worth noting as evidence for the item's thesis: the duplication was invisible
+while the third copy was reachable only through a `__test_` seam.
+
+What is left, by concentration: `event-router.ts` 6, `install.ts` 4, then
+`apply.ts` / `reinstall.ts` / `marketplace/update.ts` / `settle.ts` /
+`registry.ts` at 2 each, and five files at 1. The `event-router.ts` six are
+`_*ForTest` state accessors, which is the dependency-injection half rather than
+the re-export half.
+
+`reinstall.ts`'s remaining two -- `outcomeToPluginMessage` and
+`renderReinstallPartitionAndNotify` -- are a single outcome-(a) move that was
+scoped OUT of this pass deliberately: `outcomeToPluginMessage` pulls
+`narrowReasons`, `narrowReason` and `reinstalledRowFromOutcome` with it, and the
+whole family belongs in `reinstall.messaging.ts`. No cycle blocks it
+(`reinstall.ts` already imports that module and nothing points back), so it is
+ready to pick up as its own change.
 
 **Status 2026-08-17: the type-leak half is done; the seams remain.**
 

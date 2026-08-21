@@ -51,6 +51,7 @@ function installable(name = "p"): ResolvedPlugin {
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [] },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 
@@ -67,6 +68,7 @@ function unsupportedResolved(
     notes: [...unsupported.map((k) => `contains ${k}`)],
     componentPaths: { skills: [], commands: [], agents: [] },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 

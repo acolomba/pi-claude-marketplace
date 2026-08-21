@@ -144,7 +144,7 @@ export interface AsyncRewakeEntry {
 // used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
 // both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
 // `dispatch-exec.ts` threads through from its own `deps` argument. The two
-// surviving `_*ForTest` exports are read-only observers, not seams: they let a
+// surviving observer exports are read-only, not seams: they let a
 // test assert on the Map and drain the in-flight pid-table persist without
 // reaching into module scope.
 // ──────────────────────────────────────────────────────────────────────────
@@ -175,8 +175,13 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
   environReader: (pid) => readFile(`/proc/${pid}/environ`, "utf8"),
 };
 
-/** Read-only view of the in-memory registry for unit-test assertions. */
-export function _getRegistryForTest(): ReadonlyMap<string, AsyncRewakeEntry> {
+/**
+ * Read-only view of the in-memory registry. The `asyncRewakeRegistry` cell is
+ * module-private, so this is the one way to observe it, mirroring the read
+ * accessors `routing-state.ts` exposes over its own cells. Its only caller
+ * today is test assertion, which is what a read surface is for.
+ */
+export function asyncRewakeEntries(): ReadonlyMap<string, AsyncRewakeEntry> {
   return asyncRewakeRegistry;
 }
 
@@ -185,8 +190,15 @@ export function _getRegistryForTest(): ReadonlyMap<string, AsyncRewakeEntry> {
 // races with write-file-atomic's in-flight atomic rename on macOS.
 let _lastPidTablePersist: Promise<void> = Promise.resolve();
 
-/** Await the most recent in-flight pid-table persist (for test teardown). */
-export function _awaitLastPidTablePersistForTest(): Promise<void> {
+/**
+ * Await the most recent fire-and-forget pid-table persist.
+ *
+ * The persist is deliberately not awaited on the spawn path, so a caller that
+ * needs the write settled -- a teardown removing the directory underneath it --
+ * has no other way to know. Without it, write-file-atomic's in-flight rename
+ * races the removal and surfaces as ENOTEMPTY on macOS.
+ */
+export function awaitPidTablePersist(): Promise<void> {
   return _lastPidTablePersist;
 }
 

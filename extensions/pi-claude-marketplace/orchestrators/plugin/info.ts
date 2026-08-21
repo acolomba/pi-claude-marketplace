@@ -42,19 +42,15 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
   resolveStrict,
+  rowClaimsInstallDisabled,
   type GitPluginRootResult,
   type ResolveContext,
   type ResolvedPluginUnavailable,
   type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
 import { parsePluginSource, type GitBackedSource, type ParsedSource } from "../../domain/source.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import {
-  isRecordedButDisabled,
-  loadState,
-  type ExtensionState,
-} from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -71,6 +67,7 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import {
   canonicalCloneUrl,
@@ -767,15 +764,24 @@ interface InfoBlock {
  *   (e) Unavailable (resolveStrict not installable OR threw) ->
  *       `(unavailable)` row with closed-set reasons.
  */
-async function buildBlock(
-  marketplace: string,
-  pluginName: string,
-  scope: Scope,
-  mpRecord: MarketplaceRecord,
-  autoupdate: boolean,
-  cwd: string,
-  fetchCtx?: InfoFetchContext,
-): Promise<InfoBlock> {
+async function buildBlock(args: {
+  marketplace: string;
+  pluginName: string;
+  scope: Scope;
+  mpRecord: MarketplaceRecord;
+  autoupdate: boolean;
+  /**
+   * DFEN-04: the user's own `enabled` opinion for this
+   * `<plugin>@<marketplace>` key in THIS scope's merged base+local config
+   * view, or `undefined` where the user has stated none. Gates the
+   * install-time claim -- see `applyInstallDisabledRowShape`.
+   */
+  declaredEnabled: boolean | undefined;
+  cwd: string;
+  fetchCtx?: InfoFetchContext;
+}): Promise<InfoBlock> {
+  const { marketplace, pluginName, scope, mpRecord, autoupdate, declaredEnabled, cwd, fetchCtx } =
+    args;
   const marketplaceDetails = { autoupdate };
 
   // RSTA-06 / NFR-5: the per-scope locations feed `makePresenceProbe`'s
@@ -900,7 +906,12 @@ async function buildBlock(
     locations,
     ...(fetchCtx !== undefined && { fetchCtx }),
   });
-  return wrapBlock(marketplace, scope, marketplaceDetails, row);
+  return wrapBlock(
+    marketplace,
+    scope,
+    marketplaceDetails,
+    applyInstallDisabledRowShape(row, entry, declaredEnabled),
+  );
 }
 
 /**
@@ -996,6 +1007,99 @@ function applyDisabledRowShape(
     status: "disabled",
     reasons: (row.reasons ?? []).filter((reason) => DISABLED_ROW_REASONS.has(reason)),
   };
+}
+
+/**
+ * OUT-03: which info statuses admit the author-declared
+ * install-time claim.
+ *
+ * A TOTAL map rather than a membership set, and the totality is the whole
+ * point. A `ReadonlySet` of three statuses is a runtime test: a ninth info
+ * status added to `PluginInfoRow` later would inherit "does not carry the
+ * token" silently, and no build step would say so. Keyed by the closed status
+ * union and pinned with `as const satisfies`, a new status instead fails to
+ * compile HERE -- the same missing-arm-is-a-compile-error discipline the render
+ * maps already hold this surface to. `DISABLED_ROW_REASONS` above is not a
+ * counter-example: its members are drawn from the large reason-token tuple,
+ * where a total map would enumerate dozens of irrelevant keys, while an
+ * eight-member status union is precisely the case this idiom exists for.
+ *
+ * The five `false` keys fall into two groups.
+ *
+ * `unavailable` is the structural exclusion. Nothing will install at all, so
+ * the claim would describe an install that cannot happen, and that row's brace
+ * already carries the blocker.
+ *
+ * `installed`, `partially-installed` and `disabled` describe an installation
+ * RECORD, and `failed` describes a block that could not be built at all. The
+ * token is a claim about a FUTURE install; on a record the action is already
+ * taken, so the row reports durable facts about what exists rather than a
+ * prediction about what an install would do. A `disabled` record is the sharp
+ * case: its disabled-ness is a recorded fact, not the same statement as "an
+ * install of this would land disabled", and reporting both would say one thing
+ * twice in two tenses.
+ */
+const INSTALL_DISABLED_ROW_STATUSES = {
+  available: true,
+  remote: true,
+  "partially-available": true,
+  unavailable: false,
+  installed: false,
+  "partially-installed": false,
+  disabled: false,
+  failed: false,
+} as const satisfies Record<PluginInfoRow["status"], boolean>;
+
+/**
+ * OUT-03 / OUT-05 / DOC-02: stamp the author-declared
+ * install-time claim onto a not-installed candidate row.
+ *
+ * DFEN-04: both inputs of the claim -- the user's config opinion
+ * (`declaredEnabled`) and the marketplace entry -- are weighed by the shared
+ * `rowClaimsInstallDisabled` so this surface and `list` cannot answer the
+ * question differently. Read that function for the precedence and for why the
+ * plugin's own manifest is never consulted. What is decided HERE is only which
+ * ROW SHAPES may carry the answer.
+ *
+ * OUT-03: applied at the single not-installed CONSUMER, never at the
+ * producers. The not-installed path has eight return sites across five builder
+ * functions, three of which never receive the entry at all -- so threading a
+ * flag would cost five signature edits, would still miss any sixth builder
+ * added later, and would give no compile-time guarantee that it had not. One
+ * consumer is the only form that cannot miss an arm. This is the sibling shape
+ * of `applyDisabledRowShape`, applied at the same function's other arms.
+ *
+ * OUT-03: a row already reporting a read failure still gets the token, and
+ * that is deliberate rather than an accident of applying one function to every
+ * arm. The failure names why the tree could not be read; the token names what
+ * an install would do. The two are independent, so a degraded row states both.
+ * Suppressing the combination would mean gating on the row already having
+ * reasons, which would ALSO suppress the token on the clean
+ * `partially-available` row and contradict OUT-03.
+ *
+ * OUT-05: the token appends at the TAIL, which is observable -- `composeReasons`
+ * joins in array order with no per-row sort -- and matches how the sibling list
+ * surface composes the same pair, so one plugin reads the same on both surfaces.
+ *
+ * `reasons` is set unconditionally rather than through a conditional spread.
+ * `composeReasons` returns the empty string for an absent list and for an empty
+ * one alike, so the two render byte-identically; `applyDisabledRowShape` above
+ * has shipped on exactly that basis. No defensive machinery is needed for a
+ * byte difference that does not exist.
+ */
+function applyInstallDisabledRowShape(
+  row: PluginInfoRow,
+  entry: MarketplaceManifest["plugins"][number],
+  declaredEnabled: boolean | undefined,
+): PluginInfoRow {
+  if (
+    !rowClaimsInstallDisabled(entry, declaredEnabled) ||
+    !INSTALL_DISABLED_ROW_STATUSES[row.status]
+  ) {
+    return row;
+  }
+
+  return { ...row, reasons: [...(row.reasons ?? []), "installs disabled"] };
 }
 
 /**
@@ -2174,24 +2278,19 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // on the fs-only presence probe (bare info is network-free).
   const fetchCtx = buildInfoFetchContext(opts);
 
-  // Collect (scope, record) tuples so the fan-out renderer preserves
-  // the outer-loop iteration order. Each scope's state is loaded
-  // read-only via `loadState` (NFR-5 preserved -- NO network).
+  // Collect (scope, record) tuples so the fan-out renderer preserves the
+  // outer-loop iteration order. The fan-out itself is shared with the
+  // marketplace `info` surface -- see `orchestrators/scope-fanout.ts`.
   //
-  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
-  // not state. Load the merged config alongside state per scope so each
-  // (scope, record) tuple carries the per-scope autoupdate truth.
-  const found: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
-  for (const scope of scopes) {
-    const locations = locationsFor(scope, opts.cwd);
-    const state = await loadState(locations.extensionRoot);
-    const record = state.marketplaces[opts.marketplace];
-    if (record !== undefined) {
-      const { merged } = await loadMergedScopeConfig(locations);
-      const autoupdate = merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false;
-      found.push({ scope, record, autoupdate });
-    }
-  }
+  // DFEN-04 / D-01: passing the flat `<plugin>@<marketplace>` key makes the
+  // same merged read also answer whether the user has stated an `enabled`
+  // opinion, which gates the install-time claim on the candidate rows.
+  const found = await collectMarketplaceRecordsByScope({
+    cwd: opts.cwd,
+    scope: opts.scope,
+    marketplace: opts.marketplace,
+    pluginKey: `${opts.plugin}@${opts.marketplace}`,
+  });
 
   // Branch on the collected marketplaces (a) / (b) / (c) per the file
   // header.
@@ -2225,15 +2324,16 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
-    const built = await buildBlock(
-      opts.marketplace,
-      opts.plugin,
-      sole.scope,
-      sole.record,
-      sole.autoupdate,
-      opts.cwd,
-      fetchCtx,
-    );
+    const built = await buildBlock({
+      marketplace: opts.marketplace,
+      pluginName: opts.plugin,
+      scope: sole.scope,
+      mpRecord: sole.record,
+      autoupdate: sole.autoupdate,
+      declaredEnabled: sole.declaredEnabled,
+      cwd: opts.cwd,
+      ...(fetchCtx !== undefined && { fetchCtx }),
+    });
     notify(opts.ctx, opts.pi, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
@@ -2256,15 +2356,16 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const built = await Promise.all(
     found.map((f) =>
-      buildBlock(
-        opts.marketplace,
-        opts.plugin,
-        f.scope,
-        f.record,
-        f.autoupdate,
-        opts.cwd,
-        fetchCtx,
-      ),
+      buildBlock({
+        marketplace: opts.marketplace,
+        pluginName: opts.plugin,
+        scope: f.scope,
+        mpRecord: f.record,
+        autoupdate: f.autoupdate,
+        declaredEnabled: f.declaredEnabled,
+        cwd: opts.cwd,
+        ...(fetchCtx !== undefined && { fetchCtx }),
+      }),
     ),
   );
   const blocks = built.map((b) => b.block);

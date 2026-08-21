@@ -10,17 +10,19 @@ import {
   toolResultCompositeHandler,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
-  _bumpEpochForTest,
-  _parsedConfigCacheForTest,
-  _resetForTest,
-  _routingTableForTest,
-  _setRoutingBucketForTest,
   addPluginConfigToCache,
   hydrateProjectScopeForCwd,
   rebuildRoutingTables,
   removePluginConfigFromCache,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  bumpEpoch,
+  parsedConfigEntries,
+  resetRoutingState,
+  routingTableEntries,
+  setRoutingBucket,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
   currentEpoch,
   type RoutingEntry,
@@ -60,7 +62,7 @@ import type {
  */
 
 beforeEach(() => {
-  _resetForTest();
+  resetRoutingState();
 });
 
 // Build a minimal HooksConfig with the given event -> matcher -> handler
@@ -110,16 +112,16 @@ test("cache: addPluginConfigToCache + removePluginConfigFromCache are idempotent
     config,
     new Map(),
   ); // overwrite, not duplicate
-  assert.equal(_parsedConfigCacheForTest().size, 1);
+  assert.equal(parsedConfigEntries().size, 1);
 
   removePluginConfigFromCache("user", "mp", "p1");
-  assert.equal(_parsedConfigCacheForTest().size, 0);
+  assert.equal(parsedConfigEntries().size, 0);
 
   // Removing a missing entry is a no-op.
   assert.doesNotThrow(() => {
     removePluginConfigFromCache("user", "mp", "p1");
   });
-  assert.equal(_parsedConfigCacheForTest().size, 0);
+  assert.equal(parsedConfigEntries().size, 0);
 });
 
 test("cache: key includes marketplace -- same (scope, pluginId) under different marketplaces do NOT collide", () => {
@@ -142,7 +144,7 @@ test("cache: key includes marketplace -- same (scope, pluginId) under different 
     new Map(),
   );
 
-  assert.equal(_parsedConfigCacheForTest().size, 2);
+  assert.equal(parsedConfigEntries().size, 2);
 });
 
 test("rebuildRoutingTables: produces 8 Claude-event buckets", () => {
@@ -158,7 +160,7 @@ test("rebuildRoutingTables: produces 8 Claude-event buckets", () => {
 
   rebuildRoutingTables();
 
-  const table = _routingTableForTest();
+  const table = routingTableEntries();
   assert.equal(table.size, BUCKET_A_EVENTS.length);
   for (const event of BUCKET_A_EVENTS) {
     assert.ok(table.has(event), `expected bucket for ${event}`);
@@ -200,7 +202,7 @@ test("rebuildRoutingTables: cross-plugin order matches compareByNameThenScope (a
 
   rebuildRoutingTables();
 
-  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = routingTableEntries().get("PreToolUse") ?? [];
   assert.deepEqual(
     bucket.map((e) => e.pluginId),
     ["alpha", "beta", "gamma"],
@@ -227,7 +229,7 @@ test("rebuildRoutingTables: within-plugin declaration order preserved via declar
 
   rebuildRoutingTables();
 
-  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = routingTableEntries().get("PreToolUse") ?? [];
   assert.equal(bucket.length, 3);
   assert.deepEqual(
     bucket.map((e) => e.declarationIndex),
@@ -258,7 +260,7 @@ test("rebuildRoutingTables: empty-cache rebuild clears stale entries", () => {
   );
 
   rebuildRoutingTables();
-  assert.equal((_routingTableForTest().get("PreToolUse") ?? []).length, 1);
+  assert.equal((routingTableEntries().get("PreToolUse") ?? []).length, 1);
 
   // Drop the cache entry (mirroring removePluginConfigFromCache in the
   // uninstall / disable per-plugin lock body); rebuild must clear the
@@ -266,7 +268,7 @@ test("rebuildRoutingTables: empty-cache rebuild clears stale entries", () => {
   removePluginConfigFromCache("user", "mp", "p1");
   rebuildRoutingTables();
 
-  const table = _routingTableForTest();
+  const table = routingTableEntries();
   for (const event of BUCKET_A_EVENTS) {
     assert.deepEqual(table.get(event), [], `expected empty bucket for ${event}`);
   }
@@ -299,14 +301,14 @@ test("rebuildRoutingTables: sequential per-scope rebuild preserves entries acros
 
   rebuildRoutingTables();
   assert.equal(
-    (_routingTableForTest().get("SessionStart") ?? []).length,
+    (routingTableEntries().get("SessionStart") ?? []).length,
     1,
     "user-scope rebuild should populate SessionStart with 1 entry",
   );
 
   rebuildRoutingTables();
   assert.equal(
-    (_routingTableForTest().get("SessionStart") ?? []).length,
+    (routingTableEntries().get("SessionStart") ?? []).length,
     1,
     "project-scope rebuild with empty state MUST NOT wipe the user-scope's SessionStart entry",
   );
@@ -339,7 +341,7 @@ test("rebuildRoutingTables: cross-scope cache walk includes BOTH scopes' entries
   // Rebuild walks the full cross-scope cache; both entries must surface.
   rebuildRoutingTables();
 
-  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = routingTableEntries().get("PreToolUse") ?? [];
   assert.deepEqual(
     bucket.map((e) => `${e.scope}/${e.pluginId}`).sort(),
     ["project/beta", "user/alpha"],
@@ -357,7 +359,7 @@ test("rebuildRoutingTables: cache miss for a state-declared plugin is silent", (
   });
 
   for (const event of BUCKET_A_EVENTS) {
-    assert.deepEqual(_routingTableForTest().get(event), [], `expected empty bucket for ${event}`);
+    assert.deepEqual(routingTableEntries().get(event), [], `expected empty bucket for ${event}`);
   }
 });
 
@@ -422,7 +424,7 @@ test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequenti
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
@@ -444,7 +446,7 @@ test("compositeHandlerFor: skips entries whose matcher does not fire", async () 
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p-edit-a", rawMatcher: "Edit" }),
     makeEntry({ pluginId: "p-edit-b", rawMatcher: "Edit" }),
     makeEntry({ pluginId: "p-bash", rawMatcher: "Bash" }),
@@ -466,7 +468,7 @@ test("compositeHandlerFor: SessionStart filter against event.reason", async () =
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("SessionStart", [
+  setRoutingBucket("SessionStart", [
     makeEntry({ pluginId: "p-any", rawMatcher: "" }),
     makeEntry({ pluginId: "p-startup", rawMatcher: "startup" }),
     makeEntry({ pluginId: "p-resume", rawMatcher: "resume" }),
@@ -485,7 +487,7 @@ test("compositeHandlerFor: UserPromptSubmit fires unconditionally on every event
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("UserPromptSubmit", [
+  setRoutingBucket("UserPromptSubmit", [
     makeEntry({ pluginId: "p-a", rawMatcher: "" }),
     makeEntry({ pluginId: "p-b", rawMatcher: "" }),
   ]);
@@ -508,12 +510,12 @@ test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatch
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
+  setRoutingBucket("PreToolUse", [makeEntry({ pluginId: "p1" })]);
 
   // Capture an epoch value, then bump the live cell so the handler's
   // captured value is stale.
   const stale = currentEpoch();
-  _bumpEpochForTest();
+  bumpEpoch();
   assert.notEqual(stale, currentEpoch());
 
   const handler = compositeHandlerFor("PreToolUse", stale, undefined, injectedExecutor);
@@ -532,8 +534,8 @@ test("toolResultCompositeHandler: event.isError true routes to PostToolUseFailur
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
   const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
@@ -559,8 +561,8 @@ test("toolResultCompositeHandler: event.isError false routes to PostToolUse buck
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
   const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
@@ -586,11 +588,11 @@ test("toolResultCompositeHandler: epoch mismatch causes no-op", async () => {
     return Promise.resolve({ kind: "noop" as const });
   };
 
-  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p1" })]);
-  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p2" })]);
+  setRoutingBucket("PostToolUse", [makeEntry({ pluginId: "p1" })]);
+  setRoutingBucket("PostToolUseFailure", [makeEntry({ pluginId: "p2" })]);
 
   const stale = currentEpoch();
-  _bumpEpochForTest();
+  bumpEpoch();
 
   const handler = toolResultCompositeHandler(stale, undefined, injectedExecutor);
   await handler(
@@ -622,7 +624,7 @@ test("dispatch is sequential awaited (NOT Promise.all)", async () => {
     return { kind: "noop" as const };
   };
 
-  _setRoutingBucketForTest("PreToolUse", [
+  setRoutingBucket("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
   ]);
@@ -660,7 +662,7 @@ test("WR-01: hydrateProjectScopeForCwd clears phantom project-arm cache entries 
     config,
     new Map(),
   );
-  assert.equal(_parsedConfigCacheForTest().size, 1);
+  assert.equal(parsedConfigEntries().size, 1);
 
   // Invoke the re-hydrate against a temp cwd whose `.pi/agent/state.json`
   // does not exist. `loadState` returns DEFAULT_STATE on ENOENT, so the
@@ -668,7 +670,7 @@ test("WR-01: hydrateProjectScopeForCwd clears phantom project-arm cache entries 
   await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
 
   // The phantom is gone; no project-scope entries remain.
-  assert.equal(_parsedConfigCacheForTest().size, 0);
+  assert.equal(parsedConfigEntries().size, 0);
 });
 
 test("WR-01: hydrateProjectScopeForCwd leaves user-scope cache entries untouched", async () => {
@@ -693,12 +695,12 @@ test("WR-01: hydrateProjectScopeForCwd leaves user-scope cache entries untouched
     config,
     new Map(),
   );
-  assert.equal(_parsedConfigCacheForTest().size, 2);
+  assert.equal(parsedConfigEntries().size, 2);
 
   await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
 
   // Only the user-scope entry survives.
-  const cache = _parsedConfigCacheForTest();
+  const cache = parsedConfigEntries();
   assert.equal(cache.size, 1);
   // Inspect the surviving entry: the value record carries `scope`, so we
   // can assert that the survivor is the user-scope one without parsing the
@@ -745,11 +747,11 @@ test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardle
     config,
     new Map(),
   );
-  assert.equal(_parsedConfigCacheForTest().size, 4);
+  assert.equal(parsedConfigEntries().size, 4);
 
   await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
 
-  const cache = _parsedConfigCacheForTest();
+  const cache = parsedConfigEntries();
   assert.equal(cache.size, 1);
   const survivor = [...cache.values()][0];
   assert.equal(survivor?.scope, "user");
@@ -827,7 +829,7 @@ test("ENBL-14 / D-100-05: a disabled record's hooks are NOT hydrated, even thoug
     await hydrateProjectScopeForCwd(cwd);
 
     assert.equal(
-      _parsedConfigCacheForTest().size,
+      parsedConfigEntries().size,
       0,
       "ENBL-14: hydrate must skip a record isRecordedButDisabled reports disabled",
     );
@@ -840,7 +842,7 @@ test("ENBL-14 control: the SAME fixture with enabled: true hydrates exactly one 
 
     await hydrateProjectScopeForCwd(cwd);
 
-    const cache = _parsedConfigCacheForTest();
+    const cache = parsedConfigEntries();
     assert.equal(cache.size, 1, "the fixture DOES hydrate when the record is enabled");
     const entry = [...cache.values()][0];
     assert.equal(entry?.scope, "project");

@@ -10,7 +10,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
-  __resetCacheForTests,
+  resetCompletionCache,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceDuplicateNameError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -452,7 +452,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
   // addMarketplace wires invalidateMarketplaceNames + invalidateMarketplaceCache
   // into its post-state-commit window. To prove the invalidation
   // fires, we:
-  //   1. __resetCacheForTests() to isolate from prior test pollution.
+  //   1. resetCompletionCache() to isolate from prior test pollution.
   //   2. Warm the in-memory marketplace-names map by calling
   //      getMarketplaceNames(...) once with a sentinel rebuild that returns
   //      a deliberately stale shape and writes the cache file.
@@ -463,7 +463,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
   //      and the file was removed, i.e. the orchestrator routed through the
   //      invalidation call site rather than rehydrating stale disk data.
   await withTmpScope(async ({ cwd, locations }) => {
-    __resetCacheForTests();
+    resetCompletionCache();
     const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),

@@ -1,5 +1,25 @@
 # Milestones: pi-claude-marketplace
 
+## defaults-enabled — defaultEnabled Manifest Field (Shipped: 2026-08-15)
+
+**Phases completed:** 5 phases (101-105), 23 plans, 47 tasks
+
+**Driver:** BACKLOG.md DFEN-01 — the `defaultEnabled` manifest field had no representation anywhere in the extension, so a plugin author could not ship a plugin that installs disabled. Claude Code honors the field at install and enable time; we honored it nowhere.
+
+**Key accomplishments:**
+
+- **Field and precedence (Phase 101):** `defaultEnabled` is accepted on both declaration sites from one shared schema line, and the "marketplace entry beats `plugin.json` beats `true`" rule is answered by a single module-private helper whose value is threaded by explicit parameter — so a forgotten wiring is a compile error rather than a silent `true` (DFEN-01..03).
+- **Install write-through (Phase 102):** installing a plugin that resolves `false` records it disabled AND writes `enabled: false` into that scope's `claude-plugins.json`, materializing nothing. Writing through — rather than resolving the manifest at consume time — is what makes "a later release changing the field does not flip an existing user" fall out for free. A new closed-set token `installs disabled` names the author-declared cause at info severity (DFEN-04/05, OUT-01/04).
+- **Nothing re-enables it (Phase 103):** the resulting state is a reconcile fixed point, and `update` / `reinstall` never re-apply the declaration. Scoped as characterization, the phase found three live defects instead: every verb that authors a config declaration on the user's behalf had been aiming its write with the caller's `--local` flag rather than with the declaration's location. They now share one selector (DFEN-06/07).
+- **Pre-install visibility (Phase 104):** `list` and `info` say `{installs disabled}` before the install is run, sourced from the cached marketplace entry alone so the claim survives having no clone to read and fires no network call. Where only an unread `plugin.json` declares, both surfaces decline to claim rather than fetch (OUT-02/03/05).
+- **The no-op proof and the contract (Phase 105):** a plugin declaring `true`, or declaring nothing, behaves byte-identically to pre-milestone across all six surfaces — proven by running them against the milestone base tree, not by reading. `docs/plugin-enablement.md` now states the shipped three-input precedence rule per surface and owns both divergences the milestone deliberately does not close (DFEN-08, DOC-01/02).
+
+**What the process caught that planning missed:** two code reviews found real defects in work already marked verified. The read surfaces claimed `{installs disabled}` from the marketplace entry alone while `install` also gates on the user's config opinion — false on a reachable state, since a config saying `enabled: true` installs enabled. And the case scoped as `install` parity was actually testing DFEN-05 precedence, leaving one of DFEN-08's six surfaces untested. Both were fixed and mutation-verified.
+
+**Known gaps (accepted):** `docs/plugin-enablement.md` has no automated gate — `docs/output-catalog.md` is the only byte-gated document in the repo. A plugin whose `plugin.json` declares `false` with a silent marketplace entry installs disabled with no prior warning from the read surfaces; that is the documented cost of keeping the read path offline (NFR-5). Full detail in `milestones/defaults-enabled-MILESTONE-AUDIT.md`.
+
+**Quality:** `npm run check` green — 3552 tests pass, 0 fail, 1 pre-existing skip. All 15 requirements satisfied; all 5 phases verified by mutation; 0 cross-phase integration blockers.
+
 ## v1.18 Manifest-Independent Installed Plugin Info (Shipped: 2026-08-12, npm 0.14.0)
 
 **Phases completed:** 6 phases (95-100), 29 plans, 64 tasks

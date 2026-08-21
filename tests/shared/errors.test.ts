@@ -9,6 +9,8 @@ import {
   ConcurrentUninstallError,
   CrossPluginConflictError,
   errorMessage,
+  errorWithManualRecovery,
+  findManualRecoveryError,
   ManualRecoveryError,
   PluginShapeError,
   PluginUpdatePhase3Error,
@@ -330,4 +332,132 @@ test("causeChainTrailer: a self-referential cycle terminates at the bound", () =
 test("causeChainTrailer: non-Error input returns ''", () => {
   assert.equal(causeChainTrailer(undefined), "");
   assert.equal(causeChainTrailer(null), "");
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// The ManualRecoveryError cause-chain protocol (CMC-16 / F-5 / WR-01 / AS-7).
+//
+// These tests used to live in tests/orchestrators/plugin/reinstall.test.ts and
+// reach the two functions through `__test_*` re-exports, because both were
+// declared inside reinstall.ts. They are the error class's own protocol rather
+// than anything reinstall-specific -- three bridges throw the class and the
+// notify renderer reads it -- so the functions moved beside the class and the
+// tests followed them here, against the public interface (FLOW-09).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * CMC-16 / F-5 dedup regression guard.
+ *
+ * `errorWithManualRecovery` MAY be called twice in the bridge cascade: once
+ * when a bridge throws ManualRecoveryError with its own `.leaks`, and again
+ * at the orchestrator-source rollback site with the merged leak set. The
+ * F-5 invariant: even if the same leak string appears in both sources, the
+ * final `.leaks` payload counts it ONCE. The implementation uses a
+ * `Set`-dedup on the merged array.
+ */
+test("CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
+  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
+  const wrapped = errorWithManualRecovery(inner, ["agents: foo"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  assert.equal(
+    wrapped.leaks.length,
+    1,
+    `expected dedup; got: ${JSON.stringify([...wrapped.leaks])}`,
+  );
+  assert.equal(wrapped.leaks[0], "agents: foo");
+  // Cause-chain preserved so the depth-5 walker still surfaces the inner.
+  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
+});
+
+test("CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
+  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
+  const wrapped = errorWithManualRecovery(inner, ["skills: bar"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  assert.deepEqual([...wrapped.leaks], ["agents: foo", "skills: bar"]);
+});
+
+test("CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
+  const inner = new Error("raw error");
+  const wrapped = errorWithManualRecovery(inner, ["x: leak"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  assert.equal(wrapped.message, "raw error");
+  assert.deepEqual([...wrapped.leaks], ["x: leak"]);
+  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
+});
+
+test("CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
+  const inner = new Error("raw error");
+  const wrapped = errorWithManualRecovery(inner, []);
+  // Zero-leak fast path preserves the original Error reference verbatim.
+  assert.equal(wrapped, inner);
+});
+
+/**
+ * CMC-16 / WR-01 regression guard.
+ *
+ * When `withScopeLock`'s body throw is a `ManualRecoveryError` AND
+ * `release()` also throws, the lock helper wraps the original in a plain
+ * `new Error(combinedMsg, { cause: base })`. A direct
+ * `err instanceof ManualRecoveryError` check would see a plain Error and
+ * silently downgrade the cascade row's Reason from `{rollback partial}`
+ * to the `narrowReason` last-resort fallback. WR-01 uses a cause-chain walk
+ * instead of the direct `instanceof` check so the class identity survives the
+ * wrapping.
+ *
+ * These tests pin both directions: positive (the walker finds the wrapped
+ * MRE) and negative (no MRE in the chain returns undefined; cycles and
+ * the depth bound terminate cleanly).
+ */
+test("WR-01: findManualRecoveryError returns the wrapped MRE when release-also-failed wrapper sits on top", () => {
+  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
+  const wrapped = new Error("staging failed (lock release also failed: chmod denied)", {
+    cause: inner,
+  });
+  const found = findManualRecoveryError(wrapped);
+  assert.equal(found, inner);
+});
+
+test("WR-01: findManualRecoveryError returns the MRE directly when it is the top-level error", () => {
+  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
+  assert.equal(findManualRecoveryError(inner), inner);
+});
+
+test("WR-01: findManualRecoveryError returns undefined when no MRE is in the chain", () => {
+  const inner = new Error("opaque inner");
+  const wrapped = new Error("opaque outer", { cause: inner });
+  assert.equal(findManualRecoveryError(wrapped), undefined);
+});
+
+test("WR-01: findManualRecoveryError terminates cleanly on self-referencing cause cycles", () => {
+  const cyclic = new Error("cyclic") as Error & { cause: unknown };
+  cyclic.cause = cyclic;
+  assert.equal(findManualRecoveryError(cyclic), undefined);
+});
+
+test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
+  // Build a 6-link chain with the MRE at the deepest position; the walker
+  // visits depth 0..4 inclusive, so a MRE at depth 5 is unreachable.
+  const mre = new ManualRecoveryError("deep", ["x"]);
+  const l5 = new Error("l5", { cause: mre });
+  const l4 = new Error("l4", { cause: l5 });
+  const l3 = new Error("l3", { cause: l4 });
+  const l2 = new Error("l2", { cause: l3 });
+  const l1 = new Error("l1", { cause: l2 });
+  const l0 = new Error("l0", { cause: l1 });
+  // l0 -> l1 -> l2 -> l3 -> l4 -> l5 -> mre (mre is at depth 6 from l0;
+  // 5 hops via .cause). The walker visits l0, l1, l2, l3, l4 (5 slots);
+  // mre is unreachable.
+  assert.equal(findManualRecoveryError(l0), undefined);
+});
+
+test("GAP-05: errorWithManualRecovery instanceof-ManualRecoveryError branch merges leaks deduped", () => {
+  // When the input error is already a ManualRecoveryError, errorWithManualRecovery
+  // merges the new leaks into the existing leaks (deduped) and wraps with cause.
+  const inner = new ManualRecoveryError("stage failed", ["agents: old"]);
+  const wrapped = errorWithManualRecovery(inner, ["agents: old", "skills: new"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  const mre = wrapped;
+  assert.deepEqual([...mre.leaks].sort(), ["agents: old", "skills: new"]);
+  assert.equal(mre.message, "stage failed");
+  assert.equal(mre.cause, inner);
 });

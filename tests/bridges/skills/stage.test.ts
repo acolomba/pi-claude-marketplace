@@ -44,6 +44,7 @@ function makeResolved(
       agents: [],
     },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 

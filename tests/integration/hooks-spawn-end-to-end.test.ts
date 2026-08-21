@@ -21,10 +21,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import {
-  _resetForTest,
-  registerHooksBridge,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { resetRoutingState } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -123,9 +121,9 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
 }
 
 test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot, sentinelPath }) => {
@@ -240,9 +238,9 @@ echo '{}'
 // ──────────────────────────────────────────────────────────────────────────
 
 test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async (t) => {
-  _resetForTest();
+  resetRoutingState();
   t.after(() => {
-    _resetForTest();
+    resetRoutingState();
   });
 
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
