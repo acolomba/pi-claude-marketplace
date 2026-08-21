@@ -83,7 +83,7 @@ export function generatedSkillName(plugin: string, source: string): string {
  * the dash separator used by skills/agents. The `<plugin>-` prefix is
  * elided from `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo).
  *
- * CM-4 (revised): `source` may be a `/`-separated relative path reflecting
+ * CM-4: `source` may be a `/`-separated relative path reflecting
  * a nested command file (e.g. "build/web" for commands/build/web.md). RN-2
  * forbids path separators in a single safe name, so the path is split into
  * segments and each segment is validated independently; the `<plugin>-`

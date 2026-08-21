@@ -1,30 +1,47 @@
 // bridges/commands/discover.ts
 //
 // Bridge primitive: enumerate `*.md` files under each declared
-// `componentPaths.commands` entry, RECURSING into subdirectories. Returns
-// a sorted, deterministic `DiscoveredCommand[]` plus a `warnings[]`
-// channel for D-07 soft-fails and for skipped unreadable subdirectories.
+// `componentPaths.commands` entry, RECURSING into subdirectories. Returns a
+// deterministic `DiscoveredCommand[]` plus a `warnings[]` channel for D-07
+// soft-fails and for every entry the walk had to skip.
 //
-// CM-4 (revised): discovery is recursive. A file at
-// `commands/build/web.md` is discovered with sourceName "build/web" and
-// generatedName "<plugin>:build:web" -- the path separator becomes a colon
-// in the generated name, matching Claude Code's nested-command convention
-// (commands and skills "work the same way"; a nested skill dir is invoked
-// as `/apps/web:deploy`). The CM-2 elision is performed by
+// Order is DFS pre-order: entries are name-sorted within one directory, and
+// a subdirectory is walked in full at the point its own name sorts to. The
+// array is NOT sorted by generated name. Order is load-bearing -- it IS the
+// first-wins tiebreak below -- so a reader who assumes a flat sort
+// mispredicts which side of a collision survives.
+//
+// CM-4: discovery is recursive. A file at `commands/build/web.md` is
+// discovered with sourceName "build/web" and generatedName
+// "<plugin>:build:web", one colon per path segment.
+//
+// That convention is measured, not inferred. Claude Code 2.1.228 loaded
+// with `--plugin-dir` registers `acme:build:web` for that file and
+// `acme:build:web:prod` for `commands/build/web/prod.md`, read off the
+// `slash_commands` field of the `system`/`init` message it emits under
+// `--output-format stream-json`. Its own documentation contradicts the
+// binary: it calls the plugin `commands` field flat and gives a command
+// name as "file name without extension". Do not cite the nested-skills
+// passage here either -- a nested plugin SKILL is not registered by Claude
+// Code at all, so it is the one component kind that demonstrably does not
+// work the same way. The CM-2 elision is performed by
 // `domain/name.ts::generatedCommandName`.
 //
 // D-07 (COMP-01): iterates over the array shape. First-wins dedup by
-// generated command name (`<plugin>:<command>` per RN-1); the second
-// occurrence across array elements surfaces as a warning. Within-dir
-// RN-6 collisions remain hard errors via `assertNoCommandCollisions`.
+// generated command name (`<plugin>:<command>` per RN-1); a second
+// occurrence is skipped with a warning naming the winner. Both directions
+// collide: another `componentPaths.commands` entry, or two files under the
+// SAME entry, since `acme-tools/lint.md` and `tools/lint.md` both name
+// `acme:tools:lint` under D-141-01.
 //
 // Symlink discipline (D-14 / PS-1): refuse symlinked entries -- files AND
 // directories. `Dirent.isSymbolicLink()` is checked before any recursion or
 // read, so a symlinked subdirectory is never followed (it could escape the
 // plugin root). Dotfile-prefixed entries (files and directories) are also
-// skipped. Containment of the commands directory itself is the resolver's
-// job (it called `assertPathInside(pluginRoot, ...)` when populating
-// componentPaths).
+// skipped; that one IS a divergence, because Claude Code registers
+// `commands/.hidden/secret.md` as `acme:.hidden:secret`. Containment of the
+// commands directory itself is the resolver's job (it called
+// `assertPathInside(pluginRoot, ...)` when populating componentPaths).
 
 import { readdir } from "node:fs/promises";
 import path from "node:path";
@@ -44,10 +61,21 @@ export interface DiscoverPluginCommandsResult {
   readonly warnings: readonly string[];
 }
 
-function duplicateWarning(sourceName: string, commandsDir: string, generatedName: string): string {
+/**
+ * D-07 first-wins skip. Names the WINNING source rather than blaming an
+ * earlier `componentPaths.commands` entry: since CM-4 made discovery
+ * recursive the two sides of a collision are just as often two files under
+ * one entry, and naming the winner is true either way and more useful.
+ */
+function duplicateWarning(
+  sourceName: string,
+  commandsDir: string,
+  generatedName: string,
+  winningSourceName: string,
+): string {
   return (
     `command source "${sourceName}" in "${commandsDir}" elides to generated name ` +
-    `"${generatedName}" already produced by an earlier componentPaths.commands entry; ` +
+    `"${generatedName}", already produced by command source "${winningSourceName}"; ` +
     `ignoring duplicate.`
   );
 }
@@ -173,8 +201,11 @@ async function collectCommandFile(args: {
 }): Promise<void> {
   const { dir, entry, full, base, pluginName, out, warnings } = args;
 
-  // Refuse symlinked `.md` entries. Even if the link target lives inside
-  // the plugin root, the bridge does not honor symlinks (D-14 / PS-1).
+  // The walk already refused this entry when `Dirent.isSymbolicLink()` was
+  // true, so the lstat inside `isPlainMarkdownFile` re-asks a settled
+  // question for commands. What the call decides here is the regular-file
+  // and `.md`-extension test. The agents bridge shares the helper and has
+  // no Dirent-level symlink check, so the lstat is load-bearing there.
   let plain: boolean;
   try {
     plain = await isPlainMarkdownFile(dir, entry);
@@ -285,8 +316,16 @@ export async function discoverPluginCommands(input: {
 
     for (const command of found) {
       // D-07 first-wins dedup by generated command name.
-      if (seenByGenerated.has(command.generatedName)) {
-        warnings.push(duplicateWarning(command.sourceName, commandsDir, command.generatedName));
+      const winner = seenByGenerated.get(command.generatedName);
+      if (winner !== undefined) {
+        warnings.push(
+          duplicateWarning(
+            command.sourceName,
+            commandsDir,
+            command.generatedName,
+            winner.sourceName,
+          ),
+        );
         continue;
       }
 

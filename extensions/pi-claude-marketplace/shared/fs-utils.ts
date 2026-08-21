@@ -290,10 +290,18 @@ export async function readDirEntriesTolerant(dir: string): Promise<Dirent[]> {
  * T-03-27: whether a dirent is a component source file the bridges will read --
  * a regular, non-dotfile `.md` file that is not a symlink.
  *
- * `readdir`'s `withFileTypes` reports a symlink's TARGET type in some
- * conditions, so the `lstat` is what actually decides the symlink question.
+ * The `lstat` decides the symlink question for a caller that has not already
+ * asked it. `readdir`'s `withFileTypes` does NOT report a symlink's target
+ * type: Node resolves a `UV_DIRENT_UNKNOWN` d_type through `lstat` before it
+ * constructs the `Dirent`, so a symlink to a directory answers
+ * `isSymbolicLink() === true` and `isDirectory() === false` on every
+ * filesystem, and a walk that gates recursion on `isDirectory()` cannot
+ * follow one.
+ *
  * Shared by the agents and commands bridges, whose file-shaped components ask
- * exactly the same question.
+ * exactly the same question. The agents bridge has no Dirent-level symlink
+ * check and depends on the `lstat`; the commands walk has already refused
+ * symlinked entries by the time it calls in.
  */
 export async function isPlainMarkdownFile(dir: string, entry: Dirent): Promise<boolean> {
   if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {

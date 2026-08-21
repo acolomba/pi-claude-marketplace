@@ -155,7 +155,7 @@ test("D-141-02 generatedCommandName still rejects a head that strips to a dot", 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// CM-4 (revised): nested command paths -- "/"-separated source joins with ":"
+// CM-4: nested command paths -- "/"-separated source joins with ":"
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CM-4 generatedCommandName maps a nested source path to colon-separated segments", () => {
