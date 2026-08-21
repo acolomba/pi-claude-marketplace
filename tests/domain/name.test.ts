@@ -138,9 +138,20 @@ test("CM-2 generatedCommandName uses COLON separator (not dash)", () => {
   assert.ok(!result.startsWith("acme-"), `expected colon-form, got "${result}"`);
 });
 
-test("CM-2 generatedCommandName throws when elision yields empty string", () => {
-  // source 'acme-' elides to '' which fails assertSafeName
-  assert.throws(() => generatedCommandName("acme", "acme-"), /non-empty/);
+test("D-141-02 generatedCommandName keeps a head the elision would empty", () => {
+  // 'acme-' would elide to '', so the elision does not fire and the head
+  // stays verbatim -- the name Claude Code registers for commands/acme-.md.
+  assert.equal(generatedCommandName("acme", "acme-"), "acme:acme-");
+});
+
+test("D-141-02 generatedCommandName keeps an emptied head of a nested source", () => {
+  assert.equal(generatedCommandName("acme", "acme-/lint"), "acme:acme-:lint");
+});
+
+test("D-141-02 generatedCommandName still rejects a head that strips to a dot", () => {
+  // The elision fires here (the remainder is non-empty) and leaves '.',
+  // which RN-2 forbids.
+  assert.throws(() => generatedCommandName("acme", "acme-."), /must not be/);
 });
 
 // ──────────────────────────────────────────────────────────────────────────

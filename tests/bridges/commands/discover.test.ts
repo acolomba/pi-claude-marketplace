@@ -439,11 +439,11 @@ test("CM-4 discoverPluginCommands names the directory and the source in a bad-na
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-badname-"));
 
   try {
-    // The head segment "acme-" elides to the empty string, so the
+    // The head segment "acme-." elides to ".", which RN-2 forbids, so the
     // elided-head check throws.
     const commandsDir = path.join(tmp, "commands");
-    await mkdir(path.join(commandsDir, "acme-"), { recursive: true });
-    await writeFile(path.join(commandsDir, "acme-", "lint.md"), "body");
+    await mkdir(path.join(commandsDir, "acme-."), { recursive: true });
+    await writeFile(path.join(commandsDir, "acme-.", "lint.md"), "body");
 
     const resolved = makeResolved(tmp, "commands");
     const err = await discoverPluginCommands({ pluginName: "acme", resolved }).then(
@@ -452,7 +452,7 @@ test("CM-4 discoverPluginCommands names the directory and the source in a bad-na
     );
 
     assert.ok(err instanceof Error, "expected a thrown Error");
-    assert.match(err.message, /"acme-\/lint"/, "the error names the source path");
+    assert.match(err.message, /"acme-\.\/lint"/, "the error names the source path");
     assert.ok(err.message.includes(commandsDir), "the error names the commands directory");
     assert.ok(err.cause instanceof Error, "the original error is preserved as the cause");
     assert.match(err.cause.message, /elided command path head/);

@@ -92,6 +92,18 @@ export function generatedSkillName(plugin: string, source: string): string {
  * Claude Code's nested-command convention. A flat source ("foo") has a
  * single segment and behaves exactly as before ("acme:foo"); "acme-foo"
  * still elides to "acme:foo".
+ *
+ * D-141-02: an elision that would empty the head does not fire. A head of
+ * exactly "acme-" in plugin "acme" keeps its verbatim form, so
+ * `commands/acme-.md` becomes "acme:acme-" and `commands/acme-/lint.md`
+ * becomes "acme:acme-:lint" -- the two names Claude Code registers for the
+ * same tree. The elision exists to remove a stutter, and a head that is
+ * nothing but the stutter has no command name left underneath it.
+ *
+ * Commands only. `generatedSkillName` and `generatedAgentName` keep their
+ * throw, because Pi validates a skill name and rejects both a trailing and
+ * a doubled hyphen: keeping the head there would yield "acme-acme-" and
+ * move the same failure to a worse message further downstream.
  */
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);
@@ -104,9 +116,11 @@ export function generatedCommandName(plugin: string, source: string): string {
 
   const prefix = `${plugin}-`;
   const head = segments[0] ?? "";
-  const elidedHead = head.startsWith(prefix) ? head.slice(prefix.length) : head;
-  // Re-validate the elided head in isolation to catch e.g. an "acme-" source
-  // that elides to empty.
+  const stripped = head.startsWith(prefix) ? head.slice(prefix.length) : head;
+  // D-141-02: keep the head verbatim when the elision would empty it.
+  const elidedHead = stripped === "" ? head : stripped;
+  // The stripped head still needs validation on its own: a safe head can
+  // strip down to an unsafe remainder ("acme-." leaves ".").
   assertSafeName(elidedHead, `elided command path head in "${source}"`);
 
   const generated = [plugin, elidedHead, ...segments.slice(1)].join(":");
