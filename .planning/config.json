@@ -7,7 +7,7 @@
   "firecrawl": false,
   "exa_search": false,
   "git": {
-    "branching_strategy": "milestone",
+    "branching_strategy": "none",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null,
@@ -48,5 +48,6 @@
       "project": "embed"
     }
   },
-  "claude_md_path": "CLAUDE.md"
+  "claude_md_path": "CLAUDE.md",
+  "runtime": "claude"
 }
