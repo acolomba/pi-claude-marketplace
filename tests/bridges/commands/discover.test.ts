@@ -346,3 +346,41 @@ test("D-07 discoverPluginCommands first-wins dedup across array elements (collis
     await rm(tmp, { recursive: true, force: true });
   }
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-141-01: the collision the first-segment elision creates.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-141-01 discoverPluginCommands folds an elided directory onto its unprefixed twin", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-elide-"));
+
+  try {
+    // "acme-tools/lint.md" elides to "acme:tools:lint", the same generated
+    // name "tools/lint.md" produces. Sorted order puts "acme-tools" first,
+    // so it wins and "tools/lint.md" surfaces as a warning.
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(path.join(commandsDir, "acme-tools"), { recursive: true });
+    await mkdir(path.join(commandsDir, "tools"), { recursive: true });
+    await writeFile(path.join(commandsDir, "acme-tools", "lint.md"), "from-acme-tools");
+    await writeFile(path.join(commandsDir, "tools", "lint.md"), "from-tools");
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.equal(out.length, 1, "both sources elide to one generated name");
+    assert.equal(out[0]?.generatedName, "acme:tools:lint");
+    assert.equal(
+      out[0]?.commandFile,
+      path.join(commandsDir, "acme-tools", "lint.md"),
+      "sorted order makes 'acme-tools' the winner",
+    );
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /command source "tools\/lint"/);
+    assert.match(warnings[0]!, /"acme:tools:lint"/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});

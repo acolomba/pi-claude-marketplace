@@ -168,6 +168,23 @@ test("CM-4 generatedCommandName rejects a backslash in a segment (OS sep must be
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// D-141-01: the CM-2 elision applies to the HEAD of the source path, and the
+// head is the first path segment when the source is nested.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-141-01 generatedCommandName elides the plugin prefix from a directory head", () => {
+  // Deliberate divergence: Claude Code 2.1.228 registers this source as
+  // "acme:acme-tools:lint" because it performs no elision at all. CM-2
+  // already diverged the same way for flat files ("acme-flat.md" is
+  // "acme:flat" here, "acme:acme-flat" upstream).
+  assert.equal(generatedCommandName("acme", "acme-tools/lint"), "acme:tools:lint");
+});
+
+test("D-141-01 generatedCommandName does not elide a non-head segment", () => {
+  assert.equal(generatedCommandName("acme", "build/acme-web"), "acme:build:acme-web");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // RN-1 / AG-1: generatedAgentName -- "pi-claude-marketplace-<plugin>-<agent>"
 // ──────────────────────────────────────────────────────────────────────────
 
