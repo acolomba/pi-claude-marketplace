@@ -4,7 +4,14 @@
 
 - A plugin author can now ship a command in a subdirectory of `commands/` and have it register. `commands/build/web.md` becomes `/acme:build:web`, one colon per path segment, to any depth, the same as Claude Code. Such a file was silently dropped before. Thanks to @rakesh-vs (#141).
 - The `<plugin>-` prefix is elided from the head of a command source name, and the head is the first path segment when the source is nested. `acme-tools/lint.md` in plugin `acme` becomes `/acme:tools:lint`, where Claude Code registers `acme:acme-tools:lint`. Claude Code performs no elision at all, so a flat `acme-flat.md` already diverged the same way.
-- A subdirectory of `commands/` that cannot be read no longer aborts the install. Discovery skips it, reports it as a warning, and installs the rest. A command file whose name is rejected again names its directory, so you can find the file.
+- A command whose name is exactly the plugin prefix now installs. `commands/acme-.md` in plugin `acme` registers as `/acme:acme-`, matching Claude Code. It failed to install before, and a directory named `acme-` failed the whole plugin.
+- A subdirectory of `commands/` that cannot be read no longer stops the install. Discovery skips it, reports it, and installs the rest of the plugin.
+- The same holds for a directory you can read but not search, where every file inside it fails to stat, and for a file whose path cannot produce a valid command name. Both skip one entry instead of the plugin.
+- A read failure that says the disk itself is unreliable still stops the install, so a partial plugin is never recorded as a whole one.
+- Discovery warnings now reach you. The commands, skills and agents bridges each wrote them to an array the installer never read, so a duplicate command name, a skipped directory and a dropped file were all silent. A standalone `install` now prints the command and skill warnings under the install row; the agent warnings reach the cascade channel that `/reload` and `import` already use.
+- A skipped subdirectory is reported, whether it is dotfile-prefixed or a symlink. A skipped file stays silent: it costs you one command, where a directory costs you every command below it.
+- A file that two declared commands directories both reach now warns. It installs under two names, which is correct but rarely what the author meant.
+- A staging failure names the plugin and the command. A nested source makes the generated name as long as the whole path, so a name too long for the filesystem is now reachable; it used to report a raw error code against an internal temporary path.
 
 ## [0.17.0] - 2026-08-19
 
