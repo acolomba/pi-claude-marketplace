@@ -1181,3 +1181,38 @@ test("SUB-02 user-scope command keeps ${CLAUDE_PROJECT_DIR} literal; other two s
     }
   });
 });
+
+// D-07 / D-141-03: the discovery warnings must survive the staging boundary.
+
+test("D-07 prepareStageCommands carries a discovery warning onto result.warnings", async () => {
+  const scope = await tmpScope();
+  const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "stage-cmds-dupwarn-"));
+
+  try {
+    // Two sources, one generated name: `acme-tools/lint.md` elides its head
+    // (D-141-01) and lands on the same `acme:tools:lint` as `tools/lint.md`.
+    const commandsDir = path.join(pluginRoot, "commands");
+    await mkdir(path.join(commandsDir, "acme-tools"), { recursive: true });
+    await mkdir(path.join(commandsDir, "tools"), { recursive: true });
+    await writeFile(path.join(commandsDir, "acme-tools", "lint.md"), "first");
+    await writeFile(path.join(commandsDir, "tools", "lint.md"), "second");
+
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(pluginRoot, "commands"),
+    });
+
+    assert.equal(prepared.result.warnings.length, 1, "the discovery warning must not be dropped");
+    assert.match(prepared.result.warnings[0]!, /"acme:tools:lint"/);
+    assert.match(prepared.result.warnings[0]!, /ignoring duplicate/);
+    await abortPreparedCommands(prepared);
+  } finally {
+    await rm(pluginRoot, { recursive: true, force: true });
+    await scope.cleanup();
+  }
+});

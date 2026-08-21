@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -194,12 +194,15 @@ test("discoverPluginCommands returns [] when commands dir missing (ENOENT gracef
   }
 });
 
-test("discoverPluginCommands returns sorted output by sourceName", async () => {
+test("discoverPluginCommands name-sorts the entries WITHIN one directory", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-sort-"));
 
   try {
     const commandsDir = path.join(tmp, "commands");
     await mkdir(commandsDir, { recursive: true });
+    // Flat directory, so per-directory sort and whole-array sort agree here.
+    // They do NOT agree once a subdirectory is involved: the walk is DFS
+    // pre-order, and that order is the D-07 first-wins tiebreak.
     // Intentionally create out-of-order names.
     await writeFile(path.join(commandsDir, "zebra.md"), "z");
     await writeFile(path.join(commandsDir, "alpha.md"), "a");
@@ -400,13 +403,15 @@ test("CM-4 discoverPluginCommands skips an unreadable subdirectory (POSIX-only)"
     return;
   }
 
-  const { chmod } = await import("node:fs/promises");
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-eacces-"));
   const commandsDir = path.join(tmp, "commands");
   const locked = path.join(commandsDir, "locked");
+  // `mkdir` runs BEFORE the try: a failure here would leave the `finally`
+  // chmod to throw ENOENT on a path that was never created, masking the real
+  // error and leaking the temp directory.
+  await mkdir(locked, { recursive: true });
 
   try {
-    await mkdir(locked, { recursive: true });
     await writeFile(path.join(locked, "hidden.md"), "unreachable");
     await writeFile(path.join(commandsDir, "readable.md"), "body");
     await chmod(locked, 0o000);
@@ -425,6 +430,11 @@ test("CM-4 discoverPluginCommands skips an unreadable subdirectory (POSIX-only)"
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /command subdirectory "locked"/);
     assert.match(warnings[0]!, /skipping subdirectory/);
+    assert.match(
+      warnings[0]!,
+      /EACCES/,
+      "the errno is what tells the user this is a permission problem",
+    );
   } finally {
     await chmod(locked, 0o755);
     await rm(tmp, { recursive: true, force: true });
@@ -462,6 +472,172 @@ test("CM-4 discoverPluginCommands skips a bad-named command and installs the res
     assert.ok(warnings[0]!.includes(commandsDir), "the warning names the commands directory");
     assert.match(warnings[0]!, /elided command path head/, "the warning names the reason");
     assert.match(warnings[0]!, /skipping file/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-141-01: the elision fires on the HEAD segment and on no other. A source
+// whose head AND leaf both carry the prefix is the only shape that separates
+// the head-only rule from an all-segment one.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-141-01 discoverPluginCommands elides the head segment and leaves the leaf alone", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-headonly-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(path.join(commandsDir, "acme-tools"), { recursive: true });
+    await writeFile(path.join(commandsDir, "acme-tools", "acme-lint.md"), "body");
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+    assert.deepEqual(
+      out.map((c) => c.generatedName),
+      ["acme:tools:acme-lint"],
+      "an all-segment elision would produce acme:tools:lint",
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// The declared commands/ directory is NOT tolerant the way a subdirectory is.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("CM-4 discoverPluginCommands reports no commands and no warning for a missing commands/", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-absent-"));
+
+  try {
+    // Nothing is created: the declared directory does not exist. ENOENT means
+    // "this plugin declares no commands", not "a subdirectory failed".
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.deepEqual(out, []);
+    assert.deepEqual(warnings, [], "an absent commands/ must not warn about anything");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("CM-4 discoverPluginCommands propagates a non-ENOENT failure on commands/ itself (POSIX-only)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block readdir");
+    return;
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-baseeacces-"));
+  const commandsDir = path.join(tmp, "commands");
+  await mkdir(commandsDir, { recursive: true });
+
+  try {
+    await writeFile(path.join(commandsDir, "readable.md"), "body");
+    await chmod(commandsDir, 0o000);
+
+    const resolved = makeResolved(tmp, "commands");
+    const err = await discoverPluginCommands({ pluginName: "acme", resolved }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    assert.ok(err instanceof Error, "an unreadable commands/ must fail the install");
+    assert.match(err.message, /EACCES/);
+  } finally {
+    await chmod(commandsDir, 0o755);
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// A readable-but-not-searchable directory: readdir lists the children and
+// every lstat on one of them fails.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("CM-4 discoverPluginCommands skips a file it cannot lstat (mode 0444, POSIX-only)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only permission failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod does not block lstat");
+    return;
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-noexec-"));
+  const commandsDir = path.join(tmp, "commands");
+  const noExec = path.join(commandsDir, "rx");
+  await mkdir(noExec, { recursive: true });
+
+  try {
+    await writeFile(path.join(noExec, "b.md"), "unreachable");
+    await writeFile(path.join(commandsDir, "readable.md"), "body");
+    // Readable but not searchable: readdir succeeds, lstat on each child does not.
+    await chmod(noExec, 0o444);
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["readable"],
+      "the readable command still installs",
+    );
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /command file "rx\/b\.md"/);
+    assert.match(warnings[0]!, /EACCES/);
+    assert.match(warnings[0]!, /skipping file/);
+  } finally {
+    await chmod(noExec, 0o755);
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-07 / RN-6: a flat file whose name already carries the colon collides with
+// the nested file that generates the same name. Traversal order decides.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-07 a flat build:web.md loses to a nested build/web.md", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-flatnested-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(path.join(commandsDir, "build"), { recursive: true });
+    await writeFile(path.join(commandsDir, "build", "web.md"), "nested");
+    await writeFile(path.join(commandsDir, "build:web.md"), "flat");
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    // "build" sorts before "build:web.md", and the walk descends at the point
+    // the directory name sorts to, so the nested file is seen first and wins.
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["build/web"],
+      "the nested file wins the first-wins tiebreak",
+    );
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /command source "build:web"/);
+    assert.match(warnings[0]!, /already produced by command source "build\/web"/);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

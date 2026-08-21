@@ -6751,3 +6751,94 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
     }
   });
 });
+
+// D-141-03: a discovery warning has to reach the user in BOTH modes. It says
+// the installed artifact set is smaller than what the author shipped, and the
+// install row's resource count gives the user no baseline to notice that.
+
+/**
+ * Seed a plugin whose commands directory holds a D-07 collision:
+ * `acme-tools/lint.md` elides its head (D-141-01) onto the same
+ * `hello:tools:lint` that `tools/lint.md` produces, so one of the two is
+ * dropped with a warning.
+ */
+async function seedCollidingNestedCommands(pluginRoot: string): Promise<void> {
+  const commandsDir = path.join(pluginRoot, "commands");
+  await mkdir(path.join(commandsDir, "hello-tools"), { recursive: true });
+  await mkdir(path.join(commandsDir, "tools"), { recursive: true });
+  await writeFile(path.join(commandsDir, "hello-tools", "lint.md"), "first\n");
+  await writeFile(path.join(commandsDir, "tools", "lint.md"), "second\n");
+}
+
+test("D-141-03: a standalone install surfaces a command discovery warning as a second notification", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        commands: [{ sourceName: "keep" }],
+      });
+      await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.equal(notifications.length, 2, "the install row plus the diagnostic block");
+      const diagnostic = notifications[1];
+      assert.ok(diagnostic !== undefined);
+      assert.equal(diagnostic.severity, "warning");
+      assert.match(diagnostic.message, /1 declared component was skipped/);
+      assert.match(diagnostic.message, /"hello:tools:lint"/);
+      assert.match(diagnostic.message, /ignoring duplicate/);
+      // NFR-9: the absolute commands directory is redacted to its basename.
+      assert.ok(
+        !diagnostic.message.includes(marketplaceRoot),
+        `absolute path leaked: ${diagnostic.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-141-03: an orchestrated install carries the same warning on postCommitWarnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-orch-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        commands: [{ sourceName: "keep" }],
+      });
+      await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(outcome.status, "installed");
+      assert.equal(notifications.length, 0, "orchestrated mode fires no notification of its own");
+      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
+      assert.ok(
+        warnings?.some((w) => w.includes('"hello:tools:lint"')),
+        `expected the discovery warning; got: ${JSON.stringify(warnings)}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
