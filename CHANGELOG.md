@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A plugin author can now ship a command in a subdirectory of `commands/` and have it register. `commands/build/web.md` becomes `/acme:build:web`, one colon per path segment, to any depth, the same as Claude Code. Such a file was silently dropped before. Thanks to @rakesh-vs (#141).
+- The `<plugin>-` prefix is elided from the head of a command source name, and the head is the first path segment when the source is nested. `acme-tools/lint.md` in plugin `acme` becomes `/acme:tools:lint`, where Claude Code registers `acme:acme-tools:lint`. Claude Code performs no elision at all, so a flat `acme-flat.md` already diverged the same way.
+- A subdirectory of `commands/` that cannot be read no longer aborts the install. Discovery skips it, reports it as a warning, and installs the rest. A command file whose name is rejected again names its directory, so you can find the file.
+
 ## [0.17.0] - 2026-08-19
 
 - A plugin author can now ship a plugin that installs disabled. `defaultEnabled` is an optional boolean on a marketplace plugin entry or in `plugin.json`, with the entry winning and absence resolving to `true`.
