@@ -35,13 +35,14 @@ function makeResolved(
 
 const FIXTURE_PLUGIN_ROOT = path.resolve(import.meta.dirname, "..", "_fixtures", "test-plugin");
 
-// CM-4: flat *.md only --------------------------------------------------
+// CM-4: recursive *.md discovery -----------------------------------------
 
-test("CM-4 discoverPluginCommands enumerates flat *.md only (test-plugin fixture)", async () => {
+test("CM-4 discoverPluginCommands enumerates *.md files (test-plugin fixture, flat)", async () => {
   const resolved = makeResolved(FIXTURE_PLUGIN_ROOT, "commands");
 
   const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
+  // Fixture has only flat files (no subdirs), so recursion is a no-op here.
   assert.equal(out.length, 2, "expected exactly 2 .md commands in fixture");
   const names = out.map((c) => c.sourceName);
   assert.deepEqual(names, ["acme-deploy", "status"]);
@@ -67,20 +68,91 @@ test("CM-4 discoverPluginCommands ignores non-md files", async () => {
   }
 });
 
-test("CM-4 discoverPluginCommands does NOT recurse into subdirs", async () => {
+test("CM-4 discoverPluginCommands recurses into subdirs (sourceName is the relative path)", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-subdir-"));
 
   try {
     const commandsDir = path.join(tmp, "commands");
-    await mkdir(path.join(commandsDir, "subdir"), { recursive: true });
+    await mkdir(path.join(commandsDir, "build", "web"), { recursive: true });
     await writeFile(path.join(commandsDir, "top.md"), "top body");
-    await writeFile(path.join(commandsDir, "subdir", "nested.md"), "nested body");
+    await writeFile(path.join(commandsDir, "build", "web.md"), "web body");
+    await writeFile(path.join(commandsDir, "build", "web", "prod.md"), "prod body");
 
     const resolved = makeResolved(tmp, "commands");
     const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
-    assert.equal(out.length, 1, "subdir entries must be skipped");
-    assert.equal(out[0]?.sourceName, "top");
+    // sourceName is the relative path from commands/ minus .md; generatedName
+    // joins plugin + segments with ':'. Entries are name-sorted at each
+    // level, and "web" (dir) sorts before "web.md" (file) because the shorter
+    // name is a prefix -- so build/web/prod is visited before build/web.
+    // This mirrors the real layout (a `pipeline/` dir beside a `pipeline.md`).
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["build/web/prod", "build/web", "top"],
+    );
+    assert.deepEqual(
+      out.map((c) => c.generatedName),
+      ["acme:build:web:prod", "acme:build:web", "acme:top"],
+    );
+    assert.equal(
+      out.find((c) => c.sourceName === "build/web/prod")?.commandFile,
+      path.join(commandsDir, "build", "web", "prod.md"),
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("CM-4 discoverPluginCommands skips dotfile-prefixed subdirectories", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-dotdir-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(path.join(commandsDir, ".hidden"), { recursive: true });
+    await mkdir(path.join(commandsDir, "build"), { recursive: true });
+    await writeFile(path.join(commandsDir, ".hidden", "secret.md"), "secret");
+    await writeFile(path.join(commandsDir, "build", "visible.md"), "visible");
+    await writeFile(path.join(commandsDir, "root.md"), "root");
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["build/visible", "root"],
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("CM-4 discoverPluginCommands refuses symlinked subdirectories (POSIX-only)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("symlink semantics differ on Windows; targeting POSIX");
+    return;
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-symlinkdir-"));
+
+  try {
+    const commandsDir = path.join(tmp, "commands");
+    await mkdir(commandsDir, { recursive: true });
+
+    // A real tree outside commands/ that a symlinked subdir points at. The
+    // bridge must NOT follow the link, or escaped.md would be discovered.
+    const outside = path.join(tmp, "outside");
+    await mkdir(path.join(outside, "linked"), { recursive: true });
+    await writeFile(path.join(outside, "linked", "escaped.md"), "escaped");
+    await symlink(outside, path.join(commandsDir, "linked"));
+
+    await writeFile(path.join(commandsDir, "real.md"), "real");
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+    const names = out.map((c) => c.sourceName);
+    assert.ok(!names.some((n) => n.startsWith("linked/")), "symlinked subdir must not be followed");
+    assert.ok(names.includes("real"), "non-symlinked .md must be present");
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

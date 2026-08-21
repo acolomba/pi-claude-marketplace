@@ -82,23 +82,38 @@ export function generatedSkillName(plugin: string, source: string): string {
  * Format: `<plugin>:<command>` -- the SEPARATOR is a colon, distinct from
  * the dash separator used by skills/agents. The `<plugin>-` prefix is
  * elided from `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo).
+ *
+ * CM-4 (revised): `source` may be a `/`-separated relative path reflecting
+ * a nested command file (e.g. "build/web" for commands/build/web.md). RN-2
+ * forbids path separators in a single safe name, so the path is split into
+ * segments and each segment is validated independently; the `<plugin>-`
+ * prefix is elided from the FIRST segment only; and the segments are joined
+ * with `:` so the nested file becomes `<plugin>:build:web` -- matching
+ * Claude Code's nested-command convention. A flat source ("foo") has a
+ * single segment and behaves exactly as before ("acme:foo"); "acme-foo"
+ * still elides to "acme:foo".
  */
 export function generatedCommandName(plugin: string, source: string): string {
-  return generatedColonName(plugin, source);
-}
-
-function generatedColonName(plugin: string, source: string): string {
   assertSafeName(plugin);
-  assertSafeName(source);
+
+  const segments = source.split("/");
+
+  for (const seg of segments) {
+    assertSafeName(seg, `command path segment in "${source}"`);
+  }
+
   const prefix = `${plugin}-`;
-  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
-  // Re-validate the elided portion in isolation to catch e.g. an "acme-"
-  // source that elides to empty.
-  assertSafeName(elided);
-  const generated = `${plugin}:${elided}`;
+  const head = segments[0] ?? "";
+  const elidedHead = head.startsWith(prefix) ? head.slice(prefix.length) : head;
+  // Re-validate the elided head in isolation to catch e.g. an "acme-" source
+  // that elides to empty.
+  assertSafeName(elidedHead, `elided command path head in "${source}"`);
+
+  const generated = [plugin, elidedHead, ...segments.slice(1)].join(":");
   // Note: assertSafeName on the colon-bearing form -- colon is allowed
   // (PRD §6.5 RN-2 forbids only "/" and "\"), so this passes.
   assertSafeName(generated);
+
   return generated;
 }
 
