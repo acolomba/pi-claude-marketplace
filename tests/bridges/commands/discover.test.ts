@@ -384,3 +384,49 @@ test("D-141-01 discoverPluginCommands folds an elided directory onto its unprefi
     await rm(tmp, { recursive: true, force: true });
   }
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// An unreadable subdirectory is a warning, not an aborted install.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("CM-4 discoverPluginCommands skips an unreadable subdirectory (POSIX-only)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block readdir");
+    return;
+  }
+
+  const { chmod } = await import("node:fs/promises");
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-eacces-"));
+  const commandsDir = path.join(tmp, "commands");
+  const locked = path.join(commandsDir, "locked");
+
+  try {
+    await mkdir(locked, { recursive: true });
+    await writeFile(path.join(locked, "hidden.md"), "unreachable");
+    await writeFile(path.join(commandsDir, "readable.md"), "body");
+    await chmod(locked, 0o000);
+
+    const resolved = makeResolved(tmp, "commands");
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.deepEqual(
+      out.map((c) => c.sourceName),
+      ["readable"],
+      "the readable command still installs",
+    );
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /command subdirectory "locked"/);
+    assert.match(warnings[0]!, /skipping subdirectory/);
+  } finally {
+    await chmod(locked, 0o755);
+    await rm(tmp, { recursive: true, force: true });
+  }
+});

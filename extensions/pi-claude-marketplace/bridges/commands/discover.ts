@@ -3,7 +3,7 @@
 // Bridge primitive: enumerate `*.md` files under each declared
 // `componentPaths.commands` entry, RECURSING into subdirectories. Returns
 // a sorted, deterministic `DiscoveredCommand[]` plus a `warnings[]`
-// channel for D-07 soft-fails.
+// channel for D-07 soft-fails and for skipped unreadable subdirectories.
 //
 // CM-4 (revised): discovery is recursive. A file at
 // `commands/build/web.md` is discovered with sourceName "build/web" and
@@ -26,13 +26,16 @@
 // job (it called `assertPathInside(pluginRoot, ...)` when populating
 // componentPaths).
 
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { generatedCommandName } from "../../domain/name.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { Dirent } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginCommandsResult {
@@ -48,6 +51,42 @@ function duplicateWarning(sourceName: string, commandsDir: string, generatedName
   );
 }
 
+function unreadableDirWarning(dir: string, base: string, err: unknown): string {
+  const rel = path.relative(base, dir).split(path.sep).join("/");
+  return (
+    `command subdirectory "${rel}" in "${base}" cannot be read: ` +
+    `${errorMessage(err)}; skipping subdirectory.`
+  );
+}
+
+/**
+ * Reads one directory of the walk. The two levels answer a read failure
+ * differently.
+ *
+ * The declared `commands/` directory itself keeps `readDirEntriesTolerant`:
+ * an absent directory (ENOENT) or a file in its place (ENOTDIR) means the
+ * plugin declares no commands, and every other errno propagates as an
+ * install failure.
+ *
+ * A subdirectory is a different question. It was found by `readdir`, so it
+ * exists; a failure to read it (EACCES on a mode-000 directory, for example)
+ * is a plugin-shape problem that must not abort the install. Skip it and
+ * report it through the same `warnings[]` channel the D-07 first-wins skips
+ * use.
+ */
+async function readWalkEntries(dir: string, base: string, warnings: string[]): Promise<Dirent[]> {
+  if (dir === base) {
+    return await readDirEntriesTolerant(dir);
+  }
+
+  try {
+    return await readdir(dir, { withFileTypes: true, encoding: "utf8" });
+  } catch (err) {
+    warnings.push(unreadableDirWarning(dir, base, err));
+    return [];
+  }
+}
+
 /**
  * Recursive walk of one `commands` directory. Collects every plain `.md`
  * file (non-symlink, non-dotfile) with `sourceName` set to the file's
@@ -56,6 +95,8 @@ function duplicateWarning(sourceName: string, commandsDir: string, generatedName
  * `sourceName` "build/web"). Subdirectories are descended into in sorted
  * order; symlinked and dotfile-prefixed entries are skipped (D-14).
  *
+ * An unreadable subdirectory is skipped and reported on `warnings`.
+ *
  * Does NOT dedup -- the caller folds the results into its first-wins map.
  */
 async function walkCommandsDir(
@@ -63,8 +104,9 @@ async function walkCommandsDir(
   base: string,
   pluginName: string,
   out: DiscoveredCommand[],
+  warnings: string[],
 ): Promise<void> {
-  const entries = await readDirEntriesTolerant(dir);
+  const entries = await readWalkEntries(dir, base, warnings);
 
   // Deterministic ordering for stable warning messages and test assertions.
   const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
@@ -84,7 +126,7 @@ async function walkCommandsDir(
     const full = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      await walkCommandsDir(full, base, pluginName, out);
+      await walkCommandsDir(full, base, pluginName, out, warnings);
       continue;
     }
 
@@ -125,7 +167,7 @@ export async function discoverPluginCommands(input: {
       : path.resolve(input.resolved.pluginRoot, commandsRel);
 
     const found: DiscoveredCommand[] = [];
-    await walkCommandsDir(commandsDir, commandsDir, input.pluginName, found);
+    await walkCommandsDir(commandsDir, commandsDir, input.pluginName, found, warnings);
 
     for (const command of found) {
       // D-07 first-wins dedup by generated command name.
