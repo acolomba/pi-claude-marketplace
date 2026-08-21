@@ -281,15 +281,17 @@ test("TC-3 / RSTA-07 :: ls alias flag completion is EXACTLY scope + the filter f
   }
 });
 
-test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model + partial", async () => {
+test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + local + map-model + partial", async () => {
   resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("install -", f.resolver);
     assert.ok(items !== null);
-    // Exact-set: `--map-model` (AG-7) and `--partial` (LIST-02) are the only
-    // install extras; list-only filter flags MUST NOT leak in.
+    // Exact-set: `--map-model` (AG-7), `--partial` (LIST-02), and `--local`
+    // (the per-machine override write target) are the install extras;
+    // list-only filter flags MUST NOT leak in.
     assert.deepEqual([...items.map((i) => i.label)].sort(), [
+      "--local",
       "--map-model",
       "--partial",
       "--scope",
@@ -299,13 +301,14 @@ test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model +
   }
 });
 
-test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + map-model + partial", async () => {
+test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + local + map-model + partial", async () => {
   resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("update -", f.resolver);
     assert.ok(items !== null);
     assert.deepEqual([...items.map((i) => i.label)].sort(), [
+      "--local",
       "--map-model",
       "--partial",
       "--scope",
@@ -323,6 +326,32 @@ test("TC-3 / FTCH-03 :: info head flag completion is EXACTLY scope + fetch", asy
     assert.ok(items !== null);
     // FTCH-03: `info` gains `--fetch`; previously it fell through to `--scope` only.
     assert.deepEqual([...items.map((i) => i.label)].sort(), ["--fetch", "--scope"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-3 :: enable head flag completion is EXACTLY scope + local", async () => {
+  resetCompletionCache();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("enable -", f.resolver);
+    assert.ok(items !== null);
+    // `--local` routes the `enabled` write-back to claude-plugins.local.json so
+    // a project-scope enable stays out of a git-tracked claude-plugins.json.
+    assert.deepEqual([...items.map((i) => i.label)].sort(), ["--local", "--scope"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-3 :: disable head flag completion is EXACTLY scope + local", async () => {
+  resetCompletionCache();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("disable -", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual([...items.map((i) => i.label)].sort(), ["--local", "--scope"]);
   } finally {
     await f.cleanup();
   }

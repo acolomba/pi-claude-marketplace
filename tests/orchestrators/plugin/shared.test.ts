@@ -7,6 +7,8 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   assertNoCrossPluginConflicts,
+  composeCrossScopeInstallHint,
+  findMarketplaceContainerInOtherScope,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstallMarketplaceSource,
@@ -437,6 +439,72 @@ test("CMP-3 :: resolveInstallMarketplaceSource returns undefined when project-ta
     });
     assert.equal(result, undefined);
   });
+});
+
+// ---------------------------------------------------------------------------
+// ATTR-11 -- cross-scope install hint helpers (findMarketplaceContainerInOtherScope
+// + composeCrossScopeInstallHint).
+// ---------------------------------------------------------------------------
+
+test("ATTR-11 :: findMarketplaceContainerInOtherScope returns project when a user-target install misses a project-only container", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "project", { mp: {} });
+    const other = await findMarketplaceContainerInOtherScope({
+      cwd,
+      marketplace: "mp",
+      scope: "user",
+    });
+    assert.equal(other, "project");
+  });
+});
+
+test("ATTR-11 :: findMarketplaceContainerInOtherScope returns undefined when the container is absent in both scopes", async () => {
+  await withTmpCwd(async (cwd) => {
+    const other = await findMarketplaceContainerInOtherScope({
+      cwd,
+      marketplace: "ghost-mp",
+      scope: "user",
+    });
+    assert.equal(other, undefined);
+  });
+});
+
+test("ATTR-11 :: findMarketplaceContainerInOtherScope returns undefined for a project-target miss (CMP-3 fallback already missed user)", async () => {
+  await withTmpCwd(async (cwd) => {
+    const other = await findMarketplaceContainerInOtherScope({
+      cwd,
+      marketplace: "ghost-mp",
+      scope: "project",
+    });
+    assert.equal(other, undefined);
+  });
+});
+
+test("ATTR-11 :: composeCrossScopeInstallHint suggests --scope project --local for a project-scope container", () => {
+  const hint = composeCrossScopeInstallHint({
+    plugin: "triage",
+    marketplace: "mp",
+    presentIn: "project",
+  });
+  assert.equal(
+    hint,
+    '  Marketplace "mp" is registered at project scope; retry with:\n' +
+      "    /claude:plugin install triage@mp --scope project --local\n" +
+      "  (--local writes to claude-plugins.local.json and leaves claude-plugins.json untouched)",
+  );
+});
+
+test("ATTR-11 :: composeCrossScopeInstallHint omits --local for a user-scope container", () => {
+  const hint = composeCrossScopeInstallHint({
+    plugin: "triage",
+    marketplace: "mp",
+    presentIn: "user",
+  });
+  assert.equal(
+    hint,
+    '  Marketplace "mp" is registered at user scope; retry with:\n' +
+      "    /claude:plugin install triage@mp --scope user",
+  );
 });
 
 // ---------------------------------------------------------------------------

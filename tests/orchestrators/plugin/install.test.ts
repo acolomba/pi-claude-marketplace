@@ -2946,11 +2946,18 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       // The marketplace is "not added in user", surfaced via the standalone
       // `marketplace-not-added` variant with the `[user]` bracket -- NOT
       // `{not in manifest}` on a plugin row.
+      //
+      // ATTR-11: because the container exists at PROJECT scope, the row now
+      // carries a cross-scope hint naming the clean retry command (including
+      // the undiscoverable `--local` flag) instead of the bare `{not added}`.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}\n" +
+          '  Marketplace "mp" is registered at project scope; retry with:\n' +
+          "    /claude:plugin install hello@mp --scope project --local\n" +
+          "  (--local writes to claude-plugins.local.json and leaves claude-plugins.json untouched)",
       );
 
       const userAfter = await loadState(userLocations.extensionRoot);

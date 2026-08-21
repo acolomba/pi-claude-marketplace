@@ -1552,11 +1552,20 @@ export interface ReconcilePendingEmptyMessage {
  * `⊘ <name> [scope?] (failed) {not added}` at severity `"error"`. The info
  * construction sites build it in this phase; install / uninstall / reinstall /
  * update reuse the SAME variant in later phases (no re-cut).
+ *
+ * ATTR-11: an optional `hint` may carry a free-form, pre-indented advisory the
+ * renderer appends AFTER the row (separated by a single `\n`). The install path
+ * sets it when the marketplace container exists at the OTHER scope, pointing the
+ * operator at the clean cross-scope install command; every other construction
+ * site omits it, so those rows render byte-identically to before. The field is
+ * advisory only -- it never changes the `{not added}` brace, the severity, or the
+ * summary line, and an empty/absent value renders the bare row exactly as before.
  */
 export interface MarketplaceNotAddedMessage {
   readonly kind: "marketplace-not-added";
   readonly name: string;
   readonly scope?: Scope;
+  readonly hint?: string;
 }
 
 /**
@@ -3527,7 +3536,7 @@ function renderMarketplaceNotAdded(
   message: MarketplaceNotAddedMessage,
   probe: SoftDepStatus,
 ): string {
-  return joinTokens([
+  const row = joinTokens([
     ICON_UNINSTALLABLE,
     message.name,
     message.scope === undefined ? "" : `[${message.scope}]`,
@@ -3535,6 +3544,11 @@ function renderMarketplaceNotAdded(
     "(failed)",
     composeReasons(["not added"], false, false, probe),
   ]);
+
+  // ATTR-11: append the optional cross-scope advisory after the row. The hint
+  // is pre-indented by the construction site and carries its own line breaks;
+  // an absent/empty value leaves the bare row byte-identical to before.
+  return message.hint === undefined || message.hint.length === 0 ? row : `${row}\n${message.hint}`;
 }
 
 /**

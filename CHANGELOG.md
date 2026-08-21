@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A default-scope (`user`) `install` against a marketplace registered only at project scope -- the common repo-bundled-marketplace case -- used to fail with a bare `{not added}` row that did not say where the container lives or how to install it cleanly. The orchestrator now performs one extra read-only lookup of the other scope on that arm and, when the container is found, appends a cross-scope hint under the row naming the retry command at the scope the container lives in. The hint suggests `--local` only for a project-scope container, since a bare `--scope project` write would land in the shared `claude-plugins.json`; `--local` routes the write-back to `claude-plugins.local.json` and leaves the shared file untouched. The hint is advisory only -- it never changes the `{not added}` brace, the severity, or the summary line -- and an install that misses in both scopes renders the bare row exactly as before.
+
+- The `--local` flag is now offered by tab completion on `install`, `update`, `uninstall`, `reinstall`, `enable`, and `disable`, with a description naming the per-machine override file it targets. It was previously parse-accepted but hidden from completion, which left the no-pollute path (write to `claude-plugins.local.json` instead of the shared, often git-tracked `claude-plugins.json`) undiscoverable at exactly the scope-decision point where it matters. `--local` is orthogonal to `--scope` -- it selects the physical config file within a scope, not the scope itself, and is valid at both user and project scope -- so it completes alongside `--scope` rather than as a scope value.
+
 ## [0.17.0] - 2026-08-19
 
 - A plugin author can now ship a plugin that installs disabled. `defaultEnabled` is an optional boolean on a marketplace plugin entry or in `plugin.json`, with the entry winning and absence resolving to `true`.

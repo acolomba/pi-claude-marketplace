@@ -644,6 +644,21 @@ A marketplace operation has failed.
 ⊘ ghost-mp [project] (failed) {not added}
 ```
 
+### Failure -- marketplace not added, cross-scope hint (ATTR-11)
+
+When the marketplace container exists at the OTHER scope -- the common repo-bundled-marketplace case, where a default-scope (user) `install` misses a marketplace registered only at project scope -- the bare `{not added}` row is not actionable on its own: it does not say where the container lives, and the clean retry command uses the `--local` flag that completion never offers. The orchestrator therefore performs one extra read-only `loadState` of the other scope on this arm and, when the container is found, appends a cross-scope hint under the row naming the retry command at the scope the container lives in. `--local` is suggested only for a project-scope container, because a bare `--scope project` write would land in the shared `claude-plugins.json`; `--local` routes the write-back to `claude-plugins.local.json` and leaves the shared file untouched. The hint is advisory only -- it never changes the `{not added}` brace, the severity, or the summary line -- and an install that misses in BOTH scopes renders the bare row exactly as above. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the detail row plus the indented hint as its own block. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added-cross-scope-hint -->
+
+```text
+A marketplace operation has failed.
+
+⊘ mp [user] (failed) {not added}
+  Marketplace "mp" is registered at project scope; retry with:
+    /claude:plugin install hello@mp --scope project --local
+  (--local writes to claude-plugins.local.json and leaves claude-plugins.json untouched)
+```
+
 ### Failure -- a name a DISABLED plugin still owns (ENBL-18)
 
 The pre-flight cross-plugin guard refuses an install when a generated skill, command, or agent name belongs to a different plugin in the same scope. A DISABLED plugin is such an owner. Disable keeps the installation record and its component inventory (ENBL-18), thus the names stay reserved even though the disable deleted every artifact from disk.
