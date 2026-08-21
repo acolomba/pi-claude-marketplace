@@ -2,6 +2,10 @@
 
 ## Guidelines
 
+### General
+
+Before editing any file, read it first. Before modifying a function, trace its callers. Research before you edit.
+
 ### Git
 
 - NEVER commit to the main branch.
