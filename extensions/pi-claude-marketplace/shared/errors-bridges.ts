@@ -98,3 +98,25 @@ export class BridgeStagingError extends Error {
     this.name = "BridgeStagingError";
   }
 }
+
+/**
+ * CM-4: one command file whose relative path does not produce a valid
+ * generated name (RN-2). `domain/name.ts` knows the failing segment but not
+ * the directory the file came from, so the throw site and the call site each
+ * hold half of the answer; this error is where they meet.
+ *
+ * The message names the source and the directory ONLY. The reason rides
+ * `Error.cause`, so `causeChainTrailer` renders it exactly once -- inlining
+ * it here as well would print it twice.
+ */
+export class CommandNameError extends Error {
+  readonly sourceName: string;
+  readonly commandsDir: string;
+
+  constructor(sourceName: string, commandsDir: string, options?: { cause?: unknown }) {
+    super(`invalid command source "${sourceName}" in "${commandsDir}"`, options);
+    this.name = "CommandNameError";
+    this.sourceName = sourceName;
+    this.commandsDir = commandsDir;
+  }
+}

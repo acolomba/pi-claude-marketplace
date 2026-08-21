@@ -30,7 +30,8 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { generatedCommandName } from "../../domain/name.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { CommandNameError } from "../../shared/errors-bridges.ts";
+import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
@@ -51,12 +52,49 @@ function duplicateWarning(sourceName: string, commandsDir: string, generatedName
   );
 }
 
+function relFrom(base: string, target: string): string {
+  return path.relative(base, target).split(path.sep).join("/");
+}
+
 function unreadableDirWarning(dir: string, base: string, err: unknown): string {
-  const rel = path.relative(base, dir).split(path.sep).join("/");
   return (
-    `command subdirectory "${rel}" in "${base}" cannot be read: ` +
+    `command subdirectory "${relFrom(base, dir)}" in "${base}" cannot be read: ` +
     `${errorMessage(err)}; skipping subdirectory.`
   );
+}
+
+function unreadableFileWarning(file: string, base: string, err: unknown): string {
+  return (
+    `command file "${relFrom(base, file)}" in "${base}" cannot be read: ` +
+    `${errorMessage(err)}; skipping file.`
+  );
+}
+
+function badNameWarning(err: CommandNameError): string {
+  return `${err.message} -- ${causeChainTrailer(err)}; skipping file.`;
+}
+
+/**
+ * The errnos a single walk step answers with a skip instead of an install
+ * failure.
+ *
+ * All four describe the entry, not the machine. A permission refusal
+ * (EACCES, or EPERM on Windows) is a plugin-shape problem the author can
+ * fix; ENOENT and ENOTDIR mean the entry `readdir` reported changed shape
+ * or vanished before the walk reached it. Every other errno -- EIO on
+ * failing storage, EMFILE when the process is out of descriptors, ENOMEM --
+ * says the read itself is unreliable, so it propagates and fails the
+ * install rather than quietly installing a subset of the plugin.
+ */
+const TOLERATED_WALK_ERRNOS: ReadonlySet<string> = new Set([
+  "EACCES",
+  "EPERM",
+  "ENOENT",
+  "ENOTDIR",
+]);
+
+function isToleratedWalkError(err: unknown): boolean {
+  return isErrnoException(err) && TOLERATED_WALK_ERRNOS.has(err.code ?? "");
 }
 
 /**
@@ -82,6 +120,10 @@ async function readWalkEntries(dir: string, base: string, warnings: string[]): P
   try {
     return await readdir(dir, { withFileTypes: true, encoding: "utf8" });
   } catch (err) {
+    if (!isToleratedWalkError(err)) {
+      throw err;
+    }
+
     warnings.push(unreadableDirWarning(dir, base, err));
     return [];
   }
@@ -93,17 +135,81 @@ async function readWalkEntries(dir: string, base: string, warnings: string[]): P
  * `domain/name.ts` is a pure module: it knows the failing segment but not
  * the directory the file came from, so its label names only the source. The
  * throw site and the call site each hold half of the answer, and the call
- * site is where they meet. Rethrow with both, keeping the original as
- * `cause`.
+ * site is where they meet. `CommandNameError` carries both, and the reason
+ * rides `Error.cause`.
  */
 function nameCommandInDir(pluginName: string, sourceName: string, base: string): string {
   try {
     return generatedCommandName(pluginName, sourceName);
   } catch (err) {
-    throw new Error(`invalid command source "${sourceName}" in "${base}": ${errorMessage(err)}`, {
-      cause: err,
-    });
+    throw new CommandNameError(sourceName, base, { cause: err });
   }
+}
+
+/**
+ * One non-directory entry of the walk.
+ *
+ * Two things can go wrong per file, and neither may abort the install (a
+ * tree that installs today must keep installing):
+ *
+ *   - The `lstat` behind `isPlainMarkdownFile` fails. A mode-0444 directory
+ *     is readable but not searchable, so `readdir` lists its children and
+ *     every `lstat` on one of them returns EACCES.
+ *   - The relative path does not produce a valid generated name. D-141-02
+ *     retired the common case (a head the elision empties); what remains is
+ *     a segment that fails RN-2 on its own -- an ASCII control character or
+ *     a literal backslash in a path component.
+ *
+ * Both skip the one file and report it on `warnings`.
+ */
+async function collectCommandFile(args: {
+  dir: string;
+  entry: Dirent;
+  full: string;
+  base: string;
+  pluginName: string;
+  out: DiscoveredCommand[];
+  warnings: string[];
+}): Promise<void> {
+  const { dir, entry, full, base, pluginName, out, warnings } = args;
+
+  // Refuse symlinked `.md` entries. Even if the link target lives inside
+  // the plugin root, the bridge does not honor symlinks (D-14 / PS-1).
+  let plain: boolean;
+  try {
+    plain = await isPlainMarkdownFile(dir, entry);
+  } catch (err) {
+    if (!isToleratedWalkError(err)) {
+      throw err;
+    }
+
+    warnings.push(unreadableFileWarning(full, base, err));
+    return;
+  }
+
+  if (!plain) {
+    return;
+  }
+
+  const sourceName = relFrom(base, full).slice(0, -3); // strip ".md"
+
+  // Per-segment validation (including path-separator rejection) happens
+  // inside generatedCommandName, which splits the `/`-separated sourceName
+  // and validates each segment. The full sourceName intentionally contains
+  // `/` for nested files, so it MUST NOT be passed to assertSafeName here.
+  let generatedName: string;
+  try {
+    generatedName = nameCommandInDir(pluginName, sourceName, base);
+  } catch (err) {
+    if (!(err instanceof CommandNameError)) {
+      throw err;
+    }
+
+    warnings.push(badNameWarning(err));
+    return;
+  }
+
+  out.push({ sourceName, generatedName, commandFile: full });
 }
 
 /**
@@ -114,7 +220,10 @@ function nameCommandInDir(pluginName: string, sourceName: string, base: string):
  * `sourceName` "build/web"). Subdirectories are descended into in sorted
  * order; symlinked and dotfile-prefixed entries are skipped (D-14).
  *
- * An unreadable subdirectory is skipped and reported on `warnings`.
+ * An unreadable subdirectory, an unreadable file, and a file whose path
+ * does not produce a valid generated name are each skipped and reported on
+ * `warnings`. Nothing here aborts the install except an errno that says the
+ * read itself is unreliable (see `TOLERATED_WALK_ERRNOS`).
  *
  * Does NOT dedup -- the caller folds the results into its first-wins map.
  */
@@ -149,21 +258,7 @@ async function walkCommandsDir(
       continue;
     }
 
-    // Refuse symlinked `.md` entries. Even if the link target lives inside
-    // the plugin root, the bridge does not honor symlinks (D-14 / PS-1).
-    if (!(await isPlainMarkdownFile(dir, entry))) {
-      continue;
-    }
-
-    const rel = path.relative(base, full).split(path.sep).join("/");
-    const sourceName = rel.slice(0, -3); // strip ".md"
-    // Per-segment validation (including path-separator rejection) happens
-    // inside generatedCommandName, which splits the `/`-separated sourceName
-    // and validates each segment. The full sourceName intentionally contains
-    // `/` for nested files, so it MUST NOT be passed to assertSafeName here.
-    const generatedName = nameCommandInDir(pluginName, sourceName, base);
-
-    out.push({ sourceName, generatedName, commandFile: full });
+    await collectCommandFile({ dir, entry, full, base, pluginName, out, warnings });
   }
 }
 

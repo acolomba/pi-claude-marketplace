@@ -432,30 +432,36 @@ test("CM-4 discoverPluginCommands skips an unreadable subdirectory (POSIX-only)"
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// A bad command file name names its directory and its path.
+// A bad command file name is a warning naming the directory, the source,
+// and the reason -- not an aborted install.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("CM-4 discoverPluginCommands names the directory and the source in a bad-name error", async () => {
+test("CM-4 discoverPluginCommands skips a bad-named command and installs the rest", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-badname-"));
 
   try {
-    // The head segment "acme-." elides to ".", which RN-2 forbids, so the
-    // elided-head check throws.
+    // The head segment "acme-." elides to ".", which RN-2 forbids.
     const commandsDir = path.join(tmp, "commands");
     await mkdir(path.join(commandsDir, "acme-."), { recursive: true });
     await writeFile(path.join(commandsDir, "acme-.", "lint.md"), "body");
+    await writeFile(path.join(commandsDir, "good.md"), "body");
 
     const resolved = makeResolved(tmp, "commands");
-    const err = await discoverPluginCommands({ pluginName: "acme", resolved }).then(
-      () => undefined,
-      (e: unknown) => e,
-    );
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
 
-    assert.ok(err instanceof Error, "expected a thrown Error");
-    assert.match(err.message, /"acme-\.\/lint"/, "the error names the source path");
-    assert.ok(err.message.includes(commandsDir), "the error names the commands directory");
-    assert.ok(err.cause instanceof Error, "the original error is preserved as the cause");
-    assert.match(err.cause.message, /elided command path head/);
+    assert.deepEqual(
+      out.map((c) => c.generatedName),
+      ["acme:good"],
+      "the well-named command still installs",
+    );
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /"acme-\.\/lint"/, "the warning names the source path");
+    assert.ok(warnings[0]!.includes(commandsDir), "the warning names the commands directory");
+    assert.match(warnings[0]!, /elided command path head/, "the warning names the reason");
+    assert.match(warnings[0]!, /skipping file/);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
