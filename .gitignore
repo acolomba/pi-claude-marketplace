@@ -1,5 +1,6 @@
 # ai harnesses
 **/.claude/settings.local.json
+/.claude/jobs/
 /.opencode
 /.pi/
 /.pi-lens/
@@ -21,6 +22,7 @@
 /.claude/hooks/package.json
 /.claude/package.json
 /.claude/scripts/*
+/.claude/skills/spike-findings-*/
 
 /.codex/.gsd-profile
 /.codex/agents/gsd-*
@@ -37,6 +39,7 @@
 /.codex/hooks/package.json
 /.codex/scripts/*
 /.codex/skills/gsd-*
+/.codex/skills/spike-findings-*/
 
 # build output
 /dist/
