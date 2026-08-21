@@ -5,8 +5,10 @@ project_doc_fallback_filenames = ["CLAUDE.md"]
 project_doc_max_bytes = 65536
 
 # GSD Agent Configuration — managed by gsd-core installer
+
 [agents]
 max_depth = 1
+
 
 [features]
 hooks = true

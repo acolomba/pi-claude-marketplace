@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "ms-vscode.vscode-typescript-next",
+    "editorconfig.editorconfig",
+    "tamasfe.even-better-toml",
+    "github.vscode-github-actions",
+    "davidanson.vscode-markdownlint",
+    "timonwong.shellcheck",
+    "sonarsource.sonarlint-vscode",
+    "redhat.vscode-xml",
+    "redhat.vscode-yaml"
+  ]
+}
