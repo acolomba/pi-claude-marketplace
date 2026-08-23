@@ -16,14 +16,22 @@
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
 // D-141-03 / D-141-05: the four bridges' staging warnings are split, not
 // folded flat. The skills and commands halves are DISCOVERY warnings and
-// reach both modes -- standalone through `./shared.ts::surfaceDiscoveryWarnings`
-// after the success row. The agents and mcp halves are hygiene warnings and
-// stay orchestrated-only beside the maintenance warnings, because
+// reach both modes. The agents and mcp halves are hygiene warnings and stay
+// orchestrated-only beside the maintenance warnings, because
 // MarketplaceNotificationMessage has no field for one and a standalone user
 // has nothing to do about it (D-19-01, unchanged). The underlying side
 // effects (dropMarketplaceCache + rm) run either way, and the internal
 // `notes` field on `ReinstallPluginOutcome` carries every half for
 // orchestrated-mode consumers.
+//
+// The discovery diagnostic is emitted by whichever function renders the row
+// it qualifies, always after that row. Every production entrypoint reaches
+// `reinstallPlugins`, which drives `reinstallPlugin` with `render: "none"`
+// and renders the cascade itself, so `reinstallPlugins` is the emitter for a
+// user-invoked reinstall; it reads the `discoveryWarnings` field the
+// `render: "none"` arm puts on each reinstalled outcome. The self-rendering
+// `render !== "none"` arm emits its own, and the two are mutually exclusive
+// by construction -- that arm never populates the field.
 
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -343,7 +351,20 @@ export async function reinstallPlugin(
       ...locked.bridgeWarnings,
       ...maintenanceWarnings,
     ].map((w) => `warning: ${w}`);
-    return notes.length === 0 ? locked.outcome : { ...locked.outcome, notes };
+    if (notes.length === 0) {
+      return locked.outcome;
+    }
+
+    // A non-empty `discoveryWarnings` always makes `notes` non-empty, so the
+    // early return above cannot drop the carrier. NREG-01: both keys stay
+    // absent on a clean reinstall.
+    return {
+      ...locked.outcome,
+      notes,
+      ...(locked.discoveryWarnings.length > 0 && {
+        discoveryWarnings: locked.discoveryWarnings,
+      }),
+    };
   }
 
   // IN-01 / D-19-01: the HYGIENE warnings (bridge + maintenance) are NOT
@@ -564,7 +585,39 @@ export async function reinstallPlugins(
   }
 
   renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
+  surfaceReinstallDiscoveryWarnings(ctx, outcomes);
   return Object.freeze(outcomes);
+}
+
+/**
+ * D-141-03 / D-141-05: render each reinstalled plugin's discovery warnings
+ * after the cascade its row lives in -- the user reads the row, then the
+ * detail that qualifies it. Mirrors `update.ts::surfaceUpdateDiscoveryWarnings`.
+ *
+ * This loop, not the `render !== "none"` arm of `reinstallPlugin`, is what a
+ * user-invoked reinstall reaches: the edge handler calls `reinstallPlugins`
+ * for every target form, and this function drives `reinstallPlugin` with
+ * `render: "none"`.
+ *
+ * The hygiene half never arrives here: only the DISCOVERY half rides
+ * `discoveryWarnings`, while `notes` keeps the flat fold for orchestrated
+ * consumers.
+ */
+function surfaceReinstallDiscoveryWarnings(
+  ctx: ExtensionContext,
+  outcomes: readonly ReinstallPluginOutcome[],
+): void {
+  for (const outcome of outcomes) {
+    if (outcome.partition !== "reinstalled" || outcome.discoveryWarnings === undefined) {
+      continue;
+    }
+
+    surfaceDiscoveryWarnings(ctx, {
+      plugin: outcome.name,
+      verb: "reinstalled",
+      warnings: outcome.discoveryWarnings,
+    });
+  }
 }
 
 /**

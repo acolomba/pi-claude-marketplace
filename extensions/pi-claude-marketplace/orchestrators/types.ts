@@ -69,6 +69,25 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];
+  /**
+   * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
+   * warnings, unprefixed, carried separately from `notes`.
+   *
+   * `notes` folds all three halves (discovery + hygiene + maintenance) behind
+   * a `warning: ` prefix for orchestrated consumers, so a reader cannot tell
+   * the halves apart again. `reinstallPlugins` needs exactly the discovery
+   * half to render after its cascade, and the boundary forces the carrier:
+   * the warnings originate inside the locked ledger while the rows are not
+   * rendered until `renderReinstallPartitionAndNotify` at the very end of
+   * `reinstallPlugins`, so a diagnostic fired from inside the ledger would
+   * print the detail BEFORE the row it explains.
+   *
+   * Populated only on the `render: "none"` arm, the same arm that populates
+   * `notes`; the self-rendering arm surfaces its own diagnostic instead.
+   * Omitted when empty, so a clean reinstall's outcome shape is unchanged
+   * (NREG-01).
+   */
+  readonly discoveryWarnings?: readonly string[];
 }
 
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
@@ -226,7 +245,7 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * D-141-03 / D-141-05: the bridge staging warnings this update produced,
    * already split -- the discovery half always, plus the hygiene half in
    * cascade mode only. Mirrors the optional `notes?` that
-   * `ReinstallOutcomeBase` carries.
+   * `ReinstallReinstalledOutcome` carries.
    *
    * This partition needs the carrier because the update path puts a boundary
    * between a warning and the row it qualifies: the warnings originate inside
@@ -236,9 +255,15 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * that row, so the outcome is the only thing that crosses the boundary.
    *
    * Omitted when empty, so a clean update's outcome shape is unchanged
-   * (NREG-01). No consumer of the `updated` partition reads it -- the two
+   * (NREG-01).
+   *
+   * NOT dead. `update.ts::surfaceUpdateDiscoveryWarnings` reads this field on
+   * this partition to render the standalone diagnostic, and the cascade
+   * consumers carry it onward. What no consumer does is NARROW it to a
+   * closed-set `Reason` the way the `skipped` and `failed` arms do -- the two
    * `notes` narrowers (`narrowSkipReasons`, `narrowFailReasons`) are each
-   * typed on their own partition's arm.
+   * typed on their own partition's arm, so a cascade ROW renderer never
+   * reads this one.
    */
   readonly notes?: readonly string[];
 }

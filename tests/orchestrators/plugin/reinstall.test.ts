@@ -4106,19 +4106,33 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
 // The skills and commands halves are discovery warnings and reach the
 // standalone user after the row; the agents and mcp halves stay on the
 // orchestrated channel.
+//
+// Every test below drives `reinstallPlugins`, the function the edge handler
+// calls for EVERY target form. `reinstallPlugin`'s own `render !== "none"`
+// arm is not a production path, so a test that entered it would prove
+// nothing about what a user sees.
 
 /**
- * Seed a D-07 collision inside ONE componentPaths.skills entry: `hello-foo/`
- * and `foo/` in plugin `hello` both elide to the generated name `hello-foo`
- * (D-141-04), so discovery keeps the localeCompare-first source and reports
- * the loser.
+ * Seed a D-07 collision inside ONE componentPaths.skills entry: for plugin
+ * `<plugin>`, `<plugin>-<stem>/` and `<stem>/` both elide to the generated
+ * name `<plugin>-<stem>` (D-141-04), so discovery keeps the localeCompare-first
+ * source and reports the loser.
  */
-async function seedCollidingSkills(pluginRoot: string): Promise<void> {
+async function seedCollidingSkills(
+  pluginRoot: string,
+  pluginName: string,
+  stems: readonly string[],
+): Promise<void> {
   const skillsDir = path.join(pluginRoot, "skills");
-  await mkdir(path.join(skillsDir, "hello-foo"), { recursive: true });
-  await writeFile(path.join(skillsDir, "hello-foo", "SKILL.md"), "---\nname: foo\n---\n\nfirst\n");
-  await mkdir(path.join(skillsDir, "foo"), { recursive: true });
-  await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\n\nsecond\n");
+  for (const stem of stems) {
+    for (const dir of [`${pluginName}-${stem}`, stem]) {
+      await mkdir(path.join(skillsDir, dir), { recursive: true });
+      await writeFile(
+        path.join(skillsDir, dir, "SKILL.md"),
+        `---\nname: ${stem}\n---\n\nfrom ${dir}\n`,
+      );
+    }
+  }
 }
 
 test("D-141-03: a standalone reinstall surfaces a skills discovery warning after the row", async () => {
@@ -4132,17 +4146,27 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         resources: { skill: "old skill" },
         install: true,
       });
-      await seedCollidingSkills(pluginRoot);
+      await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
       const { ctx, pi, notifications } = makeCtx();
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
 
-      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(outcomes[0]?.partition, "reinstalled");
       assert.equal(notifications.length, 2, "the reinstall row plus the diagnostic block");
       const diagnostic = notifications[1];
       assert.ok(diagnostic !== undefined);
       assert.equal(diagnostic.severity, "warning");
-      assert.match(diagnostic.message, /1 declared component was skipped/);
+      // The VERB and the plugin name are the whole reason the diagnostic
+      // header is parameterised; assert them, not just the tally clause.
+      assert.match(
+        diagnostic.message,
+        /Plugin "hello" reinstalled; 1 declared component was skipped\./,
+      );
       assert.match(diagnostic.message, /"hello-foo"/);
       assert.match(diagnostic.message, /ignoring duplicate/);
       // NFR-9: the absolute skills directory is redacted to its basename.
@@ -4156,6 +4180,164 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
   });
 });
 
+test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular and plural", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-bulk-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const hello = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "hello",
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      const world = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "world",
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await seedCollidingSkills(hello.pluginRoot, "hello", ["foo"]);
+      // TWO collisions, so this plugin exercises the PLURAL header arm that a
+      // one-collision fixture leaves dark.
+      await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      const diagnostics = notifications.filter((n) => n.message.includes("declared component"));
+      // Both plugins reported, so the emitter walks EVERY outcome rather than
+      // stopping at the first.
+      assert.equal(diagnostics.length, 2, JSON.stringify(notifications));
+      assert.ok(
+        diagnostics.some((n) =>
+          n.message.includes('Plugin "hello" reinstalled; 1 declared component was skipped.'),
+        ),
+        JSON.stringify(diagnostics),
+      );
+      assert.ok(
+        diagnostics.some((n) =>
+          n.message.includes('Plugin "world" reinstalled; 2 declared components were skipped.'),
+        ),
+        JSON.stringify(diagnostics),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-141-03: an orchestrated reinstall carries the discovery half on notes and on discoveryWarnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-orch-"));
+    try {
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(notifications.length, 0, "render: none emits nothing");
+      // The flat `notes` fold reaches orchestrated consumers (reconcile
+      // backfill) and MUST keep carrying the discovery half.
+      const notes = outcome.partition === "reinstalled" ? (outcome.notes ?? []) : [];
+      assert.ok(
+        notes.some((n) => n.startsWith("warning: ") && n.includes('"hello-foo"')),
+        `expected the discovery warning on notes; got: ${JSON.stringify(notes)}`,
+      );
+      // The unprefixed carrier is what `reinstallPlugins` renders from.
+      const carried = outcome.partition === "reinstalled" ? (outcome.discoveryWarnings ?? []) : [];
+      assert.equal(carried.length, 1, JSON.stringify(carried));
+      assert.ok(carried[0]?.includes('"hello-foo"'));
+      assert.ok(!carried[0]?.startsWith("warning: "));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NREG-01: a clean reinstall outcome carries neither notes nor discoveryWarnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nreg-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
+      assert.ok(!Object.hasOwn(outcome, "discoveryWarnings"), JSON.stringify(outcome));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NREG-01: a hygiene-only reinstall carries notes but still omits discoveryWarnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nreg-hyg-"));
+    try {
+      // The agent has no `description`, so the HYGIENE half is non-empty while
+      // the discovery half stays empty. Without this case the omit rule is
+      // only exercised where `notes` is empty too, and an unconditional
+      // `discoveryWarnings: []` would go unnoticed.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", agent: "old agent" },
+        install: true,
+      });
+
+      const { ctx, pi } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.ok(Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
+      assert.ok(!Object.hasOwn(outcome, "discoveryWarnings"), JSON.stringify(outcome));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and no notification in standalone", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hygwarn-"));
@@ -4163,12 +4345,15 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
       const marketplaceRoot = path.join(cwd, "mp-src");
       // `writePluginTree` writes the agent frontmatter with no `description`,
       // which the agents bridge reports as a fallback note.
-      await seedMarketplace({
+      const { pluginRoot } = await seedMarketplace({
         cwd,
         marketplaceRoot,
         resources: { skill: "old skill", agent: "old agent" },
         install: true,
       });
+      // A discovery warning beside it: without this positive control the
+      // absence assertion below would also pass if the split returned nothing.
+      await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
       const orchestrated = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
       const orchestratedOutcome = await reinstallPlugin({
@@ -4190,8 +4375,17 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
       );
 
       const standalone = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
-      await reinstallDefault(cwd, standalone.ctx, standalone.pi);
+      await reinstallPlugins({
+        ctx: standalone.ctx,
+        pi: standalone.pi,
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
 
+      assert.ok(
+        standalone.notifications.some((n) => n.message.includes("declared component was skipped")),
+        `the discovery half must still reach standalone: ${JSON.stringify(standalone.notifications)}`,
+      );
       assert.ok(
         !standalone.notifications.some((n) =>
           n.message.includes("source description was missing or empty"),
