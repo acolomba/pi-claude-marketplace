@@ -66,10 +66,23 @@ async function isSelfSkillDir(skillsDir: string): Promise<boolean> {
   );
 }
 
-function duplicateWarning(sourceName: string, skillsDir: string, generatedName: string): string {
+/**
+ * D-07 first-wins skip. Names the WINNING source rather than blaming an
+ * earlier `componentPaths.skills` entry: under D-141-04 the two sides of a
+ * collision are just as often two subdirs of ONE entry (`acme-foo/` and
+ * `foo/` in plugin `acme`), where there is no earlier entry to blame. Naming
+ * the winner is true either way and more useful. Matches the commands
+ * bridge's warning of the same shape.
+ */
+function duplicateWarning(
+  sourceName: string,
+  skillsDir: string,
+  generatedName: string,
+  winningSourceName: string,
+): string {
   return (
     `skill source "${sourceName}" in "${skillsDir}" elides to generated name ` +
-    `"${generatedName}" already produced by an earlier componentPaths.skills entry; ` +
+    `"${generatedName}", already produced by skill source "${winningSourceName}"; ` +
     `ignoring duplicate.`
   );
 }
@@ -99,8 +112,9 @@ async function collectSelfSkillDir(
   assertSafeName(sourceName, `skill directory name in ${skillsDir}`);
 
   const generatedName = generatedSkillName(pluginName, sourceName);
-  if (seenByGenerated.has(generatedName)) {
-    warnings.push(duplicateWarning(sourceName, skillsDir, generatedName));
+  const winner = seenByGenerated.get(generatedName);
+  if (winner !== undefined) {
+    warnings.push(duplicateWarning(sourceName, skillsDir, generatedName, winner.sourceName));
     return true;
   }
 
@@ -173,8 +187,9 @@ export async function discoverPluginSkills(input: {
       // a soft-fail with a descriptive warning. RN-6 / D-141-04: the loser
       // may sit in this same dir -- `acme-foo/` and `foo/` in plugin `acme`
       // both generate `acme-foo` -- and it takes the same skip.
-      if (seenByGenerated.has(generatedName)) {
-        warnings.push(duplicateWarning(entry.name, skillsDir, generatedName));
+      const winner = seenByGenerated.get(generatedName);
+      if (winner !== undefined) {
+        warnings.push(duplicateWarning(entry.name, skillsDir, generatedName, winner.sourceName));
         continue;
       }
 

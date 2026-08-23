@@ -230,8 +230,12 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
     assert.equal(discovered.length, 1, "first-wins keeps only one");
     assert.equal(discovered[0]!.skillDir, path.join(a, "shared"), "dir 'a' wins");
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /elides to generated name "acme-shared"/);
-    assert.match(warnings[0]!, /ignoring duplicate/);
+    // The warning names the WINNING source, not an "earlier entry".
+    assert.equal(
+      warnings[0],
+      `skill source "shared" in "${b}" elides to generated name "acme-shared", ` +
+        `already produced by skill source "shared"; ignoring duplicate.`,
+    );
   } finally {
     await cleanupStaging(tmp, "test-cleanup");
   }
@@ -268,8 +272,13 @@ test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the fir
     assert.equal(discovered[0]!.sourceName, "acme-foo", "the localeCompare-first source wins");
     assert.equal(discovered[0]!.generatedName, "acme-foo");
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /"acme-foo"/);
-    assert.match(warnings[0]!, /ignoring duplicate/);
+    // There IS no earlier `componentPaths.skills` entry here -- one entry
+    // holds both sides -- so the warning names the winner instead.
+    assert.equal(
+      warnings[0],
+      `skill source "foo" in "${skillsDir}" elides to generated name "acme-foo", ` +
+        `already produced by skill source "acme-foo"; ignoring duplicate.`,
+    );
   } finally {
     await cleanupStaging(tmp, "test-cleanup");
   }

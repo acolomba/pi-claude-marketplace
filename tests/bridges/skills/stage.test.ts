@@ -269,7 +269,7 @@ test("SK-4 / AG-8: a ${CLAUDE_PLUGIN_ROOT} in a body-synthesized description sur
   });
 });
 
-test("AS-8 / RN-6 prepareStageSkills returns kind:'noop' when no discovered AND no previousNames", async () => {
+test("AS-8 prepareStageSkills returns kind:'noop' when no discovered AND no previousNames", async () => {
   await withTmpScope(async ({ locations }) => {
     // empty-mcp fixture has no skills/ dir.
     const pluginRoot = path.join(FIXTURES, "empty-mcp");
