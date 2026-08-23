@@ -173,7 +173,7 @@ identical to a direct call.
 | Item | Reason |
 | ---- | ------ |
 | `assertNoAgentCollisions` | Out of scope per the plan. Not measured, not settled by a decision, and PRD RN-6 points agents at AG-12. The agents bridge was touched only to READ its `result.warnings`. |
-| The `duplicateWarning` "already produced by an earlier componentPaths.skills entry" clause | Out of scope per the plan. It is inaccurate for a within-entry collision, pre-existing on both the skills and commands bridges, and recorded by 260821-eln as a later pass. The new `D-141-04` test deliberately asserts on `"acme-foo"` and `ignoring duplicate` only, never on that clause, so nothing locks it in. |
+| The AGENTS bridge's `duplicateWarning` "already produced by an earlier componentPaths.agents entry" clause | Out of scope per the plan, and still true of the agents bridge alone (`bridges/agents/discover.ts:41`). Filed as `AGCOL-01`. The SKILLS clause this row originally claimed was out of scope is not: `f6efa2d0` changed it during the review round, and the commands bridge had already named the winner at `e3cafdb0` (`9142f8bc`, earlier in this same PR), so it was never "pre-existing on both". `tests/bridges/skills/discover.test.ts` now asserts the complete byte string at three sites, so it IS locked in. |
 | `discover-names.ts` | Out of scope per the plan. It still discards its copy of the discovery warnings on purpose; every caller re-walks the same directories during staging, and that pass is the one that reports. |
 | Any version bump | Locked by the plan and the constraints. `package.json`, `package-lock.json`, `EXTENSION_VERSION` and `sonar.projectVersion` all verified still at `0.17.0`; `git diff main...HEAD` over the three version files is empty. |
 | A CHANGELOG entry for the retired skills gate | Locked by the plan. The gate never fired, so retiring it changes no user-visible behavior, and the changelog rule forbids explaining what the old code did internally. |
@@ -284,3 +284,45 @@ compiles; the durable fix is a producer-side `kind` discriminant).
 `npm run check` redirected to `/tmp/260823-ar0-recheck.log`, never piped.
 **Real exit code: `EXIT=0`.** Unit 3633 / 3632 pass / 0 fail / 1 pre-existing
 platform skip; integration 21 / 21 pass.
+
+## Review round 2 (2026-08-23)
+
+Two reviewers re-reviewed `e3cafdb0..6386dcf1`. No Critical: the round-1 fix
+was proven by running a real fixture through the production CLI entrypoint,
+and all ten round-1 plants were independently re-run. What follows is the
+remainder.
+
+| Commit | Finding |
+| ------ | ------- |
+| `7d195d22` | The `surfaceDiscoveryWarnings` call left in `reinstallPlugin`'s `render !== "none"` arm was an unreachable second copy once delivery moved to `reinstallPlugins`. Deleted; the surrounding pre-existing dead arm stays. The file header's "every production entrypoint reaches `reinstallPlugins`" was false -- `reconcile/backfill.ts:349` calls `reinstallPlugin` directly, reached from `resources_discover`. Narrowed, and the backfill gap folded into `UPCASC-01`. |
+| `6e6b9826` | `collectSelfSkillDir`'s duplicate branch was UNEXECUTED, not merely unasserted. Covered by a reversed-order sibling test. Two anchors that could not discriminate the value passed were re-cut. |
+
+### The backfill gap
+
+`PluginBackfilledOutcome` (`reconcile/apply-outcomes.ts:137`) declares no
+warnings field, and `reconcile/apply.ts:934::surfacePostCommitWarnings` filters
+to `plugin-installed`/`plugin-disabled`, so a reconcile-driven re-materialize
+of a colliding plugin reports NOTHING while a reconcile-driven install of the
+same plugin reports it. Recorded in `UPCASC-01` with its file/line evidence,
+not fixed here: rendering it means deciding where a per-plugin warning block
+sits in a multi-plugin cascade, which is the same question that already blocks
+the update and reinstall cascades.
+
+### Mutation plants run this round
+
+Every plant was applied to production code, run, and reverted.
+
+| Plant | Result |
+| ----- | ------ |
+| Replace `collectSelfSkillDir`'s whole duplicate branch with a `throw` | Only the new test fails (13 others pass) -- proving the branch was previously unreached |
+| Swap winner/loser in that branch's `duplicateWarning` call | The new test fails |
+| Change that branch's `return true` to `return false` | The new test fails (the self skill dir's subdirs get walked) |
+| Swap winner/loser at the LOOP `duplicateWarning` call | 2 fail. Against the pre-change test file the same plant left the across-array test GREEN -- the defect the rename fixes |
+| Make `collectUpdateWarnings` leak the hygiene half unconditionally | The re-anchored control reports "agents warning leaked"; the OLD anchor reported "the discovery half must still reach standalone" -- the wrong failure for the right bug |
+
+### Explicitly not done
+
+The `[scope]` bracket is still absent from the discovery diagnostic header.
+`surfaceUpdateDiscoveryWarnings` has the same shape, so it is a
+parity-preserving gap on every verb rather than a regression on one. Added as
+a line under `UPCASC-01`, to be fixed with the cascade rendering.
