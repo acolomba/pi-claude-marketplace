@@ -14,12 +14,16 @@
 // notify() owns severity, the reload-hint trailer, and the cause-chain.
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
-// Post-success soft warnings (bridge / maintenance) are NOT surfaced:
-// MarketplaceNotificationMessage has no field for them. The underlying side
-// effects (dropMarketplaceCache + rm) still run, and the internal `notes`
-// field on `ReinstallPluginOutcome` (orchestrated-mode consumers) still
-// carries the warning strings -- only the standalone-mode user-facing
-// surface is absent.
+// D-141-03 / D-141-05: the four bridges' staging warnings are split, not
+// folded flat. The skills and commands halves are DISCOVERY warnings and
+// reach both modes -- standalone through `./shared.ts::surfaceDiscoveryWarnings`
+// after the success row. The agents and mcp halves are hygiene warnings and
+// stay orchestrated-only beside the maintenance warnings, because
+// MarketplaceNotificationMessage has no field for one and a standalone user
+// has nothing to do about it (D-19-01, unchanged). The underlying side
+// effects (dropMarketplaceCache + rm) run either way, and the internal
+// `notes` field on `ReinstallPluginOutcome` carries every half for
+// orchestrated-mode consumers.
 
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -109,6 +113,8 @@ import {
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
+  splitStagingWarnings,
+  surfaceDiscoveryWarnings,
 } from "./shared.ts";
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -254,6 +260,15 @@ type ReplacementEntry =
 
 interface LockedSuccess {
   readonly outcome: ReinstallPluginOutcome;
+  /**
+   * D-141-03: the skills and commands halves of the staging warnings. These
+   * reach BOTH modes -- mirrors install's two-array `InstallCtx` shape.
+   */
+  readonly discoveryWarnings: readonly string[];
+  /**
+   * The agents and mcp halves, plus the `finalizeReplacements` leak strings.
+   * Orchestrated-only per D-19-01.
+   */
   readonly bridgeWarnings: readonly string[];
   /**
    * S5: when the config-back loadConfig returned `invalid`, the write-back
@@ -323,17 +338,23 @@ export async function reinstallPlugin(
 
   const maintenanceWarnings = await runPostSuccessMaintenance(opts, locations);
   if (render === "none") {
-    const notes = [...locked.bridgeWarnings, ...maintenanceWarnings].map((w) => `warning: ${w}`);
+    const notes = [
+      ...locked.discoveryWarnings,
+      ...locked.bridgeWarnings,
+      ...maintenanceWarnings,
+    ].map((w) => `warning: ${w}`);
     return notes.length === 0 ? locked.outcome : { ...locked.outcome, notes };
   }
 
-  // IN-01: post-success soft warnings (bridge + maintenance) are NOT
+  // IN-01 / D-19-01: the HYGIENE warnings (bridge + maintenance) are NOT
   // surfaced -- there is no clean MarketplaceNotificationMessage
   // representation for a post-success soft warning. The underlying side
   // effects (cache drop + data-dir rm + bridge finalize) still fire above;
   // the orchestrated-mode `notes` field at the `render === "none"` arm still
   // carries the warning strings for consumers outside the notify path.
-  // `maintenanceWarnings` is awaited strictly for its side effects.
+  // `maintenanceWarnings` is awaited strictly for its side effects. The
+  // DISCOVERY warnings are the D-141-03 exception and render below, after the
+  // success row.
 
   // Single-plugin reinstall success is a 1-row cascade carrying a
   // PluginReinstalledMessage variant; this branch and the bulk-cascade branch
@@ -354,6 +375,14 @@ export async function reinstallPlugin(
   notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
     { name: marketplace, scope, plugins: [reinstalledRow] },
   ]);
+
+  // D-141-03: after the row, never before -- the user reads the row, then the
+  // detail that qualifies it.
+  surfaceDiscoveryWarnings(ctx, {
+    plugin,
+    verb: "reinstalled",
+    warnings: locked.discoveryWarnings,
+  });
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artifacts were
@@ -848,6 +877,7 @@ async function runLockedReinstall(
   if (mp === undefined || oldRecord === undefined) {
     return {
       outcome: { partition: "skipped", name: plugin, marketplace, scope, notes: ["not installed"] },
+      discoveryWarnings: [],
       bridgeWarnings: [],
     };
   }
@@ -875,6 +905,7 @@ async function runLockedReinstall(
         scope,
         notes: ["already disabled"],
       },
+      discoveryWarnings: [],
       bridgeWarnings: [],
     };
   }
@@ -995,12 +1026,11 @@ async function runLockedReinstall(
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
   }
 
-  const bridgeWarnings = [
-    ...collectStagingWarnings(handles),
-    ...(await finalizeReplacements(replacements)),
-  ];
+  const staging = splitHandleWarnings(handles);
+  const bridgeWarnings = [...staging.bridge, ...(await finalizeReplacements(replacements))];
   return {
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
+    discoveryWarnings: staging.discovery,
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
@@ -1465,13 +1495,16 @@ function sameStrings(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-function collectStagingWarnings(handles: PreparedHandles): readonly string[] {
-  return Object.freeze([
-    ...handles.skills.result.warnings,
-    ...handles.commands.result.warnings,
-    ...handles.agents.result.warnings,
-    ...handles.mcp.result.warnings,
-  ]);
+function splitHandleWarnings(handles: PreparedHandles): {
+  readonly discovery: readonly string[];
+  readonly bridge: readonly string[];
+} {
+  return splitStagingWarnings({
+    skills: handles.skills.result.warnings,
+    commands: handles.commands.result.warnings,
+    agents: handles.agents.result.warnings,
+    mcp: handles.mcp.result.warnings,
+  });
 }
 
 async function abortPartialHandles(handles: PartialPreparedHandles): Promise<readonly string[]> {

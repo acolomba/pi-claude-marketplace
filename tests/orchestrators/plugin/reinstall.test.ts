@@ -4101,3 +4101,105 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
     }
   });
 });
+
+// D-141-03 / D-141-05: reinstall runs install's warning policy, not its own.
+// The skills and commands halves are discovery warnings and reach the
+// standalone user after the row; the agents and mcp halves stay on the
+// orchestrated channel.
+
+/**
+ * Seed a D-07 collision inside ONE componentPaths.skills entry: `hello-foo/`
+ * and `foo/` in plugin `hello` both elide to the generated name `hello-foo`
+ * (D-141-04), so discovery keeps the localeCompare-first source and reports
+ * the loser.
+ */
+async function seedCollidingSkills(pluginRoot: string): Promise<void> {
+  const skillsDir = path.join(pluginRoot, "skills");
+  await mkdir(path.join(skillsDir, "hello-foo"), { recursive: true });
+  await writeFile(path.join(skillsDir, "hello-foo", "SKILL.md"), "---\nname: foo\n---\n\nfirst\n");
+  await mkdir(path.join(skillsDir, "foo"), { recursive: true });
+  await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\n\nsecond\n");
+}
+
+test("D-141-03: a standalone reinstall surfaces a skills discovery warning after the row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await seedCollidingSkills(pluginRoot);
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(notifications.length, 2, "the reinstall row plus the diagnostic block");
+      const diagnostic = notifications[1];
+      assert.ok(diagnostic !== undefined);
+      assert.equal(diagnostic.severity, "warning");
+      assert.match(diagnostic.message, /1 declared component was skipped/);
+      assert.match(diagnostic.message, /"hello-foo"/);
+      assert.match(diagnostic.message, /ignoring duplicate/);
+      // NFR-9: the absolute skills directory is redacted to its basename.
+      assert.ok(
+        !diagnostic.message.includes(marketplaceRoot),
+        `absolute path leaked: ${diagnostic.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and no notification in standalone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hygwarn-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      // `writePluginTree` writes the agent frontmatter with no `description`,
+      // which the agents bridge reports as a fallback note.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill", agent: "old agent" },
+        install: true,
+      });
+
+      const orchestrated = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      const orchestratedOutcome = await reinstallPlugin({
+        ctx: orchestrated.ctx,
+        pi: orchestrated.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.equal(orchestratedOutcome.partition, "reinstalled");
+      assert.equal(orchestrated.notifications.length, 0, "render: none emits nothing");
+      const notes = orchestratedOutcome.notes ?? [];
+      assert.ok(
+        notes.some((n) => n.includes("source description was missing or empty")),
+        `expected the agents warning on notes; got: ${JSON.stringify(notes)}`,
+      );
+
+      const standalone = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      await reinstallDefault(cwd, standalone.ctx, standalone.pi);
+
+      assert.ok(
+        !standalone.notifications.some((n) =>
+          n.message.includes("source description was missing or empty"),
+        ),
+        `agents warning leaked to standalone: ${JSON.stringify(standalone.notifications)}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

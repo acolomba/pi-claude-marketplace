@@ -29,7 +29,7 @@ import {
   errorMessage,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
@@ -1167,4 +1167,65 @@ export function emitMarketplaceNotAdded(args: {
     ...(requestedScope !== undefined && { scope: requestedScope }),
   });
   return undefined;
+}
+
+/**
+ * D-141-03 / D-141-05: split one staging pass's four bridge warning arrays
+ * into the DISCOVERY half and the HYGIENE half.
+ *
+ * Skills and commands report only first-wins discovery skips, so their
+ * warnings say the installed artifact set is short of what the plugin author
+ * shipped -- the user's own resource count gives no baseline to notice that,
+ * so those reach standalone mode. The agents bridge aggregates index
+ * corruptions, per-agent conversion notes and D-07 skips onto ONE array that
+ * cannot be split at the call site, so the whole array joins the hygiene
+ * channel; mcp rides beside it.
+ *
+ * Kept here, taking plain string arrays rather than bridge result types, so
+ * install, update and reinstall run one policy instead of three copies that
+ * drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
+ * nothing to find).
+ */
+export function splitStagingWarnings(warnings: {
+  readonly skills: readonly string[];
+  readonly commands: readonly string[];
+  readonly agents: readonly string[];
+  readonly mcp: readonly string[];
+}): { readonly discovery: readonly string[]; readonly bridge: readonly string[] } {
+  return {
+    discovery: Object.freeze([...warnings.skills, ...warnings.commands]),
+    bridge: Object.freeze([...warnings.agents, ...warnings.mcp]),
+  };
+}
+
+/**
+ * D-141-03 / D-141-05: render the discovery half to a standalone user, after
+ * the verb's own row.
+ *
+ * The seam is `notifyDiagnostic`, the same sanctioned second-notify channel
+ * the reconcile pass uses; the verb's row itself stays exactly one
+ * `MarketplaceNotificationMessage` (IL-2).
+ *
+ * NFR-9: a discovery warning embeds the absolute component directory it
+ * walked, so it goes through `redactAbsolutePaths` before it reaches the
+ * user, exactly as the reconcile composer does.
+ */
+export function surfaceDiscoveryWarnings(
+  ctx: ExtensionContext,
+  args: {
+    readonly plugin: string;
+    readonly verb: "installed" | "updated" | "reinstalled";
+    readonly warnings: readonly string[];
+  },
+): void {
+  if (args.warnings.length === 0) {
+    return;
+  }
+
+  const lines = args.warnings.map((w) => redactAbsolutePaths(w));
+  const header =
+    lines.length === 1
+      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component was skipped.`
+      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components were skipped.`;
+  notifyDiagnostic(ctx, header, lines);
 }

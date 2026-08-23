@@ -122,7 +122,7 @@ import {
   malformedReasonsForKinds,
   type DegradeKind,
 } from "../../shared/notify-reasons.ts";
-import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
+import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -155,6 +155,7 @@ import {
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   selectDeclaringConfigWriteTarget,
+  surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
@@ -1497,9 +1498,10 @@ function readDeclaredEnabled(args: {
  * warning says the installed artifact set does not match what the plugin
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
- * through `surfaceStandaloneDiscoveryWarnings`. Only the skills and
- * commands bridges feed that array; the agents bridge mixes three kinds of
- * warning onto one result field and rides the hygiene channel instead.
+ * through `./shared.ts::surfaceDiscoveryWarnings`, which update and
+ * reinstall also call (D-141-05). Only the skills and commands bridges feed
+ * that array; the agents bridge mixes three kinds of warning onto one result
+ * field and rides the hygiene channel instead.
  */
 async function collectPostCommitWarnings(
   installCtx: InstallCtx,
@@ -1565,36 +1567,6 @@ async function collectPostCommitWarnings(
   }
 
   return warnings;
-}
-
-/**
- * D-141-03: the standalone half of the discovery-warning surface.
- *
- * In standalone mode `collectPostCommitWarnings` returns the discovery
- * warnings and nothing else, so the whole array renders here. The seam is
- * `notifyDiagnostic`, the same sanctioned second-notify channel the
- * reconcile pass uses; the install row itself stays exactly one
- * `MarketplaceNotificationMessage` (IL-2).
- *
- * NFR-9: a discovery warning embeds the absolute component directory it
- * walked, so it goes through `redactAbsolutePaths` before it reaches the
- * user, exactly as the reconcile composer does.
- */
-function surfaceStandaloneDiscoveryWarnings(
-  ctx: ExtensionContext,
-  plugin: string,
-  warnings: readonly string[],
-): void {
-  if (warnings.length === 0) {
-    return;
-  }
-
-  const lines = warnings.map((w) => redactAbsolutePaths(w));
-  const header =
-    lines.length === 1
-      ? `Plugin "${plugin}" installed; 1 declared component was skipped.`
-      : `Plugin "${plugin}" installed; ${lines.length.toString()} declared components were skipped.`;
-  notifyDiagnostic(ctx, header, lines);
 }
 
 /**
@@ -2415,7 +2387,11 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         ],
       },
     ]);
-    surfaceStandaloneDiscoveryWarnings(ctx, plugin, postCommitWarnings);
+    surfaceDiscoveryWarnings(ctx, {
+      plugin,
+      verb: "installed",
+      warnings: postCommitWarnings,
+    });
   }
 
   return buildInstalledOutcome(installCtx, postCommitWarnings, disabledInstall.landed);
