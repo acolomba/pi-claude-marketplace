@@ -83,7 +83,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * print the detail BEFORE the row it explains.
    *
    * Populated only on the `render: "none"` arm, the same arm that populates
-   * `notes`; the self-rendering arm surfaces its own diagnostic instead.
+   * `notes`. The self-rendering `render !== "none"` arm leaves this undefined
+   * and surfaces NO discovery diagnostic of its own: no production caller
+   * reaches that arm, so its duplicate copy of the `surfaceDiscoveryWarnings`
+   * call was deleted rather than maintained against a surface nothing
+   * exercises. Anything that makes that arm reachable again has to render the
+   * discovery half itself -- do not read this field's absence there as the
+   * warnings being handled some other way.
    * Omitted when empty, so a clean reinstall's outcome shape is unchanged
    * (NREG-01).
    */

@@ -126,7 +126,7 @@ tests can fail, and all were reverted before the commit.
 | Plant | Result |
 | ----- | ------ |
 | Task 1: remove the `continue` in `discover.ts`'s `seenByGenerated.has` branch | The new `D-141-04` test failed (along with two pre-existing dedup tests). Restored; 41/41 pass. |
-| Task 2 (added, not required by the plan): drop the `surfaceDiscoveryWarnings` call and the `discoveryWarnings` spread from reinstall's two arms | The new standalone reinstall test failed. Restored; 80/80 pass. |
+| Task 2 (added, not required by the plan): drop the `surfaceDiscoveryWarnings` call and the `discoveryWarnings` spread from reinstall's two arms | The new standalone reinstall test failed. Restored; 80/80 pass. **Not reproducible against current code**, and the reason is the round-1 defect itself: at `4ebe5f73` the two sites were the call inside the `render !== "none"` arm and the `...locked.discoveryWarnings` spread into `notes`, and the test drove `reinstallPlugin` DIRECTLY into that arm. The call was killing the test from a surface no production caller reached. `91dd4968` moved delivery to `reinstallPlugins` and `7d195d22` deleted the call, which by then killed nothing (84/84 with it gone). The live plants for this behavior are the round-1 table below. |
 | Task 3: drop the `notes` assignment from the `updated` outcome | Both new update tests failed. Restored; 103/103 pass. |
 
 The Task 2 plant is worth one note: dropping `discoveryWarnings` from the
@@ -225,9 +225,11 @@ every target form, and that function -- like `reconcile/backfill.ts` -- passes
 
 Fixed in `91dd4968`. The reinstalled outcome now carries the discovery half
 unprefixed on a `discoveryWarnings` field, and `reinstallPlugins` renders it
-after the cascade, the shape `updatePlugins` already used. The dead arm is
-untouched and keeps its own call; the two are mutually exclusive because that
-arm never populates the carrier.
+after the cascade, the shape `updatePlugins` already used. **Superseded by
+`7d195d22`:** this round left the dead arm's own call in place and argued the
+two were mutually exclusive because that arm never populates the carrier. It
+was a second, unreachable copy of the diagnostic, and round 2 deleted it. The
+dead arm itself is still untouched.
 
 ### Mutation plants run this round
 
@@ -297,10 +299,22 @@ remainder.
 | `7d195d22` | The `surfaceDiscoveryWarnings` call left in `reinstallPlugin`'s `render !== "none"` arm was an unreachable second copy once delivery moved to `reinstallPlugins`. Deleted; the surrounding pre-existing dead arm stays. The file header's "every production entrypoint reaches `reinstallPlugins`" was false -- `reconcile/backfill.ts:349` calls `reinstallPlugin` directly, reached from `resources_discover`. Narrowed, and the backfill gap folded into `UPCASC-01`. |
 | `6e6b9826` | `collectSelfSkillDir`'s duplicate branch was UNEXECUTED, not merely unasserted. Covered by a reversed-order sibling test. Two anchors that could not discriminate the value passed were re-cut. |
 
+A confirmatory review of those two commits found one real miss and three
+follow-ups, closed by the commit that follows them. The deletion in `7d195d22`
+falsified a twin clause it did not touch: `orchestrators/types.ts` said the
+self-rendering arm "surfaces its own diagnostic instead", which stopped being
+true the moment that call was removed -- and it misled in the dangerous
+direction, since someone making the dead arm reachable would have read it and
+believed the discovery half was already handled there. That clause, the
+`reinstall.ts` header's stale mutual-exclusion justification, two superseded
+rows in this document, and an `apply.ts:934` citation that pointed at the
+filter line rather than the declaration (`:924`) are all corrected. Comment
+and prose only; no test expectations moved.
+
 ### The backfill gap
 
 `PluginBackfilledOutcome` (`reconcile/apply-outcomes.ts:137`) declares no
-warnings field, and `reconcile/apply.ts:934::surfacePostCommitWarnings` filters
+warnings field, and `reconcile/apply.ts:924::surfacePostCommitWarnings` filters
 to `plugin-installed`/`plugin-disabled`, so a reconcile-driven re-materialize
 of a colliding plugin reports NOTHING while a reconcile-driven install of the
 same plugin reports it. Recorded in `UPCASC-01` with its file/line evidence,

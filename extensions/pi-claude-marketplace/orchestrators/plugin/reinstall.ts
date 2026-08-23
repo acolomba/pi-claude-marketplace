@@ -31,7 +31,11 @@
 // itself, so `reinstallPlugins` is the emitter for a user-invoked reinstall;
 // it reads the `discoveryWarnings` field the `render: "none"` arm puts on
 // each reinstalled outcome. The self-rendering `render !== "none"` arm emits
-// nothing, and cannot: that arm never populates the field.
+// no discovery diagnostic at all -- no production caller reaches it, so it
+// carries no copy of the call to drift out of step with this one. Its
+// outcomes also leave `discoveryWarnings` undefined, which is a separate
+// fact: it is what would keep `surfaceReinstallDiscoveryWarnings` from
+// double-rendering, not the reason that arm is silent.
 //
 // `reconcile/backfill.ts` is the other production caller -- `render: "none"`
 // too, reached from `resources_discover` -> `applyReconcile`. It consumes the

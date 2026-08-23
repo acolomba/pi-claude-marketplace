@@ -1817,7 +1817,7 @@ with `render: "none"`, reached from `resources_discover` -> `applyReconcile` ->
 `applyBackfillForScopeIsolated`. The outcome it builds,
 `PluginBackfilledOutcome` (`orchestrators/reconcile/apply-outcomes.ts:137`),
 declares no warnings field at all, and
-`orchestrators/reconcile/apply.ts:934::surfacePostCommitWarnings` filters to
+`orchestrators/reconcile/apply.ts:924::surfacePostCommitWarnings` filters to
 `plugin-installed`/`plugin-disabled` regardless. So a reconcile-driven
 re-materialize of a plugin with a generated-name collision reports nothing,
 while a reconcile-driven INSTALL of the same plugin reports it.
