@@ -25,13 +25,22 @@
 // orchestrated-mode consumers.
 //
 // The discovery diagnostic is emitted by whichever function renders the row
-// it qualifies, always after that row. Every production entrypoint reaches
-// `reinstallPlugins`, which drives `reinstallPlugin` with `render: "none"`
-// and renders the cascade itself, so `reinstallPlugins` is the emitter for a
-// user-invoked reinstall; it reads the `discoveryWarnings` field the
-// `render: "none"` arm puts on each reinstalled outcome. The self-rendering
-// `render !== "none"` arm emits its own, and the two are mutually exclusive
-// by construction -- that arm never populates the field.
+// it qualifies, always after that row. The USER-INVOKED entrypoint reaches
+// `reinstallPlugins`: the edge handler calls it for every target form, and it
+// drives `reinstallPlugin` with `render: "none"` and renders the cascade
+// itself, so `reinstallPlugins` is the emitter for a user-invoked reinstall;
+// it reads the `discoveryWarnings` field the `render: "none"` arm puts on
+// each reinstalled outcome. The self-rendering `render !== "none"` arm emits
+// nothing, and cannot: that arm never populates the field.
+//
+// `reconcile/backfill.ts` is the other production caller -- `render: "none"`
+// too, reached from `resources_discover` -> `applyReconcile`. It consumes the
+// outcome without rendering EITHER half: `PluginBackfilledOutcome` carries no
+// warnings field, and `reconcile/apply.ts::surfacePostCommitWarnings` renders
+// only the `plugin-installed`/`plugin-disabled` arms. So a reconcile-driven
+// re-materialize of a colliding plugin reports nothing while a
+// reconcile-driven INSTALL of the same plugin reports it. Tracked as part of
+// BACKLOG UPCASC-01 (decide the cascade rendering once).
 
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -374,8 +383,10 @@ export async function reinstallPlugin(
   // the orchestrated-mode `notes` field at the `render === "none"` arm still
   // carries the warning strings for consumers outside the notify path.
   // `maintenanceWarnings` is awaited strictly for its side effects. The
-  // DISCOVERY warnings are the D-141-03 exception and render below, after the
-  // success row.
+  // DISCOVERY warnings are the D-141-03 exception, but this arm does not
+  // render them either: no production caller reaches it, and
+  // `reinstallPlugins` already renders them after the cascade row for the
+  // `render: "none"` arm every caller does reach.
 
   // Single-plugin reinstall success is a 1-row cascade carrying a
   // PluginReinstalledMessage variant; this branch and the bulk-cascade branch
@@ -396,14 +407,6 @@ export async function reinstallPlugin(
   notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
     { name: marketplace, scope, plugins: [reinstalledRow] },
   ]);
-
-  // D-141-03: after the row, never before -- the user reads the row, then the
-  // detail that qualifies it.
-  surfaceDiscoveryWarnings(ctx, {
-    plugin,
-    verb: "reinstalled",
-    warnings: locked.discoveryWarnings,
-  });
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artifacts were

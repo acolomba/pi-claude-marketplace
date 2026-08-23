@@ -1811,8 +1811,26 @@ warning block sits inside a multi-plugin marketplace cascade, which is a
 message-shape question for `MarketplaceNotificationMessage`, not a plumbing
 one -- and the same question governs the reinstall cascade.
 
-**Fix shape.** Decide the cascade rendering once, then apply it to the update
-and reinstall cascades together. The install cascade's existing
+The reconcile backfill has the same hole, and loses BOTH halves rather than
+one. `orchestrators/reconcile/backfill.ts:349` calls `reinstallPlugin` directly
+with `render: "none"`, reached from `resources_discover` -> `applyReconcile` ->
+`applyBackfillForScopeIsolated`. The outcome it builds,
+`PluginBackfilledOutcome` (`orchestrators/reconcile/apply-outcomes.ts:137`),
+declares no warnings field at all, and
+`orchestrators/reconcile/apply.ts:934::surfacePostCommitWarnings` filters to
+`plugin-installed`/`plugin-disabled` regardless. So a reconcile-driven
+re-materialize of a plugin with a generated-name collision reports nothing,
+while a reconcile-driven INSTALL of the same plugin reports it.
+
+A smaller parity gap rides along: the diagnostic header
+(`orchestrators/plugin/shared.ts::surfaceDiscoveryWarnings`) names the plugin
+but not its scope, so a two-scope cascade renders two headers that read alike.
+`surfaceUpdateDiscoveryWarnings` and `surfaceReinstallDiscoveryWarnings` share
+the shape, so this is a pre-existing gap on every verb rather than a
+regression on one -- fix it with the cascade rendering, not before.
+
+**Fix shape.** Decide the cascade rendering once, then apply it to the update,
+reinstall and backfill cascades together. The install cascade's existing
 `postCommitWarnings` rendering is the precedent to match rather than to
 reinvent.
 
