@@ -38,7 +38,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-21 - Completed quick task 260821-eln: Land PR #141, recursive nested command discovery
+Last activity: 2026-08-23 - Completed quick task 260823-ar0: Retire the dead skills collision gate and deliver bridge warnings on update and reinstall
 
 ## Milestone Summary
 
@@ -83,6 +83,7 @@ remain uncovered, each with its unreachability reason recorded in
 | 260819-bs8 | GitHub release automation and Codex config tracking | 2026-08-19 | 2c19c8cb | [260819-bs8-github-release-automation-and-codex-conf](./quick/260819-bs8-github-release-automation-and-codex-conf/) |
 | 260819-r3k | Land PR #138: hook timeout read as seconds (@rakesh-vs) | 2026-08-19 | 2fbaaca3..HEAD (PR #138) | [260819-r3k-land-pr-138-hook-timeout-seconds-units](./quick/260819-r3k-land-pr-138-hook-timeout-seconds-units/) |
 | 260821-eln | Land PR #141: recursive nested command discovery (@rakesh-vs) | 2026-08-21 | 6bd79fea..HEAD (PR #141) | [260821-eln-land-pr-141-recursive-nested-command-dis](./quick/260821-eln-land-pr-141-recursive-nested-command-dis/) |
+| 260823-ar0 | Retire the dead skills collision gate; one warning policy across install/update/reinstall | 2026-08-23 | 18f87ff2..fee24d1d (PR #141) | [260823-ar0-retire-the-dead-skills-collision-gate-an](./quick/260823-ar0-retire-the-dead-skills-collision-gate-an/) |
 
 ## Decisions
 
