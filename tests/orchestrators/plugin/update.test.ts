@@ -6499,3 +6499,134 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
     }
   });
 });
+
+// ─── D-141-03 / D-141-05: the update path reads the bridges' warnings ─────────
+//
+// It read none of them before, so every staging and discovery warning an
+// update produced was dark. The skills and commands halves reach the
+// standalone user after the cascade; the agents and mcp halves stay on the
+// orchestrated channel.
+
+/**
+ * Seed a D-07 collision inside ONE componentPaths.skills entry of the plugin
+ * tree: `hello-foo/` and `foo/` both elide to the generated name `hello-foo`
+ * (D-141-04), so discovery keeps the localeCompare-first source and reports
+ * the loser.
+ */
+async function seedCollidingSkills(marketplaceRoot: string): Promise<void> {
+  const skillsDir = path.join(marketplaceRoot, "plugins", "hello", "skills");
+  await mkdir(path.join(skillsDir, "hello-foo"), { recursive: true });
+  await writeFile(path.join(skillsDir, "hello-foo", "SKILL.md"), "---\nname: foo\n---\n\nfirst\n");
+  await mkdir(path.join(skillsDir, "foo"), { recursive: true });
+  await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\n\nsecond\n");
+}
+
+test("D-141-03: a standalone updatePlugins run surfaces the skills discovery warning after the row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-discwarn-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      // The collision lives in the NEW version's tree, so the swap reaches it.
+      await seedCollidingSkills(seeded.marketplaceRoot);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 2, "the update row plus the diagnostic block");
+      const diagnostic = notifications[1];
+      assert.ok(diagnostic !== undefined);
+      assert.equal(diagnostic.severity, "warning");
+      assert.match(diagnostic.message, /1 declared component was skipped/);
+      assert.match(diagnostic.message, /"hello-foo"/);
+      assert.match(diagnostic.message, /ignoring duplicate/);
+      // NFR-9: the absolute skills directory is redacted to its basename.
+      assert.ok(
+        !diagnostic.message.includes(seeded.marketplaceRoot),
+        `absolute path leaked: ${diagnostic.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-141-03: an updateSinglePlugin cascade emits no notification and carries both halves on notes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-discwarn-casc-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        // `hasAgent` writes the agent frontmatter with no `description`, which
+        // the agents bridge reports as a fallback note -- the hygiene half.
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasAgent: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await seedCollidingSkills(seeded.marketplaceRoot);
+
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      let outcome;
+      try {
+        outcome = await updateSinglePlugin("hello", "mp", "project");
+      } finally {
+        process.chdir(prevCwd);
+      }
+
+      assert.equal(outcome.partition, "updated");
+      const notes = outcome.partition === "updated" ? (outcome.notes ?? []) : [];
+      assert.ok(
+        notes.some((n) => n.includes('"hello-foo"')),
+        `expected the discovery warning on notes; got: ${JSON.stringify(notes)}`,
+      );
+      assert.ok(
+        notes.some((n) => n.includes("source description was missing or empty")),
+        `expected the agents warning on notes; got: ${JSON.stringify(notes)}`,
+      );
+
+      // The agents half must NOT reach a standalone run's notifications.
+      const cwd2 = await mkdtemp(path.join(tmpdir(), "update-discwarn-std-"));
+      try {
+        const seeded2 = await seedPathMarketplace({
+          cwd: cwd2,
+          marketplaceRoot: path.join(cwd2, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasAgent: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await seedCollidingSkills(seeded2.marketplaceRoot);
+
+        const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+        await updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd: cwd2,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        assert.ok(
+          !notifications.some((n) => n.message.includes("source description was missing or empty")),
+          `agents warning leaked to standalone: ${JSON.stringify(notifications)}`,
+        );
+      } finally {
+        await rm(cwd2, { recursive: true, force: true });
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

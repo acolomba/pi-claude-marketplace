@@ -222,6 +222,25 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
     readonly kinds: readonly string[];
     readonly newlyDegraded: boolean;
   };
+  /**
+   * D-141-03 / D-141-05: the bridge staging warnings this update produced,
+   * already split -- the discovery half always, plus the hygiene half in
+   * cascade mode only. Mirrors the optional `notes?` that
+   * `ReinstallOutcomeBase` carries.
+   *
+   * This partition needs the carrier because the update path puts a boundary
+   * between a warning and the row it qualifies: the warnings originate inside
+   * the three-phase runner, while the direct path renders no row until
+   * `renderUpdateCascadeAndNotify` at the very end of `updatePlugins`. A
+   * diagnostic fired from inside the runner would print the detail BEFORE
+   * that row, so the outcome is the only thing that crosses the boundary.
+   *
+   * Omitted when empty, so a clean update's outcome shape is unchanged
+   * (NREG-01). No consumer of the `updated` partition reads it -- the two
+   * `notes` narrowers (`narrowSkipReasons`, `narrowFailReasons`) are each
+   * typed on their own partition's arm.
+   */
+  readonly notes?: readonly string[];
 }
 
 /**

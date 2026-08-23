@@ -29,6 +29,15 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
+// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
+// not, so every one of them was dark on this path) and split by install's
+// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
+// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
+// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
+// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
+// the runner that produces a warning finishes long before the row it
+// qualifies exists.
+//
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
 //  updatePlugins -- direct path -- surfaces phase-2-or-earlier throws via
@@ -140,6 +149,8 @@ import {
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   resolvePluginVersion,
+  splitStagingWarnings,
+  surfaceDiscoveryWarnings,
 } from "./shared.ts";
 import { updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
@@ -449,6 +460,37 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   }
 
   renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
+  surfaceUpdateDiscoveryWarnings(ctx, outcomes);
+}
+
+/**
+ * D-141-03 / D-141-05: render each updated plugin's discovery warnings after
+ * the cascade the rows live in -- the user reads the row, then the detail
+ * that qualifies it.
+ *
+ * `cascade` is false on this path, so `collectUpdateWarnings` put the
+ * discovery half on `notes` and nothing else; the hygiene half never reaches
+ * here. That is the same property install's standalone arm relies on.
+ *
+ * Deliberately NOT called from the `renderUpdateCascadeIfAny` early-abort
+ * path: an aborted batch has a failure to explain, and a skipped-component
+ * note is noise against it.
+ */
+function surfaceUpdateDiscoveryWarnings(
+  ctx: ExtensionContext,
+  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+): void {
+  for (const { outcome } of outcomes) {
+    if (outcome.partition !== "updated" || outcome.notes === undefined) {
+      continue;
+    }
+
+    surfaceDiscoveryWarnings(ctx, {
+      plugin: outcome.name,
+      verb: "updated",
+      warnings: outcome.notes,
+    });
+  }
 }
 
 /**
@@ -1210,6 +1252,16 @@ function isOutcome(value: PluginPreflight | PluginUpdateOutcome): value is Plugi
   return "partition" in value;
 }
 
+/**
+ * Prepare all four bridges into tmp, in skills -> commands -> agents -> mcp
+ * order; any throw aborts the handles already prepared and appends their
+ * cleanup-leak descriptors.
+ *
+ * D-141-03 / D-141-05: each returned handle carries a `result.warnings`
+ * array. Those are read once the swap succeeds, by `collectUpdateWarnings`
+ * below -- not here, because a prepare that later fails has no row to hang a
+ * warning off.
+ */
 async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
@@ -1273,6 +1325,27 @@ async function prepareUpdateHandles(
   }
 
   return handles as PrepHandles;
+}
+
+/**
+ * D-141-03 / D-141-05: fold the four bridges' staging warnings onto the
+ * `updated` outcome, split by install's rule -- the skills and commands
+ * DISCOVERY half reaches both modes, the agents and mcp HYGIENE half is
+ * orchestrated-only. `args.cascade` is the mode seam; no plumbing flag was
+ * added for this.
+ *
+ * Its own function rather than a few lines inside the finalize window:
+ * `prepareUpdateHandles` and that window already sit near the fallow
+ * `maxCognitive: 15` and `maxUnitSize: 60` ceilings.
+ */
+function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
+  const { discovery, bridge } = splitStagingWarnings({
+    skills: handles.skills.result.warnings,
+    commands: handles.commands.result.warnings,
+    agents: handles.agents.result.warnings,
+    mcp: handles.mcp.result.warnings,
+  });
+  return Object.freeze([...discovery, ...(cascade ? bridge : [])]);
 }
 
 async function abortPartialHandles(handles: Partial<PrepHandles>): Promise<(string | undefined)[]> {
@@ -2272,6 +2345,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // renders the record's degraded state one command later over a row that
   // claimed a clean update.
   const degradedKinds = collectDegradedKinds(handles);
+  const updateWarnings = collectUpdateWarnings(handles, args.cascade);
   await dropPluginCompletionCache(args);
   if (invalidConfigWriteBack) {
     notifyInvalidConfigWriteBack(args);
@@ -2314,6 +2388,9 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
       },
     }),
+    // D-141-03 / D-141-05: same NREG-01 spread rule as `degradedKinds` -- a
+    // clean update's outcome keeps the key absent.
+    ...(updateWarnings.length > 0 && { notes: updateWarnings }),
   };
 }
 
