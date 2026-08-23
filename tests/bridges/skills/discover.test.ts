@@ -205,8 +205,8 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
   try {
     // Two dirs each contain a "shared" subdir with SKILL.md. Both generate
     // the name "acme-shared". First-wins: dir `a` is kept; dir
-    // `b` surfaces a soft-fail warning. RN-6 within-dir collisions are NOT
-    // exercised here -- those are HARD errors at `assertNoSkillCollisions`.
+    // `b` surfaces a soft-fail warning. The within-entry case takes the same
+    // branch and is covered by the D-141-04 test below.
     const a = path.join(tmp, "a");
     const b = path.join(tmp, "b");
     await mkdir(path.join(a, "shared"), { recursive: true });
@@ -231,6 +231,44 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
     assert.equal(discovered[0]!.skillDir, path.join(a, "shared"), "dir 'a' wins");
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /elides to generated name "acme-shared"/);
+    assert.match(warnings[0]!, /ignoring duplicate/);
+  } finally {
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});
+
+test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the first-wins skip", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-within-entry-"));
+  try {
+    // One declared entry holding two skill dirs that elide to the same
+    // generated name: `generatedSkillName` drops the `acme-` head and
+    // re-prefixes, so `acme-foo/` and `foo/` both name `acme-foo`.
+    // Discovery sorts by `name.localeCompare`, so `acme-foo` wins.
+    const skillsDir = path.join(tmp, "skills");
+    await mkdir(path.join(skillsDir, "acme-foo"), { recursive: true });
+    await writeFile(path.join(skillsDir, "acme-foo", "SKILL.md"), "---\nname: foo\n---\nfrom-acme");
+    await mkdir(path.join(skillsDir, "foo"), { recursive: true });
+    await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\nfrom-bare");
+
+    const resolved: ResolvedPluginInstallable = {
+      state: "installable",
+      name: "acme",
+      pluginRoot: tmp,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDir], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    };
+
+    const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+    assert.equal(discovered.length, 1, "first-wins keeps only one");
+    assert.equal(discovered[0]!.sourceName, "acme-foo", "the localeCompare-first source wins");
+    assert.equal(discovered[0]!.generatedName, "acme-foo");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /"acme-foo"/);
     assert.match(warnings[0]!, /ignoring duplicate/);
   } finally {
     await cleanupStaging(tmp, "test-cleanup");

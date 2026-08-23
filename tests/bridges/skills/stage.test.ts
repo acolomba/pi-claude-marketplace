@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 
 import {
   abortPreparedSkills,
-  assertNoSkillCollisions,
   commitPreparedSkills,
   finalizeSkillsReplacement,
   prepareStageSkills,
@@ -18,7 +17,6 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { DiscoveredSkill } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 // Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
@@ -299,35 +297,6 @@ test("AS-8 / RN-6 prepareStageSkills returns kind:'noop' when no discovered AND 
     // abort on noop is also a no-op.
     await abortPreparedSkills(prepared);
   });
-});
-
-test("RN-6 assertNoSkillCollisions throws with both source names when two skills elide to same generated", () => {
-  const synth: DiscoveredSkill[] = [
-    {
-      sourceName: "acme-foo",
-      generatedName: "acme-foo",
-      skillDir: "/tmp/x/acme-foo",
-    },
-    {
-      sourceName: "foo",
-      generatedName: "acme-foo",
-      skillDir: "/tmp/x/foo",
-    },
-  ];
-  assert.throws(
-    () => {
-      assertNoSkillCollisions(synth);
-    },
-    (err: unknown) => {
-      assert.ok(err instanceof Error);
-      assert.match(err.message, /collision/i);
-      assert.ok(err.message.includes(`"acme-foo"`), "must list generated name");
-      assert.ok(err.message.includes(`"foo"`), "must list other source name");
-      // Both source names quoted in the bracketed list.
-      assert.match(err.message, /\["acme-foo", "foo"\]|\["foo", "acme-foo"\]/);
-      return true;
-    },
-  );
 });
 
 test("commitPreparedSkills removes previous-named target dirs before rename (re-stage path)", async () => {

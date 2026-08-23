@@ -11,8 +11,9 @@
 //     per-skill `rename`.
 //   - D-08: substitution helper is `shared/vars.ts::substituteClaudeVars`
 //     (uniform across skills/commands/agents).
-//   - RN-6: `assertNoSkillCollisions` throws if two source skills elide
-//     to the same generated name, listing both source names.
+//   - RN-6: two source skills that elide to the same generated name are a
+//     first-wins skip plus a warning, decided in `discover.ts` (D-141-04).
+//     Nothing here throws on a generated-name collision.
 //   - T-03-15 hardening: cp uses `verbatimSymlinks: true, dereference: false`
 //     so a plugin author cannot escape the source tree by planting a symlink.
 
@@ -43,7 +44,6 @@ import {
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 
 import type {
-  DiscoveredSkill,
   PreparedSkillsStaging,
   SkillDegradeRecord,
   SkillsReplacement,
@@ -62,35 +62,6 @@ const skillsReplacementInternals = new WeakMap<
   Extract<SkillsReplacement, { kind: "replaced" }>,
   SkillsReplacementInternals
 >();
-
-/**
- * RN-6: refuse two source skills that elide to the same generated name.
- * Throws an Error whose message lists ALL collision groups, each with the
- * generated name and every contributing source name.
- */
-export function assertNoSkillCollisions(discovered: readonly DiscoveredSkill[]): void {
-  const groups = new Map<string, string[]>();
-  for (const s of discovered) {
-    const arr = groups.get(s.generatedName) ?? [];
-    arr.push(s.sourceName);
-    groups.set(s.generatedName, arr);
-  }
-
-  const collisions: string[] = [];
-  for (const [generated, sources] of groups) {
-    if (sources.length > 1) {
-      const sourceList = sources.map((s) => `"${s}"`).join(", ");
-      collisions.push(`"${generated}" <- [${sourceList}]`);
-    }
-  }
-
-  if (collisions.length > 0) {
-    throw new Error(
-      `Generated skill name collision detected. Rename one of the source skills:\n  ` +
-        collisions.join("\n  "),
-    );
-  }
-}
 
 /**
  * SKILL-01: extract the markdown body from a skill source whose frontmatter
@@ -183,15 +154,16 @@ function augmentSkillDescription(
 
 /**
  * Phase-1 of the skills bridge two-phase commit:
- *   1. Discover skills in the source plugin (SK-5).
- *   2. Refuse on RN-6 collisions.
- *   3. If `discovered.length === 0 && previousSkillNames.length === 0`,
+ *   1. Discover skills in the source plugin (SK-5). RN-6 / D-141-04:
+ *      discovery already resolved any generated-name collision by first-wins
+ *      and reported the loser as a warning, so nothing is refused here.
+ *   2. If `discovered.length === 0 && previousSkillNames.length === 0`,
  *      return the noop variant (no staging dir created).
- *   4. Otherwise create `<skillsStagingDir>/<uuid>/` and per-skill copy +
+ *   3. Otherwise create `<skillsStagingDir>/<uuid>/` and per-skill copy +
  *      frontmatter rewrite (SK-3) + var substitution (SK-4) into it.
- *   5. Return the staged variant carrying internal `_renamePairs` for commit.
+ *   4. Return the staged variant carrying internal `_renamePairs` for commit.
  *
- * On any error during step 4, the partial staging tree is best-effort
+ * On any error during step 3, the partial staging tree is best-effort
  * cleaned up via `cleanupStaging`; any leak message is appended to the
  * thrown error via `appendLeakToError` so the caller sees both the original
  * cause and a manual-cleanup hint in one notification.
@@ -201,14 +173,14 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
   const previousNames = input.previousSkillNames ?? [];
 
   // D-07: discover returns { discovered, warnings }. warnings surface
-  // duplicate-generated-name first-wins skips across multiple
-  // componentPaths.skills entries; RN-6 within-dir source-name
-  // collisions are still hard errors via assertNoSkillCollisions.
+  // duplicate-generated-name first-wins skips. RN-6 / D-141-04: a
+  // generated-name collision is that same skip whether the two sources sit
+  // in one declared componentPaths.skills entry or in two, so `discovered`
+  // is collision-free here by construction.
   const { discovered, warnings: discoverWarnings } = await discoverPluginSkills({
     pluginName,
     resolved,
   });
-  assertNoSkillCollisions(discovered);
 
   // AS-8-style materialization gate: nothing to stage AND nothing to clean
   // up -> noop. Mirrors mcp/agents bridge symmetry; no per-SK requirement.
