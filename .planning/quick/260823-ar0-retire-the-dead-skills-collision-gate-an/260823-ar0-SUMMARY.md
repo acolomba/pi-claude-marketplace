@@ -187,10 +187,13 @@ identical to a direct call.
 | The skills gate is gone and nothing claims otherwise | `grep -rn "assertNoSkillCollisions" extensions/ tests/ docs/` returns nothing |
 | Retiring it changed no behavior | the new `D-141-04` discover test passes, and fails under the planted first-wins mutation |
 | The hoist changed no install behavior | `tests/orchestrators/plugin/install.test.ts` 127/127, unedited |
-| A standalone reinstall surfaces a skills warning | new reinstall test: row plus exactly one `warning`-severity diagnostic |
-| A standalone update surfaces one | new update test: row plus exactly one `warning`-severity diagnostic |
-| Agents and mcp warnings stay orchestrated-only | both new orchestrated tests: present on `notes`, absent from every notification |
+| A standalone reinstall surfaces a skills warning | new reinstall tests, driving `reinstallPlugins` (the function the edge handler calls): row plus one `warning`-severity diagnostic naming the verb and the plugin |
+| A standalone update surfaces one | new update test: row plus one `warning`-severity diagnostic naming the verb and the plugin |
+| Agents and mcp warnings stay orchestrated-only | both orchestrated tests: present on `notes`, absent from every notification, each with a positive control proving the discovery half still arrives |
 | No absolute path leaks | each standalone test asserts the marketplace root is not in the message (NFR-9) |
+| The plural header arm works | bulk reinstall test seeds two collisions on one plugin and one on another |
+| The emitter walks every outcome | bulk reinstall and bulk update tests each assert two diagnostics |
+| A clean outcome grows no keys | NREG-01 tests on both verbs assert `!Object.hasOwn(outcome, ...)`, including a hygiene-only reinstall where `notes` IS present |
 | Update reads the warnings at all | `grep -n "result.warnings" orchestrators/plugin/update.ts` returns the fold at lines 1343-1346 |
 | The whole thing is green | `npm run check` exit 0, redirected to a file, not piped |
 
@@ -204,3 +207,80 @@ identical to a direct call.
 - `grep -rn "assertNoSkillCollisions" extensions/ tests/ docs/` returns
   nothing.
 - Working tree clean apart from this task's untracked planning directory.
+
+## Review round (2026-08-23)
+
+Five reviewers ran over `b1a3826e..e3cafdb0`. The table above is corrected;
+what follows is what the round changed.
+
+### The reinstall half did not ship
+
+The verification row claiming a standalone reinstall surfaced a warning was
+FALSE when written. The `surfaceDiscoveryWarnings` call sat in
+`reinstallPlugin`'s `render !== "none"` arm, which no production caller
+reaches: `edge/handlers/plugin/reinstall.ts` calls `reinstallPlugins` for
+every target form, and that function -- like `reconcile/backfill.ts` -- passes
+`render: "none"`. The test passed only because its helper called
+`reinstallPlugin` directly and defaulted into the dead arm.
+
+Fixed in `91dd4968`. The reinstalled outcome now carries the discovery half
+unprefixed on a `discoveryWarnings` field, and `reinstallPlugins` renders it
+after the cascade, the shape `updatePlugins` already used. The dead arm is
+untouched and keeps its own call; the two are mutually exclusive because that
+arm never populates the carrier.
+
+### Mutation plants run this round
+
+Every plant below was applied to production code, run against the suite, and
+reverted. Each one had left the suite GREEN before this round's test changes.
+
+| Plant | Result after the fix |
+| ----- | -------------------- |
+| Drop `surfaceReinstallDiscoveryWarnings` from `reinstallPlugins` | 3 reinstall tests fail |
+| Drop `...locked.discoveryWarnings` from the orchestrated `notes` spread | 3 reinstall tests fail |
+| Truncate the reinstall emitter loop to `outcomes.slice(0, 1)` | 1 fails |
+| Make reinstall's `discoveryWarnings` spread unconditional | 1 fails (the hygiene-only NREG-01 case) |
+| Hardcode `verb` to `"installed"` in `surfaceDiscoveryWarnings` | 2 reinstall + 2 update fail |
+| Break the plural header arm to say "was skipped" | 1 fails |
+| Make update's `notes` spread unconditional | 1 fails |
+| Truncate `surfaceUpdateDiscoveryWarnings` to `outcomes.slice(0, 1)` | 1 fails |
+| Make `collectUpdateWarnings` return `[]` | 3 fail |
+| Pass the loser's name as the winner in the skills duplicate warning | 1 fails |
+
+### False statements corrected
+
+- `orchestrators/types.ts`: "No consumer of the `updated` partition reads it"
+  was false the moment `surfaceUpdateDiscoveryWarnings` was added in the same
+  commit. Restated to the true, narrower claim -- no cascade ROW renderer
+  narrows it -- so nobody deletes the field believing it dead. The same block
+  named `ReinstallOutcomeBase` as the carrier of the optional `notes?`; it is
+  `ReinstallReinstalledOutcome`.
+- `orchestrators/plugin/shared.ts` and PROJECT.md D-141-05 both claimed
+  install, update and reinstall all route through `splitStagingWarnings`.
+  Install does not -- it classifies inline at four ledger phase sites and
+  imports only the renderer. Two of three share the classification; all three
+  share the rendering. Both now say that, and name the drift risk.
+- The splitter's rationale said skills and commands "report only first-wins
+  discovery skips". The commands bridge also reports unreadable directories
+  and files, unusable paths, skipped subdirectories, and a file reached by two
+  entries -- which is a SURPLUS. The conclusion held; the reason did not.
+- PRD RN-6's normative sentence had lost its "skill" qualifier, so it read as
+  contradicting AG-12, which still requires an agents collision to throw.
+- The skills `duplicateWarning` blamed "an earlier componentPaths.skills
+  entry", which is false for the within-entry collision D-141-04 routes
+  through it. It now names the winning source, matching the commands bridge.
+- `tests/bridges/skills/stage.test.ts`'s noop test dropped its RN-6 anchor.
+
+### Deferred, filed in BACKLOG.md
+
+`AGCOL-01` (the agents gate is the retired skills gate's twin), `ENWARN-01`
+(`enable` discards both warning arrays through the ledger summary
+projection), `UPCASC-01` (update's cascade channel is a carrier with no
+consumer), `WCHAN-01` (both channels are `readonly string[]`, so a swap
+compiles; the durable fix is a producer-side `kind` discriminant).
+
+### Gate
+
+`npm run check` redirected to `/tmp/260823-ar0-recheck.log`, never piped.
+**Real exit code: `EXIT=0`.** Unit 3633 / 3632 pass / 0 fail / 1 pre-existing
+platform skip; integration 21 / 21 pass.
