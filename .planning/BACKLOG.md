@@ -1718,6 +1718,135 @@ Code seams: `bridges/hooks/dispatch.ts` (`reduceBucket`,
 `compositeHandlerFor`), `bridges/hooks/timeout.ts` (`BLOCKING_EVENT_DEFAULT_SECONDS`),
 `bridges/hooks/event-router.ts` (the `session_shutdown` registration).
 
+## AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one
+
+Surfaced by review while landing PR #141 (2026-08-23), directly beside the
+retirement of `assertNoSkillCollisions` (D-141-04).
+
+`assertNoAgentCollisions` (`bridges/agents/convert.ts:605`) is called from
+`bridges/agents/stage.ts:133` on the array `discoverPluginAgents` returned.
+That array is `[...seenByGenerated.values()]` from a `Map` keyed on the
+generated name (`bridges/agents/discover.ts`), so it is duplicate-free by
+construction and the gate cannot fire -- the identical mechanism, in the
+identical position, as the skills gate that was just retired. A collision has
+already taken the first-wins-plus-warning branch inside discovery.
+
+Two documents still describe it as live: `bridges/agents/discover.ts:93-95`
+("within-dir collisions on generated name are caught later by
+`assertNoAgentCollisions` (hard error)") and PRD AG-12 ("Source-name
+collisions within a single plugin MUST throw with both source names listed").
+PRD RN-6 points the reader at AG-12 for exactly this, so the two rows now
+disagree about whether an agents collision throws. The two tests of the gate
+(`tests/bridges/agents/convert.test.ts:220`, `:238`) hand-build the colliding
+array and call the function directly, which is why the suite says nothing.
+
+**Out of scope now.** PR #141's brief locked the skills gate as its subject
+and named the agents gate as untouched. Retiring a second documented hard
+error is its own measured change: it needs the same before/after grep of every
+comment that promises the throw, a replacement regression test proving
+first-wins, and an AG-12 amendment -- and AG-12 is cited from RN-6, so the two
+rows move together or not at all.
+
+**Fix shape.** Repeat what D-141-04 did for skills: delete the gate and its
+call site, correct `discover.ts`'s comment and `stage.ts`'s step narration,
+amend AG-12 to state first-wins plus a warning, add a discovery-level
+regression test for a within-dir collision, and record the decision beside
+D-141-04. The agents `duplicateWarning`
+(`bridges/agents/discover.ts:41`) still blames "an earlier
+componentPaths.agents entry", which is false for a within-dir collision --
+fix it the way the skills and commands bridges were fixed, by naming the
+winner.
+
+## ENWARN-01: `enable` re-materializes a plugin and discards every warning
+
+Surfaced by review while landing PR #141 (2026-08-23).
+
+D-141-05 records that the discovery/hygiene split is every staging verb's
+policy. `enable` does not have it, and the reason is a projection, not a
+missing fold.
+
+`setPluginEnabled`'s enable branch (`orchestrators/plugin/enable-disable.ts`)
+re-materializes through `runInstallLedger`. That function returns
+`toInstallLedgerSummary(installCtx)` (`orchestrators/plugin/install.ts`),
+which projects four fields -- `resolved`, `frontmatterDegradations`,
+`stagedAgentNames`, `stagedMcpServerNames` -- and no warnings member at all.
+The ledger phases push into `installCtx.discoveryWarnings` and
+`installCtx.bridgeWarnings` exactly as they do for a real install; the
+projection then drops both on the floor. Enabling a plugin whose skills
+collide therefore reports nothing, where installing the same plugin reports
+the skip.
+
+**Out of scope now.** The projection is deliberate: `InstallCtx` is
+module-private specifically so no caller can reach into the ledger's working
+context (see its own doc comment), and widening the outward summary is a
+contract change that touches every `runInstallLedger` consumer, not a fold.
+
+**Fix shape.** Add the two arrays to `InstallLedgerSummary`, then have the
+enable branch surface the discovery half through
+`orchestrators/plugin/shared.ts::surfaceDiscoveryWarnings` with a new
+`"enabled"` verb after its own row, and carry both halves on the orchestrated
+outcome. The verb union is closed, so the compiler names every header site.
+
+## UPCASC-01: update's cascade warning channel is a carrier with no consumer
+
+Surfaced by review while landing PR #141 (2026-08-23), in the change that
+built the channel.
+
+In cascade mode `collectUpdateWarnings(handles, true)`
+(`orchestrators/plugin/update.ts`) folds BOTH halves onto the `updated`
+outcome's `notes`, so the payload is correct. Nothing reads it. The only
+`notes` readers on the update union are `narrowSkipReasons` and
+`narrowFailReasons`, each typed on its own partition's arm, plus the direct
+path's own `surfaceUpdateDiscoveryWarnings`. So `marketplace update`,
+autoupdate, and the reconcile `pluginUpdate` seam all receive every warning an
+update produced and render none of it.
+
+Install shows what the other side looks like: its `postCommitWarnings` field
+is read and rendered by `orchestrators/reconcile/apply.ts` and by
+`orchestrators/import/execute.ts`, so a cascade install genuinely surfaces its
+warnings.
+
+**Out of scope now.** Rendering them means deciding where a per-plugin
+warning block sits inside a multi-plugin marketplace cascade, which is a
+message-shape question for `MarketplaceNotificationMessage`, not a plumbing
+one -- and the same question governs the reinstall cascade.
+
+**Fix shape.** Decide the cascade rendering once, then apply it to the update
+and reinstall cascades together. The install cascade's existing
+`postCommitWarnings` rendering is the precedent to match rather than to
+reinvent.
+
+## WCHAN-01: the two warning channels are the same type, so a swap compiles
+
+Surfaced by review while landing PR #141 (2026-08-23).
+
+The discovery channel and the hygiene channel differ only by which variable a
+string was pushed into. Both are `readonly string[]` at all five assignment
+sites -- the four inline pushes in `orchestrators/plugin/install.ts`'s ledger
+phases and the returns of
+`orchestrators/plugin/shared.ts::splitStagingWarnings`. Swapping the two
+halves type-checks, passes lint, and turns a standalone-visible warning silent
+(or leaks a hygiene note to a user who can do nothing about it). Only the
+per-verb tests catch it, and only for the shapes they happen to seed.
+
+The repo already has the machinery for the weaker half of a fix: `ScopedLocations`
+(`persistence/locations.ts`) is branded with a unique symbol precisely so a
+project-scope bundle cannot stand in for a user-scope one.
+
+**Out of scope now.** A brand on the arrays would make the swap a compile
+error, but it would also be a second concept doing the job of a missing first
+one, and it does not help the case that motivated the split.
+
+**Fix shape.** Tag the warning at the PRODUCER instead: have each bridge emit
+`{ kind: "discovery" | "hygiene"; message: string }` and let the orchestrators
+partition on the discriminant. That removes the classification decision from
+the call site entirely, so install's four inline pushes and the shared
+splitter converge on one rule (see D-141-05). It also splits what the agents
+bridge cannot split today: it aggregates index corruptions, per-agent
+conversion notes and D-07 skips onto ONE array, which is the sole reason its
+whole array rides the hygiene channel, and a per-warning tag would let the
+D-07 skips reach the user like every other bridge's.
+
 ## ~~HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable~~ -- CLOSED
 
 Closed 2026-08-17 by the routingTable encapsulation, which removed both
