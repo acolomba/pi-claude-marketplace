@@ -8,7 +8,7 @@
 - A subdirectory of `commands/` that cannot be read no longer stops the install. Discovery skips it, reports it, and installs the rest of the plugin.
 - The same holds for a directory you can read but not search, where every file inside it fails to stat, and for a file whose path cannot produce a valid command name. Both skip one entry instead of the plugin.
 - A read failure that says the disk itself is unreliable still stops the install, so a partial plugin is never recorded as a whole one.
-- Discovery warnings now reach you. The commands, skills and agents bridges each wrote them to an array the installer never read, so a duplicate command name, a skipped directory and a dropped file were all silent. A standalone `install` now prints the command and skill warnings under the install row; the agent warnings reach the cascade channel that `/reload` and `import` already use.
+- Discovery warnings now reach you. They were all silent before. A standalone `install`, `update` or `reinstall` prints the command and skill warnings under its row. The agent warnings reach the cascade channel that `/reload` and `import` already use.
 - A skipped subdirectory is reported, whether it is dotfile-prefixed or a symlink. A skipped file stays silent: it costs you one command, where a directory costs you every command below it.
 - A file that two declared commands directories both reach now warns. It installs under two names, which is correct but rarely what the author meant.
 - A staging failure names the plugin and the command. A nested source makes the generated name as long as the whole path, so a name too long for the filesystem is now reachable; it used to report a raw error code against an internal temporary path.
