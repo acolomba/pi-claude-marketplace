@@ -203,14 +203,17 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
 test("D-07 discoverPluginSkills first-wins dedup across array elements (collision -> warning)", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-dedup-"));
   try {
-    // Two dirs each contain a "shared" subdir with SKILL.md. Both generate
-    // the name "acme-shared". First-wins: dir `a` is kept; dir
-    // `b` surfaces a soft-fail warning. The within-entry case takes the same
-    // branch and is covered by the D-141-04 test below.
+    // Dir `a` holds `acme-shared/`, dir `b` holds `shared/`. Both elide to
+    // the generated name "acme-shared" (SK-2 drops the `acme-` head and
+    // re-prefixes). First-wins: dir `a` is kept; dir `b` surfaces a soft-fail
+    // warning. The two source names are deliberately DIFFERENT so the exact
+    // string below discriminates the winner from the loser -- with both named
+    // "shared" it read the same whichever the code passed. The within-entry
+    // case takes the same branch and is covered by the D-141-04 test below.
     const a = path.join(tmp, "a");
     const b = path.join(tmp, "b");
-    await mkdir(path.join(a, "shared"), { recursive: true });
-    await writeFile(path.join(a, "shared", "SKILL.md"), "---\nname: shared\n---\nfrom-a");
+    await mkdir(path.join(a, "acme-shared"), { recursive: true });
+    await writeFile(path.join(a, "acme-shared", "SKILL.md"), "---\nname: shared\n---\nfrom-a");
     await mkdir(path.join(b, "shared"), { recursive: true });
     await writeFile(path.join(b, "shared", "SKILL.md"), "---\nname: shared\n---\nfrom-b");
 
@@ -228,13 +231,14 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
 
     const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
     assert.equal(discovered.length, 1, "first-wins keeps only one");
-    assert.equal(discovered[0]!.skillDir, path.join(a, "shared"), "dir 'a' wins");
+    assert.equal(discovered[0]!.skillDir, path.join(a, "acme-shared"), "dir 'a' wins");
+    assert.equal(discovered[0]!.sourceName, "acme-shared");
     assert.equal(warnings.length, 1);
     // The warning names the WINNING source, not an "earlier entry".
     assert.equal(
       warnings[0],
       `skill source "shared" in "${b}" elides to generated name "acme-shared", ` +
-        `already produced by skill source "shared"; ignoring duplicate.`,
+        `already produced by skill source "acme-shared"; ignoring duplicate.`,
     );
   } finally {
     await cleanupStaging(tmp, "test-cleanup");
@@ -353,6 +357,71 @@ test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill
     assert.equal(discovered[0]!.skillDir, direct);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /mattpocock-skills-implement/);
+  } finally {
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});
+
+test("discoverPluginSkills reports the loss on the self skill dir when it arrives second", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-loses-"));
+  try {
+    // The sibling test above orders the array [direct, container], so the self
+    // skill dir always WINS and the loss is reported by the subdir-enumeration
+    // loop. That leaves `collectSelfSkillDir`'s own duplicate branch
+    // unexecuted. Reversing the order routes the loss through it instead.
+    //
+    // The two source names differ (`mattpocock-skills-implement` in the
+    // container, `implement` as the self skill dir) so the exact string below
+    // discriminates winner from loser; both elide to the same generated name.
+    const container = path.join(tmp, "skills");
+    await mkdir(path.join(container, "mattpocock-skills-implement"), { recursive: true });
+    await writeFile(
+      path.join(container, "mattpocock-skills-implement", "SKILL.md"),
+      "---\nname: implement\n---\nfrom-container",
+    );
+
+    const direct = path.join(tmp, "implement");
+    await mkdir(direct, { recursive: true });
+    await writeFile(path.join(direct, "SKILL.md"), "---\nname: implement\n---\nfrom-direct");
+
+    // A skill subdir UNDER the self skill dir, generating a name that collides
+    // with nothing. It is discovered only if the branch falls through to
+    // subdir enumeration, so `discovered.length` below also guards the
+    // branch's `return true`.
+    await mkdir(path.join(direct, "nested"), { recursive: true });
+    await writeFile(path.join(direct, "nested", "SKILL.md"), "---\nname: nested\n---\nbody");
+
+    const resolved: ResolvedPluginInstallable = {
+      state: "installable",
+      name: "mattpocock-skills",
+      pluginRoot: tmp,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [container, direct], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    };
+
+    const { discovered, warnings } = await discoverPluginSkills({
+      pluginName: "mattpocock-skills",
+      resolved,
+    });
+
+    assert.equal(discovered.length, 1, "the self skill dir loses and its subdirs stay unwalked");
+    assert.equal(discovered[0]!.sourceName, "mattpocock-skills-implement");
+    assert.equal(
+      discovered[0]!.skillDir,
+      path.join(container, "mattpocock-skills-implement"),
+      "the container entry wins",
+    );
+    assert.equal(warnings.length, 1);
+    assert.equal(
+      warnings[0],
+      `skill source "implement" in "${direct}" elides to generated name ` +
+        `"mattpocock-skills-implement", already produced by skill source ` +
+        `"mattpocock-skills-implement"; ignoring duplicate.`,
+    );
   } finally {
     await cleanupStaging(tmp, "test-cleanup");
   }

@@ -6625,8 +6625,14 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
 
         // Positive control: without it this run would also pass if the split
         // returned nothing at all, which is the regression it must catch.
+        //
+        // Anchored on the row prefix, NOT on the singular "declared component
+        // was skipped" tail: a hygiene leak adds a second line, which flips
+        // the header to the plural "declared components were skipped" and
+        // would trip this control on grammar before the leak assertion below
+        // ever ran -- reporting the wrong failure for the right bug.
         assert.ok(
-          notifications.some((n) => n.message.includes("declared component was skipped")),
+          notifications.some((n) => n.message.includes('Plugin "hello" updated;')),
           `the discovery half must still reach standalone: ${JSON.stringify(notifications)}`,
         );
         assert.ok(
