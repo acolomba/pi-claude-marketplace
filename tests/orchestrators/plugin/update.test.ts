@@ -6513,12 +6513,12 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
  * (D-141-04), so discovery keeps the localeCompare-first source and reports
  * the loser.
  */
-async function seedCollidingSkills(marketplaceRoot: string): Promise<void> {
-  const skillsDir = path.join(marketplaceRoot, "plugins", "hello", "skills");
-  await mkdir(path.join(skillsDir, "hello-foo"), { recursive: true });
-  await writeFile(path.join(skillsDir, "hello-foo", "SKILL.md"), "---\nname: foo\n---\n\nfirst\n");
-  await mkdir(path.join(skillsDir, "foo"), { recursive: true });
-  await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\n\nsecond\n");
+async function seedCollidingSkills(marketplaceRoot: string, pluginName = "hello"): Promise<void> {
+  const skillsDir = path.join(marketplaceRoot, "plugins", pluginName, "skills");
+  for (const dir of [`${pluginName}-foo`, "foo"]) {
+    await mkdir(path.join(skillsDir, dir), { recursive: true });
+    await writeFile(path.join(skillsDir, dir, "SKILL.md"), `---\nname: foo\n---\n\n${dir}\n`);
+  }
 }
 
 test("D-141-03: a standalone updatePlugins run surfaces the skills discovery warning after the row", async () => {
@@ -6548,7 +6548,12 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
       const diagnostic = notifications[1];
       assert.ok(diagnostic !== undefined);
       assert.equal(diagnostic.severity, "warning");
-      assert.match(diagnostic.message, /1 declared component was skipped/);
+      // The VERB and the plugin name are the whole reason the diagnostic
+      // header is parameterised; assert them, not just the tally clause.
+      assert.ok(
+        diagnostic.message.includes('Plugin "hello" updated; 1 declared component was skipped.'),
+        diagnostic.message,
+      );
       assert.match(diagnostic.message, /"hello-foo"/);
       assert.match(diagnostic.message, /ignoring duplicate/);
       // NFR-9: the absolute skills directory is redacted to its basename.
@@ -6618,6 +6623,12 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         });
 
+        // Positive control: without it this run would also pass if the split
+        // returned nothing at all, which is the regression it must catch.
+        assert.ok(
+          notifications.some((n) => n.message.includes("declared component was skipped")),
+          `the discovery half must still reach standalone: ${JSON.stringify(notifications)}`,
+        );
         assert.ok(
           !notifications.some((n) => n.message.includes("source description was missing or empty")),
           `agents warning leaked to standalone: ${JSON.stringify(notifications)}`,
@@ -6625,6 +6636,85 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
       } finally {
         await rm(cwd2, { recursive: true, force: true });
       }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-discwarn-bulk-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.1", hasSkill: true },
+          world: { version: "1.0.1", hasSkill: true },
+        },
+        installedVersions: { hello: "1.0.0", world: "1.0.0" },
+      });
+      await seedCollidingSkills(seeded.marketplaceRoot, "hello");
+      await seedCollidingSkills(seeded.marketplaceRoot, "world");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // Both plugins reported, so the emitter walks EVERY outcome rather than
+      // stopping at the first.
+      const diagnostics = notifications.filter((n) => n.message.includes("declared component"));
+      assert.equal(diagnostics.length, 2, JSON.stringify(notifications));
+      assert.ok(
+        diagnostics.some((n) =>
+          n.message.includes('Plugin "hello" updated; 1 declared component was skipped.'),
+        ),
+        JSON.stringify(diagnostics),
+      );
+      assert.ok(
+        diagnostics.some((n) =>
+          n.message.includes('Plugin "world" updated; 1 declared component was skipped.'),
+        ),
+        JSON.stringify(diagnostics),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NREG-01: a clean update outcome omits the notes key entirely", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-nreg-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      let outcome;
+      try {
+        // The cascade arm folds BOTH halves onto `notes`, so it is the arm
+        // where an unconditional spread would be hardest to notice.
+        outcome = await updateSinglePlugin("hello", "mp", "project");
+      } finally {
+        process.chdir(prevCwd);
+      }
+
+      assert.equal(outcome.partition, "updated");
+      assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

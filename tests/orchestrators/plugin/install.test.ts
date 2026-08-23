@@ -6791,7 +6791,12 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       const diagnostic = notifications[1];
       assert.ok(diagnostic !== undefined);
       assert.equal(diagnostic.severity, "warning");
-      assert.match(diagnostic.message, /1 declared component was skipped/);
+      // The VERB and the plugin name are the whole reason the diagnostic
+      // header is parameterised; assert them, not just the tally clause.
+      assert.ok(
+        diagnostic.message.includes('Plugin "hello" installed; 1 declared component was skipped.'),
+        diagnostic.message,
+      );
       assert.match(diagnostic.message, /"hello:tools:lint"/);
       assert.match(diagnostic.message, /ignoring duplicate/);
       // NFR-9: the absolute commands directory is redacted to its basename.
