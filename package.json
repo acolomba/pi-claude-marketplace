@@ -6,7 +6,7 @@
     "url": "https://github.com/acolomba/pi-claude-marketplace/issues"
   },
   "dependencies": {
-    "isomorphic-git": "^1.38.1",
+    "isomorphic-git": "^1.41.8",
     "proper-lockfile": "^4.1.2",
     "write-file-atomic": "^8.0.0"
   },
