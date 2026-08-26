@@ -70,29 +70,17 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     marketplaceUpdate: mk("marketplaceUpdate"),
     marketplaceAutoupdate: mk("marketplaceAutoupdate"),
     marketplaceNoautoupdate: mk("marketplaceNoautoupdate"),
+    browse: mk("browse"),
   };
   return { handlers, calls };
 }
 
-test("AP-3 :: empty input emits TOP_LEVEL_USAGE at error severity", async () => {
+test("AP-3 :: empty input dispatches to handlers.browse (bare /claude:plugin opens the picker)", async () => {
   const { ctx, notifications } = makeCtx();
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("", handlers, ctx);
-  assert.deepEqual(calls, []);
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.severity, "error");
-  // notifyUsageError emits `${message}\n\n${usageBlock}` -- assert the
-  // Usage block is present in the surfaced message.
-  assert.ok(notifications[0]?.message.includes(TOP_LEVEL_USAGE));
-  // RINST-01 / D-67-03: the reinstall help line no longer advertises
-  // `[--force]` (overwrite is unconditional; `--force` errors as unknown).
-  assert.ok(
-    TOP_LEVEL_USAGE.includes(
-      "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n",
-    ),
-  );
-  assert.doesNotMatch(TOP_LEVEL_USAGE, /reinstall.*\[--force\]/);
-  assert.ok(notifications[0]?.message.includes("import"));
+  assert.deepEqual(calls, [{ name: "browse", args: "" }]);
+  assert.deepEqual(notifications, []);
 });
 
 test("AP-3 :: unknown subcommand emits Unknown subcommand: + TOP_LEVEL_USAGE at error severity", async () => {
@@ -200,6 +188,15 @@ test("router :: TOP_LEVEL_SUBCOMMANDS includes `info` (INFO-02)", () => {
 
 test("router :: TOP_LEVEL_USAGE contains the `info <plugin>@<marketplace>` usage line", () => {
   assert.match(TOP_LEVEL_USAGE, /info <plugin>@<marketplace> \[--scope user\|project\]/);
+  // RINST-01 / D-67-03: the reinstall help line no longer advertises
+  // `[--force]` (overwrite is unconditional; `--force` errors as unknown).
+  assert.ok(
+    TOP_LEVEL_USAGE.includes(
+      "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n",
+    ),
+  );
+  assert.doesNotMatch(TOP_LEVEL_USAGE, /reinstall.*\[--force\]/);
+  assert.ok(TOP_LEVEL_USAGE.includes("import"));
 });
 
 test("routeClaudePlugin :: dispatches import to handlers.import", async () => {
@@ -207,6 +204,14 @@ test("routeClaudePlugin :: dispatches import to handlers.import", async () => {
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("import --scope user", handlers, ctx);
   assert.deepEqual(calls, [{ name: "import", args: "--scope user" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("routeClaudePlugin :: dispatches browse to handlers.browse", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("browse", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "browse", args: "" }]);
   assert.deepEqual(notifications, []);
 });
 

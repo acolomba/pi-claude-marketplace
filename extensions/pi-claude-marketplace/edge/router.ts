@@ -49,6 +49,9 @@ export interface SubcommandHandlers {
   marketplaceUpdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAutoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceNoautoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  // Interactive SelectList browser (TUI-only). Falls back to `list` in
+  // non-TUI modes.
+  browse: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 
 /**
@@ -70,6 +73,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "disable",
   "import",
   "marketplace",
+  "browse",
 ] as const;
 
 /**
@@ -102,7 +106,8 @@ export const TOP_LEVEL_USAGE =
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  browse                                             interactive marketplaces -> plugins -> action picker";
 
 export const MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
@@ -141,8 +146,10 @@ export async function routeClaudePlugin(
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    notifyUsageError(ctx, { message: "Usage error.", usage: TOP_LEVEL_USAGE });
-    return;
+    // Bare `/claude:plugin` opens the interactive browser (TUI) or falls
+    // back to the inventory list (non-TUI), matching Claude Code's
+    // `/plugin` UX. `rest` is "" here (peelToken of empty input).
+    return handlers.browse(rest, ctx);
   }
 
   switch (head) {
@@ -173,6 +180,8 @@ export async function routeClaudePlugin(
       return handlers.import(rest, ctx);
     case "marketplace":
       return routeMarketplace(rest, handlers, ctx);
+    case "browse":
+      return handlers.browse(rest, ctx);
     default:
       notifyUsageError(ctx, { message: `Unknown subcommand: "${head}".`, usage: TOP_LEVEL_USAGE });
       return;

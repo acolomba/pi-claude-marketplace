@@ -10,7 +10,7 @@
   "boundaries": {
     "coverage": {
       "requireAllFiles": true,
-      "allowUnmatched": ["eslint.config.js", "tests/**"]
+      "allowUnmatched": ["eslint.config.js", "tests/**", "demos/**"]
     },
     "zones": [
       {
