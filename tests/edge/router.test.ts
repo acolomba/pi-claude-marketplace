@@ -71,6 +71,7 @@ const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "enable", handler: "enable" },
   { subcommand: "disable", handler: "disable" },
   { subcommand: "import", handler: "import" },
+  { subcommand: "browse", handler: "browse" },
 ];
 
 const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
@@ -99,7 +100,8 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  browse                                             interactive marketplaces -> plugins -> action picker";
 
 const EXPECTED_MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
@@ -347,18 +349,17 @@ for (const { input, shape } of [
   { input: "", shape: "no characters at all" },
   { input: "   ", shape: "nothing but whitespace" },
 ]) {
-  test(`reports a usage error with the top-level usage block for input with ${shape} (AP-3)`, async () => {
+  test(`dispatches to the browse handler for input with ${shape} (AP-3)`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+    when(() => handlers.browse("", ctx)).thenResolve(undefined);
 
     // act
     await routeClaudePlugin(input, handlers, ctx);
 
     // assert
-    assert.deepStrictEqual(notifications, [
-      { message: `Usage error.\n\n${EXPECTED_TOP_LEVEL_USAGE}`, severity: "error" },
-    ]);
+    assert.deepStrictEqual(notifications, []);
     verifyBoundary();
     verify(handlers);
   });
