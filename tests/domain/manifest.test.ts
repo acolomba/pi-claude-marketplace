@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
+  findMarketplaceManifestPath,
   loadMarketplaceManifest,
   type MarketplaceManifest,
 } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -271,5 +272,48 @@ describe("loadMarketplaceManifest", () => {
         return true;
       },
     );
+  });
+});
+
+describe("findMarketplaceManifestPath", () => {
+  test("prefers .claude-plugin/marketplace.json when present", async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-find-"));
+    t.after(async () => {
+      await rm(directory, { force: true, recursive: true });
+    });
+
+    const claudeDir = path.join(directory, ".claude-plugin");
+    const codexDir = path.join(directory, ".agents", "plugins");
+    await mkdir(claudeDir, { recursive: true });
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(path.join(claudeDir, "marketplace.json"), "{}");
+    await writeFile(path.join(codexDir, "marketplace.json"), "{}");
+
+    const found = await findMarketplaceManifestPath(directory);
+    assert.strictEqual(found, path.join(claudeDir, "marketplace.json"));
+  });
+
+  test("falls back to .agents/plugins/marketplace.json when .claude-plugin is absent", async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-find-"));
+    t.after(async () => {
+      await rm(directory, { force: true, recursive: true });
+    });
+
+    const codexDir = path.join(directory, ".agents", "plugins");
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(path.join(codexDir, "marketplace.json"), "{}");
+
+    const found = await findMarketplaceManifestPath(directory);
+    assert.strictEqual(found, path.join(codexDir, "marketplace.json"));
+  });
+
+  test("defaults to .claude-plugin/marketplace.json when neither exists", async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-find-"));
+    t.after(async () => {
+      await rm(directory, { force: true, recursive: true });
+    });
+
+    const found = await findMarketplaceManifestPath(directory);
+    assert.strictEqual(found, path.join(directory, ".claude-plugin", "marketplace.json"));
   });
 });
