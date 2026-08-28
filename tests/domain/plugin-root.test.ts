@@ -1,44 +1,79 @@
-// tests/domain/plugin-root.test.ts
-//
-// Coverage suite for the `AbsolutePluginRoot` brand validator. The three
-// throw arms (empty, null byte, not absolute) each pin one runtime
-// invariant the brand exists to enforce; the happy path confirms the
-// brand returns the input string unmodified.
-
 import assert from "node:assert/strict";
-import { delimiter } from "node:path";
-import { test } from "node:test";
+import path from "node:path";
+import test from "node:test";
 
-import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import {
+  asAbsolutePluginRoot,
+  type AbsolutePluginRoot,
+} from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
-test("asAbsolutePluginRoot: returns the branded string unchanged on a valid absolute path", () => {
-  const branded = asAbsolutePluginRoot("/tmp/test-plugin");
-  assert.equal(branded, "/tmp/test-plugin");
+// @ts-expect-error A plain string does not carry the validated root brand.
+void ("/plugin" satisfies AbsolutePluginRoot);
+
+test("returns a valid absolute path unchanged", () => {
+  // arrange
+  const absolutePath = path.resolve("test-plugin");
+
+  // act
+  const pluginRoot: AbsolutePluginRoot = asAbsolutePluginRoot(absolutePath);
+
+  // assert
+  assert.strictEqual(pluginRoot, absolutePath);
 });
 
-test("asAbsolutePluginRoot: accepts an absolute path with `..` segments because path.isAbsolute -> path.normalize collapses them", () => {
-  // `/tmp/a/../b` is absolute and survives the validator -- the `..` is
-  // a non-issue for absolute paths because no `..` segment can survive
-  // `path.normalize` on an absolute input.
-  const branded = asAbsolutePluginRoot("/tmp/a/../b");
-  assert.equal(branded, "/tmp/a/../b");
+test("accepts an already branded root without changing it", () => {
+  // arrange
+  const pluginRoot = asAbsolutePluginRoot(path.resolve("test-plugin"));
+
+  // act
+  const rebrandedPluginRoot = asAbsolutePluginRoot(pluginRoot);
+
+  // assert
+  assert.strictEqual(rebrandedPluginRoot, pluginRoot);
 });
 
-test("asAbsolutePluginRoot: throws on the empty string", () => {
-  assert.throws(() => asAbsolutePluginRoot(""), /empty string/);
+test("preserves parent segments in an absolute path", () => {
+  // arrange
+  const absolutePath = `${path.resolve("tmp", "a")}${path.sep}..${path.sep}b`;
+
+  // act
+  const pluginRoot = asAbsolutePluginRoot(absolutePath);
+
+  // assert
+  assert.strictEqual(pluginRoot, absolutePath);
 });
 
-test("asAbsolutePluginRoot: throws when the input contains a null byte", () => {
-  assert.throws(() => asAbsolutePluginRoot("/tmp/test\0plugin"), /null byte/);
-});
+for (const { pluginRoot, errorMessage } of [
+  {
+    pluginRoot: "",
+    errorMessage: "AbsolutePluginRoot: empty string",
+  },
+  {
+    pluginRoot: `${path.resolve("test")}\0plugin`,
+    errorMessage: "AbsolutePluginRoot: contains null byte",
+  },
+  {
+    pluginRoot: path.resolve(`test${path.delimiter}plugin`),
+    errorMessage: `AbsolutePluginRoot: contains PATH delimiter: ${path.resolve(`test${path.delimiter}plugin`)}`,
+  },
+  {
+    pluginRoot: `relative${path.sep}plugin`,
+    errorMessage: `AbsolutePluginRoot: not absolute: relative${path.sep}plugin`,
+  },
+]) {
+  test(`rejects ${JSON.stringify(pluginRoot)}`, () => {
+    // arrange
+    const unsafePluginRoot = pluginRoot;
 
-test("asAbsolutePluginRoot: throws on a relative path", () => {
-  assert.throws(() => asAbsolutePluginRoot("relative/path"), /not absolute/);
-});
-
-test("asAbsolutePluginRoot: throws when the input contains the PATH delimiter", () => {
-  // A delimiter-bearing root cannot round-trip the delimiter-joined
-  // PI_CLAUDE_MARKETPLACE_PATH ledger, so it must be rejected before it can
-  // enter the ledger and leak a stale fragment on cleanup.
-  assert.throws(() => asAbsolutePluginRoot(`/tmp/a${delimiter}b`), /delimiter/);
-});
+    // act & assert
+    assert.throws(
+      () => asAbsolutePluginRoot(unsafePluginRoot),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      },
+    );
+  });
+}
