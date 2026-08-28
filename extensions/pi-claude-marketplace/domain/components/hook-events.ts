@@ -101,7 +101,7 @@ export type ToolEvent = (typeof TOOL_EVENTS)[number];
  * matches `BUCKET_A_EVENTS` as a deterministic registration order for
  * downstream consumers.
  */
-export const DISPATCHABLE_EVENTS = [
+const DISPATCHABLE_EVENTS = [
   "SessionStart",
   "UserPromptSubmit",
   "PreToolUse",
@@ -143,7 +143,7 @@ export function isDispatchableEvent(event: BucketAEvent): event is DispatchableE
  * non-tool event added to `BUCKET_A_EVENTS` without a matcher disposition is a
  * compile error at the table literal.
  */
-export type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
+type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
 
 /**
  * Claude-side matcher target field per non-tool bucket-A event. The value
@@ -179,7 +179,7 @@ export type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  * upstream contract is deferred. What is load-bearing is the closed set in
  * `NON_TOOL_EVENT_CLOSED_SETS.StopFailure` below.
  */
-export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>> = {
+export const NON_TOOL_EVENT_FIELDS = {
   SessionStart: "source",
   SessionEnd: "reason",
   PreCompact: "trigger",
@@ -187,7 +187,7 @@ export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>
   UserPromptSubmit: null,
   Stop: null,
   StopFailure: "error",
-};
+} as const satisfies Readonly<Record<NonToolEvent, string | null>>;
 
 /**
  * The closed StopFailure error-type vocabulary (SFAIL-03, D-88-02). Single
@@ -262,9 +262,7 @@ export type StopFailureErrorType = (typeof STOP_FAILURE_ERROR_TYPES)[number];
  *     therefore trips TOOL-02 as `closed-set`. Same table shape as
  *     SessionStart (D-58-06).
  */
-export const NON_TOOL_EVENT_CLOSED_SETS: Readonly<
-  Partial<Record<BucketAEvent, ReadonlySet<string>>>
-> = {
+export const NON_TOOL_EVENT_CLOSED_SETS = {
   // D-58-06: Pi `SessionStartEvent.reason` exposes `startup` and `resume`
   // among the Claude SessionStart source values; `clear` and `compact`
   // are unmappable and trip TOOL-02.
@@ -284,4 +282,6 @@ export const NON_TOOL_EVENT_CLOSED_SETS: Readonly<
   // whole-string membership only -- no pipe-OR splitting (a pipe compound is
   // a single string absent from this set and trips `closed-set`).
   StopFailure: new Set<string>(STOP_FAILURE_ERROR_TYPES),
-};
+} satisfies Readonly<
+  Record<Exclude<NonToolEvent, "UserPromptSubmit" | "Stop">, ReadonlySet<string>>
+>;
