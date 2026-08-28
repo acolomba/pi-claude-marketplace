@@ -42,7 +42,7 @@ export function assertSafeName(name: string, label?: string): void {
   }
 
   for (let i = 0; i < name.length; i++) {
-    const code = name.codePointAt(i) ?? 0;
+    const code = name.charCodeAt(i);
 
     if (code < 0x20 || code === 0x7f) {
       throw new Error(`${prefix}"${name}" must not contain ASCII control characters.`);
@@ -108,14 +108,14 @@ export function generatedSkillName(plugin: string, source: string): string {
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);
 
-  const segments = source.split("/");
+  const segments = source.split("/") as [string, ...string[]];
 
   for (const seg of segments) {
     assertSafeName(seg, `command path segment in "${source}"`);
   }
 
   const prefix = `${plugin}-`;
-  const head = segments[0] ?? "";
+  const head = segments[0];
   const stripped = head.startsWith(prefix) ? head.slice(prefix.length) : head;
   // D-141-02: keep the head verbatim when the elision would empty it.
   const elidedHead = stripped === "" ? head : stripped;
