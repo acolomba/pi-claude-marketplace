@@ -1,7 +1,7 @@
 // domain/components/hook-tool-names.ts
 //
 // TOOL-01 bidirectional Claude <-> Pi tool-name map and the derived
-// `PiToolName` / `ClaudeToolName` literal unions. This module is the
+// `PiToolName` literal union. This module is the
 // source of truth the matcher parser reads at parse time to translate
 // Claude-form matcher tokens (`Edit`, `Bash`, `Glob`, ...) into the
 // Pi-form `event.toolName` literals (`edit`, `bash`, `find`, ...) the
@@ -29,10 +29,8 @@
 // matchers at parse time.
 //
 // The reverse map `CLAUDE_TO_PI_TOOL_NAMES` is hand-written rather than
-// computed from `PI_TO_CLAUDE_TOOL_NAMES` so the architecture test can
-// type-check the reverse-direction literal shape (a computed reverse
-// would erase to `Record<string, PiToolName>` and lose the locked
-// `ClaudeToolName` keys).
+// computed from `PI_TO_CLAUDE_TOOL_NAMES`. A computed reverse would
+// erase its literal key and value information.
 
 import type { ToolCallEvent } from "../../platform/pi-api.ts";
 
@@ -50,12 +48,13 @@ import type { ToolCallEvent } from "../../platform/pi-api.ts";
  * the `CustomToolCallEvent` arm preserves the literal `toolName` fields
  * on the seven specific arms.
  */
-export type LiteralToolNameArm<T> = T extends { toolName: infer N }
-  ? string extends N
-    ? never
-    : N
+export type PiToolName = ToolCallEvent extends infer Event
+  ? Event extends { toolName: infer Name }
+    ? string extends Name
+      ? never
+      : Name
+    : never
   : never;
-export type PiToolName = LiteralToolNameArm<ToolCallEvent>;
 
 /**
  * Claude-form spelling of every Pi tool literal. Keys are the seven
@@ -74,7 +73,7 @@ export type PiToolName = LiteralToolNameArm<ToolCallEvent>;
  * load-bearing compile-time exhaustiveness gate -- removing any of the
  * seven entries red-fails `npm run typecheck`.
  */
-export const PI_TO_CLAUDE_TOOL_NAMES = {
+const PI_TO_CLAUDE_TOOL_NAMES = {
   bash: "Bash",
   read: "Read",
   edit: "Edit",
@@ -91,11 +90,8 @@ export const PI_TO_CLAUDE_TOOL_NAMES = {
  * Inverse of `PI_TO_CLAUDE_TOOL_NAMES`. Keys are the seven Claude-form
  * tool names; values are the corresponding Pi-form literals.
  *
- * Hand-written rather than computed from the forward map so the keys
- * type-check as the locked `ClaudeToolName` literal union. A computed
- * reverse (e.g. `Object.fromEntries(Object.entries(...).map(...))`)
- * would erase to `Record<string, PiToolName>`, dropping the literal
- * key information the architecture test relies on.
+ * Hand-written rather than computed from the forward map so its keys
+ * and values retain their literal types.
  */
 export const CLAUDE_TO_PI_TOOL_NAMES = {
   Bash: "bash",
