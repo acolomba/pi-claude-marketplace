@@ -1,212 +1,356 @@
-// tests/platform/pi-api.test.ts
-//
-// D-13-07: the three exports under test are the probe helpers
-// (`hasLoadedPiSubagents` / `hasLoadedPiMcpAdapter` / `softDepStatus`),
-// which feed the `SoftDepProbe` injected into `renderRow`.
-
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
+  getAgentDir as peerGetAgentDir,
+  parseFrontmatter as peerParseFrontmatter,
+} from "@earendil-works/pi-coding-agent";
+
+import {
+  getAgentDir,
   hasLoadedPiMcpAdapter,
   hasLoadedPiSubagents,
   parseFrontmatter,
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type * as PiBoundary from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type * as Peer from "@earendil-works/pi-coding-agent";
 
-// WR-04 / D-17.2-08: `name` is optional so the `tool.name === undefined`
-// boundary case (Test 6) can be constructed without a cast. Mirrors the
-// `MockTool` shape in tests/shared/notify-v2.test.ts.
-interface ToolStub {
+interface ToolDeclaration {
   name?: string;
   sourceInfo?: { source?: unknown };
 }
 
-function makePi(tools: ToolStub[]): ExtensionAPI {
-  return { getAllTools: () => tools } as unknown as ExtensionAPI;
+type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
+
+function extensionApiWithTools(tools: ToolDeclaration[]): PiBoundary.ExtensionAPI {
+  return { getAllTools: () => tools } as unknown as PiBoundary.ExtensionAPI;
 }
 
-function makeThrowingPi(): ExtensionAPI {
-  return {
-    getAllTools: () => {
-      throw new Error("not ready");
-    },
-  } as unknown as ExtensionAPI;
-}
+void (true satisfies Same<PiBoundary.AgentEndEvent, Peer.AgentEndEvent>);
+void (true satisfies Same<PiBoundary.AgentSettledEvent, Peer.AgentSettledEvent>);
+void (true satisfies Same<PiBoundary.BeforeAgentStartEvent, Peer.BeforeAgentStartEvent>);
+void (true satisfies Same<
+  PiBoundary.BeforeAgentStartEventResult,
+  Peer.BeforeAgentStartEventResult
+>);
+void (true satisfies Same<PiBoundary.ExtensionAPI, Peer.ExtensionAPI>);
+void (true satisfies Same<PiBoundary.ExtensionCommandContext, Peer.ExtensionCommandContext>);
+void (true satisfies Same<PiBoundary.ExtensionContext, Peer.ExtensionContext>);
+void (true satisfies Same<PiBoundary.InputEvent, Peer.InputEvent>);
+void (true satisfies Same<PiBoundary.InputEventResult, Peer.InputEventResult>);
+void (true satisfies Same<PiBoundary.SessionBeforeCompactEvent, Peer.SessionBeforeCompactEvent>);
+void (true satisfies Same<PiBoundary.SessionCompactEvent, Peer.SessionCompactEvent>);
+void (true satisfies Same<PiBoundary.SessionShutdownEvent, Peer.SessionShutdownEvent>);
+void (true satisfies Same<PiBoundary.SessionStartEvent, Peer.SessionStartEvent>);
+void (true satisfies Same<PiBoundary.ToolCallEvent, Peer.ToolCallEvent>);
+void (true satisfies Same<PiBoundary.ToolCallEventResult, Peer.ToolCallEventResult>);
+void (true satisfies Same<PiBoundary.ToolResultEvent, Peer.ToolResultEvent>);
+void ({ type: "text", text: "message" } satisfies PiBoundary.PiTextContentBlock);
+void ({
+  content: [{ type: "text", text: "message" }],
+  details: { command: "build" },
+  isError: false,
+} satisfies PiBoundary.ToolResultEventResult);
+void ({
+  type: "resources_discover",
+  cwd: "/project",
+  reason: "reload",
+} satisfies PiBoundary.ResourcesDiscoverEvent);
+void ({
+  skillPaths: ["/skills"],
+  promptPaths: ["/prompts"],
+  themePaths: ["/themes"],
+} satisfies PiBoundary.ResourcesDiscoverResult);
+void ({
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: false,
+} satisfies PiBoundary.SoftDepStatus);
 
-test("platform pi-api owns soft-dep probes (subagent)", () => {
-  assert.equal(hasLoadedPiSubagents(makePi([{ name: "subagent" }])), true);
-  assert.equal(hasLoadedPiSubagents(makePi([{ name: "other" }])), false);
-  assert.equal(hasLoadedPiSubagents(makeThrowingPi()), false);
+describe("getAgentDir", () => {
+  test("re-exports the peer binding", () => {
+    // arrange
+    const expectedGetAgentDir = peerGetAgentDir;
+
+    // act
+    const boundaryGetAgentDir = getAgentDir;
+
+    // assert
+    assert.strictEqual(boundaryGetAgentDir, expectedGetAgentDir);
+  });
 });
 
-test("platform pi-api detects mcp adapter by name or source", () => {
-  assert.equal(hasLoadedPiMcpAdapter(makePi([{ name: "mcp" }])), true);
-  assert.equal(
-    hasLoadedPiMcpAdapter(
-      makePi([{ name: "other", sourceInfo: { source: "@scope/pi-mcp-adapter@1.0.0" } }]),
-    ),
-    true,
-  );
-  assert.equal(hasLoadedPiMcpAdapter(makePi([{ name: "other" }])), false);
-  assert.equal(hasLoadedPiMcpAdapter(makeThrowingPi()), false);
-});
+describe("parseFrontmatter", () => {
+  test("re-exports the peer binding", () => {
+    // arrange
+    const expectedParseFrontmatter = peerParseFrontmatter;
 
-test("softDepStatus composes the SoftDepProbe shape from the two probes", () => {
-  const probe = softDepStatus(makePi([{ name: "subagent" }, { name: "mcp" }]));
-  assert.deepEqual(probe, { piSubagentsLoaded: true, piMcpAdapterLoaded: true });
+    // act
+    const boundaryParseFrontmatter = parseFrontmatter;
 
-  const empty = softDepStatus(makePi([]));
-  assert.deepEqual(empty, { piSubagentsLoaded: false, piMcpAdapterLoaded: false });
-});
-
-// -----------------------------------------------------------------------------
-// WR-04 / D-17.2-08 boundary coverage.
-//
-// Three branches of `hasLoadedPiSubagents` /
-// `hasLoadedPiMcpAdapter` (at platform/pi-api.ts:51-78) are locked below:
-//   (a) `pi-mcp-adapter` `sourceInfo.source` substring boundary
-//   (b) try/catch fallback when `getAllTools()` throws or a tool accessor
-//       throws inside the `.some()` callback
-//   (c) `tool.name === undefined` boundary case (the real coverage gap)
-// -----------------------------------------------------------------------------
-
-// WR-04 branch (a): substring boundary of the `pi-mcp-adapter` source path.
-test("platform pi-api: hasLoadedPiMcpAdapter source-substring boundary matches", () => {
-  // Exact substring match -- minimal positive case.
-  assert.equal(
-    hasLoadedPiMcpAdapter(makePi([{ name: "other", sourceInfo: { source: "pi-mcp-adapter" } }])),
-    true,
-  );
-
-  // Substring embedded within a larger path-like string.
-  assert.equal(
-    hasLoadedPiMcpAdapter(
-      makePi([{ name: "other", sourceInfo: { source: "wrapper/pi-mcp-adapter-clone" } }]),
-    ),
-    true,
-  );
-
-  // Prefix-only "pi-mcp" without "-adapter" suffix MUST NOT match.
-  assert.equal(
-    hasLoadedPiMcpAdapter(makePi([{ name: "other", sourceInfo: { source: "pi-mcp" } }])),
-    false,
-  );
-
-  // Empty `source` string -- includes() returns false for non-empty needle.
-  assert.equal(
-    hasLoadedPiMcpAdapter(makePi([{ name: "other", sourceInfo: { source: "" } }])),
-    false,
-  );
-
-  // `sourceInfo` present but without a `source` field at all.
-  assert.equal(hasLoadedPiMcpAdapter(makePi([{ name: "other", sourceInfo: {} }])), false);
-
-  // Non-string `source` (number, undefined) -- the `typeof src === "string"`
-  // guard at pi-api.ts:73 protects against `.includes()` blowing up.
-  assert.equal(
-    hasLoadedPiMcpAdapter(makePi([{ name: "other", sourceInfo: { source: undefined } }])),
-    false,
-  );
-  assert.equal(
-    hasLoadedPiMcpAdapter(makePi([{ name: "other", sourceInfo: { source: 42 } }])),
-    false,
-  );
-});
-
-// WR-04 branch (b): try/catch fallback. `getAllTools()` throwing is covered by
-// existing Tests 1 and 2; this test hardens that coverage and adds a tool-level
-// accessor-throws case to exercise the in-callback fault path.
-test("platform pi-api: probes return false when getAllTools() throws or a tool accessor throws", () => {
-  // `getAllTools()` throws -- both probes degrade to false, composed status
-  // is the clean negative.
-  assert.equal(hasLoadedPiSubagents(makeThrowingPi()), false);
-  assert.equal(hasLoadedPiMcpAdapter(makeThrowingPi()), false);
-  assert.deepEqual(softDepStatus(makeThrowingPi()), {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    // assert
+    assert.strictEqual(boundaryParseFrontmatter, expectedParseFrontmatter);
   });
 
-  // In-callback throw: a tool whose `name` getter throws is consulted inside
-  // `.some(...)`; the outer try/catch in both probes must catch and degrade.
-  function makePiWithThrowingTool(): ExtensionAPI {
-    return {
-      getAllTools: () => [
-        new Proxy(
-          {},
-          {
-            get(_target, prop) {
-              if (prop === "name") {
-                throw new Error("accessor failed");
-              }
+  test("parses a closed block and normalizes its body", () => {
+    // arrange
+    const document =
+      "---\r\nname: helper\r\ndescription: does a thing\r\n---\r\nBody line one\r\n\r\n";
 
-              return undefined;
-            },
-          },
-        ),
-      ],
-    } as unknown as ExtensionAPI;
+    // act
+    const parsedFrontmatter = parseFrontmatter<{ name: string; description: string }>(document);
+
+    // assert
+    assert.deepStrictEqual(parsedFrontmatter, {
+      frontmatter: { name: "helper", description: "does a thing" },
+      body: "Body line one",
+    });
+  });
+
+  test("keeps the body and returns empty metadata without an opening delimiter", () => {
+    // arrange
+    const document = "# Heading\r\n\r\nProse.\r\n";
+
+    // act
+    const parsedFrontmatter = parseFrontmatter(document);
+
+    // assert
+    assert.deepStrictEqual(parsedFrontmatter, {
+      frontmatter: {},
+      body: "# Heading\n\nProse.\n",
+    });
+  });
+
+  test("returns empty metadata for an unclosed block", () => {
+    // arrange
+    const document = "---\nname: helper\nno closing delimiter\n";
+
+    // act
+    const parsedFrontmatter = parseFrontmatter(document);
+
+    // assert
+    assert.deepStrictEqual(parsedFrontmatter, {
+      frontmatter: {},
+      body: "---\nname: helper\nno closing delimiter\n",
+    });
+  });
+
+  test("throws a YAML parse error for malformed metadata", () => {
+    // arrange
+    const document = "---\ndescription: a: b: c value\n---\nbody\n";
+
+    // act & assert
+    assert.throws(
+      () => parseFrontmatter(document),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.name, "YAMLParseError");
+        return true;
+      },
+    );
+  });
+});
+
+describe("hasLoadedPiSubagents", () => {
+  for (const { tools, expectedLoaded, behavior } of [
+    {
+      behavior: "recognizes the subagent tool",
+      tools: [{ name: "subagent" }],
+      expectedLoaded: true,
+    },
+    {
+      behavior: "ignores other named tools",
+      tools: [{ name: "other" }],
+      expectedLoaded: false,
+    },
+    {
+      behavior: "ignores a source-only subagents declaration",
+      tools: [{ sourceInfo: { source: "pi-subagents" } }],
+      expectedLoaded: false,
+    },
+    {
+      behavior: "accepts a tool without a name",
+      tools: [{}],
+      expectedLoaded: false,
+    },
+  ]) {
+    test(behavior, () => {
+      // arrange
+      const extensionApi = extensionApiWithTools(tools);
+
+      // act
+      const isLoaded = hasLoadedPiSubagents(extensionApi);
+
+      // assert
+      assert.strictEqual(isLoaded, expectedLoaded);
+    });
   }
 
-  assert.equal(hasLoadedPiSubagents(makePiWithThrowingTool()), false);
-  // For the mcp probe, accessing `name` on the same Proxy throws -- the outer
-  // try/catch catches it and degrades to false (consistent with branch policy).
-  assert.equal(hasLoadedPiMcpAdapter(makePiWithThrowingTool()), false);
+  test("degrades to unloaded when tool discovery fails", () => {
+    // arrange
+    const extensionApi = {
+      getAllTools: () => {
+        throw new Error("not ready");
+      },
+    } as unknown as PiBoundary.ExtensionAPI;
+
+    // act
+    const isLoaded = hasLoadedPiSubagents(extensionApi);
+
+    // assert
+    assert.strictEqual(isLoaded, false);
+  });
+
+  test("degrades to unloaded when a tool name accessor fails", () => {
+    // arrange
+    const inaccessibleTool = Object.defineProperty({}, "name", {
+      get: () => {
+        throw new Error("inaccessible");
+      },
+    });
+    const extensionApi = extensionApiWithTools([inaccessibleTool]);
+
+    // act
+    const isLoaded = hasLoadedPiSubagents(extensionApi);
+
+    // assert
+    assert.strictEqual(isLoaded, false);
+  });
 });
 
-// WR-04 branch (c): `tool.name === undefined` boundary. This is the real
-// coverage gap.
-test("platform pi-api: probes do not crash on tool.name === undefined; fall through to source-substring or false", () => {
-  // Subagent probe: undefined === "subagent" is false; no crash, no spurious true.
-  assert.equal(hasLoadedPiSubagents(makePi([{}])), false);
+describe("hasLoadedPiMcpAdapter", () => {
+  for (const { tools, expectedLoaded, behavior } of [
+    {
+      behavior: "recognizes the mcp tool name",
+      tools: [{ name: "mcp" }],
+      expectedLoaded: true,
+    },
+    {
+      behavior: "recognizes the adapter source",
+      tools: [{ name: "other", sourceInfo: { source: "pi-mcp-adapter" } }],
+      expectedLoaded: true,
+    },
+    {
+      behavior: "recognizes the adapter within a source path",
+      tools: [{ sourceInfo: { source: "wrapper/pi-mcp-adapter-clone" } }],
+      expectedLoaded: true,
+    },
+    {
+      behavior: "rejects a partial adapter source name",
+      tools: [{ sourceInfo: { source: "pi-mcp" } }],
+      expectedLoaded: false,
+    },
+    {
+      behavior: "rejects an empty adapter source",
+      tools: [{ sourceInfo: { source: "" } }],
+      expectedLoaded: false,
+    },
+    {
+      behavior: "accepts a tool without source metadata",
+      tools: [{}],
+      expectedLoaded: false,
+    },
+    {
+      behavior: "rejects a non-string adapter source",
+      tools: [{ sourceInfo: { source: 42 } }],
+      expectedLoaded: false,
+    },
+  ]) {
+    test(behavior, () => {
+      // arrange
+      const extensionApi = extensionApiWithTools(tools);
 
-  // Subagent probe has NO source-substring fallback -- even a tool whose
-  // sourceInfo.source is "pi-subagents" returns false because the probe only
-  // checks `tool.name === "subagent"`.
-  assert.equal(hasLoadedPiSubagents(makePi([{ sourceInfo: { source: "pi-subagents" } }])), false);
+      // act
+      const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
 
-  // Mcp adapter probe: no name, no sourceInfo -- false.
-  assert.equal(hasLoadedPiMcpAdapter(makePi([{}])), false);
+      // assert
+      assert.strictEqual(isLoaded, expectedLoaded);
+    });
+  }
 
-  // Mcp adapter probe: undefined name, but sourceInfo.source contains the
-  // substring -- the fallback fires and the probe returns true.
-  assert.equal(hasLoadedPiMcpAdapter(makePi([{ sourceInfo: { source: "pi-mcp-adapter" } }])), true);
+  test("degrades to unloaded when tool discovery fails", () => {
+    // arrange
+    const extensionApi = {
+      getAllTools: () => {
+        throw new Error("not ready");
+      },
+    } as unknown as PiBoundary.ExtensionAPI;
+
+    // act
+    const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
+
+    // assert
+    assert.strictEqual(isLoaded, false);
+  });
+
+  test("degrades to unloaded when a tool name accessor fails", () => {
+    // arrange
+    const inaccessibleTool = Object.defineProperty({}, "name", {
+      get: () => {
+        throw new Error("inaccessible");
+      },
+    });
+    const extensionApi = extensionApiWithTools([inaccessibleTool]);
+
+    // act
+    const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
+
+    // assert
+    assert.strictEqual(isLoaded, false);
+  });
 });
 
-// -----------------------------------------------------------------------------
-// PARSE-01: the `parseFrontmatter` re-export pins the throw/return semantics the
-// skills/commands staging gates branch on. A CLOSED, malformed `---` block is
-// the degrade trigger (throws); a missing/unclosed delimiter is the empty-
-// metadata branch (returns without throwing).
-// -----------------------------------------------------------------------------
+describe("softDepStatus", () => {
+  for (const { tools, expectedStatus, behavior } of [
+    {
+      behavior: "reports both dependencies as loaded",
+      tools: [{ name: "subagent" }, { name: "mcp" }],
+      expectedStatus: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    },
+    {
+      behavior: "reports only subagents as loaded",
+      tools: [{ name: "subagent" }],
+      expectedStatus: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    },
+    {
+      behavior: "reports only the MCP adapter as loaded",
+      tools: [{ sourceInfo: { source: "pi-mcp-adapter" } }],
+      expectedStatus: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    },
+    {
+      behavior: "reports both dependencies as unloaded",
+      tools: [],
+      expectedStatus: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    },
+  ]) {
+    test(behavior, () => {
+      // arrange
+      const extensionApi = extensionApiWithTools(tools);
 
-test("PARSE-01: parseFrontmatter reads a valid closed block and normalizes the body", () => {
-  const { frontmatter, body } = parseFrontmatter<{ name: string; description: string }>(
-    "---\r\nname: helper\r\ndescription: does a thing\r\n---\r\nBody line one\r\n\r\n",
-  );
-  assert.equal(frontmatter.name, "helper");
-  assert.equal(frontmatter.description, "does a thing");
-  // CRLF -> LF normalized and trailing whitespace trimmed.
-  assert.equal(body, "Body line one");
-});
+      // act
+      const status = softDepStatus(extensionApi);
 
-test("PARSE-01: parseFrontmatter returns empty frontmatter (no throw) when the `---` delimiter is absent", () => {
-  const { frontmatter, body } = parseFrontmatter("# Just a heading\n\nSome prose.\n");
-  assert.deepEqual(frontmatter, {});
-  // No-delimiter path: body is CRLF->LF normalized but NOT trimmed (only the
-  // frontmatter-present path trims the post-block body).
-  assert.equal(body, "# Just a heading\n\nSome prose.\n");
-});
+      // assert
+      assert.deepStrictEqual(status, expectedStatus);
+    });
+  }
 
-test("PARSE-01: parseFrontmatter returns empty frontmatter (no throw) when the opening `---` is never closed", () => {
-  const { frontmatter } = parseFrontmatter("---\nname: helper\nno closing delimiter here\n");
-  assert.deepEqual(frontmatter, {});
-});
+  test("degrades both dependencies to unloaded when discovery fails", () => {
+    // arrange
+    const extensionApi = {
+      getAllTools: () => {
+        throw new Error("not ready");
+      },
+    } as unknown as PiBoundary.ExtensionAPI;
 
-test("PARSE-01: parseFrontmatter THROWS on a closed block whose inner YAML is malformed", () => {
-  // An unquoted `: ` mid-scalar is the js-yaml/`yaml` strict-parse rejection the
-  // degrade path (SKILL-01 / CMD-01) triggers on.
-  assert.throws(() => parseFrontmatter("---\ndescription: a: b: c value\n---\nbody\n"));
+    // act
+    const status = softDepStatus(extensionApi);
+
+    // assert
+    assert.deepStrictEqual(status, {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+    });
+  });
 });
