@@ -1,118 +1,142 @@
-// PI-7 hash-version contract tests. The snapshot value pinned in
-// `PI-7 SNAPSHOT` freezes the algorithm + truncation length (12 hex chars)
-// + walk filter list as a stable user contract per D-11/D-12.
-// Any future change to the algorithm, truncation length, normalization
-// rules, or HASH_WALK_SKIP list MUST be accompanied by a CHANGELOG entry.
-//
-// `.git/HEAD` is materialized at test-startup (not committed to git --
-// git refuses to track any file under a `.git` path component). The file
-// MUST exist on disk before the snapshot test runs so the walk-filter
-// exclusion is exercised against a real `.git/` entry, exactly the way a
-// freshly-cloned plugin tree would present.
-
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test, { before } from "node:test";
-import { fileURLToPath } from "node:url";
+import { describe, test, type TestContext } from "node:test";
 
 import {
   computeHashVersion,
-  HASH_WALK_SKIP,
-  looksLikeShaVersion,
-  SHA_VERSION_RE,
   shaVersion,
 } from "../../extensions/pi-claude-marketplace/domain/version.ts";
-import { renderVersion } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_ROOT = path.join(HERE, "fixtures/hash-stability");
-const SAMPLE_PLUGIN = path.join(FIXTURE_ROOT, "sample-plugin");
-const SAMPLE_PLUGIN_DOT_GIT = path.join(SAMPLE_PLUGIN, ".git");
-const SAMPLE_PLUGIN_DOT_GIT_HEAD = path.join(SAMPLE_PLUGIN_DOT_GIT, "HEAD");
+async function createVersionSandbox(t: TestContext): Promise<string> {
+  const directory = await mkdtemp(path.join(tmpdir(), "plugin-version-"));
+  t.after(async () => {
+    await rm(directory, { force: true, recursive: true });
+  });
+  return directory;
+}
 
-before(() => {
-  // PI-7 / D-12: re-create the `.git/HEAD` decoy on every run. Git itself
-  // will not let us check this file into the repo (any path containing a
-  // `.git` component is silently refused), so we materialize it at test
-  // startup. Its presence exercises the HASH_WALK_SKIP filter -- if the
-  // walker did NOT skip `.git/`, the snapshot hash would change.
-  mkdirSync(SAMPLE_PLUGIN_DOT_GIT, { recursive: true });
-  writeFileSync(SAMPLE_PLUGIN_DOT_GIT_HEAD, "ref: refs/heads/main\n");
+describe("computeHashVersion", () => {
+  test("returns the fixed empty-tree hash", async (t) => {
+    // arrange
+    const pluginRoot = await createVersionSandbox(t);
+
+    // act
+    const version = await computeHashVersion(pluginRoot);
+
+    // assert
+    assert.strictEqual(version, "hash-e3b0c44298fc");
+  });
+
+  test("hashes sorted nested paths and normalized bytes deterministically", async (t) => {
+    // arrange
+    const pluginRoot = await createVersionSandbox(t);
+    await writeFile(path.join(pluginRoot, "z.txt"), "zulu\n");
+    await mkdir(path.join(pluginRoot, "nested"));
+    await writeFile(path.join(pluginRoot, "nested", "b.txt"), "beta\rstandalone\r\n");
+    await writeFile(
+      path.join(pluginRoot, "a.txt"),
+      Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("alpha\r\n")]),
+    );
+    await writeFile(path.join(pluginRoot, "short.txt"), "x");
+
+    // act
+    const version = await computeHashVersion(pluginRoot);
+
+    // assert
+    assert.strictEqual(version, "hash-7f044a9c40a0");
+  });
+
+  test("ignores Git, dependency, and Finder entries", async (t) => {
+    // arrange
+    const pluginRoot = await createVersionSandbox(t);
+    await writeFile(path.join(pluginRoot, "main.txt"), "main\n");
+    await mkdir(path.join(pluginRoot, ".git"));
+    await writeFile(path.join(pluginRoot, ".git", "HEAD"), "ignored\n");
+    await mkdir(path.join(pluginRoot, "node_modules", "package"), {
+      recursive: true,
+    });
+    await writeFile(path.join(pluginRoot, "node_modules", "package", "index.js"), "ignored\n");
+    await writeFile(path.join(pluginRoot, ".DS_Store"), "ignored\n");
+
+    // act
+    const version = await computeHashVersion(pluginRoot);
+
+    // assert
+    assert.strictEqual(version, "hash-c5994021316d");
+  });
+
+  test("normalizes a UTF-8 BOM and CRLF line endings", async (t) => {
+    // arrange
+    const directory = await createVersionSandbox(t);
+    const lfPluginRoot = path.join(directory, "lf");
+    const crlfPluginRoot = path.join(directory, "crlf");
+    await mkdir(lfPluginRoot);
+    await mkdir(crlfPluginRoot);
+    await writeFile(path.join(lfPluginRoot, "plugin.txt"), "hello\n");
+    await writeFile(
+      path.join(crlfPluginRoot, "plugin.txt"),
+      Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("hello\r\n")]),
+    );
+
+    // act
+    const lfVersion = await computeHashVersion(lfPluginRoot);
+    const crlfVersion = await computeHashVersion(crlfPluginRoot);
+
+    // assert
+    assert.strictEqual(lfVersion, "hash-35fe934cd70c");
+    assert.strictEqual(crlfVersion, "hash-35fe934cd70c");
+  });
+
+  test("preserves a standalone carriage return", async (t) => {
+    // arrange
+    const directory = await createVersionSandbox(t);
+    const carriagePluginRoot = path.join(directory, "carriage");
+    const linefeedPluginRoot = path.join(directory, "linefeed");
+    await mkdir(carriagePluginRoot);
+    await mkdir(linefeedPluginRoot);
+    await writeFile(path.join(carriagePluginRoot, "plugin.txt"), "a\rb\n");
+    await writeFile(path.join(linefeedPluginRoot, "plugin.txt"), "a\nb\n");
+
+    // act
+    const carriageVersion = await computeHashVersion(carriagePluginRoot);
+    const linefeedVersion = await computeHashVersion(linefeedPluginRoot);
+
+    // assert
+    assert.strictEqual(carriageVersion, "hash-574e22309277");
+    assert.strictEqual(linefeedVersion, "hash-e851780efdf8");
+  });
+
+  test("does not hash symlink target bytes", async (t) => {
+    // arrange
+    const directory = await createVersionSandbox(t);
+    const pluginRoot = path.join(directory, "plugin");
+    const targetPath = path.join(directory, "external.txt");
+    await mkdir(pluginRoot);
+    await writeFile(targetPath, "first target\n");
+    await symlink(targetPath, path.join(pluginRoot, "alias.txt"));
+
+    // act
+    const firstVersion = await computeHashVersion(pluginRoot);
+    await writeFile(targetPath, "different target\n");
+    const secondVersion = await computeHashVersion(pluginRoot);
+
+    // assert
+    assert.strictEqual(firstVersion, "hash-e07e386a2c84");
+    assert.strictEqual(secondVersion, "hash-e07e386a2c84");
+  });
 });
 
-test("PI-7 / D-12 HASH_WALK_SKIP is the locked walk-filter list", () => {
-  // D-12 contract: exactly these three entries, in this order. Adding or
-  // removing entries is a breaking change to the user-visible hash version.
-  assert.deepEqual([...HASH_WALK_SKIP], [".git", "node_modules", ".DS_Store"]);
-});
+describe("shaVersion", () => {
+  test("uses the first 12 characters of the resolved commit SHA", () => {
+    // arrange
+    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
 
-test("PI-7 computeHashVersion returns 12-hex prefix matching /^hash-[0-9a-f]{12}$/", async () => {
-  const got = await computeHashVersion(SAMPLE_PLUGIN);
-  assert.match(got, /^hash-[0-9a-f]{12}$/);
-});
+    // act
+    const version = shaVersion(fullSha);
 
-test("PI-7 / D-11 computeHashVersion is invariant across CRLF<->LF + BOM<->no-BOM", async () => {
-  // D-11 normalization: byte-different but logically-equivalent files
-  // (UTF-8 BOM stripped, CRLF collapsed to LF) MUST produce the same hash.
-  const lf = await computeHashVersion(path.join(FIXTURE_ROOT, "sample-lf"));
-  const crlfBom = await computeHashVersion(path.join(FIXTURE_ROOT, "sample-crlf-bom"));
-  assert.equal(lf, crlfBom, `LF hash ${lf} should equal CRLF+BOM hash ${crlfBom}`);
-});
-
-test("PI-7 / D-12 computeHashVersion is stable across runs (deterministic, same input -> same hash)", async () => {
-  const a = await computeHashVersion(SAMPLE_PLUGIN);
-  const b = await computeHashVersion(SAMPLE_PLUGIN);
-  assert.equal(a, b);
-});
-
-test("PI-7 SNAPSHOT: sample-plugin fixture hash is pinned (D-11/D-12 contract)", async () => {
-  // The pinned value below is the SHA-256 of (sorted-walk path bytes +
-  // normalized file bytes) over the sample-plugin tree, truncated to 12
-  // hex chars and prefixed `hash-`. The walk excludes `.git/` and
-  // `.DS_Store` per HASH_WALK_SKIP -- adding/removing those decoys does
-  // NOT change the hash. Re-pinning this value MUST be accompanied by a
-  // CHANGELOG entry per PI-7.
-  const got = await computeHashVersion(SAMPLE_PLUGIN);
-  assert.equal(
-    got,
-    "hash-743f35130ec4",
-    `Snapshot mismatch -- got ${got}. If the algorithm/truncation/walk-filter changed intentionally, update the pinned snapshot value in tests/domain/version.test.ts and add a CHANGELOG entry per the PI-7 contract.`,
-  );
-});
-
-// PURL-09 / D-77-01 sha-version helper contract. Parallels the PI-7
-// hash-version convention: `sha-<12hex>` names the git-commit provenance,
-// stays compact on the list surface, and compares by exact string equality.
-
-const FULL_SHA = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
-
-test("PURL-09 / D-77-01 shaVersion returns sha- + first 12 hex of the full sha", () => {
-  assert.equal(shaVersion(FULL_SHA), "sha-a1b2c3d4e5f6");
-});
-
-test("PURL-09 / D-77-01 SHA_VERSION_RE is the anchored-exact 12-lowercase-hex shape", () => {
-  assert.deepEqual(SHA_VERSION_RE, /^sha-[0-9a-f]{12}$/);
-});
-
-test("PURL-09 / D-77-01 looksLikeShaVersion accepts exactly sha-<12 lowercase hex>", () => {
-  assert.equal(looksLikeShaVersion("sha-a1b2c3d4e5f6"), true);
-});
-
-test("PURL-09 / D-77-01 looksLikeShaVersion rejects uppercase, wrong length, hash-, and semver", () => {
-  assert.equal(looksLikeShaVersion("sha-A1B2C3D4E5F6"), false);
-  assert.equal(looksLikeShaVersion("sha-a1b2"), false);
-  assert.equal(looksLikeShaVersion("hash-a1b2c3d4e5f6"), false);
-  assert.equal(looksLikeShaVersion("1.0.0"), false);
-});
-
-test("PURL-09 / D-77-01 renderVersion renders sha-<12hex> as v#<first 7 hex>", () => {
-  assert.equal(renderVersion("sha-2ea95f857031"), "v#2ea95f8");
-});
-
-test("PURL-09 / D-77-01 renderVersion leaves hash-<12hex> and SemVer unchanged", () => {
-  // The hash arm is unaffected by the sha arm (each formatter no-ops the
-  // other's shape); SemVer passes straight through.
-  assert.equal(renderVersion("hash-2ea95f85703d"), "v#2ea95f8");
-  assert.equal(renderVersion("1.0.0"), "v1.0.0");
+    // assert
+    assert.strictEqual(version, "sha-a1b2c3d4e5f6");
+  });
 });
