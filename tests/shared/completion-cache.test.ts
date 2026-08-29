@@ -189,6 +189,99 @@ describe("getMarketplaceNames", () => {
       (error: unknown) => error === rebuildError,
     );
   });
+
+  for (const { schemaVersion } of [{ schemaVersion: 1 }, { schemaVersion: 3 }]) {
+    test(`rejects adjacent marketplace schema version ${schemaVersion}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-schema-"));
+      const cachePath = path.join(directory, "marketplace-names.json");
+      const scope = "user";
+      const expectedNames = ["rebuilt-name"];
+      const expectedBytes = '{\n  "schemaVersion": 2,\n  "names": [\n    "rebuilt-name"\n  ]\n}\n';
+      t.after(async () => {
+        await invalidateMarketplaceNames(cachePath, scope);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await writeFile(
+        cachePath,
+        `{"schemaVersion":${schemaVersion},"names":["stale-name"]}`,
+        "utf8",
+      );
+
+      // act
+      const names = await getMarketplaceNames(cachePath, scope, () =>
+        Promise.resolve(expectedNames),
+      );
+      const bytes = await readFile(cachePath, "utf8");
+
+      // assert
+      assert.deepStrictEqual(names, expectedNames);
+      assert.strictEqual(bytes, expectedBytes);
+    });
+  }
+
+  for (const { name, bytes } of [
+    { name: "JSON-invalid marketplace cache", bytes: "{invalid" },
+    { name: "malformed marketplace cache", bytes: '{"schemaVersion":2,"names":[1]}' },
+  ]) {
+    test(`rebuilds a ${name}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-malformed-"));
+      const cachePath = path.join(directory, "marketplace-names.json");
+      const scope = "project";
+      const expectedNames = ["valid-name"];
+      t.after(async () => {
+        await invalidateMarketplaceNames(cachePath, scope);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await writeFile(cachePath, bytes, "utf8");
+
+      // act
+      const names = await getMarketplaceNames(cachePath, scope, () =>
+        Promise.resolve(expectedNames),
+      );
+
+      // assert
+      assert.deepStrictEqual(names, expectedNames);
+      assert.strictEqual(
+        await readFile(cachePath, "utf8"),
+        '{\n  "schemaVersion": 2,\n  "names": [\n    "valid-name"\n  ]\n}\n',
+      );
+    });
+  }
+
+  for (const { name, bytes, expectedNames } of [
+    {
+      name: "empty marketplace cache",
+      bytes: '{"schemaVersion":2,"names":[]}',
+      expectedNames: [] as string[],
+    },
+    {
+      name: "single-name marketplace cache",
+      bytes: '{"schemaVersion":2,"names":["only-name"]}',
+      expectedNames: ["only-name"],
+    },
+  ]) {
+    test(`accepts a ${name}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-cardinality-"));
+      const cachePath = path.join(directory, "marketplace-names.json");
+      const scope = "user";
+      t.after(async () => {
+        await invalidateMarketplaceNames(cachePath, scope);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await writeFile(cachePath, bytes, "utf8");
+
+      // act
+      const names = await getMarketplaceNames(cachePath, scope, () =>
+        Promise.reject(new Error("valid cardinality rebuilt")),
+      );
+
+      // assert
+      assert.deepStrictEqual(names, expectedNames);
+    });
+  }
 });
 
 describe("getPluginIndex", () => {
@@ -359,6 +452,285 @@ describe("getPluginIndex", () => {
       (error: unknown) => error === rebuildError,
     );
   });
+
+  for (const { schemaVersion } of [{ schemaVersion: 5 }, { schemaVersion: 7 }]) {
+    test(`rejects adjacent plugin schema version ${schemaVersion}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-schema-"));
+      const cachePath = path.join(directory, "plugin-index.json");
+      const scope = "project";
+      const marketplace = `schema-${schemaVersion}-index`;
+      const clock = Date.parse("2026-08-29T12:00:00.000Z");
+      const expectedRows = [
+        { name: "rebuilt-row", status: "partially-installed" },
+      ] satisfies PluginIndexRow[];
+      t.after(async () => {
+        invalidateMarketplaceCache(scope, marketplace);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await writeFile(
+        cachePath,
+        `{"schemaVersion":${schemaVersion},"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"stale-row","status":"installed"}]}`,
+        "utf8",
+      );
+
+      // act
+      const rows = await getPluginIndex(
+        cachePath,
+        scope,
+        marketplace,
+        () => Promise.resolve(expectedRows),
+        { now: () => clock },
+      );
+      const persisted = JSON.parse(await readFile(cachePath, "utf8")) as {
+        schemaVersion: number;
+        plugins: unknown[];
+      };
+
+      // assert
+      assert.deepStrictEqual(rows, expectedRows);
+      assert.deepStrictEqual(
+        { schemaVersion: persisted.schemaVersion, plugins: persisted.plugins },
+        {
+          schemaVersion: 6,
+          plugins: [{ name: "rebuilt-row", status: "partially-installed" }],
+        },
+      );
+    });
+  }
+
+  for (const { name, bytes } of [
+    { name: "JSON-invalid plugin cache", bytes: "{invalid" },
+    {
+      name: "malformed plugin cache",
+      bytes:
+        '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"bad-row","status":"unknown"}]}',
+    },
+  ]) {
+    test(`rebuilds a ${name}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-malformed-"));
+      const cachePath = path.join(directory, "plugin-index.json");
+      const scope = "user";
+      const marketplace = `${name.replaceAll(" ", "-")}-index`;
+      const clock = Date.parse("2026-08-29T12:00:00.000Z");
+      const expectedRows = [{ name: "valid-row", status: "available" }] satisfies PluginIndexRow[];
+      t.after(async () => {
+        invalidateMarketplaceCache(scope, marketplace);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await writeFile(cachePath, bytes, "utf8");
+
+      // act
+      const rows = await getPluginIndex(
+        cachePath,
+        scope,
+        marketplace,
+        () => Promise.resolve(expectedRows),
+        { now: () => clock },
+      );
+
+      // assert
+      assert.deepStrictEqual(rows, expectedRows);
+      assert.deepStrictEqual(
+        (JSON.parse(await readFile(cachePath, "utf8")) as { plugins: unknown[] }).plugins,
+        [{ name: "valid-row", status: "available" }],
+      );
+    });
+  }
+
+  for (const { name, bytes, expectedRows } of [
+    {
+      name: "empty plugin cache",
+      bytes: '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[]}',
+      expectedRows: [] satisfies PluginIndexRow[],
+    },
+    {
+      name: "single-row plugin cache",
+      bytes:
+        '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"only-row","status":"partially-available"}]}',
+      expectedRows: [
+        { name: "only-row", status: "partially-available" },
+      ] satisfies PluginIndexRow[],
+    },
+  ]) {
+    test(`accepts a ${name}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-cardinality-"));
+      const cachePath = path.join(directory, "plugin-index.json");
+      const scope = "project";
+      const marketplace = `${name.replaceAll(" ", "-")}-index`;
+      const clock = Date.parse("2026-08-29T12:00:00.000Z");
+      t.after(async () => {
+        invalidateMarketplaceCache(scope, marketplace);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await writeFile(cachePath, bytes, "utf8");
+
+      // act
+      const rows = await getPluginIndex(
+        cachePath,
+        scope,
+        marketplace,
+        () => Promise.reject(new Error("valid cardinality rebuilt")),
+        { now: () => clock },
+      );
+
+      // assert
+      assert.deepStrictEqual(rows, expectedRows);
+    });
+  }
+
+  for (const { name, elapsed, expectedRows } of [
+    {
+      name: "one millisecond before the TTL",
+      elapsed: 599_999,
+      expectedRows: [{ name: "cached-row", status: "installed" }] satisfies PluginIndexRow[],
+    },
+    {
+      name: "exactly at the TTL",
+      elapsed: 600_000,
+      expectedRows: [{ name: "cached-row", status: "installed" }] satisfies PluginIndexRow[],
+    },
+    {
+      name: "one millisecond beyond the TTL",
+      elapsed: 600_001,
+      expectedRows: [{ name: "rebuilt-row", status: "available" }] satisfies PluginIndexRow[],
+    },
+  ]) {
+    test(`uses the memory cache ${name}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-memory-ttl-"));
+      const cachePath = path.join(directory, "plugin-index.json");
+      const scope = "user";
+      const marketplace = `${elapsed}-memory-ttl-index`;
+      let clock = 10_000_000;
+      const options = { now: () => clock } satisfies GetPluginIndexOptions;
+      const cachedRows = [{ name: "cached-row", status: "installed" }] satisfies PluginIndexRow[];
+      const rebuiltRows = [{ name: "rebuilt-row", status: "available" }] satisfies PluginIndexRow[];
+      t.after(async () => {
+        invalidateMarketplaceCache(scope, marketplace);
+        await rm(directory, { recursive: true, force: true });
+      });
+      await getPluginIndex(
+        cachePath,
+        scope,
+        marketplace,
+        () => Promise.resolve(cachedRows),
+        options,
+      );
+      await rm(cachePath);
+      clock += elapsed;
+
+      // act
+      const rows = await getPluginIndex(
+        cachePath,
+        scope,
+        marketplace,
+        () => Promise.resolve(rebuiltRows),
+        options,
+      );
+
+      // assert
+      assert.deepStrictEqual(rows, expectedRows);
+    });
+  }
+
+  test("uses integer millisecond precision at the file TTL boundary", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-file-precision-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "project";
+    const marketplace = "file-precision-index";
+    const timestamp = Date.parse("2026-08-29T12:00:00.123Z");
+    const clock = timestamp + 600_000;
+    const expectedRows = [{ name: "precise-row", status: "remote" }] satisfies PluginIndexRow[];
+    t.after(async () => {
+      invalidateMarketplaceCache(scope, marketplace);
+      await rm(directory, { recursive: true, force: true });
+    });
+    await writeFile(
+      cachePath,
+      '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"precise-row","status":"remote"}]}',
+      "utf8",
+    );
+
+    // act
+    const rows = await getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.reject(new Error("exact file boundary rebuilt")),
+      { now: () => clock },
+    );
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+  });
+
+  test("rebuilds a file cache one millisecond beyond the TTL", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-file-stale-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "user";
+    const marketplace = "file-stale-index";
+    const timestamp = Date.parse("2026-08-29T12:00:00.123Z");
+    const clock = timestamp + 600_001;
+    const expectedRows = [{ name: "rebuilt-row", status: "upgradable" }] satisfies PluginIndexRow[];
+    t.after(async () => {
+      invalidateMarketplaceCache(scope, marketplace);
+      await rm(directory, { recursive: true, force: true });
+    });
+    await writeFile(
+      cachePath,
+      '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"stale-row","status":"installed"}]}',
+      "utf8",
+    );
+
+    // act
+    const rows = await getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.resolve(expectedRows),
+      { now: () => clock },
+    );
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+  });
+
+  test("preserves input order for rows with equal status", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-order-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "project";
+    const marketplace = "equal-row-order-index";
+    const expectedRows = [
+      { name: "zeta", status: "available" },
+      { name: "alpha", status: "available" },
+      { name: "middle", status: "available" },
+    ] satisfies PluginIndexRow[];
+    t.after(async () => {
+      invalidateMarketplaceCache(scope, marketplace);
+      await rm(directory, { recursive: true, force: true });
+    });
+
+    // act
+    const rows = await getPluginIndex(cachePath, scope, marketplace, () =>
+      Promise.resolve(expectedRows),
+    );
+    const persistedRows = (JSON.parse(await readFile(cachePath, "utf8")) as { plugins: unknown[] })
+      .plugins;
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+    assert.deepStrictEqual(persistedRows, [
+      { name: "zeta", status: "available" },
+      { name: "alpha", status: "available" },
+      { name: "middle", status: "available" },
+    ]);
+  });
 });
 
 describe("cache invalidation", () => {
@@ -436,6 +808,76 @@ describe("cache invalidation", () => {
 
     // assert
     assert.deepStrictEqual(rows, [{ name: "after", status: "available" }]);
+  });
+
+  test("ignores a missing marketplace names cache during invalidation", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalidate-names-missing-"));
+    const cachePath = path.join(directory, "missing.json");
+    const scope = "project";
+    t.after(() => rm(directory, { recursive: true, force: true }));
+
+    // act
+    await invalidateMarketplaceNames(cachePath, scope);
+
+    // assert
+    await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
+  });
+
+  test("propagates a non-ENOENT marketplace names unlink error", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalidate-names-error-"));
+    const scope = "user";
+    t.after(() => rm(directory, { recursive: true, force: true }));
+
+    // act & assert
+    await assert.rejects(
+      () => invalidateMarketplaceNames(directory, scope),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual((error as NodeJS.ErrnoException).code, "EISDIR");
+        return true;
+      },
+    );
+  });
+
+  test("ignores a missing plugin cache during destructive invalidation", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-drop-plugin-missing-"));
+    const cachePath = path.join(directory, "missing.json");
+    const scope = "project";
+    const marketplace = "missing-drop-index";
+    t.after(async () => {
+      invalidateMarketplaceCache(scope, marketplace);
+      await rm(directory, { recursive: true, force: true });
+    });
+
+    // act
+    await dropMarketplaceCache(cachePath, scope, marketplace);
+
+    // assert
+    await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
+  });
+
+  test("propagates a non-ENOENT plugin cache unlink error", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-drop-plugin-error-"));
+    const scope = "user";
+    const marketplace = "unlink-error-index";
+    t.after(async () => {
+      invalidateMarketplaceCache(scope, marketplace);
+      await rm(directory, { recursive: true, force: true });
+    });
+
+    // act & assert
+    await assert.rejects(
+      () => dropMarketplaceCache(directory, scope, marketplace),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual((error as NodeJS.ErrnoException).code, "EISDIR");
+        return true;
+      },
+    );
   });
 
   test("resetting the completion cache clears both memory maps", async (t) => {
