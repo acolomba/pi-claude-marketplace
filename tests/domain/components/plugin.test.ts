@@ -15,10 +15,14 @@ void ({
   defaultEnabled: false,
   mcpServers: "./plugin.mcp.json",
 } satisfies PluginEntry);
+// @ts-expect-error A plugin entry requires its name.
+void ({ source: "./plugin" } satisfies PluginEntry);
 // @ts-expect-error A plugin entry requires its source declaration.
 void ({ name: "plugin" } satisfies PluginEntry);
 // @ts-expect-error The enablement declaration is boolean when present.
 void ({ name: "plugin", source: "./plugin", defaultEnabled: "false" } satisfies PluginEntry);
+// @ts-expect-error MCP servers are a file reference or a server map.
+void ({ name: "plugin", source: "./plugin", mcpServers: 42 } satisfies PluginEntry);
 
 describe("PLUGIN_ENTRY_SCHEMA", () => {
   test("describes the complete plugin entry object", () => {
@@ -146,18 +150,41 @@ describe("PLUGIN_ENTRY_VALIDATOR", () => {
     });
   }
 
+  for (const { missingField, pluginEntry } of [
+    { missingField: "name", pluginEntry: { source: "./plugin" } },
+    { missingField: "source", pluginEntry: { name: "plugin" } },
+  ]) {
+    test(`rejects an entry without its ${missingField}`, () => {
+      // arrange
+      const incompletePluginEntry = pluginEntry;
+
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(incompletePluginEntry);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
+
+  for (const pluginEntry of [null, [], undefined, "plugin", 42, true]) {
+    test(`rejects the non-record value ${JSON.stringify(pluginEntry)}`, () => {
+      // arrange
+      const nonRecordPluginEntry = pluginEntry;
+
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(nonRecordPluginEntry);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
+
   for (const pluginEntry of [
-    null,
-    [],
-    { source: "./plugin" },
-    { name: "plugin" },
     { name: 1, source: "./plugin" },
     { name: "plugin", source: "./plugin", description: 1 },
     { name: "plugin", source: "./plugin", version: 1 },
     { name: "plugin", source: "./plugin", defaultEnabled: "false" },
     { name: "plugin", source: "./plugin", defaultEnabled: null },
-    { name: "plugin", source: "./plugin", mcpServers: [] },
-    { name: "plugin", source: "./plugin", mcpServers: 1 },
   ]) {
     test(`rejects ${JSON.stringify(pluginEntry)}`, () => {
       // arrange
@@ -165,6 +192,19 @@ describe("PLUGIN_ENTRY_VALIDATOR", () => {
 
       // act
       const isValid = PLUGIN_ENTRY_VALIDATOR.Check(invalidPluginEntry);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
+
+  for (const mcpServers of [null, [], 1, true]) {
+    test(`rejects the MCP declaration ${JSON.stringify(mcpServers)}`, () => {
+      // arrange
+      const pluginEntry = { name: "plugin", source: "./plugin", mcpServers };
+
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
 
       // assert
       assert.strictEqual(isValid, false);
@@ -234,16 +274,25 @@ describe("PLUGIN_MANIFEST_VALIDATOR", () => {
     });
   }
 
+  for (const pluginManifest of [null, [], undefined, "plugin", 42, true]) {
+    test(`rejects the non-record value ${JSON.stringify(pluginManifest)}`, () => {
+      // arrange
+      const nonRecordPluginManifest = pluginManifest;
+
+      // act
+      const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(nonRecordPluginManifest);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
+
   for (const pluginManifest of [
-    null,
-    [],
     { name: 42 },
     { description: 42 },
     { version: 42 },
     { defaultEnabled: "false" },
     { defaultEnabled: null },
-    { mcpServers: [] },
-    { mcpServers: 1 },
   ]) {
     test(`rejects ${JSON.stringify(pluginManifest)}`, () => {
       // arrange
@@ -251,6 +300,19 @@ describe("PLUGIN_MANIFEST_VALIDATOR", () => {
 
       // act
       const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(invalidPluginManifest);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
+
+  for (const mcpServers of [null, [], 1, true]) {
+    test(`rejects the MCP declaration ${JSON.stringify(mcpServers)}`, () => {
+      // arrange
+      const pluginManifest = { mcpServers };
+
+      // act
+      const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(pluginManifest);
 
       // assert
       assert.strictEqual(isValid, false);
