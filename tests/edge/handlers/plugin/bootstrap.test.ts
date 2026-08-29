@@ -17,7 +17,7 @@ import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketpla
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -92,6 +92,42 @@ function fixtureClaudePluginsOfficial(): string {
     "_fixtures",
     "claude-plugins-official",
   );
+}
+
+function fixtureMarketplaceDir(name: "valid-marketplace"): string {
+  return path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    "..",
+    "..",
+    "..",
+    "orchestrators",
+    "marketplace",
+    "_fixtures",
+    name,
+  );
+}
+
+function makeMockGitOps(options: { readonly fixtureSourceDir: string }) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ["https://github.com/anthropics/claude-plugins-official.git"],
+    cloneFixture: {
+      boundary: "local",
+      sourceDir: options.fixtureSourceDir,
+    },
+  });
+  const gitOps: EdgeDeps["gitOps"] = {
+    ...git.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneOptionsWithoutCredentials } = cloneOptions;
+      await git.gitOps.clone(cloneOptionsWithoutCredentials);
+    },
+  };
+
+  return {
+    gitOps,
+    state: { cloneCalls: git.state.calls.clone },
+  };
 }
 
 function makeDeps(): { deps: EdgeDeps; gitState: ReturnType<typeof makeMockGitOps>["state"] } {

@@ -15,7 +15,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { makeMarketplaceUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts";
-import { makeMockGitOps } from "../../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { PluginUpdateOutcome } from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -24,6 +24,10 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+function makeMockGitOps() {
+  return createGitOpsFake({ boundary: "memory" });
 }
 
 function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {

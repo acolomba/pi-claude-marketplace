@@ -53,7 +53,7 @@ import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrat
 import { reinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { updatePlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
-import { makeMockGitOps } from "../helpers/git-mock.ts";
+import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -66,6 +66,10 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+function makeMockGitOps() {
+  return createGitOpsFake({ boundary: "memory" });
 }
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
