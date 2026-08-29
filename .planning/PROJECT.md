@@ -17,14 +17,12 @@ meets the TypeScript unit testing guidelines.
 
 **Target features:**
 
-- One mirrored test module for every production TypeScript module, including
-  type-only modules and barrels.
-- Complete direct function, line, and branch coverage for each source-test pair.
-- Independent cases with strict assertions, controlled dependencies, and
-  case-private state.
-- Small fail-closed gates for pairing, direct coverage, and test architecture.
-- Preserved public behavior, persistence formats, adapter contracts, and
-  product corrections from the refactor handoff.
+- Audit all 204 production TypeScript modules from the code at HEAD.
+- Use one source-test pair in each executable plan and implementation commit.
+- Give each source module one mirrored test, including type-only modules and barrels.
+- Require complete direct function, line, and branch coverage for each pair.
+- Preserve public behavior, persistence formats, adapter contracts, and named product corrections.
+- Keep retained source and test commits as baseline code, not proof of compliance.
 
 ## Previous Milestone: v1.18 Manifest-Independent Installed Plugin Info (branch: features/manifest-independent-plugin-info, shipped 2026-08-12, npm 0.14.0)
 
@@ -216,9 +214,9 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** v1.19 Unit Test Refactor. The milestone replaces the current unit
-test structure one production module at a time. The preserved handoff is evidence,
-not prior milestone state.
+**In progress:** v1.19 Unit Test Refactor. The milestone audits the current code
+one source-test pair at a time. Retained commits are baseline code, not proof of
+compliance. The preserved handoff is evidence, not prior milestone state.
 
 **Just shipped:** v1.18 Manifest-Independent Installed Plugin Info (2026-08-12, Phases 95-100, 29 plans; audit passed 32/32 requirements, 6/6 phases, 5/5 integration seams, 3/3 flows, 0 open threats; archived to `.planning/milestones/v1.18-*`). An installed plugin stays visible, inspectable, and uninstallable after its entry disappears from a valid marketplace manifest; a disabled partially-installed plugin is recognized as disabled again; and a disabled plugin keeps describing itself. Shipped as npm `0.14.0` on PR #120. Phase 100 (2026-08-12) made disable retain the installation record's inventory and drop only artifacts, re-basing the hook-routing suppression and enable-path self-conflict guards that ENBL-04's empty-resources marker had carried, and closed on live human UAT against Pi 0.84.1 (3/3, zero issues). Phase 99 (2026-08-10) closed post-audit tech debt: the manifest-declaration question is now asked in one place and answered identically on every rendering surface with a source walk standing between the tree and a fourth copy; a disabled record repairs its source and availability discriminant when they move under an unchanged version; and the coverage residual was re-measured against the tree the milestone actually left, with the seven reachable arms asserting what the failure left behind rather than that the line ran. Phase 98 (2026-08-10) shipped lifecycle regression and contract documentation plus the four folded Phase-97 review carriers: install→reconcile `{orphan rewake}` threading and enable soft-dep markers through one shared `LedgerDegradationSignals` shape in `orchestrators/plugin/shared.ts`, the stale-gate enable remediation trailer, disabled records reachable by `update` without `--partial` under a consent-preserving gate (a clean disabled record cannot degrade unconsented), per-kind LIFE-04 uninstall coverage (hooks seed added to the fixture), LIFE-05/06 skip pins across all three update enumeration paths plus the autoupdate cascade (both halves), the COMPAT-01 enumeration-equality no-expansion gate (mutation-proven, direct-fs source scanning via the shared `tests/helpers/source-scan.ts` seam), and the DOC-08 accuracy sweep (ten named defects plus discovered ones corrected in place, PRD §5.3.1 flowchart redrawn to the ManifestLookup decision path). The three-iteration review fix loop finished all_fixed (14 findings, 13 fixed, WR-12 carried to backlog); the reinstall row now composes degradation reasons through one shared composer. Verification passed 5/5 criteria + 9/9 requirement IDs; nyquist-compliant; threats_open 0; final gate 3386 unit + 18 integration, 0 fail. Phase 97 (2026-08-09) shipped the disabled-state classification repair (ENBL-05..09): every disabled-state read now flows through one `enabled`-keyed predicate in `persistence/state-io.ts` under a whole-tree drift gate, a disabled partial renders bare `(disabled)` byte-identically to the canonical shape on list and info (D-97-01 parity), `enable` re-materializes a partial through the partially-available ledger arm with a derived admission gate and threads degradation signals through one shared shape (status derived like install's, severity info per the operator's SEV-03 parity ruling), load-time backfill is a fixed point for disabled records (T-97-01 high threat closed with red-proof), and `update --partial`'s disabled short-circuit derives the persisted availability discriminant (mutation-proven), refreshes `resolvedSha` beside the version pin, and reaches clone GC. Verification passed 6/6 criteria + 29/29 must-haves; nyquist-compliant; threats_open 0; three-iteration review fix loop all_fixed with carriers into Phase 98 (WR-02/WR-04/WR-06, IN-07) and one backlog todo (stale resolvedSource on unchanged version). Phase 96 (2026-08-09) shipped the info half (INFO-09..12, BOUND-01/02): the `buildBlock` arm split renders a manifest-absent installation from its record — `(installed) {not in manifest}` with recorded version and reconstructed component inventory (generated names per D-96-01), the containment-guarded materialized-hooks read with the D-96-03 truthful-split degradation, the INFO-12 zero-call network guard, the D-96-04 visible fetch-skip note (broadened to disabled scopes in review), and the D-96-02 own-manifest authority pins that closed the catalog's open note. Verification passed 15/15; Nyquist-compliant; threats_open 0. CR-01 (disabled-partial predicate) carried to Phase 97 by design. The milestone makes list/info derive installed truth from the existing installation record when a valid marketplace manifest no longer contains the plugin entry, without introducing persisted orphan state or changing update semantics, and repairs the disabled-state predicate so a disabled partially-installed plugin is recognized as disabled (Phase 97, ENBL-05..09). Phase 95 shipped the list half (INV-01..05, BOUND-03): manifest-absent enabled records render `(installed) {not in manifest}` under a `ManifestLookup` discriminated value judged against the record's own manifest, partial records keep `(partially-installed)` with the absence reason prepended, the fold path threads the load error so a failed read never claims absence, the LLM tool payload forwards reasons on all four installed-family arms, and two new output-catalog states sit under the byte-equality gate. Verification passed 21/21 with operator UAT sign-off; Nyquist-compliant; threats_open 0.
 
@@ -228,8 +226,8 @@ not prior milestone state.
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** establish the corresponding-test and direct-coverage gates. Then refactor
-each module through its exported behavior and run its focused coverage gate.
+**Next:** start Phase 108 with the domain and platform pairs. Each plan owns one
+pair and must prove the complete guideline through exported behavior.
 
 ## Requirements
 
@@ -350,6 +348,8 @@ each module through its exported behavior and run its focused coverage gate.
 - [ ] Public behavior and all preserved handoff contracts remain unchanged.
 - [ ] The resolver exposes `installable: true | false` as a safe discriminant.
 - [ ] Replacement structural gates fail closed and have negative controls.
+- [ ] Each executable plan and implementation commit owns exactly one source-test pair.
+- [ ] No pair receives completion credit from a retained commit or retired summary.
 
 <!-- Milestone v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07, shipped 2026-08-12). -->
 
@@ -420,6 +420,10 @@ each module through its exported behavior and run its focused coverage gate.
   preserves contracts and discovery data from the abandoned attempt. The current
   branch starts at the latest `main`, commit `06887215`. The new guidelines match
   the preserved copies by SHA-256. The old patch and milestone state remain unused.
+- **v1.19 measured baseline:** HEAD has 204 production TypeScript modules. Direct
+  coverage passes for 59 pairs. It is incomplete for 83 pairs. Sixty pairs have
+  no mirrored test, and two focused tests fail. All 204 pairs remain open until
+  a new plan proves or repairs compliance.
 - **Codebase state at v1.18 close (2026-08-12):** 3386 unit + 18 integration tests green; lint + format + types clean. The milestone landed +15,804 / −2,390 LOC across 68 source, test and doc files (6 days, 2026-08-07 → 2026-08-12; 306 commits on the branch). New load-bearing surfaces: the `ManifestLookup` discriminated value behind every absence verdict, the single `enabled`-keyed disabled predicate in `persistence/state-io.ts` plus its whole-tree drift gate, the additive `hookEntries` record key, the shared `LedgerDegradationSignals` shape feeding every row composed off `runInstallLedger`, and the COMPAT-01 no-expansion architecture test (four closed sets by enumeration equality, seven glyphs with an eighth-glyph tripwire, the record key set, the schema-version union, the network clause). The two pi-subagents integration suites resolve their peer from `npm root -g`, so a stale global install fails them locally while CI skips them — the floor is `>=0.35.0`.
 - **Codebase state at url-source close (2026-07-13):** 2739 unit + 16 integration tests green; lint + format + types clean. Milestone landed +20,370 / −613 LOC across 141 files (~3 days, 133 commits, 2026-07-11 → 2026-07-13). New load-bearing surfaces: `plugin-clones/` source-addressed cache (SC-7 chokepoint in `persistence/locations.ts`), shared `orchestrators/plugin/git-source-probe.ts` classification module (list + completion parity, drift-guarded), `domain/auth-registry.ts` + `orchestrators/auth-host.ts` provider seam, and the `resolvedSha` additive state field. NFR-5 amended: install/update/reinstall of git-source plugins may touch the network on cache miss only; list/info/uninstall/marketplace-remove stay network-free. NFR-10 re-anchored to the owning clone root.
 - **Codebase state at v1.3 close (2026-05-25):** 1249/1249 tests green; lint + format + types clean. v1.3 milestone landed +15,030 / -1,917 LOC across 180 files (~3 days, 223 commits). Drift-guard plugin (`tests/lint-rules/`, 34 rules) and byte-equality catalog UAT (`tests/architecture/catalog-uat.test.ts` against `docs/output-catalog.md`) are now load-bearing -- `npm run check` will fail on any user-contract drift.
@@ -538,7 +542,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-08-28 after milestone v1.19 Unit Test Refactor started. The milestone uses the preserved handoff as evidence and replaces its mechanisms with the new TypeScript unit testing guidelines. Prior updates follow.*
+*Last updated: 2026-08-28 after the v1.19 Unit Test Refactor baseline audit. The milestone has 204 open source-test pairs. Retained commits and retired Phase 106/107 summaries give no completion credit. Prior updates follow.*
 
 *Last updated: 2026-08-12 after milestone v1.18 Manifest-Independent Installed Plugin Info shipped (Phases 95-100, 29 plans, audit passed 32/32 requirements + 5/5 integration seams + 3/3 flows + 0 open threats; archived to `.planning/milestones/v1.18-*`; npm 0.14.0 on PR #120). An installed plugin now stays visible, inspectable and uninstallable after its marketplace manifest stops declaring it: every absence verdict is judged against the record's own manifest through a `ManifestLookup` discriminated value, `info` reads hooks from the new additive `hookEntries` record key with the materialized file as legacy fallback, and a failed manifest read never claims absence. The `(disabled)` classification was repaired by collapsing four drifting copies of `installable && !enabled` onto one `enabled`-keyed predicate under a whole-tree drift gate, and Phase 100 — added mid-milestone rather than opening v1.19 — made disable retain the record's inventory, which retired ENBL-04's empty-resources marker and re-based the hook-routing and self-conflict guards that had depended on it. Closed on live human UAT against Pi 0.84.1. At close, SEED-001 and the coverage todo were promoted to BACKLOG.md, and the stale global pi-subagents peer was upgraded 0.24.3 → 0.47.1, taking the integration suite 16/18 → 18/18. Prior updates below.*
 
