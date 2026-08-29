@@ -2,67 +2,73 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "node:test";
 
 import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 
-/**
- * NFR-1, AS-1, D-03 -- atomicWriteJson via write-file-atomic@^7.
- *
- * The library handles tmp + fsync + rename internally; these tests verify
- * the wrapper produces the expected shape (2-space indent + trailing newline)
- * and that concurrent writes serialize cleanly.
- */
+test("writes two-space JSON with one trailing newline", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-shape-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "out.json");
+  const expectedJsonBytes = '{\n  "ok": true,\n  "count": 7\n}\n';
 
-test("happy path: write succeeds with 2-space indent + trailing newline (AS-1)", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "aj-"));
-  try {
-    const file = path.join(dir, "out.json");
-    await atomicWriteJson(file, { ok: true, n: 7 });
-    const got = await readFile(file, "utf8");
-    assert.equal(
-      got,
-      '{\n  "ok": true,\n  "n": 7\n}\n',
-      `unexpected JSON shape: ${JSON.stringify(got)}`,
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  // act
+  await atomicWriteJson(filePath, { ok: true, count: 7 });
+  const jsonBytes = await readFile(filePath, "utf8");
+
+  // assert
+  assert.strictEqual(jsonBytes, expectedJsonBytes);
 });
 
-test("auto-creates parent directory if missing (D-03 ergonomics)", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "aj-"));
-  try {
-    const file = path.join(dir, "deeply", "nested", "out.json");
-    await atomicWriteJson(file, { hello: "world" });
-    const got = await readFile(file, "utf8");
-    const parsed = JSON.parse(got) as { hello: string };
-    assert.equal(parsed.hello, "world");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+test("creates a missing parent tree before writing the document", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-parent-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "new", "nested", "out.json");
+  const expectedJsonBytes = '{\n  "message": "written"\n}\n';
+
+  // act
+  await atomicWriteJson(filePath, { message: "written" });
+  const jsonBytes = await readFile(filePath, "utf8");
+
+  // assert
+  assert.strictEqual(jsonBytes, expectedJsonBytes);
 });
 
-test("concurrent writes serialize cleanly (NFR-1 -- write-file-atomic queue)", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "aj-"));
-  try {
-    const file = path.join(dir, "race.json");
-    // Kick off 5 parallel writes with distinct payloads. The library's
-    // internal queue serializes them; the final on-disk content is one of
-    // the inputs (which one is non-deterministic, but it MUST be a complete
-    // valid JSON document of one of the candidates -- never a mid-write
-    // truncation).
-    const candidates = [{ i: 1 }, { i: 2 }, { i: 3 }, { i: 4 }, { i: 5 }];
-    await Promise.all(candidates.map((c) => atomicWriteJson(file, c)));
-    const got = await readFile(file, "utf8");
-    const parsed = JSON.parse(got) as { i: number };
-    assert.ok(
-      candidates.some((c) => c.i === parsed.i),
-      `final content's "i" must match one of the inputs, got ${parsed.i}`,
-    );
-    // The trailing newline + 2-space indent must still be intact:
-    assert.match(got, /^\{\n {2}"i": \d+\n\}\n$/);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+test("keeps every concurrent same-path observation as one complete document", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-concurrent-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "shared.json");
+  const documents = [
+    {
+      content: { writer: "first", sequence: [1, 2] },
+      expectedJsonBytes: '{\n  "writer": "first",\n  "sequence": [\n    1,\n    2\n  ]\n}\n',
+    },
+    {
+      content: { writer: "second", enabled: true },
+      expectedJsonBytes: '{\n  "writer": "second",\n  "enabled": true\n}\n',
+    },
+    {
+      content: { writer: "third", nested: { status: "ready" } },
+      expectedJsonBytes: '{\n  "writer": "third",\n  "nested": {\n    "status": "ready"\n  }\n}\n',
+    },
+  ] as const;
+  const expectedDocuments = new Set(documents.map(({ expectedJsonBytes }) => expectedJsonBytes));
+
+  // act
+  const observedDocuments = await Promise.all(
+    documents.map(async ({ content }) => {
+      await atomicWriteJson(filePath, content);
+      return readFile(filePath, "utf8");
+    }),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    observedDocuments.map((jsonBytes) => expectedDocuments.has(jsonBytes)),
+    [true, true, true],
+  );
+  assert.strictEqual(observedDocuments.length, documents.length);
 });
