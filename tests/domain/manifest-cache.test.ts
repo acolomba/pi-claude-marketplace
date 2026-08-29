@@ -36,6 +36,7 @@ test("loads a cold entry without writing a sidecar file", async (t) => {
   const directoryEntries = await readdir(directory);
 
   // assert
+  assert.deepStrictEqual(loadedManifest, { name: "marketplace", plugins: [] });
   assert.strictEqual(loadedManifest, marketplaceManifest);
   assert.deepStrictEqual(directoryEntries, ["marketplace.json"]);
   assert.strictEqual(load.mock.callCount(), 1);
@@ -55,10 +56,14 @@ test("returns an unchanged entry by reference without reloading", async (t) => {
   const thirdManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(firstManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(secondManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(thirdManifest, { name: "marketplace", plugins: [] });
   assert.strictEqual(firstManifest, marketplaceManifest);
-  assert.strictEqual(secondManifest, marketplaceManifest);
-  assert.strictEqual(thirdManifest, marketplaceManifest);
+  assert.strictEqual(secondManifest, firstManifest);
+  assert.strictEqual(thirdManifest, firstManifest);
   assert.strictEqual(load.mock.callCount(), 1);
+  assert.deepStrictEqual(load.mock.calls[0]?.arguments, [manifestPath]);
 });
 
 test("keeps entries private to each cache instance", async (t) => {
@@ -76,17 +81,24 @@ test("keeps entries private to each cache instance", async (t) => {
   const secondLoadedManifest = await secondCache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(firstLoadedManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(secondLoadedManifest, { name: "second", plugins: [] });
   assert.strictEqual(firstLoadedManifest, firstManifest);
   assert.strictEqual(secondLoadedManifest, secondManifest);
   assert.strictEqual(firstLoad.mock.callCount(), 1);
   assert.strictEqual(secondLoad.mock.callCount(), 1);
+  assert.deepStrictEqual(firstLoad.mock.calls[0]?.arguments, [manifestPath]);
+  assert.deepStrictEqual(secondLoad.mock.calls[0]?.arguments, [manifestPath]);
 });
 
-test("caches entries independently by manifest path", async (t) => {
+test("caches equal-metadata entries independently by manifest path", async (t) => {
   // arrange
   const { directory, manifestPath } = await createManifestFile(t);
   const otherManifestPath = path.join(directory, "other.json");
   await writeFile(otherManifestPath, "{}", "utf8");
+  const sharedTimestamp = new Date("2026-08-28T10:00:00.000Z");
+  await utimes(manifestPath, sharedTimestamp, sharedTimestamp);
+  await utimes(otherManifestPath, sharedTimestamp, sharedTimestamp);
   const marketplaceManifest = { name: "marketplace", plugins: [] };
   const otherMarketplaceManifest = { name: "other", plugins: [] };
   const load = t.mock.fn<ManifestLoader>((loadedPath) =>
@@ -98,11 +110,17 @@ test("caches entries independently by manifest path", async (t) => {
   const firstManifest = await cache.load(manifestPath);
   const otherManifest = await cache.load(otherManifestPath);
   const cachedManifest = await cache.load(manifestPath);
+  const cachedOtherManifest = await cache.load(otherManifestPath);
 
   // assert
+  assert.deepStrictEqual(firstManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(otherManifest, { name: "other", plugins: [] });
+  assert.deepStrictEqual(cachedManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(cachedOtherManifest, { name: "other", plugins: [] });
   assert.strictEqual(firstManifest, marketplaceManifest);
   assert.strictEqual(otherManifest, otherMarketplaceManifest);
-  assert.strictEqual(cachedManifest, marketplaceManifest);
+  assert.strictEqual(cachedManifest, firstManifest);
+  assert.strictEqual(cachedOtherManifest, otherManifest);
   assert.strictEqual(load.mock.callCount(), 2);
   assert.deepStrictEqual(
     load.mock.calls.map((call) => call.arguments),
@@ -125,9 +143,18 @@ test("reloads a successful entry after its size changes", async (t) => {
   const loadedSecondManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(loadedFirstManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(loadedSecondManifest, {
+    name: "second",
+    plugins: [{ name: "plugin" }],
+  });
   assert.strictEqual(loadedFirstManifest, firstManifest);
   assert.strictEqual(loadedSecondManifest, secondManifest);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
 test("reloads a successful entry after only its modification time changes", async (t) => {
@@ -146,9 +173,15 @@ test("reloads a successful entry after only its modification time changes", asyn
   const loadedSecondManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(loadedFirstManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(loadedSecondManifest, { name: "second", plugins: [] });
   assert.strictEqual(loadedFirstManifest, firstManifest);
   assert.strictEqual(loadedSecondManifest, secondManifest);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
 test("rethrows an unchanged negative entry by identity", async (t) => {
