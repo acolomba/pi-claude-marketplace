@@ -59,7 +59,7 @@ secondary detail.
 3. Production and fake Git, credential, and device-flow adapters pass the same public contract cases, including an independent broken-adapter control.
 4. Domain and platform tests run without live network access, developer credentials, or test-only production exports.
 
-**Plans**: 22/23 plans executed
+**Plans**: 23/23 plans executed
 
 Plans:
 
@@ -85,7 +85,7 @@ Plans:
 - [x] 108-20-PLAN.md
 - [x] 108-21-PLAN.md
 - [x] 108-22-PLAN.md
-- [ ] 108-23-PLAN.md
+- [x] 108-23-PLAN.md
 
 - [x] **108-01** (`108-01-PLAN.md`, `P108-01`) - `extensions/pi-claude-marketplace/domain/auth-registry.ts` → `tests/domain/auth-registry.test.ts`
 - [x] **108-02** (`108-02-PLAN.md`, `P108-02`) - `extensions/pi-claude-marketplace/domain/clone-key.ts` → `tests/domain/clone-key.test.ts`
@@ -109,7 +109,7 @@ Plans:
 - [x] **108-20** (`108-20-PLAN.md`, `P108-20`) - `extensions/pi-claude-marketplace/domain/version.ts` → `tests/domain/version.test.ts`
 - [x] **108-21** (`108-21-PLAN.md`, `P108-21`) - `extensions/pi-claude-marketplace/platform/git-credential.ts` → `tests/platform/git-credential.test.ts`
 - [x] **108-22** (`108-22-PLAN.md`, `P108-22`) - `extensions/pi-claude-marketplace/platform/git.ts` → `tests/platform/git.test.ts`
-- [ ] **108-23** (`108-23-PLAN.md`, `P108-23`) - `extensions/pi-claude-marketplace/platform/pi-api.ts` → `tests/platform/pi-api.test.ts`
+- [x] **108-23** (`108-23-PLAN.md`, `P108-23`) - `extensions/pi-claude-marketplace/platform/pi-api.ts` → `tests/platform/pi-api.test.ts`
 
 ### Phase 109: Shared Contracts
 
@@ -502,7 +502,7 @@ and commit still owns one pair.
 
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
-| 108. Domain and Platform                 | 22/23 | In Progress|  |
+| 108. Domain and Platform                 | 23/23 | In Progress|  |
 | 109. Shared Contracts                    |           0/19 | Not started     | -         |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
@@ -512,4 +512,4 @@ and commit still owns one pair.
 | 115. Composition Orchestrators           |            0/8 | Not started     | -         |
 | 116. Edge Surface                        |           0/30 | Not started     | -         |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -         |
-| **Total**                                |     **22/204** | **In Progress** | **-**     |
+| **Total**                                |     **23/204** | **In Progress** | **-**     |
