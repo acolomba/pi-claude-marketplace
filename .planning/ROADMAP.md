@@ -59,11 +59,35 @@ secondary detail.
 3. Production and fake Git, credential, and device-flow adapters pass the same public contract cases, including an independent broken-adapter control.
 4. Domain and platform tests run without live network access, developer credentials, or test-only production exports.
 
-**Plans**: 23 plans
+**Plans**: 1/23 plans executed
 
 Plans:
 
-- [ ] **108-01** (`108-01-PLAN.md`, `P108-01`) - `extensions/pi-claude-marketplace/domain/auth-registry.ts` → `tests/domain/auth-registry.test.ts`
+- [x] 108-01-PLAN.md
+- [ ] 108-02-PLAN.md
+- [ ] 108-03-PLAN.md
+- [ ] 108-04-PLAN.md
+- [ ] 108-05-PLAN.md
+- [ ] 108-06-PLAN.md
+- [ ] 108-07-PLAN.md
+- [ ] 108-08-PLAN.md
+- [ ] 108-09-PLAN.md
+- [ ] 108-10-PLAN.md
+- [ ] 108-11-PLAN.md
+- [ ] 108-12-PLAN.md
+- [ ] 108-13-PLAN.md
+- [ ] 108-14-PLAN.md
+- [ ] 108-15-PLAN.md
+- [ ] 108-16-PLAN.md
+- [ ] 108-17-PLAN.md
+- [ ] 108-18-PLAN.md
+- [ ] 108-19-PLAN.md
+- [ ] 108-20-PLAN.md
+- [ ] 108-21-PLAN.md
+- [ ] 108-22-PLAN.md
+- [ ] 108-23-PLAN.md
+
+- [x] **108-01** (`108-01-PLAN.md`, `P108-01`) - `extensions/pi-claude-marketplace/domain/auth-registry.ts` → `tests/domain/auth-registry.test.ts`
 - [ ] **108-02** (`108-02-PLAN.md`, `P108-02`) - `extensions/pi-claude-marketplace/domain/clone-key.ts` → `tests/domain/clone-key.test.ts`
 - [ ] **108-03** (`108-03-PLAN.md`, `P108-03`) - `extensions/pi-claude-marketplace/domain/components/hook-events.ts` → `tests/domain/components/hook-events.test.ts`
 - [ ] **108-04** (`108-04-PLAN.md`, `P108-04`) - `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` → `tests/domain/components/hook-if-targets.test.ts`
@@ -478,7 +502,7 @@ and commit still owns one pair.
 
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
-| 108. Domain and Platform                 |           0/23 | Not started     | -         |
+| 108. Domain and Platform                 | 1/23 | In Progress|  |
 | 109. Shared Contracts                    |           0/19 | Not started     | -         |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
