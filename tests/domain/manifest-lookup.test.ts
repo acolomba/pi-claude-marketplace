@@ -112,3 +112,37 @@ test("does not normalize Unicode plugin names", () => {
   // assert
   assert.deepStrictEqual(lookup, { kind: "absent" });
 });
+
+test("returns the first complete entry for duplicate exact names", () => {
+  // arrange
+  const manifest = {
+    plugins: [
+      {
+        name: "plugin",
+        source: "./first",
+        description: "First plugin",
+        version: "1.0.0",
+      },
+      {
+        name: "plugin",
+        source: "./second",
+        description: "Second plugin",
+        version: "2.0.0",
+      },
+    ],
+  } as const;
+
+  // act
+  const lookup = lookupDeclaredPlugin(manifest, "plugin");
+
+  // assert
+  assert.deepStrictEqual(lookup, {
+    kind: "declared",
+    entry: {
+      name: "plugin",
+      source: "./first",
+      description: "First plugin",
+      version: "1.0.0",
+    },
+  });
+});
