@@ -150,6 +150,10 @@ Plans:
 - [ ] **109-18** (`109-18-PLAN.md`, `P109-18`) - `extensions/pi-claude-marketplace/shared/types.ts` → `tests/shared/types.test.ts`
 - [ ] **109-19** (`109-19-PLAN.md`, `P109-19`) - `extensions/pi-claude-marketplace/shared/vars.ts` → `tests/shared/vars.test.ts`
 
+**Cross-cutting constraints:**
+
+- Every runtime case created or changed uses separate lowercase phase markers and case-owned mutable state; type-only evidence follows D-03 (D-02, D-03, D-04).
+
 ### Phase 110: Persistence and Transaction
 
 **Goal**: Maintainers can change durable-state and transaction modules with direct proof that replay and recovery behavior stay stable.
