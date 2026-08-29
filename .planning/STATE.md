@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 108
 current_phase_name: Domain and Platform
 status: executing
-stopped_at: Completed revised Phase 108 Wave 4 (15/23 plans)
-last_updated: "2026-08-29T11:50:05.133Z"
+stopped_at: Completed revised Phase 108 Wave 5 (16/23 plans)
+last_updated: "2026-08-29T12:22:55.165Z"
 last_activity: 2026-08-29
-last_activity_desc: Phase 108 credential carrier wave merged and verified
-state_head: 1f7ccb040226f76fb7d981454b99648df7a74feb
+last_activity_desc: Phase 108 device-flow carrier wave merged and verified
+state_head: d04c3bccf148e242ec5679723de8906ad031ab37
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 23
-  completed_plans: 15
+  completed_plans: 16
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 108 (Domain and Platform) — EXECUTING
-Plan: 16 of 23
+Plan: 17 of 23
 Status: Ready to execute
-Last activity: 2026-08-29 — Credential carrier wave merged and verified
+Last activity: 2026-08-29 — Device-flow carrier wave merged and verified
 
-Progress: [███████░░░] 65%
+Progress: [███████░░░] 70%
 
-Fifteen of 204 source-test pairs are complete. The remaining 189 are open.
+Sixteen of 204 source-test pairs are complete. The remaining 188 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -45,17 +45,17 @@ evidence.
 
 **Velocity:**
 
-- Total plans completed: 15
-- Average duration: 30.7 min
-- Total execution time: 7 hr 41 min
+- Total plans completed: 16
+- Average duration: 30.5 min
+- Total execution time: 8 hr 8 min
 
 **By Phase:**
 
 | Phase                    | Plans | Total | Avg/Plan |
 | ------------------------ | ----: | ----- | -------- |
-| 108. Domain and Platform |    15 | 7h 41m | 30.7 min |
+| 108. Domain and Platform |    16 | 8h 8m | 30.5 min |
 
-**Recent Trend:** 15 Phase 108 plans completed at a 30.7-minute average.
+**Recent Trend:** 16 Phase 108 plans completed at a 30.5-minute average.
 **Per-Plan Metrics:**
 
 | Plan | Duration | Tasks | Files |
@@ -75,6 +75,7 @@ evidence.
 | Phase 108 P20 | 12 min | 2 tasks | 1 files |
 | Phase 108 P18 | 43 min | 3 tasks | 8 files |
 | Phase 108 P21 | 3h 40m | 3 tasks | 9 files |
+| Phase 108 P12 | 27 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -107,5 +108,5 @@ None for roadmap creation.
 ## Session Continuity
 
 Last session: 2026-08-29T04:56:26.774Z
-Stopped at: Completed revised Phase 108 Wave 4 (15/23 plans)
+Stopped at: Completed revised Phase 108 Wave 5 (16/23 plans)
 Resume file: None

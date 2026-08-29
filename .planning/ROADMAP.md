@@ -59,7 +59,7 @@ secondary detail.
 3. Production and fake Git, credential, and device-flow adapters pass the same public contract cases, including an independent broken-adapter control.
 4. Domain and platform tests run without live network access, developer credentials, or test-only production exports.
 
-**Plans**: 15/23 plans executed
+**Plans**: 16/23 plans executed
 
 Plans:
 
@@ -74,7 +74,7 @@ Plans:
 - [x] 108-09-PLAN.md
 - [x] 108-10-PLAN.md
 - [x] 108-11-PLAN.md
-- [ ] 108-12-PLAN.md
+- [x] 108-12-PLAN.md
 - [x] 108-13-PLAN.md
 - [x] 108-14-PLAN.md
 - [x] 108-15-PLAN.md
@@ -98,7 +98,7 @@ Plans:
 - [x] **108-09** (`108-09-PLAN.md`, `P108-09`) - `extensions/pi-claude-marketplace/domain/components/hooks/schema.ts` → `tests/domain/components/hooks/schema.test.ts`
 - [x] **108-10** (`108-10-PLAN.md`, `P108-10`) - `extensions/pi-claude-marketplace/domain/components/mcp.ts` → `tests/domain/components/mcp.test.ts`
 - [x] **108-11** (`108-11-PLAN.md`, `P108-11`) - `extensions/pi-claude-marketplace/domain/components/plugin.ts` → `tests/domain/components/plugin.test.ts`
-- [ ] **108-12** (`108-12-PLAN.md`, `P108-12`) - `extensions/pi-claude-marketplace/domain/github-auth.ts` → `tests/domain/github-auth.test.ts`
+- [x] **108-12** (`108-12-PLAN.md`, `P108-12`) - `extensions/pi-claude-marketplace/domain/github-auth.ts` → `tests/domain/github-auth.test.ts`
 - [x] **108-13** (`108-13-PLAN.md`, `P108-13`) - `extensions/pi-claude-marketplace/domain/manifest-cache.ts` → `tests/domain/manifest-cache.test.ts`
 - [x] **108-14** (`108-14-PLAN.md`, `P108-14`) - `extensions/pi-claude-marketplace/domain/manifest-lookup.ts` → `tests/domain/manifest-lookup.test.ts`
 - [x] **108-15** (`108-15-PLAN.md`, `P108-15`) - `extensions/pi-claude-marketplace/domain/manifest.ts` → `tests/domain/manifest.test.ts`
@@ -502,7 +502,7 @@ and commit still owns one pair.
 
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
-| 108. Domain and Platform                 | 15/23 | In Progress|  |
+| 108. Domain and Platform                 | 16/23 | In Progress|  |
 | 109. Shared Contracts                    |           0/19 | Not started     | -         |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
