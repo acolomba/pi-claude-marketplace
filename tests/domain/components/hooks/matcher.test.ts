@@ -120,6 +120,9 @@ describe("parseMatcher", () => {
 
   for (const expression of [
     "Edit.*",
+    "Edit+",
+    "Read?",
+    "Write[0]",
     "*bash",
     ".*",
     "Edit$",
@@ -141,4 +144,18 @@ describe("parseMatcher", () => {
       assert.deepStrictEqual(matcher, { kind: "regex" });
     });
   }
+
+  test("rejects an MCP matcher that differs from a valid literal by one unsafe character", () => {
+    // arrange
+    const validLiteral = "mcp__server__tool";
+    const unsafeLiteral = "mcp__server__tool!";
+
+    // act
+    const validMatcher = parseMatcher(validLiteral);
+    const unsafeMatcher = parseMatcher(unsafeLiteral);
+
+    // assert
+    assert.deepStrictEqual(validMatcher, { kind: "mcp-literal", literal: validLiteral });
+    assert.deepStrictEqual(unsafeMatcher, { kind: "regex" });
+  });
 });
