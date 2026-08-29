@@ -6,6 +6,7 @@ import {
   type CredentialOps,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import { registerCredentialOpsContract } from "./credential-ops-contract.ts";
 import { createCredentialProcessFake } from "./credential-process-fake.ts";
 
 void ({
@@ -18,7 +19,66 @@ function manualCredentialProcess() {
   return createCredentialProcessFake({ onInput: () => {} });
 }
 
+function credentialAttributes(input: string): Record<string, string> {
+  return Object.fromEntries(
+    input
+      .split("\n")
+      .filter((line) => line.includes("="))
+      .map((line) => {
+        const separator = line.indexOf("=");
+        return [line.slice(0, separator), line.slice(separator + 1)];
+      }),
+  );
+}
+
+function credentialsMatch(left: GitCredentials, right: GitCredentials): boolean {
+  return left.username === right.username && left.password === right.password;
+}
+
+function createProductionCredentialOps(): CredentialOps {
+  const credentials = new Map<string, GitCredentials>();
+  const processes = createCredentialProcessFake({
+    onInput: (process) => {
+      const attributes = credentialAttributes(process.input());
+      const host = attributes.host;
+      if (attributes.protocol !== "https" || host === undefined) {
+        throw new Error("Credential process received an invalid attribute block");
+      }
+
+      if (process.subcommand === "fill") {
+        const credential = credentials.get(host);
+        if (credential === undefined) {
+          process.close(1);
+          return;
+        }
+
+        process.writeOutput(`username=${credential.username}\npassword=${credential.password}\n`);
+        process.close(0);
+        return;
+      }
+
+      const credential: GitCredentials = {
+        ...(attributes.username !== undefined && { username: attributes.username }),
+        ...(attributes.password !== undefined && { password: attributes.password }),
+      };
+      if (process.subcommand === "approve") {
+        credentials.set(host, structuredClone(credential));
+      } else {
+        const stored = credentials.get(host);
+        if (stored !== undefined && credentialsMatch(stored, credential)) {
+          credentials.delete(host);
+        }
+      }
+      process.close(0);
+    },
+  });
+
+  return createCredentialOps({ spawn: processes.spawn });
+}
+
 describe("createCredentialOps", () => {
+  registerCredentialOpsContract(createProductionCredentialOps);
+
   test("fills a credential from the complete git wire response", async () => {
     // arrange
     const processes = manualCredentialProcess();
@@ -223,91 +283,6 @@ describe("createCredentialOps", () => {
 
       // assert
       assert.deepStrictEqual(process.terminations(), []);
-    });
-  }
-
-  for (const { operation, field, character, text, credential } of [
-    ...["\n", "\r", "\0"].flatMap((character) => [
-      {
-        operation: "fill" as const,
-        field: "host" as const,
-        character,
-        text: `github.com${character}x`,
-      },
-      {
-        operation: "approve" as const,
-        field: "host" as const,
-        character,
-        text: `github.com${character}x`,
-        credential: { username: "x-access-token", password: "token-1" },
-      },
-      {
-        operation: "approve" as const,
-        field: "username" as const,
-        character,
-        text: "github.com",
-        credential: { username: `x${character}x`, password: "token-1" },
-      },
-      {
-        operation: "approve" as const,
-        field: "password" as const,
-        character,
-        text: "github.com",
-        credential: { username: "x-access-token", password: `x${character}x` },
-      },
-      {
-        operation: "reject" as const,
-        field: "host" as const,
-        character,
-        text: `github.com${character}x`,
-        credential: { username: "x-access-token", password: "token-1" },
-      },
-      {
-        operation: "reject" as const,
-        field: "username" as const,
-        character,
-        text: "github.com",
-        credential: { username: `x${character}x`, password: "token-1" },
-      },
-      {
-        operation: "reject" as const,
-        field: "password" as const,
-        character,
-        text: "github.com",
-        credential: { username: "x-access-token", password: `x${character}x` },
-      },
-    ]),
-  ] satisfies ReadonlyArray<{
-    readonly operation: "fill" | "approve" | "reject";
-    readonly field: "host" | "username" | "password";
-    readonly character: string;
-    readonly text: string;
-    readonly credential?: GitCredentials;
-  }>) {
-    test(`rejects ${JSON.stringify(character)} in ${operation} ${field}`, async () => {
-      // arrange
-      const processes = manualCredentialProcess();
-      const credentialOps = createCredentialOps({ spawn: processes.spawn });
-
-      // act
-      const rejected =
-        operation === "fill"
-          ? credentialOps.fill(text)
-          : credentialOps[operation](text, credential ?? {});
-
-      // assert
-      await assert.rejects(rejected, (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.deepStrictEqual(
-          { name: error.name, message: error.message },
-          {
-            name: "Error",
-            message: `git-credential attribute '${field}' contains a control character`,
-          },
-        );
-        return true;
-      });
-      assert.deepStrictEqual(processes.invocations(), []);
     });
   }
 });
