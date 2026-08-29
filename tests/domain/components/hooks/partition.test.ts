@@ -29,7 +29,16 @@ describe("partitionHooks", () => {
     const partition = partitionHooks(config);
 
     // assert
-    assert.deepStrictEqual(partition, { supported: config, dropped: [] });
+    assert.deepStrictEqual(partition, {
+      supported: {
+        PreToolUse: [
+          { matcher: "Edit", hooks: [{ type: "command", command: "edit" }] },
+          { matcher: "mcp__github__issue", hooks: [{ type: "command", command: "issue" }] },
+          { hooks: [{ type: "command", command: "all" }] },
+        ],
+      },
+      dropped: [],
+    });
   });
 
   test("drops regex and unmapped tool groups but keeps their supported sibling", () => {
@@ -114,7 +123,15 @@ describe("partitionHooks", () => {
     const partition = partitionHooks(config);
 
     // assert
-    assert.deepStrictEqual(partition, { supported: config, dropped: [] });
+    assert.deepStrictEqual(partition, {
+      supported: {
+        Stop: [
+          { hooks: [{ type: "command", command: "absent" }] },
+          { matcher: "*", hooks: [{ type: "command", command: "star" }] },
+        ],
+      },
+      dropped: [],
+    });
   });
 
   test("keeps a closed-set value and drops values outside the set", () => {
@@ -213,6 +230,83 @@ describe("partitionHooks", () => {
         ],
       },
       dropped: [{ kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" }],
+    });
+  });
+
+  test("keeps repeated equal handlers in their input positions", () => {
+    // arrange
+    const config = {
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [
+            { type: "command", command: "repeat" },
+            { type: "command", command: "middle" },
+            { type: "command", command: "repeat" },
+          ],
+        },
+      ],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, {
+      supported: {
+        PreToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [
+              { type: "command", command: "repeat" },
+              { type: "command", command: "middle" },
+              { type: "command", command: "repeat" },
+            ],
+          },
+        ],
+      },
+      dropped: [],
+    });
+  });
+
+  test("orders rejected events, handlers, and groups by their input positions", () => {
+    // arrange
+    const config = {
+      Notification: [{ hooks: [{ type: "command", command: "notify" }] }],
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [
+            { type: "http", command: "drop-first" },
+            { type: "command", command: "keep" },
+            { type: "prompt", command: "drop-second" },
+          ],
+        },
+        { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+      ],
+      SessionStart: [{ matcher: "clear", hooks: [{ type: "command", command: "clear" }] }],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, {
+      supported: {
+        PreToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [{ type: "command", command: "keep" }],
+          },
+        ],
+      },
+      dropped: [
+        { kind: "event", event: "Notification" },
+        { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" },
+        { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "prompt" },
+        { kind: "group", event: "PreToolUse", matcher: "Edit.*", cond: "regex" },
+        { kind: "group", event: "SessionStart", matcher: "clear", cond: "closed-set" },
+      ],
     });
   });
 });
