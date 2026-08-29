@@ -15,13 +15,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { refreshGitHubClone } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 
 import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps: credentials.credentialOps };
+}
 
 interface CallLog {
   fetch: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }[];

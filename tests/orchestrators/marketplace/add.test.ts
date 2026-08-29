@@ -15,12 +15,137 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceDuplicateNameError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
+import type {
+  DeviceCodeResponse,
+  PollResult,
+} from "../../../extensions/pi-claude-marketplace/domain/github-auth.ts";
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function fixtureMarketplaceDir(
+  name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
+): string {
+  return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
+}
+
+interface CredentialAdapterOptions {
+  readonly store?: ReadonlyMap<string, GitCredentials>;
+}
+
+function makeMockCredentialOps(initial: CredentialAdapterOptions = {}) {
+  const credentials = createCredentialOpsFake({
+    boundary: "memory",
+    credentials: [...(initial.store ?? new Map<string, GitCredentials>()).entries()],
+  });
+
+  return {
+    credOps: credentials.credentialOps,
+    state: {
+      get fillCalls() {
+        return credentials.calls.fill;
+      },
+      get approveCalls() {
+        return credentials.calls.approve.map(({ host, credential: cred }) => ({ host, cred }));
+      },
+    },
+  };
+}
+
+interface DeviceFlowAdapterOptions {
+  readonly deviceCode?: DeviceCodeResponse;
+  readonly pollQueue?: readonly PollResult[];
+}
+
+function makeMockDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: initial.deviceCode ?? {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    ...(initial.pollQueue === undefined ? {} : { pollResponses: initial.pollQueue }),
+  });
+
+  return {
+    http: deviceFlow.http,
+    state: {
+      get requestCodeCalls() {
+        return deviceFlow.calls.requestCode;
+      },
+    },
+  };
+}
+
+interface GitOpsAdapterOptions {
+  readonly fixtureSourceDir?: string;
+  readonly cloneThrows?: Error;
+}
+
+const ALLOWED_MARKETPLACE_REMOTES = [
+  "https://github.com/anthropics/claude-plugins-official.git",
+  "https://github.com/owner/repo.git",
+  "https://gitlab.example.com/team/mp.git",
+  "https://gitlab.example.com/team/private-mp.git",
+  "https://GitHub.com/acme/mp.git",
+  "https://gitlab.com/team/mp.git",
+] as const;
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ALLOWED_MARKETPLACE_REMOTES,
+    ...(initial.fixtureSourceDir === undefined
+      ? {}
+      : {
+          cloneFixture: {
+            boundary: "local" as const,
+            sourceDir: initial.fixtureSourceDir,
+          },
+        }),
+    ...(initial.cloneThrows === undefined ? {} : { cloneError: initial.cloneThrows }),
+  });
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async clone(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.clone(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
+      }
+    },
+  };
+
+  return {
+    gitOps,
+    state: {
+      get cloneCalls() {
+        return git.state.calls.clone;
+      },
+      get fetchCalls() {
+        return git.state.calls.fetch;
+      },
+      get forceUpdateRefCalls() {
+        return git.state.calls.forceUpdateRef;
+      },
+      get checkoutCalls() {
+        return git.state.calls.checkout;
+      },
+      get resolveRefCalls() {
+        return git.state.calls.resolveRef;
+      },
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;

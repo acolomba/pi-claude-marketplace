@@ -7,11 +7,49 @@ import {
   buildAuthForHost,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import { makeMockCredentialOps } from "../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../helpers/device-flow-mock.ts";
+import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 
+import type {
+  DeviceCodeResponse,
+  PollResult,
+} from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps: credentials.credentialOps };
+}
+
+interface DeviceFlowAdapterOptions {
+  readonly deviceCode?: DeviceCodeResponse;
+  readonly pollQueue?: readonly PollResult[];
+}
+
+function makeMockDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: initial.deviceCode ?? {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    ...(initial.pollQueue === undefined ? {} : { pollResponses: initial.pollQueue }),
+  });
+
+  return {
+    http: deviceFlow.http,
+    state: {
+      get requestCodeCalls() {
+        return deviceFlow.calls.requestCode;
+      },
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;
