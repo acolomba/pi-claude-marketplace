@@ -19,9 +19,9 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { GitAuthBundle } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -29,6 +29,87 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+const DEVICE_CODE = {
+  device_code: "MOCK_DEVICE_CODE",
+  user_code: "ABCD-1234",
+  verification_uri: "https://github.com/login/device",
+  expires_in: 900,
+  interval: 0,
+} as const;
+const INSTALL_AUTH_REMOTE_URLS = [
+  "https://github.com/org/repo.git",
+  "https://github.com/org/private.git",
+  "https://gitlab.com/o/r.git",
+  "https://gitlab.example.com/o/r.git",
+  "https://gitlab.example.com/o/private.git",
+] as const;
+
+function makeMockCredentialOps(): {
+  readonly credOps: ReturnType<typeof createCredentialOpsFake>["credentialOps"];
+} {
+  const { credentialOps: credOps } = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps };
+}
+
+function makeMockDeviceFlowHttp(
+  initial: {
+    readonly pollQueue?: Parameters<typeof createDeviceFlowFake>[0]["pollResponses"];
+  } = {},
+): {
+  readonly http: ReturnType<typeof createDeviceFlowFake>["http"];
+  readonly state: {
+    readonly requestCodeCalls: ReturnType<typeof createDeviceFlowFake>["calls"]["requestCode"];
+  };
+} {
+  const fake = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: DEVICE_CODE,
+    ...(initial.pollQueue !== undefined && { pollResponses: initial.pollQueue }),
+  });
+  return { http: fake.http, state: { requestCodeCalls: fake.calls.requestCode } };
+}
+
+function makeMockGitOps(options: {
+  readonly fixtureSourceDir: string;
+  readonly cloneThrows?: Error;
+}): {
+  readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
+  readonly state: {
+    readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
+  };
+} {
+  const fake = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: INSTALL_AUTH_REMOTE_URLS,
+    cloneFixture: { boundary: "local", sourceDir: options.fixtureSourceDir },
+    ...(options.cloneThrows !== undefined && { cloneError: options.cloneThrows }),
+  });
+  const cloneCalls: Parameters<typeof fake.gitOps.clone>[0][] = [];
+  const gitOps: typeof fake.gitOps = {
+    ...fake.gitOps,
+    async clone(cloneOptions) {
+      cloneCalls.push({ ...cloneOptions });
+      const { auth: _auth, ...cloneWithoutCallbacks } = cloneOptions;
+      await fake.gitOps.clone(cloneWithoutCallbacks);
+    },
+    async resolveRef(resolveOptions) {
+      if (resolveOptions.ref === "refs/remotes/origin/HEAD") {
+        const remoteMain = fake.state.localRefs["refs/remotes/origin/main"];
+        if (remoteMain !== undefined) {
+          return remoteMain;
+        }
+      }
+
+      return fake.gitOps.resolveRef(resolveOptions);
+    },
+    async resolveRemoteRef(resolveOptions) {
+      const { auth: _auth, ...resolveWithoutCallbacks } = resolveOptions;
+      return fake.gitOps.resolveRemoteRef(resolveWithoutCallbacks);
+    },
+  };
+  return { gitOps, state: { cloneCalls } };
+}
 
 interface NotifyRecord {
   message: string;

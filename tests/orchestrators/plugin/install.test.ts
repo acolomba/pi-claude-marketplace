@@ -37,7 +37,7 @@ import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -5873,6 +5873,72 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+const INSTALL_REMOTE_URLS = [
+  "https://example.com/org/repo.git",
+  "https://example.com/org/mono.git",
+  "https://github.com/org/repo.git",
+] as const;
+
+function makeMockGitOps(options: {
+  readonly fixtureSourceDir: string;
+  readonly head?: string;
+  readonly localRefs?: Readonly<Record<string, string>>;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+  readonly remoteResolveMap?: Readonly<Record<string, string>>;
+}): {
+  readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
+  readonly state: {
+    readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
+    readonly checkoutCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["checkout"];
+    readonly resolveRemoteRefCalls: ReturnType<
+      typeof createGitOpsFake
+    >["state"]["calls"]["resolveRemoteRef"];
+  };
+} {
+  const remoteRefs = {
+    ...Object.fromEntries(
+      Object.entries(options.remoteRefs ?? {}).map(([ref, oid]) => [ref.split("/").at(-1)!, oid]),
+    ),
+    ...(options.remoteResolveMap ?? {}),
+  };
+  const fake = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: INSTALL_REMOTE_URLS,
+    cloneFixture: { boundary: "local", sourceDir: options.fixtureSourceDir },
+    ...(options.head !== undefined && { initialOid: options.head, remoteHead: options.head }),
+    ...(options.localRefs !== undefined && { localRefs: options.localRefs }),
+    ...(Object.keys(remoteRefs).length > 0 && { remoteRefs }),
+  });
+  const gitOps: typeof fake.gitOps = {
+    ...fake.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneWithoutCallbacks } = cloneOptions;
+      await fake.gitOps.clone(cloneWithoutCallbacks);
+    },
+    async resolveRef(resolveOptions) {
+      if (resolveOptions.ref === "refs/remotes/origin/HEAD") {
+        const remoteMain = fake.state.localRefs["refs/remotes/origin/main"];
+        if (remoteMain !== undefined) {
+          return remoteMain;
+        }
+      }
+
+      return fake.gitOps.resolveRef(resolveOptions);
+    },
+    async resolveRemoteRef(resolveOptions) {
+      const { auth: _auth, ...resolveWithoutCallbacks } = resolveOptions;
+      return fake.gitOps.resolveRemoteRef(resolveWithoutCallbacks);
+    },
+  };
+  return {
+    gitOps,
+    state: {
+      cloneCalls: fake.state.calls.clone,
+      checkoutCalls: fake.state.calls.checkout,
+      resolveRemoteRefCalls: fake.state.calls.resolveRemoteRef,
+    },
+  };
+}
 
 /**
  * Bind the clone-cache seam entrypoints to a mock gitOps so install's

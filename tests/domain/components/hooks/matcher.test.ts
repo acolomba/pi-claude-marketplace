@@ -39,11 +39,24 @@ describe("parseMatcher", () => {
     });
   }
 
-  test("maps an alternation to one tool set", () => {
+  test("maps multiple tool tokens in source order", () => {
     // arrange
 
     // act
-    const matcher = parseMatcher("Read|Write|Grep|Read");
+    const matcher = parseMatcher("Write|Read|Grep");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      piTools: new Set(["write", "read", "grep"]),
+    });
+  });
+
+  test("deduplicates repeated tool tokens without changing first-occurrence order", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("Read|Write|Grep|Read|Write");
 
     // assert
     assert.deepStrictEqual(matcher, {
@@ -54,6 +67,7 @@ describe("parseMatcher", () => {
 
   for (const literal of [
     "mcp__github__create_issue",
+    "mcp__server__tool",
     "mcp__my-server-1__some_tool",
     "mcp__server__nested__tool",
   ]) {
@@ -68,12 +82,24 @@ describe("parseMatcher", () => {
     });
   }
 
+  test("reports the first unmapped token after a mapped token", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("Edit|mcp__server__tool|Write");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "unmapped",
+      token: "mcp__server__tool",
+    });
+  });
+
   for (const token of [
     "edit",
     "MultiEdit",
     "WebFetch",
     "Task",
-    "Edit|mcp__server__tool",
     "mcp____tool",
     "mcp__server",
     "mcp__server__",
@@ -94,6 +120,9 @@ describe("parseMatcher", () => {
 
   for (const expression of [
     "Edit.*",
+    "Edit+",
+    "Read?",
+    "Write[0]",
     "*bash",
     ".*",
     "Edit$",
@@ -115,4 +144,18 @@ describe("parseMatcher", () => {
       assert.deepStrictEqual(matcher, { kind: "regex" });
     });
   }
+
+  test("rejects an MCP matcher that differs from a valid literal by one unsafe character", () => {
+    // arrange
+    const validLiteral = "mcp__server__tool";
+    const unsafeLiteral = "mcp__server__tool!";
+
+    // act
+    const validMatcher = parseMatcher(validLiteral);
+    const unsafeMatcher = parseMatcher(unsafeLiteral);
+
+    // assert
+    assert.deepStrictEqual(validMatcher, { kind: "mcp-literal", literal: validLiteral });
+    assert.deepStrictEqual(unsafeMatcher, { kind: "regex" });
+  });
 });

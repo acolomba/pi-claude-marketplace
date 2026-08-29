@@ -28,8 +28,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { initiateDeviceFlow } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
-import { makeMockCredentialOps } from "../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../helpers/device-flow-mock.ts";
+import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 
 interface NotifyCall {
   readonly message: string;
@@ -49,10 +49,13 @@ function makeNotifyRecorder(): {
 }
 
 test("AUTH-03: Device Flow prompt byte form matches docs/output-catalog.md exactly", async () => {
+  // arrange
   // Mock values match the catalog example at
   // docs/output-catalog.md -> ## Out-of-band notifications ->
   // ### Device Flow user-code prompt (catalog-state: device-flow-prompt).
-  const { http } = makeMockDeviceFlowHttp({
+  const { http } = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
       user_code: "ABCD-1234",
@@ -60,15 +63,17 @@ test("AUTH-03: Device Flow prompt byte form matches docs/output-catalog.md exact
       expires_in: 900,
       interval: 0,
     },
-    pollQueue: [
+    pollResponses: [
       { kind: "success", accessToken: "gho_test_lock", tokenType: "bearer", scope: "repo" },
     ],
   });
-  const { credOps } = makeMockCredentialOps();
+  const { credentialOps: credOps } = createCredentialOpsFake({ boundary: "memory" });
   const { notifyFn, calls } = makeNotifyRecorder();
 
+  // act
   await initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
 
+  // assert
   // The notify recorder must have exactly one call (the prompt). The
   // happy path does NOT emit a second notification on success; the
   // approve() persistence is silent.
@@ -94,12 +99,15 @@ test("AUTH-03: Device Flow prompt byte form matches docs/output-catalog.md exact
 });
 
 test("AUTH-03: Device Flow prompt is emitted BEFORE the poll loop (token not yet acquired -- AUTH-09)", async () => {
+  // arrange
   // Drive a poll sequence that fails immediately (access_denied) so the
   // poll loop terminates on the first iteration. The prompt MUST still
   // fire before the failure -- it is emitted on the device-code response,
   // not on poll success. This proves AUTH-09: even when the access token
   // is never acquired, the prompt fires correctly.
-  const { http } = makeMockDeviceFlowHttp({
+  const { http } = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
       user_code: "WXYZ-5678",
@@ -107,11 +115,12 @@ test("AUTH-03: Device Flow prompt is emitted BEFORE the poll loop (token not yet
       expires_in: 900,
       interval: 0,
     },
-    pollQueue: [{ kind: "access_denied" }],
+    pollResponses: [{ kind: "access_denied" }],
   });
-  const { credOps } = makeMockCredentialOps();
+  const { credentialOps: credOps } = createCredentialOpsFake({ boundary: "memory" });
   const { notifyFn, calls } = makeNotifyRecorder();
 
+  // act
   const result = await initiateDeviceFlow({
     host: "github.com",
     credentialOps: credOps,
@@ -119,6 +128,7 @@ test("AUTH-03: Device Flow prompt is emitted BEFORE the poll loop (token not yet
     http,
   });
 
+  // assert
   // The Device Flow failed (access_denied), but the prompt fired exactly
   // once -- proving AUTH-03 holds independently of poll success.
   assert.equal(result.ok, false);
