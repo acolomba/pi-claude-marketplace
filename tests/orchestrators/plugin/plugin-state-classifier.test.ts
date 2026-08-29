@@ -28,6 +28,9 @@ import type { ResolvedPlugin } from "../../../extensions/pi-claude-marketplace/d
 // Fixtures
 // ──────────────────────────────────────────────────────────────────────────
 
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
+const UNAVAILABLE_FIXTURE_FIELDS = { installable: false } as const;
+
 function record(
   unsupported: readonly string[] = [],
   opts: { enabled?: boolean; installable?: boolean } = {},
@@ -43,6 +46,7 @@ function record(
 
 function installable(name = "p"): ResolvedPlugin {
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name,
     pluginRoot: `/tmp/${name}`,
@@ -60,6 +64,7 @@ function unsupportedResolved(
   unsupported: readonly string[] = ["lspServers"],
 ): ResolvedPlugin {
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "partially-available",
     name,
     pluginRoot: `/tmp/${name}`,
@@ -73,7 +78,12 @@ function unsupportedResolved(
 }
 
 function unavailableResolved(name = "p"): ResolvedPlugin {
-  return { state: "unavailable", name, notes: ["source dir does not exist"] };
+  return {
+    ...UNAVAILABLE_FIXTURE_FIELDS,
+    state: "unavailable",
+    name,
+    notes: ["source dir does not exist"],
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
