@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
+
 import { mock, verify, when } from "strong-mock";
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  SoftDepStatus,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
   notifyReconcileAppliedWithContext,
   notifyUpdateNoOpWithContext,
@@ -19,6 +15,12 @@ import {
   type Single,
   type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  SoftDepStatus,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   PluginAvailableMessage,
   PluginDisabledMessage,
@@ -29,11 +31,11 @@ import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.
 
 type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;
 type ControlledStatus = ControlledMessage["status"];
-type SimpleMarketplace = {
+interface SimpleMarketplace {
   readonly name: string;
   readonly scope: Scope;
   readonly plugins: readonly PluginNotificationMessage[];
-};
+}
 
 void (((row: PluginAvailableMessage, probe: SoftDepStatus, scope: Scope) =>
   `${row.name}:${probe.piSubagentsLoaded.toString()}:${scope}`) satisfies RenderFn<PluginAvailableMessage>);
@@ -114,9 +116,13 @@ function createHarness(notification: NotificationRecord): Harness {
     .thenReturn([])
     .twice();
   if (notification.severity === undefined) {
-    when(() => ui.notify(notification.message)).thenReturn(undefined);
+    when(() => {
+      ui.notify(notification.message);
+    }).thenReturn(undefined);
   } else {
-    when(() => ui.notify(notification.message, notification.severity)).thenReturn(undefined);
+    when(() => {
+      ui.notify(notification.message, notification.severity);
+    }).thenReturn(undefined);
   }
 
   return { ctx, pi, ui };
@@ -141,6 +147,10 @@ function createControlledContext(t: TestContext, label: string): ControlledConte
 
 function availableRow(name: string): PluginAvailableMessage {
   return { status: "available", name, severity: "info", needsReload: false };
+}
+
+function disabledRow(name: string): PluginDisabledMessage {
+  return { status: "disabled", name, severity: "info", needsReload: false };
 }
 
 test("an empty cascade notifies once without invoking a renderer", (t) => {
@@ -185,28 +195,50 @@ test("a single cascade dispatches its row without a plural tally", (t) => {
   verify(harness.ui);
 });
 
-test("the update wrapper dispatches a row with its exact tally", (t) => {
+test("plural marketplaces dispatch equal-status rows separately in input order", (t) => {
   // arrange
   const harness = createHarness({
-    message:
-      "● official [project]\n  controlled available alpha [project]\n\nPlugin update: 1 updated",
+    message: [
+      "● official [user]",
+      "  controlled available alpha [user]",
+      "  controlled available beta [user]",
+      "",
+      "● community [project]",
+      "  controlled disabled gamma [project]",
+      "",
+      "Plugin inspect: 3 successes",
+    ].join("\n"),
   });
-  const controlled = createControlledContext(t, "Plugin update");
+  const controlled = createControlledContext(t, "Plugin inspect");
   const rows: readonly MarketplaceRows<ControlledMessage>[] = [
-    { name: "official", scope: "project", plugins: [availableRow("alpha")] },
+    {
+      name: "official",
+      scope: "user",
+      plugins: [availableRow("alpha"), availableRow("beta")],
+    },
+    { name: "community", scope: "project", plugins: [disabledRow("gamma")] },
   ];
 
   // act
-  notifyUpdateWithContext(harness.ctx, harness.pi, controlled.context, rows, "plural", {
-    verb: "updated",
-    count: 1,
-  });
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
     {
       status: "available",
       name: "alpha",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      scope: "user",
+    },
+    {
+      status: "available",
+      name: "beta",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      scope: "user",
+    },
+    {
+      status: "disabled",
+      name: "gamma",
       probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
       scope: "project",
     },
@@ -215,6 +247,51 @@ test("the update wrapper dispatches a row with its exact tally", (t) => {
   verify(harness.pi);
   verify(harness.ui);
 });
+
+for (const { count, expectedMessage } of [
+  {
+    count: 0,
+    expectedMessage: "● official [project]\n  controlled available alpha [project]",
+  },
+  {
+    count: 1,
+    expectedMessage:
+      "● official [project]\n  controlled available alpha [project]\n\nPlugin update: 1 updated",
+  },
+  {
+    count: 37,
+    expectedMessage:
+      "● official [project]\n  controlled available alpha [project]\n\nPlugin update: 37 updated",
+  },
+] as const) {
+  test(`the update wrapper preserves the exact integer tally ${count.toString()}`, (t) => {
+    // arrange
+    const harness = createHarness({ message: expectedMessage });
+    const controlled = createControlledContext(t, "Plugin update");
+    const rows: readonly MarketplaceRows<ControlledMessage>[] = [
+      { name: "official", scope: "project", plugins: [availableRow("alpha")] },
+    ];
+
+    // act
+    notifyUpdateWithContext(harness.ctx, harness.pi, controlled.context, rows, "plural", {
+      verb: "updated",
+      count,
+    });
+
+    // assert
+    assert.deepStrictEqual(controlled.calls, [
+      {
+        status: "available",
+        name: "alpha",
+        probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+        scope: "project",
+      },
+    ]);
+    verify(harness.ctx);
+    verify(harness.pi);
+    verify(harness.ui);
+  });
+}
 
 test("the no-op update wrapper emits its fixed headline for no rows", (t) => {
   // arrange
@@ -226,6 +303,131 @@ test("the no-op update wrapper emits its fixed headline for no rows", (t) => {
 
   // assert
   assert.deepStrictEqual(controlled.calls, []);
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("the no-op update wrapper dispatches surviving rows before its headline", (t) => {
+  // arrange
+  const harness = createHarness({
+    message:
+      "● official [user]\n  controlled disabled alpha [user]\n\nPlugin update: nothing to update",
+  });
+  const controlled = createControlledContext(t, "Plugin update");
+  const rows: readonly MarketplaceRows<ControlledMessage>[] = [
+    { name: "official", scope: "user", plugins: [disabledRow("alpha")] },
+  ];
+
+  // act
+  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, rows);
+
+  // assert
+  assert.deepStrictEqual(controlled.calls, [
+    {
+      status: "disabled",
+      name: "alpha",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      scope: "user",
+    },
+  ]);
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("a missing render arm reports its named row before the adjacent present arm", (t) => {
+  // arrange
+  const harness = createHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● official [user]",
+      '  orphan (failed) {internal: no render arm for "disabled"}',
+      "  controlled available neighbor [user]",
+    ].join("\n"),
+    severity: "error",
+  });
+  const calls: RenderCall[] = [];
+  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, probe, scope) => {
+    calls.push({ status: row.status, name: row.name, probe: { ...probe }, scope });
+    return `controlled available ${row.name} [${scope}]`;
+  });
+  const context = {
+    Messaging: { label: "Broken command" },
+    render: { available },
+  } as CommandContext<string, PluginNotificationMessage>;
+  const missing = disabledRow("orphan");
+  const rows: readonly MarketplaceRows<PluginNotificationMessage>[] = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [missing, availableRow("neighbor")],
+    },
+  ];
+
+  // act
+  notifyWithContext(harness.ctx, harness.pi, context, rows);
+
+  // assert
+  assert.deepStrictEqual(missing, {
+    status: "disabled",
+    name: "orphan",
+    severity: "error",
+    needsReload: false,
+  });
+  assert.deepStrictEqual(calls, [
+    {
+      status: "available",
+      name: "neighbor",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      scope: "user",
+    },
+  ]);
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("a frozen unnamed missing-arm row still precedes the adjacent present arm", (t) => {
+  // arrange
+  const harness = createHarness({
+    message: [
+      "● official [user]",
+      '  ? (failed) {internal: no render arm for "unknown"}',
+      "  controlled available neighbor [user]",
+    ].join("\n"),
+  });
+  const calls: RenderCall[] = [];
+  const available = t.mock.fn<RenderFn<PluginAvailableMessage>>((row, probe, scope) => {
+    calls.push({ status: row.status, name: row.name, probe: { ...probe }, scope });
+    return `controlled available ${row.name} [${scope}]`;
+  });
+  const context = {
+    Messaging: { label: "Broken command" },
+    render: { available },
+  } as CommandContext<string, PluginNotificationMessage>;
+  const missing = Object.freeze({ status: "unknown" }) as never;
+  const rows: readonly MarketplaceRows<PluginNotificationMessage>[] = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [missing, availableRow("neighbor")],
+    },
+  ];
+
+  // act
+  notifyWithContext(harness.ctx, harness.pi, context, rows);
+
+  // assert
+  assert.deepStrictEqual(calls, [
+    {
+      status: "available",
+      name: "neighbor",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      scope: "user",
+    },
+  ]);
   verify(harness.ctx);
   verify(harness.pi);
   verify(harness.ui);
