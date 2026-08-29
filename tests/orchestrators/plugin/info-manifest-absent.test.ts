@@ -49,19 +49,52 @@ import {
   type InfoCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
 import {
   buildInstalledPluginRecord,
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../helpers/marketplace-seed.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return {
+    credOps: credentials.credentialOps,
+    state: {
+      get fillCalls() {
+        return credentials.calls.fill;
+      },
+      get approveCalls() {
+        return credentials.calls.approve;
+      },
+      get rejectCalls() {
+        return credentials.calls.reject;
+      },
+    },
+  };
+}
+
+function makeMockGitOps(_initial: Record<string, never> = {}) {
+  const git = createGitOpsFake({ boundary: "memory", allowedRemoteUrls: [] });
+  return {
+    gitOps: git.gitOps,
+    state: {
+      get cloneCalls() {
+        return git.state.calls.clone;
+      },
+      get fetchCalls() {
+        return git.state.calls.fetch;
+      },
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;

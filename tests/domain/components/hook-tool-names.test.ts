@@ -12,6 +12,27 @@ void ("bash" satisfies PiToolName);
 void ("custom" satisfies PiToolName);
 
 describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
+  for (const { claudeToolName, expectedPiToolName } of [
+    { claudeToolName: "Bash", expectedPiToolName: "bash" },
+    { claudeToolName: "Read", expectedPiToolName: "read" },
+    { claudeToolName: "Edit", expectedPiToolName: "edit" },
+    { claudeToolName: "Write", expectedPiToolName: "write" },
+    { claudeToolName: "Grep", expectedPiToolName: "grep" },
+    { claudeToolName: "Glob", expectedPiToolName: "find" },
+    { claudeToolName: "LS", expectedPiToolName: "ls" },
+  ] as const) {
+    test(`maps ${claudeToolName} to ${expectedPiToolName}`, () => {
+      // arrange
+      const toolName = claudeToolName;
+
+      // act
+      const piToolName = CLAUDE_TO_PI_TOOL_NAMES[toolName];
+
+      // assert
+      assert.strictEqual(piToolName, expectedPiToolName);
+    });
+  }
+
   test("maps every supported Claude tool name to its Pi spelling", () => {
     // arrange
     const expectedMappings = {
@@ -30,6 +51,24 @@ describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
     // assert
     assert.deepStrictEqual(mappings, expectedMappings);
   });
+
+  for (const { suppliedToolName, expectedPiToolName } of [
+    { suppliedToolName: "", expectedPiToolName: "" },
+    { suppliedToolName: "bash", expectedPiToolName: "bash" },
+    { suppliedToolName: "mcp__server__tool", expectedPiToolName: "mcp__server__tool" },
+  ]) {
+    test(`passes ${JSON.stringify(suppliedToolName)} through an inverse lookup`, () => {
+      // arrange
+      const toolName = suppliedToolName;
+
+      // act
+      const piToolName =
+        (CLAUDE_TO_PI_TOOL_NAMES as Readonly<Record<string, string>>)[toolName] ?? toolName;
+
+      // assert
+      assert.strictEqual(piToolName, expectedPiToolName);
+    });
+  }
 });
 
 describe("mapPiToClaudeToolName", () => {

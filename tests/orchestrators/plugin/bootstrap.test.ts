@@ -45,11 +45,52 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+interface GitOpsAdapterOptions {
+  readonly fixtureSourceDir?: string;
+  readonly cloneThrows?: Error;
+}
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ["https://github.com/anthropics/claude-plugins-official.git"],
+    ...(initial.fixtureSourceDir === undefined
+      ? {}
+      : {
+          cloneFixture: {
+            boundary: "local" as const,
+            sourceDir: initial.fixtureSourceDir,
+          },
+        }),
+    ...(initial.cloneThrows === undefined ? {} : { cloneError: initial.cloneThrows }),
+  });
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async clone(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.clone(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
+      }
+    },
+  };
+
+  return {
+    gitOps,
+    state: {
+      get cloneCalls() {
+        return git.state.calls.clone;
+      },
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;

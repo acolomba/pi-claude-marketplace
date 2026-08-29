@@ -55,17 +55,125 @@ import {
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../helpers/marketplace-seed.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps: credentials.credentialOps };
+}
+
+interface GitOpsAdapterOptions {
+  readonly fixtureSourceDir?: string;
+  readonly cloneThrows?: Error;
+  readonly head?: string;
+  readonly localRefs?: Readonly<Record<string, string>>;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+}
+
+const ALLOWED_INFO_REMOTES = [
+  "https://example.com/monorepo",
+  "https://example.com/monorepo.git",
+  "https://example.com/repo",
+  "https://example.com/repo.git",
+  "https://example.com/warmdecl",
+  "https://example.com/warmdecl.git",
+  "https://github.com/owner/gh-mp",
+  "https://github.com/owner/gh-mp.git",
+] as const;
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const normalizedRemoteRefs = Object.fromEntries(
+    Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
+      ref.replace(/^refs\/remotes\/[^/]+\//, ""),
+      oid,
+    ]),
+  );
+  const initialOid =
+    initial.head ??
+    initial.localRefs?.["refs/heads/main"] ??
+    "0000000000000000000000000000000000000001";
+  const remoteHead =
+    initial.remoteRefs?.["refs/remotes/origin/HEAD"] ??
+    initial.remoteRefs?.["refs/remotes/origin/main"] ??
+    initialOid;
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ALLOWED_INFO_REMOTES,
+    initialOid,
+    remoteHead,
+    remoteRefs: { ...normalizedRemoteRefs, ...(initial.remoteRefs ?? {}) },
+    ...(initial.localRefs === undefined ? {} : { localRefs: initial.localRefs }),
+    ...(initial.fixtureSourceDir === undefined
+      ? {}
+      : {
+          cloneFixture: {
+            boundary: "local" as const,
+            sourceDir: initial.fixtureSourceDir,
+          },
+        }),
+    ...(initial.cloneThrows === undefined ? {} : { cloneError: initial.cloneThrows }),
+  });
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async clone(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.clone(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
+      }
+    },
+    async fetch(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.fetch(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.fetch.at(-1) ?? {}, { auth });
+      }
+    },
+    async resolveRef(options) {
+      try {
+        return await git.gitOps.resolveRef(options);
+      } catch (error) {
+        const remoteOid = git.state.remoteRefs[options.ref];
+        if (remoteOid !== undefined) {
+          return remoteOid;
+        }
+
+        throw error;
+      }
+    },
+    async resolveRemoteRef(options) {
+      const { auth, ...authlessOptions } = options;
+      const oid = await git.gitOps.resolveRemoteRef(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.resolveRemoteRef.at(-1) ?? {}, { auth });
+      }
+
+      return oid;
+    },
+  };
+
+  return {
+    gitOps,
+    state: {
+      get cloneCalls() {
+        return git.state.calls.clone;
+      },
+      get fetchCalls() {
+        return git.state.calls.fetch;
+      },
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;
