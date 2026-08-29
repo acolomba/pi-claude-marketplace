@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import {
   appendHooksBlock,
   type ClaudeHookEvent,
@@ -146,6 +147,46 @@ test("appends mixed entries in caller order with exact indentation", () => {
     "      PostToolUseFailure(Edit|Write)",
     "      StopFailure",
     "      PermissionRequest(Bash) (unsupported)",
+  ];
+
+  // act
+  appendHooksBlock(lines, entries);
+
+  // assert
+  assert.deepStrictEqual(lines, expectedLines);
+});
+
+test("distinguishes an absent lenient matcher from an empty matcher", () => {
+  // arrange
+  const lines: string[] = [];
+  const entries = [
+    { kind: "lenient", event: "PostToolUse", supported: true },
+    { kind: "lenient", event: "PostToolUse", supported: true, matcher: "" },
+  ] satisfies HookSummaryEntry[];
+  const expectedLines = ["    hooks:", "      PostToolUse", "      PostToolUse()"];
+
+  // act
+  appendHooksBlock(lines, entries);
+
+  // assert
+  assert.deepStrictEqual(lines, expectedLines);
+});
+
+test("preserves order and duplicate values for entries that share an event", () => {
+  // arrange
+  const lines: string[] = [];
+  const entries = [
+    { event: "PreToolUse", matcher: "Write" },
+    { event: "PreToolUse", matcher: "Bash" },
+    { event: "PreToolUse", matcher: "Bash" },
+    { event: "PreToolUse", matcher: "Edit" },
+  ] satisfies HookSummaryEntry[];
+  const expectedLines = [
+    "    hooks:",
+    "      PreToolUse(Write)",
+    "      PreToolUse(Bash)",
+    "      PreToolUse(Bash)",
+    "      PreToolUse(Edit)",
   ];
 
   // act
