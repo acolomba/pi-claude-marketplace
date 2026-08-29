@@ -43,6 +43,24 @@ interface SubstitutionCase {
 
 const substitutionCases = [
   {
+    name: "returns empty content unchanged",
+    content: "",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "",
+  },
+  {
+    name: "returns token-free content byte-identically",
+    content: "Plain content with braces {and} a dollar $ sign.",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "Plain content with braces {and} a dollar $ sign.",
+  },
+  {
+    name: "replaces one plugin root token",
+    content: "Root: ${CLAUDE_PLUGIN_ROOT}",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "Root: /plugin",
+  },
+  {
     name: "maps all supported tokens to their matching fields from left to right",
     content:
       "root=${CLAUDE_PLUGIN_ROOT};data=${CLAUDE_PLUGIN_DATA};" +
@@ -80,6 +98,17 @@ const substitutionCases = [
     expectedContent: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
   },
   {
+    name: "leaves explicitly undefined optional values as literal tokens",
+    content: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: undefined,
+      projectDir: undefined,
+    },
+    expectedContent: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+  },
+  {
     name: "leaves an unknown Claude token unchanged",
     content: "unknown=${CLAUDE_SOMETHING_ELSE}",
     vars: {
@@ -89,6 +118,30 @@ const substitutionCases = [
       projectDir: "/project",
     },
     expectedContent: "unknown=${CLAUDE_SOMETHING_ELSE}",
+  },
+  {
+    name: "leaves almost-matching token names unchanged",
+    content:
+      "${CLAUDE_PLUGIN_ROO}|${CLAUDE_PLUGIN_ROOT_EXTRA}|${claude_plugin_root}|" +
+      "${CLAUDE-PROJECT-DIR}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: "/skill",
+      projectDir: "/project",
+    },
+    expectedContent:
+      "${CLAUDE_PLUGIN_ROO}|${CLAUDE_PLUGIN_ROOT_EXTRA}|${claude_plugin_root}|" +
+      "${CLAUDE-PROJECT-DIR}",
+  },
+  {
+    name: "scans original tokens left to right without expanding an injected token",
+    content: "${CLAUDE_PLUGIN_ROOT}|${CLAUDE_PLUGIN_DATA}",
+    vars: {
+      pluginRoot: "before/${CLAUDE_PLUGIN_DATA}/after",
+      pluginData: "/data",
+    },
+    expectedContent: "before/${CLAUDE_PLUGIN_DATA}/after|/data",
   },
   {
     name: "does not re-expand an injected copy of the matched token",
