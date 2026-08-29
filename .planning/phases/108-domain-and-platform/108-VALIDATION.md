@@ -79,9 +79,9 @@ created: 2026-08-28
 | 108-16-02 | 16 | 2 | MOD-01 | `node --test tests/domain/name.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/name.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
 | 108-17-01 | 17 | 2 | MOD-01 | `node --test tests/domain/plugin-root.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
 | 108-17-02 | 17 | 2 | MOD-01 | `node --test tests/domain/plugin-root.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/plugin-root.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-18-01 | 18 | 2 | MOD-01, RES-01 | `npm run typecheck && node --test tests/domain/resolver.test.ts` | ❌ Wave 0 creates: `tests/domain/resolver.test.ts` | ⬜ pending — sample after task commit |
-| 108-18-02 | 18 | 2 | MOD-01, RES-01 | `node --test tests/domain/resolver.test.ts && npm run typecheck && npm run test:corresponding` | ❌ Wave 0 creates: `tests/domain/resolver.test.ts` | ⬜ pending — sample after task commit |
-| 108-18-03 | 18 | 2 | MOD-01, RES-01 | `node --test tests/domain/resolver.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/resolver.ts && npm run typecheck` | ❌ Wave 0 creates: `tests/domain/resolver.test.ts` | ⬜ pending — sample after task commit |
+| 108-18-01 | 18 | 2 | MOD-01, RES-01 | `npm run typecheck && node --test tests/domain/resolver.test.ts` | 🛠 Task 108-18-01 creates `tests/domain/resolver.test.ts` before verification | ⬜ pending — sample after task commit |
+| 108-18-02 | 18 | 2 | MOD-01, RES-01 | `node --test tests/domain/resolver.test.ts && npm run typecheck && npm run test:corresponding` | ⏩ owner exists from Task 108-18-01; this task extends it | ⬜ pending — sample after task commit |
+| 108-18-03 | 18 | 2 | MOD-01, RES-01 | `node --test tests/domain/resolver.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/resolver.ts && npm run typecheck` | ⏩ owner exists from Task 108-18-01 | ⬜ pending — sample after task commit |
 | 108-19-01 | 19 | 6 | MOD-01 | `node --test tests/domain/source.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
 | 108-19-02 | 19 | 6 | MOD-01 | `node --test tests/domain/source.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/source.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
 | 108-20-01 | 20 | 2 | MOD-01 | `node --test tests/domain/version.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
@@ -99,7 +99,7 @@ created: 2026-08-28
 All 56 executable task IDs are mapped. Wave values match plan frontmatter; every row carries its exact task-level automated command, current/Wave-0 file state, and per-commit sampling status.
 ## Wave 0 Requirements
 
-- [ ] `tests/domain/resolver.test.ts` — canonical owner for RES-01 runtime and compile-time contracts.
+- No resolver Wave 0 scaffold is required: Task 108-18-01 explicitly creates `tests/domain/resolver.test.ts` before running its automated verification, and Tasks 108-18-02/03 extend that owner.
 - [ ] `tests/platform/git.test.ts` — canonical owner for the Git production adapter.
 - [ ] Concern-local Git contract, fake, fake participant, guarded local-repository/HTTP support, and exact negative control under `tests/platform/`.
 - [ ] Concern-local credential contract, relocated fake, fake participant, deterministic process support, and exact negative control under `tests/platform/`.
