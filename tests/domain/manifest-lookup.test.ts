@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "node:test";
 
 import {
   lookupDeclaredPlugin,
@@ -48,10 +48,36 @@ test("returns the complete entry for an exact plugin name", () => {
   });
 });
 
-test("returns absent when the manifest has no exact plugin name", () => {
+test("returns absent for an empty plugin name", () => {
+  // arrange
+  const manifest = {
+    plugins: [{ name: "plugin", source: "./plugin" }],
+  } as const;
+
+  // act
+  const lookup = lookupDeclaredPlugin(manifest, "");
+
+  // assert
+  assert.deepStrictEqual(lookup, { kind: "absent" });
+});
+
+test("returns absent for a missing plugin name", () => {
   // arrange
   const manifest = {
     plugins: [{ name: "other", source: "./other" }],
+  } as const;
+
+  // act
+  const lookup = lookupDeclaredPlugin(manifest, "plugin");
+
+  // assert
+  assert.deepStrictEqual(lookup, { kind: "absent" });
+});
+
+test("returns absent for a one-character lookalike", () => {
+  // arrange
+  const manifest = {
+    plugins: [{ name: "plugln", source: "./lookalike" }],
   } as const;
 
   // act
