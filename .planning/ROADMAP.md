@@ -126,7 +126,7 @@ Plans:
 3. Tests own and restore filesystem, environment, cache, and notification state without a generic helper directory.
 4. Shared modules keep their current public surface and expose no test-only state or reset operation.
 
-**Plans**: 18/19 plans executed
+**Plans**: 19/19 plans executed
 
 Plans:
 
@@ -143,7 +143,7 @@ Plans:
 - [x] 109-11-PLAN.md
 - [x] 109-12-PLAN.md
 - [x] 109-13-PLAN.md
-- [ ] 109-14-PLAN.md
+- [x] 109-14-PLAN.md
 - [x] 109-15-PLAN.md
 - [x] 109-16-PLAN.md
 - [x] 109-17-PLAN.md
@@ -161,9 +161,9 @@ Plans:
 - [x] **109-09** (`109-09-PLAN.md`, `P109-09`) - `extensions/pi-claude-marketplace/shared/fs-utils.ts` → `tests/shared/fs-utils.test.ts`
 - [x] **109-10** (`109-10-PLAN.md`, `P109-10`) - `extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts` → `tests/shared/git-failure-classifiers.test.ts`
 - [x] **109-11** (`109-11-PLAN.md`, `P109-11`) - `extensions/pi-claude-marketplace/shared/markers.ts` → `tests/shared/markers.test.ts`
-- [ ] **109-12** (`109-12-PLAN.md`, `P109-12`) - `extensions/pi-claude-marketplace/shared/notify-context.ts` → `tests/shared/notify-context.test.ts`
+- [x] **109-12** (`109-12-PLAN.md`, `P109-12`) - `extensions/pi-claude-marketplace/shared/notify-context.ts` → `tests/shared/notify-context.test.ts`
 - [x] **109-13** (`109-13-PLAN.md`, `P109-13`) - `extensions/pi-claude-marketplace/shared/notify-reasons.ts` → `tests/shared/notify-reasons.test.ts`
-- [ ] **109-14** (`109-14-PLAN.md`, `P109-14`) - `extensions/pi-claude-marketplace/shared/notify.ts` → `tests/shared/notify.test.ts`
+- [x] **109-14** (`109-14-PLAN.md`, `P109-14`) - `extensions/pi-claude-marketplace/shared/notify.ts` → `tests/shared/notify.test.ts`
 - [x] **109-15** (`109-15-PLAN.md`, `P109-15`) - `extensions/pi-claude-marketplace/shared/path-safety.ts` → `tests/shared/path-safety.test.ts`
 - [x] **109-16** (`109-16-PLAN.md`, `P109-16`) - `extensions/pi-claude-marketplace/shared/probe-classifiers.ts` → `tests/shared/probe-classifiers.test.ts`
 - [x] **109-17** (`109-17-PLAN.md`, `P109-17`) - `extensions/pi-claude-marketplace/shared/session-env.ts` → `tests/shared/session-env.test.ts`
@@ -527,7 +527,7 @@ and commit still owns one pair.
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
-| 109. Shared Contracts                    | 18/19 | In Progress|  |
+| 109. Shared Contracts                    | 19/19 | In Progress|  |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
