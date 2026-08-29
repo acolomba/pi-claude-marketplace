@@ -54,6 +54,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PLUGIN = path.resolve(HERE, "_fixtures", "test-plugin");
 const PLUGIN_NAME = "acme";
 const MARKETPLACE_NAME = "test-mp";
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 /**
  * Synthesize a ResolvedPluginInstallable for the integration tests.
@@ -66,6 +67,7 @@ const MARKETPLACE_NAME = "test-mp";
  */
 function makeResolved(): ResolvedPluginInstallable {
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name: PLUGIN_NAME,
     pluginRoot: FIXTURE_PLUGIN,

@@ -22,6 +22,7 @@ import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-ma
 // Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(__dirname, "..", "_fixtures");
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 function makeResolved(
   name: string,
@@ -30,6 +31,7 @@ function makeResolved(
 ): ResolvedPluginInstallable {
   // D-07: componentPaths.skills is `readonly string[]`.
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name,
     pluginRoot,

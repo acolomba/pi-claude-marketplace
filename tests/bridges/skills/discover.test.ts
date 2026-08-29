@@ -13,6 +13,7 @@ import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-ma
 // Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(__dirname, "..", "_fixtures");
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 function makeResolved(
   pluginRoot: string,
@@ -22,6 +23,7 @@ function makeResolved(
   // absolute fixture dir directly (verbatim element); the bridge accepts
   // both absolute and relative-to-pluginRoot elements.
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name: "acme",
     pluginRoot,
@@ -168,6 +170,7 @@ test("discoverPluginSkills skips symlinked skill dirs (T-03-15 hardening)", asyn
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no collision)", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-multi-"));
   try {
     // Two independent skills dirs, no overlap.
@@ -179,6 +182,7 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
     await writeFile(path.join(b, "two", "SKILL.md"), "---\nname: two\n---\nbody");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "acme",
       pluginRoot: tmp,
@@ -190,7 +194,10 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
       defaultEnabled: true,
     };
 
+    // act
     const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+    // assert
     assert.equal(discovered.length, 2, "both dirs' sources discovered");
     const names = discovered.map((d) => d.sourceName).sort();
     assert.deepEqual(names, ["one", "two"]);
@@ -201,6 +208,7 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
 });
 
 test("D-07 discoverPluginSkills first-wins dedup across array elements (collision -> warning)", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-dedup-"));
   try {
     // Dir `a` holds `acme-shared/`, dir `b` holds `shared/`. Both elide to
@@ -218,6 +226,7 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
     await writeFile(path.join(b, "shared", "SKILL.md"), "---\nname: shared\n---\nfrom-b");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "acme",
       pluginRoot: tmp,
@@ -229,7 +238,10 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
       defaultEnabled: true,
     };
 
+    // act
     const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+    // assert
     assert.equal(discovered.length, 1, "first-wins keeps only one");
     assert.equal(discovered[0]!.skillDir, path.join(a, "acme-shared"), "dir 'a' wins");
     assert.equal(discovered[0]!.sourceName, "acme-shared");
@@ -246,6 +258,7 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
 });
 
 test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the first-wins skip", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-within-entry-"));
   try {
     // One declared entry holding two skill dirs that elide to the same
@@ -259,6 +272,7 @@ test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the fir
     await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\nfrom-bare");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "acme",
       pluginRoot: tmp,
@@ -270,8 +284,10 @@ test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the fir
       defaultEnabled: true,
     };
 
+    // act
     const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
 
+    // assert
     assert.equal(discovered.length, 1, "first-wins keeps only one");
     assert.equal(discovered[0]!.sourceName, "acme-foo", "the localeCompare-first source wins");
     assert.equal(discovered[0]!.generatedName, "acme-foo");
@@ -289,6 +305,7 @@ test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the fir
 });
 
 test("discoverPluginSkills treats a declared path that is itself a skill dir as one discovered skill", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-"));
   try {
     const skillDir = path.join(tmp, "implement");
@@ -296,6 +313,7 @@ test("discoverPluginSkills treats a declared path that is itself a skill dir as 
     await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: implement\n---\nbody");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "mattpocock-skills",
       pluginRoot: tmp,
@@ -307,11 +325,13 @@ test("discoverPluginSkills treats a declared path that is itself a skill dir as 
       defaultEnabled: true,
     };
 
+    // act
     const { discovered, warnings } = await discoverPluginSkills({
       pluginName: "mattpocock-skills",
       resolved,
     });
 
+    // assert
     assert.deepEqual([...warnings], []);
     assert.equal(discovered.length, 1);
     assert.equal(discovered[0]!.sourceName, "implement");
@@ -323,6 +343,7 @@ test("discoverPluginSkills treats a declared path that is itself a skill dir as 
 });
 
 test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill dir", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-dedup-"));
   try {
     const direct = path.join(tmp, "implement");
@@ -337,6 +358,7 @@ test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill
     );
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "mattpocock-skills",
       pluginRoot: tmp,
@@ -348,11 +370,13 @@ test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill
       defaultEnabled: true,
     };
 
+    // act
     const { discovered, warnings } = await discoverPluginSkills({
       pluginName: "mattpocock-skills",
       resolved,
     });
 
+    // assert
     assert.equal(discovered.length, 1);
     assert.equal(discovered[0]!.skillDir, direct);
     assert.equal(warnings.length, 1);
@@ -363,6 +387,7 @@ test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill
 });
 
 test("discoverPluginSkills reports the loss on the self skill dir when it arrives second", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-loses-"));
   try {
     // The sibling test above orders the array [direct, container], so the self
@@ -392,6 +417,7 @@ test("discoverPluginSkills reports the loss on the self skill dir when it arrive
     await writeFile(path.join(direct, "nested", "SKILL.md"), "---\nname: nested\n---\nbody");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "mattpocock-skills",
       pluginRoot: tmp,
@@ -403,11 +429,13 @@ test("discoverPluginSkills reports the loss on the self skill dir when it arrive
       defaultEnabled: true,
     };
 
+    // act
     const { discovered, warnings } = await discoverPluginSkills({
       pluginName: "mattpocock-skills",
       resolved,
     });
 
+    // assert
     assert.equal(discovered.length, 1, "the self skill dir loses and its subdirs stay unwalked");
     assert.equal(discovered[0]!.sourceName, "mattpocock-skills-implement");
     assert.equal(
