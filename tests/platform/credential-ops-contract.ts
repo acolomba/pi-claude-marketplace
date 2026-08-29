@@ -6,7 +6,7 @@ import type { GitCredentials } from "../../extensions/pi-claude-marketplace/plat
 
 export type CredentialOpsFactory = () => CredentialOps | Promise<CredentialOps>;
 
-export interface CredentialOpsContractCase {
+interface CredentialOpsContractCase {
   readonly name: string;
   readonly run: (createCredentialOps: CredentialOpsFactory) => Promise<void>;
 }
@@ -45,10 +45,8 @@ export const CREDENTIAL_OPS_CASE_NAMES = [
   "rejects NUL in reject password",
 ] as const;
 
-export const CREDENTIAL_OPS_INAPPLICABLE_CATEGORIES = {
-  globalOrdering: "CredentialOps defines per-host state transitions, not cross-host ordering.",
-  transportErrors: "Process exit, error, timeout, and cleanup are production-owner mechanics.",
-} as const;
+// Global ordering is inapplicable because CredentialOps defines only per-host state transitions.
+// Process exit, error, timeout, and cleanup are production-owner mechanics, not contract cases.
 
 const credential = {
   username: "x-access-token",
