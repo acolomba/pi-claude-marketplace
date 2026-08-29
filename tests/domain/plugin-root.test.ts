@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "node:test";
 
 import {
   asAbsolutePluginRoot,
@@ -10,37 +12,60 @@ import {
 // @ts-expect-error A plain string does not carry the validated root brand.
 void ("/plugin" satisfies AbsolutePluginRoot);
 
-test("returns a valid absolute path unchanged", () => {
+test("returns an absolute root resolved from relative segments", async (t) => {
   // arrange
-  const absolutePath = path.resolve("test-plugin");
+  const directory = await mkdtemp(path.join(tmpdir(), "plugin-root-relative-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const absolutePath = path.resolve(directory, "plugins", "test-plugin");
 
   // act
   const pluginRoot: AbsolutePluginRoot = asAbsolutePluginRoot(absolutePath);
 
   // assert
-  assert.strictEqual(pluginRoot, absolutePath);
+  assert.strictEqual(pluginRoot, path.join(directory, "plugins", "test-plugin"));
 });
 
-test("accepts an already branded root without changing it", () => {
+test("returns an already absolute root unchanged", async (t) => {
   // arrange
-  const pluginRoot = asAbsolutePluginRoot(path.resolve("test-plugin"));
-
-  // act
-  const rebrandedPluginRoot = asAbsolutePluginRoot(pluginRoot);
-
-  // assert
-  assert.strictEqual(rebrandedPluginRoot, pluginRoot);
-});
-
-test("preserves parent segments in an absolute path", () => {
-  // arrange
-  const absolutePath = `${path.resolve("tmp", "a")}${path.sep}..${path.sep}b`;
+  const directory = await mkdtemp(path.join(tmpdir(), "plugin-root-absolute-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const absolutePath = path.join(directory, "plugins", "test-plugin");
 
   // act
   const pluginRoot = asAbsolutePluginRoot(absolutePath);
 
   // assert
-  assert.strictEqual(pluginRoot, absolutePath);
+  assert.strictEqual(pluginRoot, path.join(directory, "plugins", "test-plugin"));
+});
+
+test("accepts an already branded root without changing it", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "plugin-root-idempotent-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const absolutePath = path.join(directory, "plugins", "test-plugin");
+  const pluginRoot = asAbsolutePluginRoot(absolutePath);
+
+  // act
+  const rebrandedPluginRoot = asAbsolutePluginRoot(pluginRoot);
+
+  // assert
+  assert.strictEqual(rebrandedPluginRoot, path.join(directory, "plugins", "test-plugin"));
+});
+
+test("preserves parent segments that resolve within the temporary root", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "plugin-root-parent-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const absolutePath = `${directory}${path.sep}plugins${path.sep}a${path.sep}..${path.sep}b`;
+
+  // act
+  const pluginRoot = asAbsolutePluginRoot(absolutePath);
+
+  // assert
+  assert.strictEqual(
+    pluginRoot,
+    `${directory}${path.sep}plugins${path.sep}a${path.sep}..${path.sep}b`,
+  );
 });
 
 for (const { pluginRoot, errorMessage } of [
