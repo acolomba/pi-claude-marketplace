@@ -61,6 +61,18 @@ describe("TOOL_EVENTS", () => {
     // assert
     assert.deepStrictEqual(events, expectedEvents);
   });
+
+  test("retains tool events in their admitted-event relative order", () => {
+    // arrange
+    const expectedEvents = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+    const toolEventMembers: ReadonlySet<string> = new Set(TOOL_EVENTS);
+
+    // act
+    const events = BUCKET_A_EVENTS.filter((event) => toolEventMembers.has(event));
+
+    // assert
+    assert.deepStrictEqual(events, expectedEvents);
+  });
 });
 
 describe("isDispatchableEvent", () => {
@@ -88,16 +100,22 @@ describe("isDispatchableEvent", () => {
     });
   }
 
-  test("rejects an event outside the dispatchable set", () => {
-    // arrange
-    const event = "Notification" as BucketAEvent;
+  for (const { description, eventName } of [
+    { description: "an empty event name", eventName: "" },
+    { description: "a case-changed event name", eventName: "sessionstart" },
+    { description: "a one-character event lookalike", eventName: "SessionStarts" },
+  ] as const) {
+    test(`rejects ${description}`, () => {
+      // arrange
+      const event = eventName as BucketAEvent;
 
-    // act
-    const isDispatchable = isDispatchableEvent(event);
+      // act
+      const isDispatchable = isDispatchableEvent(event);
 
-    // assert
-    assert.strictEqual(isDispatchable, false);
-  });
+      // assert
+      assert.strictEqual(isDispatchable, false);
+    });
+  }
 });
 
 describe("NON_TOOL_EVENT_FIELDS", () => {
