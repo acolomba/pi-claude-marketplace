@@ -169,6 +169,8 @@ describe("loadMarketplaceManifest", () => {
     });
     const manifestPath = path.join(directory, "marketplace.json");
     await writeFile(manifestPath, "{", "utf8");
+    const syntaxErrorMessage =
+      "Expected property name or '}' in JSON at position 1 (line 1 column 2)";
 
     // act & assert
     await assert.rejects(
@@ -176,7 +178,13 @@ describe("loadMarketplaceManifest", () => {
       (error: unknown) => {
         assert.ok(error instanceof InvalidMarketplaceManifestError);
         assert.strictEqual(error.name, "InvalidMarketplaceManifestError");
+        assert.strictEqual(
+          error.message,
+          `marketplace.json is not valid JSON: SyntaxError: ${syntaxErrorMessage}`,
+        );
         assert.ok(error.cause instanceof SyntaxError);
+        assert.strictEqual(error.cause.name, "SyntaxError");
+        assert.strictEqual(error.cause.message, syntaxErrorMessage);
         return true;
       },
     );
