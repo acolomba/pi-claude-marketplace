@@ -55,7 +55,9 @@ test("keeps every concurrent same-path observation as one complete document", as
       expectedJsonBytes: '{\n  "writer": "third",\n  "nested": {\n    "status": "ready"\n  }\n}\n',
     },
   ] as const;
-  const expectedDocuments = new Set(documents.map(({ expectedJsonBytes }) => expectedJsonBytes));
+  const expectedDocuments = new Set<string>(
+    documents.map(({ expectedJsonBytes }) => expectedJsonBytes),
+  );
 
   // act
   const observedDocuments = await Promise.all(
@@ -72,3 +74,66 @@ test("keeps every concurrent same-path observation as one complete document", as
   );
   assert.strictEqual(observedDocuments.length, documents.length);
 });
+
+test("writes an empty object at a root-level target", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-empty-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "empty.json");
+  const expectedJsonBytes = "{}\n";
+
+  // act
+  await atomicWriteJson(filePath, {});
+  const jsonBytes = await readFile(filePath, "utf8");
+
+  // assert
+  assert.strictEqual(jsonBytes, expectedJsonBytes);
+});
+
+test("preserves string-key insertion order in the emitted document", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-order-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "ordered.json");
+  const expectedJsonBytes = '{\n  "zebra": 3,\n  "alpha": 1,\n  "middle": 2\n}\n';
+
+  // act
+  await atomicWriteJson(filePath, { zebra: 3, alpha: 1, middle: 2 });
+  const jsonBytes = await readFile(filePath, "utf8");
+
+  // assert
+  assert.strictEqual(jsonBytes, expectedJsonBytes);
+});
+
+for (const { name, content, expectedJsonBytes } of [
+  {
+    name: "writes negative zero as JSON zero",
+    content: { negativeZero: -0 },
+    expectedJsonBytes: '{\n  "negativeZero": 0\n}\n',
+  },
+  {
+    name: "preserves a finite fractional JSON number",
+    content: { fraction: 0.125 },
+    expectedJsonBytes: '{\n  "fraction": 0.125\n}\n',
+  },
+  {
+    name: "writes non-finite JSON numbers as null",
+    content: { notANumber: Number.NaN, positiveInfinity: Infinity, negativeInfinity: -Infinity },
+    expectedJsonBytes:
+      '{\n  "notANumber": null,\n  "positiveInfinity": null,\n  "negativeInfinity": null\n}\n',
+  },
+] as const) {
+  test(name, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-json-number-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const filePath = path.join(directory, "number.json");
+
+    // act
+    await atomicWriteJson(filePath, content);
+    const jsonBytes = await readFile(filePath, "utf8");
+
+    // assert
+    assert.strictEqual(jsonBytes, expectedJsonBytes);
+  });
+}
