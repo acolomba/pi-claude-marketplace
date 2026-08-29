@@ -59,7 +59,7 @@ secondary detail.
 3. Production and fake Git, credential, and device-flow adapters pass the same public contract cases, including an independent broken-adapter control.
 4. Domain and platform tests run without live network access, developer credentials, or test-only production exports.
 
-**Plans**: 13/23 plans executed
+**Plans**: 14/23 plans executed
 
 Plans:
 
@@ -80,7 +80,7 @@ Plans:
 - [x] 108-15-PLAN.md
 - [x] 108-16-PLAN.md
 - [x] 108-17-PLAN.md
-- [ ] 108-18-PLAN.md
+- [x] 108-18-PLAN.md
 - [x] 108-19-PLAN.md
 - [x] 108-20-PLAN.md
 - [ ] 108-21-PLAN.md
@@ -92,21 +92,21 @@ Plans:
 - [ ] **108-03** (`108-03-PLAN.md`, `P108-03`) - `extensions/pi-claude-marketplace/domain/components/hook-events.ts` → `tests/domain/components/hook-events.test.ts`
 - [ ] **108-04** (`108-04-PLAN.md`, `P108-04`) - `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` → `tests/domain/components/hook-if-targets.test.ts`
 - [ ] **108-05** (`108-05-PLAN.md`, `P108-05`) - `extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts` → `tests/domain/components/hook-tool-names.test.ts`
-- [ ] **108-06** (`108-06-PLAN.md`, `P108-06`) - `extensions/pi-claude-marketplace/domain/components/hooks.ts` → `tests/domain/components/hooks.test.ts`
+- [x] **108-06** (`108-06-PLAN.md`, `P108-06`) - `extensions/pi-claude-marketplace/domain/components/hooks.ts` → `tests/domain/components/hooks.test.ts`
 - [ ] **108-07** (`108-07-PLAN.md`, `P108-07`) - `extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts` → `tests/domain/components/hooks/matcher.test.ts`
-- [ ] **108-08** (`108-08-PLAN.md`, `P108-08`) - `extensions/pi-claude-marketplace/domain/components/hooks/partition.ts` → `tests/domain/components/hooks/partition.test.ts`
-- [ ] **108-09** (`108-09-PLAN.md`, `P108-09`) - `extensions/pi-claude-marketplace/domain/components/hooks/schema.ts` → `tests/domain/components/hooks/schema.test.ts`
-- [ ] **108-10** (`108-10-PLAN.md`, `P108-10`) - `extensions/pi-claude-marketplace/domain/components/mcp.ts` → `tests/domain/components/mcp.test.ts`
-- [ ] **108-11** (`108-11-PLAN.md`, `P108-11`) - `extensions/pi-claude-marketplace/domain/components/plugin.ts` → `tests/domain/components/plugin.test.ts`
+- [x] **108-08** (`108-08-PLAN.md`, `P108-08`) - `extensions/pi-claude-marketplace/domain/components/hooks/partition.ts` → `tests/domain/components/hooks/partition.test.ts`
+- [x] **108-09** (`108-09-PLAN.md`, `P108-09`) - `extensions/pi-claude-marketplace/domain/components/hooks/schema.ts` → `tests/domain/components/hooks/schema.test.ts`
+- [x] **108-10** (`108-10-PLAN.md`, `P108-10`) - `extensions/pi-claude-marketplace/domain/components/mcp.ts` → `tests/domain/components/mcp.test.ts`
+- [x] **108-11** (`108-11-PLAN.md`, `P108-11`) - `extensions/pi-claude-marketplace/domain/components/plugin.ts` → `tests/domain/components/plugin.test.ts`
 - [ ] **108-12** (`108-12-PLAN.md`, `P108-12`) - `extensions/pi-claude-marketplace/domain/github-auth.ts` → `tests/domain/github-auth.test.ts`
-- [ ] **108-13** (`108-13-PLAN.md`, `P108-13`) - `extensions/pi-claude-marketplace/domain/manifest-cache.ts` → `tests/domain/manifest-cache.test.ts`
-- [ ] **108-14** (`108-14-PLAN.md`, `P108-14`) - `extensions/pi-claude-marketplace/domain/manifest-lookup.ts` → `tests/domain/manifest-lookup.test.ts`
-- [ ] **108-15** (`108-15-PLAN.md`, `P108-15`) - `extensions/pi-claude-marketplace/domain/manifest.ts` → `tests/domain/manifest.test.ts`
-- [ ] **108-16** (`108-16-PLAN.md`, `P108-16`) - `extensions/pi-claude-marketplace/domain/name.ts` → `tests/domain/name.test.ts`
-- [ ] **108-17** (`108-17-PLAN.md`, `P108-17`) - `extensions/pi-claude-marketplace/domain/plugin-root.ts` → `tests/domain/plugin-root.test.ts`
-- [ ] **108-18** (`108-18-PLAN.md`, `P108-18`) - `extensions/pi-claude-marketplace/domain/resolver.ts` → `tests/domain/resolver.test.ts`
-- [ ] **108-19** (`108-19-PLAN.md`, `P108-19`) - `extensions/pi-claude-marketplace/domain/source.ts` → `tests/domain/source.test.ts`
-- [ ] **108-20** (`108-20-PLAN.md`, `P108-20`) - `extensions/pi-claude-marketplace/domain/version.ts` → `tests/domain/version.test.ts`
+- [x] **108-13** (`108-13-PLAN.md`, `P108-13`) - `extensions/pi-claude-marketplace/domain/manifest-cache.ts` → `tests/domain/manifest-cache.test.ts`
+- [x] **108-14** (`108-14-PLAN.md`, `P108-14`) - `extensions/pi-claude-marketplace/domain/manifest-lookup.ts` → `tests/domain/manifest-lookup.test.ts`
+- [x] **108-15** (`108-15-PLAN.md`, `P108-15`) - `extensions/pi-claude-marketplace/domain/manifest.ts` → `tests/domain/manifest.test.ts`
+- [x] **108-16** (`108-16-PLAN.md`, `P108-16`) - `extensions/pi-claude-marketplace/domain/name.ts` → `tests/domain/name.test.ts`
+- [x] **108-17** (`108-17-PLAN.md`, `P108-17`) - `extensions/pi-claude-marketplace/domain/plugin-root.ts` → `tests/domain/plugin-root.test.ts`
+- [x] **108-18** (`108-18-PLAN.md`, `P108-18`) - `extensions/pi-claude-marketplace/domain/resolver.ts` → `tests/domain/resolver.test.ts`
+- [x] **108-19** (`108-19-PLAN.md`, `P108-19`) - `extensions/pi-claude-marketplace/domain/source.ts` → `tests/domain/source.test.ts`
+- [x] **108-20** (`108-20-PLAN.md`, `P108-20`) - `extensions/pi-claude-marketplace/domain/version.ts` → `tests/domain/version.test.ts`
 - [ ] **108-21** (`108-21-PLAN.md`, `P108-21`) - `extensions/pi-claude-marketplace/platform/git-credential.ts` → `tests/platform/git-credential.test.ts`
 - [ ] **108-22** (`108-22-PLAN.md`, `P108-22`) - `extensions/pi-claude-marketplace/platform/git.ts` → `tests/platform/git.test.ts`
 - [ ] **108-23** (`108-23-PLAN.md`, `P108-23`) - `extensions/pi-claude-marketplace/platform/pi-api.ts` → `tests/platform/pi-api.test.ts`
@@ -502,7 +502,7 @@ and commit still owns one pair.
 
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
-| 108. Domain and Platform                 | 13/23 | In Progress|  |
+| 108. Domain and Platform                 | 14/23 | In Progress|  |
 | 109. Shared Contracts                    |           0/19 | Not started     | -         |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
