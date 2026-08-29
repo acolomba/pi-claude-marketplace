@@ -38,6 +38,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_EMPTY_MCP = path.resolve(HERE, "_fixtures", "empty-mcp");
 const FIXTURE_EMPTY_AGENTS = path.resolve(HERE, "_fixtures", "empty-agents");
 const FIXTURE_TEST_PLUGIN = path.resolve(HERE, "_fixtures", "test-plugin");
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 /** Returns true iff `p` exists (any kind), false on ENOENT. Throws on other errors. */
 async function pathExists(p: string): Promise<boolean> {
@@ -93,10 +94,12 @@ describe("integration: materialization gate", () => {
   });
 
   test("AS-9: empty agents source + no previous-ours = no scoped agents/ dir AND no agents-index.json", async () => {
+    // arrange
     const scopeRoot = await mkdtemp(path.join(tmpdir(), "integration-as9-"));
     try {
       const locations = locationsFor("project", scopeRoot);
       const resolved: ResolvedPluginInstallable = {
+        ...INSTALLABLE_FIXTURE_FIELDS,
         state: "installable",
         name: "empty-agents",
         pluginRoot: FIXTURE_EMPTY_AGENTS,
@@ -109,6 +112,7 @@ describe("integration: materialization gate", () => {
         defaultEnabled: true,
       };
 
+      // act
       const prep = await prepareStagePluginAgents({
         locations,
         cwd: locations.scopeRoot,
@@ -120,8 +124,10 @@ describe("integration: materialization gate", () => {
         agentsSourceDir: path.join(FIXTURE_EMPTY_AGENTS, "agents"),
         knownSkills: [],
       });
-      assert.equal(prep.kind, "noop", "AS-9: no agents + no previous-ours -> noop");
       await commitPreparedAgents(prep);
+
+      // assert
+      assert.equal(prep.kind, "noop", "AS-9: no agents + no previous-ours -> noop");
 
       // scoped agents/ dir MUST NOT exist.
       assert.equal(

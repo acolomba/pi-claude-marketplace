@@ -10,6 +10,8 @@ import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-ma
 
 // Helpers ---------------------------------------------------------------
 
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
+
 /** Builds a minimal `ResolvedPluginInstallable` for discover tests. */
 function makeResolved(
   pluginRoot: string,
@@ -17,6 +19,7 @@ function makeResolved(
 ): ResolvedPluginInstallable {
   // D-07: componentPaths.commands is `readonly string[]`.
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name: "acme",
     pluginRoot,
@@ -277,6 +280,7 @@ test("discoverPluginCommands refuses symlinked .md entries (POSIX-only)", async 
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands (no collision)", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-multi-"));
 
   try {
@@ -288,6 +292,7 @@ test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands
     await writeFile(path.join(b, "two.md"), "body-b");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "acme",
       pluginRoot: tmp,
@@ -298,11 +303,14 @@ test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands
       mcpServers: {},
       defaultEnabled: true,
     };
+
+    // act
     const { discovered: out, warnings } = await discoverPluginCommands({
       pluginName: "acme",
       resolved,
     });
 
+    // assert
     const names = out.map((c) => c.sourceName).sort();
     assert.deepEqual(names, ["one", "two"]);
     assert.deepEqual([...warnings], [], "no warnings when generated names disjoint");
@@ -312,6 +320,7 @@ test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands
 });
 
 test("D-07 discoverPluginCommands first-wins dedup across array elements (collision -> warning)", async () => {
+  // arrange
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-dedup-"));
 
   try {
@@ -325,6 +334,7 @@ test("D-07 discoverPluginCommands first-wins dedup across array elements (collis
     await writeFile(path.join(b, "shared.md"), "from-b");
 
     const resolved: ResolvedPluginInstallable = {
+      ...INSTALLABLE_FIXTURE_FIELDS,
       state: "installable",
       name: "acme",
       pluginRoot: tmp,
@@ -335,11 +345,14 @@ test("D-07 discoverPluginCommands first-wins dedup across array elements (collis
       mcpServers: {},
       defaultEnabled: true,
     };
+
+    // act
     const { discovered: out, warnings } = await discoverPluginCommands({
       pluginName: "acme",
       resolved,
     });
 
+    // assert
     assert.equal(out.length, 1, "first-wins keeps only one");
     assert.equal(out[0]!.commandFile, path.join(a, "shared.md"), "dir 'a' wins");
     assert.equal(warnings.length, 1);

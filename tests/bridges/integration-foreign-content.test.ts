@@ -42,9 +42,11 @@ const FIXTURE_PLUGIN = path.resolve(HERE, "_fixtures", "test-plugin");
 const FIXTURE_FOREIGN = path.resolve(HERE, "_fixtures", "foreign-agents");
 const PLUGIN_NAME = "acme";
 const MARKETPLACE_NAME = "test-mp";
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 function makeResolved(): ResolvedPluginInstallable {
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name: PLUGIN_NAME,
     pluginRoot: FIXTURE_PLUGIN,
