@@ -15,10 +15,14 @@ void ({
   defaultEnabled: false,
   mcpServers: "./plugin.mcp.json",
 } satisfies PluginEntry);
+// @ts-expect-error A plugin entry requires its name.
+void ({ source: "./plugin" } satisfies PluginEntry);
 // @ts-expect-error A plugin entry requires its source declaration.
 void ({ name: "plugin" } satisfies PluginEntry);
 // @ts-expect-error The enablement declaration is boolean when present.
 void ({ name: "plugin", source: "./plugin", defaultEnabled: "false" } satisfies PluginEntry);
+// @ts-expect-error MCP servers are a file reference or a server map.
+void ({ name: "plugin", source: "./plugin", mcpServers: 42 } satisfies PluginEntry);
 
 describe("PLUGIN_ENTRY_SCHEMA", () => {
   test("describes the complete plugin entry object", () => {
@@ -66,105 +70,121 @@ describe("PLUGIN_ENTRY_SCHEMA", () => {
 });
 
 describe("PLUGIN_ENTRY_VALIDATOR", () => {
-  test("accepts the required name and source", () => {
-    // arrange
-    const pluginEntry = { name: "plugin", source: "./plugin" };
+  for (const { entryShape, pluginEntry } of [
+    {
+      entryShape: "the required name and source",
+      pluginEntry: { name: "plugin", source: "./plugin" },
+    },
+    {
+      entryShape: "an opaque object source",
+      pluginEntry: {
+        name: "plugin",
+        source: { type: "github", repo: "owner/repository" },
+      },
+    },
+    {
+      entryShape: "opaque component payloads",
+      pluginEntry: {
+        name: "plugin",
+        source: "./plugin",
+        skills: ["./skills"],
+        commands: "./commands",
+        agents: { directory: "./agents" },
+        hooks: { PreToolUse: [] },
+        lspServers: ["typescript"],
+        monitors: null,
+        themes: ["dark"],
+        outputStyles: { concise: true },
+        channels: 2,
+        userConfig: false,
+        bin: ["plugin"],
+        settings: { feature: true },
+      },
+    },
+    {
+      entryShape: "metadata, dependencies, and an unknown vendor field",
+      pluginEntry: {
+        name: "plugin",
+        source: "./plugin",
+        description: "Description",
+        version: "1.2.3",
+        defaultEnabled: false,
+        dependencies: { other: "1.0.0" },
+        vendorField: { enabled: true },
+      },
+    },
+    {
+      entryShape: "an inline MCP server map",
+      pluginEntry: {
+        name: "plugin",
+        source: "./plugin",
+        mcpServers: { local: { command: "node" } },
+      },
+    },
+    {
+      entryShape: "an MCP file reference",
+      pluginEntry: {
+        name: "plugin",
+        source: "./plugin",
+        mcpServers: "./plugin.mcp.json",
+      },
+    },
+    {
+      entryShape: "enabled-by-default declarations",
+      pluginEntry: {
+        name: "plugin",
+        source: "./plugin",
+        defaultEnabled: true,
+      },
+    },
+  ]) {
+    test(`accepts ${entryShape}`, () => {
+      // arrange
+      const acceptedPluginEntry = pluginEntry;
 
-    // act
-    const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(acceptedPluginEntry);
 
-    // assert
-    assert.strictEqual(isValid, true);
-  });
+      // assert
+      assert.strictEqual(isValid, true);
+    });
+  }
 
-  test("accepts an opaque object source", () => {
-    // arrange
-    const pluginEntry = {
-      name: "plugin",
-      source: { type: "github", repo: "owner/repository" },
-    };
+  for (const { missingField, pluginEntry } of [
+    { missingField: "name", pluginEntry: { source: "./plugin" } },
+    { missingField: "source", pluginEntry: { name: "plugin" } },
+  ]) {
+    test(`rejects an entry without its ${missingField}`, () => {
+      // arrange
+      const incompletePluginEntry = pluginEntry;
 
-    // act
-    const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(incompletePluginEntry);
 
-    // assert
-    assert.strictEqual(isValid, true);
-  });
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
 
-  test("accepts every optional field and an unknown vendor field", () => {
-    // arrange
-    const pluginEntry = {
-      name: "plugin",
-      source: "./plugin",
-      description: "Description",
-      version: "1.2.3",
-      defaultEnabled: false,
-      skills: ["./skills"],
-      commands: "./commands",
-      agents: { directory: "./agents" },
-      hooks: { PreToolUse: [] },
-      lspServers: ["typescript"],
-      monitors: null,
-      themes: ["dark"],
-      outputStyles: { concise: true },
-      channels: 2,
-      userConfig: false,
-      bin: ["plugin"],
-      settings: { feature: true },
-      mcpServers: { local: { command: "node" } },
-      dependencies: { other: "1.0.0" },
-      vendorField: { enabled: true },
-    };
+  for (const pluginEntry of [null, [], undefined, "plugin", 42, true]) {
+    test(`rejects the non-record value ${JSON.stringify(pluginEntry)}`, () => {
+      // arrange
+      const nonRecordPluginEntry = pluginEntry;
 
-    // act
-    const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(nonRecordPluginEntry);
 
-    // assert
-    assert.strictEqual(isValid, true);
-  });
-
-  test("accepts an MCP file reference", () => {
-    // arrange
-    const pluginEntry = {
-      name: "plugin",
-      source: "./plugin",
-      mcpServers: "./plugin.mcp.json",
-    };
-
-    // act
-    const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
-
-    // assert
-    assert.strictEqual(isValid, true);
-  });
-
-  test("accepts enabled-by-default declarations", () => {
-    // arrange
-    const pluginEntry = {
-      name: "plugin",
-      source: "./plugin",
-      defaultEnabled: true,
-    };
-
-    // act
-    const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
-
-    // assert
-    assert.strictEqual(isValid, true);
-  });
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
 
   for (const pluginEntry of [
-    null,
-    [],
-    { source: "./plugin" },
-    { name: "plugin" },
     { name: 1, source: "./plugin" },
     { name: "plugin", source: "./plugin", description: 1 },
     { name: "plugin", source: "./plugin", version: 1 },
     { name: "plugin", source: "./plugin", defaultEnabled: "false" },
     { name: "plugin", source: "./plugin", defaultEnabled: null },
-    { name: "plugin", source: "./plugin", mcpServers: [] },
-    { name: "plugin", source: "./plugin", mcpServers: 1 },
   ]) {
     test(`rejects ${JSON.stringify(pluginEntry)}`, () => {
       // arrange
@@ -177,83 +197,102 @@ describe("PLUGIN_ENTRY_VALIDATOR", () => {
       assert.strictEqual(isValid, false);
     });
   }
+
+  for (const mcpServers of [null, [], 1, true]) {
+    test(`rejects the MCP declaration ${JSON.stringify(mcpServers)}`, () => {
+      // arrange
+      const pluginEntry = { name: "plugin", source: "./plugin", mcpServers };
+
+      // act
+      const isValid = PLUGIN_ENTRY_VALIDATOR.Check(pluginEntry);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
 });
 
 describe("PLUGIN_MANIFEST_VALIDATOR", () => {
-  test("accepts an empty standalone manifest", () => {
-    // arrange
-    const pluginManifest = {};
+  for (const { manifestShape, pluginManifest } of [
+    {
+      manifestShape: "an empty standalone manifest without entry fields",
+      pluginManifest: {},
+    },
+    {
+      manifestShape: "an optional name without an entry source",
+      pluginManifest: { name: "plugin" },
+    },
+    {
+      manifestShape: "opaque component payloads",
+      pluginManifest: {
+        skills: ["./skills"],
+        commands: "./commands",
+        agents: { directory: "./agents" },
+        hooks: { PreToolUse: [] },
+        lspServers: ["typescript"],
+        monitors: null,
+        themes: ["dark"],
+        outputStyles: { concise: true },
+        channels: 2,
+        userConfig: false,
+        bin: ["plugin"],
+        settings: { feature: true },
+      },
+    },
+    {
+      manifestShape: "metadata, dependencies, and an unknown vendor field",
+      pluginManifest: {
+        description: "Description",
+        version: "1.2.3",
+        defaultEnabled: false,
+        dependencies: { other: "1.0.0" },
+        vendorField: { enabled: true },
+      },
+    },
+    {
+      manifestShape: "an inline MCP server map",
+      pluginManifest: { mcpServers: { local: { command: "node" } } },
+    },
+    {
+      manifestShape: "an MCP file reference",
+      pluginManifest: { mcpServers: "./plugin.mcp.json" },
+    },
+    {
+      manifestShape: "enabled-by-default declarations",
+      pluginManifest: { defaultEnabled: true },
+    },
+  ]) {
+    test(`accepts ${manifestShape}`, () => {
+      // arrange
+      const acceptedPluginManifest = pluginManifest;
 
-    // act
-    const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(pluginManifest);
+      // act
+      const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(acceptedPluginManifest);
 
-    // assert
-    assert.strictEqual(isValid, true);
-  });
+      // assert
+      assert.strictEqual(isValid, true);
+    });
+  }
 
-  test("accepts every optional field and an unknown vendor field", () => {
-    // arrange
-    const pluginManifest = {
-      name: "plugin",
-      description: "Description",
-      version: "1.2.3",
-      defaultEnabled: false,
-      skills: ["./skills"],
-      commands: "./commands",
-      agents: { directory: "./agents" },
-      hooks: { PreToolUse: [] },
-      lspServers: ["typescript"],
-      monitors: null,
-      themes: ["dark"],
-      outputStyles: { concise: true },
-      channels: 2,
-      userConfig: false,
-      bin: ["plugin"],
-      settings: { feature: true },
-      mcpServers: { local: { command: "node" } },
-      dependencies: { other: "1.0.0" },
-      vendorField: { enabled: true },
-    };
+  for (const pluginManifest of [null, [], undefined, "plugin", 42, true]) {
+    test(`rejects the non-record value ${JSON.stringify(pluginManifest)}`, () => {
+      // arrange
+      const nonRecordPluginManifest = pluginManifest;
 
-    // act
-    const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(pluginManifest);
+      // act
+      const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(nonRecordPluginManifest);
 
-    // assert
-    assert.strictEqual(isValid, true);
-  });
-
-  test("accepts an MCP file reference", () => {
-    // arrange
-    const pluginManifest = { mcpServers: "./plugin.mcp.json" };
-
-    // act
-    const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(pluginManifest);
-
-    // assert
-    assert.strictEqual(isValid, true);
-  });
-
-  test("accepts enabled-by-default declarations", () => {
-    // arrange
-    const pluginManifest = { defaultEnabled: true };
-
-    // act
-    const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(pluginManifest);
-
-    // assert
-    assert.strictEqual(isValid, true);
-  });
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
 
   for (const pluginManifest of [
-    null,
-    [],
     { name: 42 },
     { description: 42 },
     { version: 42 },
     { defaultEnabled: "false" },
     { defaultEnabled: null },
-    { mcpServers: [] },
-    { mcpServers: 1 },
   ]) {
     test(`rejects ${JSON.stringify(pluginManifest)}`, () => {
       // arrange
@@ -261,6 +300,19 @@ describe("PLUGIN_MANIFEST_VALIDATOR", () => {
 
       // act
       const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(invalidPluginManifest);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
+
+  for (const mcpServers of [null, [], 1, true]) {
+    test(`rejects the MCP declaration ${JSON.stringify(mcpServers)}`, () => {
+      // arrange
+      const pluginManifest = { mcpServers };
+
+      // act
+      const isValid = PLUGIN_MANIFEST_VALIDATOR.Check(pluginManifest);
 
       // assert
       assert.strictEqual(isValid, false);
