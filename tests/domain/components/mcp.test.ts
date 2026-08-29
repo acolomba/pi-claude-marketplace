@@ -23,20 +23,40 @@ describe("MCP_SERVERS_SCHEMA", () => {
 });
 
 describe("MCP_SERVERS_VALIDATOR", () => {
-  for (const servers of [
-    {},
-    { local: { command: "node", args: ["server.js"] } },
-    { nil: null, scalar: "opaque", list: [1, 2] },
+  for (const { description, servers, expectedServers } of [
+    {
+      description: "an empty record",
+      servers: {},
+      expectedServers: {},
+    },
+    {
+      description: "a record with arbitrary values",
+      servers: {
+        nested: { command: "node", args: ["server.js"] },
+        scalar: "opaque",
+        list: [1, 2],
+        disabled: false,
+        nil: null,
+      },
+      expectedServers: {
+        nested: { command: "node", args: ["server.js"] },
+        scalar: "opaque",
+        list: [1, 2],
+        disabled: false,
+        nil: null,
+      },
+    },
   ]) {
-    test(`accepts ${JSON.stringify(servers)}`, () => {
+    test(`parses ${description}`, () => {
       // arrange
       const mcpServers = servers;
+      const expectedMcpServers = expectedServers;
 
       // act
-      const isValid = MCP_SERVERS_VALIDATOR.Check(mcpServers);
+      const parsedMcpServers = MCP_SERVERS_VALIDATOR.Parse(mcpServers);
 
       // assert
-      assert.strictEqual(isValid, true);
+      assert.deepStrictEqual(parsedMcpServers, expectedMcpServers);
     });
   }
 
