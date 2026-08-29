@@ -126,7 +126,7 @@ Plans:
 3. Tests own and restore filesystem, environment, cache, and notification state without a generic helper directory.
 4. Shared modules keep their current public surface and expose no test-only state or reset operation.
 
-**Plans**: 7/19 plans executed
+**Plans**: 8/19 plans executed
 
 Plans:
 
@@ -137,7 +137,7 @@ Plans:
 - [x] 109-05-PLAN.md
 - [x] 109-06-PLAN.md
 - [x] 109-07-PLAN.md
-- [ ] 109-08-PLAN.md
+- [x] 109-08-PLAN.md
 - [ ] 109-09-PLAN.md
 - [ ] 109-10-PLAN.md
 - [ ] 109-11-PLAN.md
@@ -156,8 +156,8 @@ Plans:
 - [x] **109-04** (`109-04-PLAN.md`, `P109-04`) - `extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts` → `tests/shared/concerns/soft-dep.test.ts`
 - [x] **109-05** (`109-05-PLAN.md`, `P109-05`) - `extensions/pi-claude-marketplace/shared/debug-log.ts` → `tests/shared/debug-log.test.ts`
 - [x] **109-06** (`109-06-PLAN.md`, `P109-06`) - `extensions/pi-claude-marketplace/shared/errors-bridges.ts` → `tests/shared/errors-bridges.test.ts`
-- [ ] **109-07** (`109-07-PLAN.md`, `P109-07`) - `extensions/pi-claude-marketplace/shared/errors.ts` → `tests/shared/errors.test.ts`
-- [ ] **109-08** (`109-08-PLAN.md`, `P109-08`) - `extensions/pi-claude-marketplace/shared/extension-version.ts` → `tests/shared/extension-version.test.ts`
+- [x] **109-07** (`109-07-PLAN.md`, `P109-07`) - `extensions/pi-claude-marketplace/shared/errors.ts` → `tests/shared/errors.test.ts`
+- [x] **109-08** (`109-08-PLAN.md`, `P109-08`) - `extensions/pi-claude-marketplace/shared/extension-version.ts` → `tests/shared/extension-version.test.ts`
 - [ ] **109-09** (`109-09-PLAN.md`, `P109-09`) - `extensions/pi-claude-marketplace/shared/fs-utils.ts` → `tests/shared/fs-utils.test.ts`
 - [ ] **109-10** (`109-10-PLAN.md`, `P109-10`) - `extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts` → `tests/shared/git-failure-classifiers.test.ts`
 - [ ] **109-11** (`109-11-PLAN.md`, `P109-11`) - `extensions/pi-claude-marketplace/shared/markers.ts` → `tests/shared/markers.test.ts`
@@ -527,7 +527,7 @@ and commit still owns one pair.
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
-| 109. Shared Contracts                    | 7/19 | In Progress|  |
+| 109. Shared Contracts                    | 8/19 | In Progress|  |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
