@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.19
 milestone_name: Unit Test Refactor
-status: planning
-last_updated: "2026-08-29T00:25:34.983Z"
+status: ready_to_plan
+last_updated: "2026-08-28"
 last_activity: 2026-08-28
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
-  total_plans: 0
+  total_plans: 204
   completed_plans: 0
   percent: 0
 ---
@@ -22,41 +22,66 @@ See: `.planning/PROJECT.md` (updated 2026-08-28 for v1.19)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Replace the unit-test suite one source-test pair at a time.
+**Current focus:** Phase 108, Domain and Platform.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-08-28 — Milestone v1.19 started
+Phase: 108 of 117 (1 of 10) — Domain and Platform
+Plan: 0 of 23 — next pair slot is `108-01-PLAN.md`
+Status: Ready to discuss and plan
+Last activity: 2026-08-28 — Created the repository-at-HEAD roadmap
 
-## Progress
+Progress: [░░░░░░░░░░] 0%
 
-The roadmap is not defined. All 204 source-test pairs remain open.
+All 204 source-test pairs are open. No v1.19 pair plan is complete. Retired Phase
+106 and 107 artifacts are history only and provide no completion evidence.
+
+## Performance Metrics
+
+**Velocity:**
+
+- Total plans completed: 0
+- Average duration: —
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase                    | Plans | Total | Avg/Plan |
+| ------------------------ | ----: | ----- | -------- |
+| 108. Domain and Platform |     0 | —     | —        |
+
+**Recent Trend:** No v1.19 plans completed.
 
 ## Accumulated Context
 
-- The guidelines in `docs/guidelines/typescript-unit-testing-guidelines.md` are
-  authoritative.
+### Decisions
 
-- `.claude/rules/typescript-unit-testing.md` is the test-authoring checklist.
-- The preserved handoff is evidence only. Do not apply its patch or old state.
-- Keep the three-way resolver `state`. Add the required boolean `installable`
-  discriminant.
+Decisions are logged in the PROJECT.md Key Decisions table.
 
-- Work on one production module at a time. Run focused direct coverage before
-  the next module.
-- The HEAD audit found 59 direct-coverage passes, 83 coverage failures, 60
-  missing mirrors, and two focused test failures. A pass is not completion
-  proof until a new pair plan checks the full guideline.
+- Each executable plan and implementation commit owns one source-test pair.
+- Retained commits and HEAD triage labels do not close a pair.
+- The resolver adds `installable: true | false` and keeps three-way `state`.
+- Current HEAD module responsibilities and all preserved contracts remain stable.
+- Cross-cutting gates travel with an owning pair. The root pair carries final gates.
 
-## Blockers
+### Pending Todos
 
-None.
+None for roadmap creation.
+
+### Blockers/Concerns
+
+- Phase 108 planning must trace resolver narrowing and adapter callers.
+- Phase 114 planning must resolve update reason mismatches from public contracts.
+- Phase 117 must measure the Node 24 all-pair duration before adding concurrency.
+
+## Deferred Items
+
+| Category | Item | Status | Deferred At | Milestone |
+| -------- | ---- | ------ | ----------- | --------- |
+| _(none)_ |      |        |             |           |
 
 ## Session Continuity
 
 Last session: 2026-08-28
-Stopped at: Rebuilding v1.19 requirements and roadmap from HEAD
+Stopped at: Roadmap created. Phase 108 is ready to discuss and plan
 Resume file: None

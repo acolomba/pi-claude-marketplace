@@ -424,17 +424,65 @@ None. This milestone covers the complete unit-test refactor.
 
 ## Traceability
 
-Roadmap creation fills this table. No v1.19 requirement is complete at the
-brownfield baseline.
+No v1.19 requirement is complete at the brownfield baseline. Requirements that
+apply to the full inventory close with the Phase 117 root-pair repository gates.
 
-| Requirement | Phase | Status |
-| --- | --- | --- |
+| Requirement | Phase     | Status  |
+| ----------- | --------- | ------- |
+| OWN-01      | Phase 117 | Pending |
+| OWN-02      | Phase 117 | Pending |
+| OWN-03      | Phase 117 | Pending |
+| OWN-04      | Phase 117 | Pending |
+| OWN-05      | Phase 117 | Pending |
+| OWN-06      | Phase 117 | Pending |
+| CASE-01     | Phase 117 | Pending |
+| CASE-02     | Phase 117 | Pending |
+| CASE-03     | Phase 117 | Pending |
+| CASE-04     | Phase 117 | Pending |
+| TEST-01     | Phase 117 | Pending |
+| TEST-02     | Phase 117 | Pending |
+| TEST-03     | Phase 117 | Pending |
+| TEST-04     | Phase 117 | Pending |
+| TEST-05     | Phase 117 | Pending |
+| COV-01      | Phase 117 | Pending |
+| COV-02      | Phase 117 | Pending |
+| COV-03      | Phase 117 | Pending |
+| COV-04      | Phase 117 | Pending |
+| COV-05      | Phase 117 | Pending |
+| DES-01      | Phase 117 | Pending |
+| DES-02      | Phase 117 | Pending |
+| DES-03      | Phase 117 | Pending |
+| RES-01      | Phase 108 | Pending |
+| DEL-01      | Phase 117 | Pending |
+| DEL-02      | Phase 117 | Pending |
+| DEL-03      | Phase 117 | Pending |
+| DEL-04      | Phase 117 | Pending |
+| MOD-01      | Phase 108 | Pending |
+| MOD-02      | Phase 109 | Pending |
+| MOD-03      | Phase 110 | Pending |
+| MOD-04      | Phase 111 | Pending |
+| MOD-05      | Phase 112 | Pending |
+| MOD-06      | Phase 113 | Pending |
+| MOD-07      | Phase 114 | Pending |
+| MOD-08      | Phase 115 | Pending |
+| MOD-09      | Phase 116 | Pending |
+| MOD-10      | Phase 117 | Pending |
+| PRES-01     | Phase 117 | Pending |
+| PRES-02     | Phase 117 | Pending |
+| PRES-03     | Phase 108 | Pending |
+| PRES-04     | Phase 108 | Pending |
+| SUITE-01    | Phase 117 | Pending |
+| SUITE-02    | Phase 117 | Pending |
+| SUITE-03    | Phase 117 | Pending |
+| SUITE-04    | Phase 117 | Pending |
+| SUITE-05    | Phase 117 | Pending |
+| SUITE-06    | Phase 117 | Pending |
 
 **Coverage:**
 
 - v1.19 requirements: 48 total
-- Mapped to phases: 0
-- Unmapped: 48
+- Mapped to phases: 48
+- Unmapped: 0
 
 ---
 
