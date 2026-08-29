@@ -36,6 +36,7 @@ test("loads a cold entry without writing a sidecar file", async (t) => {
   const directoryEntries = await readdir(directory);
 
   // assert
+  assert.deepStrictEqual(loadedManifest, { name: "marketplace", plugins: [] });
   assert.strictEqual(loadedManifest, marketplaceManifest);
   assert.deepStrictEqual(directoryEntries, ["marketplace.json"]);
   assert.strictEqual(load.mock.callCount(), 1);
@@ -55,10 +56,14 @@ test("returns an unchanged entry by reference without reloading", async (t) => {
   const thirdManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(firstManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(secondManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(thirdManifest, { name: "marketplace", plugins: [] });
   assert.strictEqual(firstManifest, marketplaceManifest);
-  assert.strictEqual(secondManifest, marketplaceManifest);
-  assert.strictEqual(thirdManifest, marketplaceManifest);
+  assert.strictEqual(secondManifest, firstManifest);
+  assert.strictEqual(thirdManifest, firstManifest);
   assert.strictEqual(load.mock.callCount(), 1);
+  assert.deepStrictEqual(load.mock.calls[0]?.arguments, [manifestPath]);
 });
 
 test("keeps entries private to each cache instance", async (t) => {
@@ -76,17 +81,24 @@ test("keeps entries private to each cache instance", async (t) => {
   const secondLoadedManifest = await secondCache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(firstLoadedManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(secondLoadedManifest, { name: "second", plugins: [] });
   assert.strictEqual(firstLoadedManifest, firstManifest);
   assert.strictEqual(secondLoadedManifest, secondManifest);
   assert.strictEqual(firstLoad.mock.callCount(), 1);
   assert.strictEqual(secondLoad.mock.callCount(), 1);
+  assert.deepStrictEqual(firstLoad.mock.calls[0]?.arguments, [manifestPath]);
+  assert.deepStrictEqual(secondLoad.mock.calls[0]?.arguments, [manifestPath]);
 });
 
-test("caches entries independently by manifest path", async (t) => {
+test("caches equal-metadata entries independently by manifest path", async (t) => {
   // arrange
   const { directory, manifestPath } = await createManifestFile(t);
   const otherManifestPath = path.join(directory, "other.json");
   await writeFile(otherManifestPath, "{}", "utf8");
+  const sharedTimestamp = new Date("2026-08-28T10:00:00.000Z");
+  await utimes(manifestPath, sharedTimestamp, sharedTimestamp);
+  await utimes(otherManifestPath, sharedTimestamp, sharedTimestamp);
   const marketplaceManifest = { name: "marketplace", plugins: [] };
   const otherMarketplaceManifest = { name: "other", plugins: [] };
   const load = t.mock.fn<ManifestLoader>((loadedPath) =>
@@ -98,11 +110,17 @@ test("caches entries independently by manifest path", async (t) => {
   const firstManifest = await cache.load(manifestPath);
   const otherManifest = await cache.load(otherManifestPath);
   const cachedManifest = await cache.load(manifestPath);
+  const cachedOtherManifest = await cache.load(otherManifestPath);
 
   // assert
+  assert.deepStrictEqual(firstManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(otherManifest, { name: "other", plugins: [] });
+  assert.deepStrictEqual(cachedManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(cachedOtherManifest, { name: "other", plugins: [] });
   assert.strictEqual(firstManifest, marketplaceManifest);
   assert.strictEqual(otherManifest, otherMarketplaceManifest);
-  assert.strictEqual(cachedManifest, marketplaceManifest);
+  assert.strictEqual(cachedManifest, firstManifest);
+  assert.strictEqual(cachedOtherManifest, otherManifest);
   assert.strictEqual(load.mock.callCount(), 2);
   assert.deepStrictEqual(
     load.mock.calls.map((call) => call.arguments),
@@ -125,9 +143,18 @@ test("reloads a successful entry after its size changes", async (t) => {
   const loadedSecondManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(loadedFirstManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(loadedSecondManifest, {
+    name: "second",
+    plugins: [{ name: "plugin" }],
+  });
   assert.strictEqual(loadedFirstManifest, firstManifest);
   assert.strictEqual(loadedSecondManifest, secondManifest);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
 test("reloads a successful entry after only its modification time changes", async (t) => {
@@ -146,15 +173,25 @@ test("reloads a successful entry after only its modification time changes", asyn
   const loadedSecondManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(loadedFirstManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(loadedSecondManifest, { name: "second", plugins: [] });
   assert.strictEqual(loadedFirstManifest, firstManifest);
   assert.strictEqual(loadedSecondManifest, secondManifest);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
 test("rethrows an unchanged negative entry by identity", async (t) => {
   // arrange
   const { manifestPath } = await createManifestFile(t);
   const failure = Object.assign(new Error("invalid manifest"), {
+    kind: "invalid-manifest",
+    path: manifestPath,
+  });
+  const expectedFailure = Object.assign(new Error("invalid manifest"), {
     kind: "invalid-manifest",
     path: manifestPath,
   });
@@ -172,9 +209,12 @@ test("rethrows an unchanged negative entry by identity", async (t) => {
   );
 
   // assert
+  assert.deepStrictEqual(firstThrown, expectedFailure);
+  assert.deepStrictEqual(secondThrown, expectedFailure);
   assert.strictEqual(firstThrown, failure);
   assert.strictEqual(secondThrown, failure);
   assert.strictEqual(load.mock.callCount(), 1);
+  assert.deepStrictEqual(load.mock.calls[0]?.arguments, [manifestPath]);
 });
 
 test("reloads a negative entry after the file size changes", async (t) => {
@@ -195,9 +235,15 @@ test("reloads a negative entry after the file size changes", async (t) => {
   const loadedManifest = await cache.load(manifestPath);
 
   // assert
+  assert.deepStrictEqual(thrown, new Error("invalid manifest"));
+  assert.deepStrictEqual(loadedManifest, { name: "marketplace", plugins: [] });
   assert.strictEqual(thrown, failure);
   assert.strictEqual(loadedManifest, marketplaceManifest);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
 test("negative-caches a failure that replaces a successful entry", async (t) => {
@@ -222,24 +268,67 @@ test("negative-caches a failure that replaces a successful entry", async (t) => 
   );
 
   // assert
+  assert.deepStrictEqual(loadedManifest, { name: "marketplace", plugins: [] });
+  assert.deepStrictEqual(firstThrown, new Error("invalid manifest"));
+  assert.deepStrictEqual(secondThrown, new Error("invalid manifest"));
   assert.strictEqual(loadedManifest, marketplaceManifest);
   assert.strictEqual(firstThrown, failure);
   assert.strictEqual(secondThrown, failure);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
-test("treats every initial stat failure as a pure miss", async (t) => {
+test("treats each stat failure as a miss instead of a cached success", async (t) => {
+  // arrange
+  const { manifestPath } = await createManifestFile(t);
+  const cachedManifest = { name: "cached", plugins: [] };
+  const firstMissManifest = { name: "first-miss", plugins: [] };
+  const secondMissManifest = { name: "second-miss", plugins: [] };
+  const load = t.mock.fn<ManifestLoader>(() => Promise.resolve(secondMissManifest));
+  load.mock.mockImplementationOnce(() => Promise.resolve(cachedManifest), 0);
+  load.mock.mockImplementationOnce(() => Promise.resolve(firstMissManifest), 1);
+  const cache = createManifestCache(load);
+
+  // act
+  const firstManifest = await cache.load(manifestPath);
+  await unlink(manifestPath);
+  const secondManifest = await cache.load(manifestPath);
+  const thirdManifest = await cache.load(manifestPath);
+
+  // assert
+  assert.deepStrictEqual(firstManifest, { name: "cached", plugins: [] });
+  assert.deepStrictEqual(secondManifest, { name: "first-miss", plugins: [] });
+  assert.deepStrictEqual(thirdManifest, { name: "second-miss", plugins: [] });
+  assert.strictEqual(firstManifest, cachedManifest);
+  assert.strictEqual(secondManifest, firstMissManifest);
+  assert.strictEqual(thirdManifest, secondMissManifest);
+  assert.strictEqual(load.mock.callCount(), 3);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath], [manifestPath]],
+  );
+});
+
+test("rethrows each loader error after a stat failure", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "manifest-cache-"));
   t.after(async () => {
     await rm(directory, { force: true, recursive: true });
   });
   const manifestPath = path.join(directory, "missing.json");
-  const failure = Object.assign(new Error("missing manifest"), {
+  const firstFailure = Object.assign(new Error("first missing manifest"), {
     code: "ENOENT",
     path: manifestPath,
   });
-  const load = t.mock.fn<ManifestLoader>(() => Promise.reject(failure));
+  const secondFailure = Object.assign(new Error("second missing manifest"), {
+    code: "ENOENT",
+    path: manifestPath,
+  });
+  const load = t.mock.fn<ManifestLoader>(() => Promise.reject(secondFailure));
+  load.mock.mockImplementationOnce(() => Promise.reject(firstFailure), 0);
   const cache = createManifestCache(load);
 
   // act
@@ -253,19 +342,33 @@ test("treats every initial stat failure as a pure miss", async (t) => {
   );
 
   // assert
-  assert.strictEqual(firstThrown, failure);
-  assert.strictEqual(secondThrown, failure);
+  assert.deepStrictEqual(
+    firstThrown,
+    Object.assign(new Error("first missing manifest"), { code: "ENOENT", path: manifestPath }),
+  );
+  assert.deepStrictEqual(
+    secondThrown,
+    Object.assign(new Error("second missing manifest"), { code: "ENOENT", path: manifestPath }),
+  );
+  assert.strictEqual(firstThrown, firstFailure);
+  assert.strictEqual(secondThrown, secondFailure);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
-test("returns but does not cache a value when the file disappears during loading", async (t) => {
+test("returns but does not cache a manifest when the file disappears during loading", async (t) => {
   // arrange
   const { manifestPath } = await createManifestFile(t);
-  const marketplaceManifest = { name: "marketplace", plugins: [] };
-  const load = t.mock.fn<ManifestLoader>(async () => {
-    await rm(manifestPath, { force: true });
-    return marketplaceManifest;
-  });
+  const firstMarketplaceManifest = { name: "first", plugins: [] };
+  const secondMarketplaceManifest = { name: "second", plugins: [] };
+  const load = t.mock.fn<ManifestLoader>(() => Promise.resolve(secondMarketplaceManifest));
+  load.mock.mockImplementationOnce(async () => {
+    await unlink(manifestPath);
+    return firstMarketplaceManifest;
+  }, 0);
   const cache = createManifestCache(load);
 
   // act
@@ -273,28 +376,65 @@ test("returns but does not cache a value when the file disappears during loading
   const secondManifest = await cache.load(manifestPath);
 
   // assert
-  assert.strictEqual(firstManifest, marketplaceManifest);
-  assert.strictEqual(secondManifest, marketplaceManifest);
+  assert.deepStrictEqual(firstManifest, { name: "first", plugins: [] });
+  assert.deepStrictEqual(secondManifest, { name: "second", plugins: [] });
+  assert.strictEqual(firstManifest, firstMarketplaceManifest);
+  assert.strictEqual(secondManifest, secondMarketplaceManifest);
   assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
 
-test("rethrows a failure when the file disappears during loading", async (t) => {
+test("retries a failure when the file disappears during loading", async (t) => {
   // arrange
   const { manifestPath } = await createManifestFile(t);
-  const failure = new Error("load failed");
-  const load = t.mock.fn<ManifestLoader>(async () => {
-    await unlink(manifestPath);
-    throw failure;
+  const firstFailure = Object.assign(new Error("first load failed"), {
+    code: "INVALID_MANIFEST",
+    path: manifestPath,
   });
+  const secondFailure = Object.assign(new Error("second load failed"), {
+    code: "INVALID_MANIFEST",
+    path: manifestPath,
+  });
+  const load = t.mock.fn<ManifestLoader>(() => Promise.reject(secondFailure));
+  load.mock.mockImplementationOnce(async () => {
+    await unlink(manifestPath);
+    throw firstFailure;
+  }, 0);
   const cache = createManifestCache(load);
 
   // act
-  const thrown = await cache.load(manifestPath).then(
+  const firstThrown = await cache.load(manifestPath).then(
+    () => undefined,
+    (loadFailure: unknown) => loadFailure,
+  );
+  const secondThrown = await cache.load(manifestPath).then(
     () => undefined,
     (loadFailure: unknown) => loadFailure,
   );
 
   // assert
-  assert.strictEqual(thrown, failure);
-  assert.strictEqual(load.mock.callCount(), 1);
+  assert.deepStrictEqual(
+    firstThrown,
+    Object.assign(new Error("first load failed"), {
+      code: "INVALID_MANIFEST",
+      path: manifestPath,
+    }),
+  );
+  assert.deepStrictEqual(
+    secondThrown,
+    Object.assign(new Error("second load failed"), {
+      code: "INVALID_MANIFEST",
+      path: manifestPath,
+    }),
+  );
+  assert.strictEqual(firstThrown, firstFailure);
+  assert.strictEqual(secondThrown, secondFailure);
+  assert.strictEqual(load.mock.callCount(), 2);
+  assert.deepStrictEqual(
+    load.mock.calls.map((call) => call.arguments),
+    [[manifestPath], [manifestPath]],
+  );
 });
