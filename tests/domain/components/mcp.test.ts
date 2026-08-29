@@ -72,26 +72,26 @@ describe("MCP_SERVERS_VALIDATOR", () => {
       // arrange
       const mcpServers = servers;
 
-      // act & assert
-      assert.throws(
-        () => MCP_SERVERS_VALIDATOR.Parse(mcpServers),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.deepStrictEqual(
-            {
-              constructorName: error.constructor.name,
-              name: error.name,
-              message: error.message,
-            },
-            {
-              constructorName: "ParseError",
-              name: "Error",
-              message: "Parse",
-            },
-          );
-          return true;
-        },
-      );
+      // act
+      const parseMcpServers = () => MCP_SERVERS_VALIDATOR.Parse(mcpServers);
+
+      // assert
+      assert.throws(parseMcpServers, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          {
+            constructorName: error.constructor.name,
+            name: error.name,
+            message: error.message,
+          },
+          {
+            constructorName: "ParseError",
+            name: "Error",
+            message: "Parse",
+          },
+        );
+        return true;
+      });
     });
   }
 });
