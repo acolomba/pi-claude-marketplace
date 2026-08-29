@@ -9,6 +9,14 @@ for (const { title, createFailure } of [
     createFailure: () => "",
   },
   {
+    title: "leaves null unclassified",
+    createFailure: () => null,
+  },
+  {
+    title: "leaves an empty object unclassified",
+    createFailure: () => ({}),
+  },
+  {
     title: "leaves undefined unclassified",
     createFailure: () => undefined,
   },
@@ -27,6 +35,11 @@ for (const { title, createFailure } of [
 
 for (const { title, statusCode, expectedReason } of [
   {
+    title: "leaves HTTP 400 unclassified",
+    statusCode: 400,
+    expectedReason: undefined,
+  },
+  {
     title: "classifies HTTP 401 as authentication required",
     statusCode: 401,
     expectedReason: "authentication required",
@@ -37,8 +50,18 @@ for (const { title, statusCode, expectedReason } of [
     expectedReason: "authentication required",
   },
   {
+    title: "leaves HTTP 404 unclassified",
+    statusCode: 404,
+    expectedReason: undefined,
+  },
+  {
     title: "leaves HTTP 500 unclassified",
     statusCode: 500,
+    expectedReason: undefined,
+  },
+  {
+    title: "requires an exact integer authentication status",
+    statusCode: 401.5,
     expectedReason: undefined,
   },
 ] as const) {
@@ -79,6 +102,14 @@ for (const { title, createFailure } of [
     createFailure: () =>
       Object.assign(new Error("The operation was canceled."), { name: "UserCanceledError" }),
   },
+  {
+    title: "classifies matching cancellation code and name as authentication required",
+    createFailure: () =>
+      Object.assign(new Error("The operation was canceled."), {
+        code: "UserCanceledError",
+        name: "UserCanceledError",
+      }),
+  },
 ] as const) {
   test(title, () => {
     // arrange
@@ -91,6 +122,60 @@ for (const { title, createFailure } of [
     assert.strictEqual(reason, "authentication required");
   });
 }
+
+test("classifies a cancellation name before a network code", () => {
+  // arrange
+  const failure = Object.assign(new Error("The operation was canceled."), {
+    code: "ENETUNREACH",
+    name: "UserCanceledError",
+  });
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "authentication required");
+});
+
+test("falls through a non-auth HTTP status to a cancellation name", () => {
+  // arrange
+  const failure = Object.assign(new Error("The operation was canceled."), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+    name: "UserCanceledError",
+  });
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "authentication required");
+});
+
+test("classifies a direct network code on an error with a cause", () => {
+  // arrange
+  const failure = Object.assign(new Error("outer failure", { cause: new Error("inner failure") }), {
+    code: "ECONNRESET",
+  });
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "network unreachable");
+});
+
+test("leaves a network code on an error cause for the caller to unwrap", () => {
+  // arrange
+  const cause = Object.assign(new Error("inner failure"), { code: "ECONNRESET" });
+  const failure = new Error("outer failure", { cause });
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, undefined);
+});
 
 for (const code of [
   "ENETUNREACH",
@@ -116,6 +201,10 @@ for (const { title, createFailure } of [
   {
     title: "leaves a generic error unclassified",
     createFailure: () => new Error("clone corrupted"),
+  },
+  {
+    title: "leaves an error with an empty message unclassified",
+    createFailure: () => new Error(""),
   },
   {
     title: "leaves a filesystem error for the caller to classify",
