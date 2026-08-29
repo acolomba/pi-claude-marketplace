@@ -1,137 +1,191 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import path from "node:path";
+import { describe, test } from "node:test";
 
-import { applySessionEnv } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
+import {
+  applyPathLedger,
+  applySessionEnv,
+  claudeSessionEnvFor,
+  PATH_LEDGER_ENV,
+} from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
 
-/**
- * Contract for `applySessionEnv` (SENV-01/02/03).
- *
- * The setter assigns exactly three keys onto `process.env`:
- *   - CLAUDECODE = "1"                    (SENV-01)
- *   - CLAUDE_CODE_SESSION_ID = sessionId  (SENV-02)
- *   - CLAUDE_SESSION_ID = sessionId       (SENV-03 pi-only shim)
- *
- * The values overwrite unconditionally so they track the active session
- * (SENV-02 freshness after a session switch / reload). Non-interference: no
- * key other than these three is added, removed, or changed -- the before/after
- * delta test is the mechanism that proves no host-identity/entrypoint var is
- * ever set (rather than grepping source).
- */
+describe("claudeSessionEnvFor", () => {
+  test("returns the exact session environment triple", () => {
+    // arrange
+    const sessionId = "session-123";
 
-// Save/restore only the keys these tests manipulate (mirrors the targeted
-// save/restore in tests/shared/debug-log.test.ts rather than snapshotting the
-// whole environment). Restore uses literal-key deletes so the restore itself
-// touches nothing else.
-function restoreKey(
-  key: "CLAUDECODE" | "CLAUDE_CODE_SESSION_ID" | "CLAUDE_SESSION_ID" | "SENV_TEST_SENTINEL",
-  prior: string | undefined,
-): void {
-  if (prior === undefined) {
-    switch (key) {
-      case "CLAUDECODE":
+    // act
+    const sessionEnv = claudeSessionEnvFor(sessionId);
+
+    // assert
+    assert.deepStrictEqual(sessionEnv, {
+      CLAUDECODE: "1",
+      CLAUDE_CODE_SESSION_ID: "session-123",
+      CLAUDE_SESSION_ID: "session-123",
+    });
+  });
+
+  test("preserves an empty session identifier", () => {
+    // arrange
+    const sessionId = "";
+
+    // act
+    const sessionEnv = claudeSessionEnvFor(sessionId);
+
+    // assert
+    assert.deepStrictEqual(sessionEnv, {
+      CLAUDECODE: "1",
+      CLAUDE_CODE_SESSION_ID: "",
+      CLAUDE_SESSION_ID: "",
+    });
+  });
+});
+
+describe("applySessionEnv", () => {
+  test("writes only the session triple and preserves an unrelated key", (t) => {
+    // arrange
+    const previousClaudeCode = process.env.CLAUDECODE;
+    const previousClaudeCodeSessionId = process.env.CLAUDE_CODE_SESSION_ID;
+    const previousClaudeSessionId = process.env.CLAUDE_SESSION_ID;
+    const previousSentinel = process.env.SENV_TEST_SENTINEL;
+    t.after(() => {
+      if (previousClaudeCode === undefined) {
         delete process.env.CLAUDECODE;
-        break;
-      case "CLAUDE_CODE_SESSION_ID":
-        delete process.env.CLAUDE_CODE_SESSION_ID;
-        break;
-      case "CLAUDE_SESSION_ID":
-        delete process.env.CLAUDE_SESSION_ID;
-        break;
-      case "SENV_TEST_SENTINEL":
-        delete process.env.SENV_TEST_SENTINEL;
-        break;
-    }
-  } else {
-    process.env[key] = prior;
-  }
-}
-
-function withEnvSnapshot(fn: () => void): void {
-  const prior = {
-    CLAUDECODE: process.env.CLAUDECODE,
-    CLAUDE_CODE_SESSION_ID: process.env.CLAUDE_CODE_SESSION_ID,
-    CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID,
-    SENV_TEST_SENTINEL: process.env.SENV_TEST_SENTINEL,
-  };
-  try {
-    fn();
-  } finally {
-    restoreKey("CLAUDECODE", prior.CLAUDECODE);
-    restoreKey("CLAUDE_CODE_SESSION_ID", prior.CLAUDE_CODE_SESSION_ID);
-    restoreKey("CLAUDE_SESSION_ID", prior.CLAUDE_SESSION_ID);
-    restoreKey("SENV_TEST_SENTINEL", prior.SENV_TEST_SENTINEL);
-  }
-}
-
-test("applySessionEnv: sets the three session keys to the given id", () => {
-  withEnvSnapshot(() => {
-    applySessionEnv("abc123");
-
-    assert.equal(process.env.CLAUDECODE, "1");
-    assert.equal(process.env.CLAUDE_CODE_SESSION_ID, "abc123");
-    assert.equal(process.env.CLAUDE_SESSION_ID, "abc123");
-  });
-});
-
-test("applySessionEnv: re-invoking overwrites both session-id keys (SENV-02 freshness)", () => {
-  withEnvSnapshot(() => {
-    applySessionEnv("abc123");
-    applySessionEnv("def456");
-
-    assert.equal(process.env.CLAUDECODE, "1");
-    assert.equal(process.env.CLAUDE_CODE_SESSION_ID, "def456");
-    assert.equal(process.env.CLAUDE_SESSION_ID, "def456");
-  });
-});
-
-test("applySessionEnv: CLAUDE_CODE_SESSION_ID and CLAUDE_SESSION_ID are distinct keys, same value", () => {
-  withEnvSnapshot(() => {
-    applySessionEnv("shared-id");
-
-    assert.equal(process.env.CLAUDE_CODE_SESSION_ID, process.env.CLAUDE_SESSION_ID);
-    // Distinct keys: mutating one directly does not move the other.
-    process.env.CLAUDE_SESSION_ID = "mutated";
-    assert.equal(process.env.CLAUDE_CODE_SESSION_ID, "shared-id");
-  });
-});
-
-test("applySessionEnv: touches exactly the three named keys and nothing else", () => {
-  withEnvSnapshot(() => {
-    // Seed a sentinel to prove pre-existing keys survive untouched.
-    process.env.SENV_TEST_SENTINEL = "keep-me";
-    // Clear the target keys first so the delta is measured from a known
-    // baseline regardless of ambient env (a host that already exports
-    // CLAUDECODE would otherwise mask the assignment).
-    delete process.env.CLAUDECODE;
-    delete process.env.CLAUDE_CODE_SESSION_ID;
-    delete process.env.CLAUDE_SESSION_ID;
-
-    const before = { ...process.env };
-    applySessionEnv("abc123");
-    const after = { ...process.env };
-
-    const changed = new Set<string>();
-    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-      if (before[key] !== after[key]) {
-        changed.add(key);
+      } else {
+        process.env.CLAUDECODE = previousClaudeCode;
       }
-    }
 
-    assert.deepEqual(
-      [...changed].sort(),
-      ["CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID"].sort(),
-      `expected exactly the three session keys to change, got: ${JSON.stringify([...changed])}`,
+      if (previousClaudeCodeSessionId === undefined) {
+        delete process.env.CLAUDE_CODE_SESSION_ID;
+      } else {
+        process.env.CLAUDE_CODE_SESSION_ID = previousClaudeCodeSessionId;
+      }
+
+      if (previousClaudeSessionId === undefined) {
+        delete process.env.CLAUDE_SESSION_ID;
+      } else {
+        process.env.CLAUDE_SESSION_ID = previousClaudeSessionId;
+      }
+
+      if (previousSentinel === undefined) {
+        delete process.env.SENV_TEST_SENTINEL;
+      } else {
+        process.env.SENV_TEST_SENTINEL = previousSentinel;
+      }
+    });
+    process.env.CLAUDECODE = "0";
+    process.env.CLAUDE_CODE_SESSION_ID = "old-code-session";
+    process.env.CLAUDE_SESSION_ID = "old-session";
+    process.env.SENV_TEST_SENTINEL = "keep-me";
+    const environmentBefore = { ...process.env };
+
+    // act
+    applySessionEnv("session-123");
+
+    // assert
+    const environmentAfter = { ...process.env };
+    const changedKeys = [
+      ...new Set([...Object.keys(environmentBefore), ...Object.keys(environmentAfter)]),
+    ]
+      .filter((key) => environmentBefore[key] !== environmentAfter[key])
+      .sort();
+    assert.deepStrictEqual(changedKeys, [
+      "CLAUDECODE",
+      "CLAUDE_CODE_SESSION_ID",
+      "CLAUDE_SESSION_ID",
+    ]);
+    assert.deepStrictEqual(
+      {
+        CLAUDECODE: process.env.CLAUDECODE,
+        CLAUDE_CODE_SESSION_ID: process.env.CLAUDE_CODE_SESSION_ID,
+        CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID,
+        SENV_TEST_SENTINEL: process.env.SENV_TEST_SENTINEL,
+      },
+      {
+        CLAUDECODE: "1",
+        CLAUDE_CODE_SESSION_ID: "session-123",
+        CLAUDE_SESSION_ID: "session-123",
+        SENV_TEST_SENTINEL: "keep-me",
+      },
     );
-    assert.equal(process.env.SENV_TEST_SENTINEL, "keep-me");
+  });
+
+  test("refreshes every owned key for the active session", (t) => {
+    // arrange
+    const previousClaudeCode = process.env.CLAUDECODE;
+    const previousClaudeCodeSessionId = process.env.CLAUDE_CODE_SESSION_ID;
+    const previousClaudeSessionId = process.env.CLAUDE_SESSION_ID;
+    t.after(() => {
+      if (previousClaudeCode === undefined) {
+        delete process.env.CLAUDECODE;
+      } else {
+        process.env.CLAUDECODE = previousClaudeCode;
+      }
+
+      if (previousClaudeCodeSessionId === undefined) {
+        delete process.env.CLAUDE_CODE_SESSION_ID;
+      } else {
+        process.env.CLAUDE_CODE_SESSION_ID = previousClaudeCodeSessionId;
+      }
+
+      if (previousClaudeSessionId === undefined) {
+        delete process.env.CLAUDE_SESSION_ID;
+      } else {
+        process.env.CLAUDE_SESSION_ID = previousClaudeSessionId;
+      }
+    });
+    process.env.CLAUDECODE = "stale";
+    process.env.CLAUDE_CODE_SESSION_ID = "stale-code-session";
+    process.env.CLAUDE_SESSION_ID = "stale-session";
+
+    // act
+    applySessionEnv("first-session");
+    applySessionEnv("active-session");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        CLAUDECODE: process.env.CLAUDECODE,
+        CLAUDE_CODE_SESSION_ID: process.env.CLAUDE_CODE_SESSION_ID,
+        CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID,
+      },
+      {
+        CLAUDECODE: "1",
+        CLAUDE_CODE_SESSION_ID: "active-session",
+        CLAUDE_SESSION_ID: "active-session",
+      },
+    );
   });
 });
 
-test("applySessionEnv: empty input assigns empty string verbatim without throwing", () => {
-  withEnvSnapshot(() => {
-    applySessionEnv("");
+describe("PATH_LEDGER_ENV", () => {
+  test("uses the exact public ledger key", () => {
+    // arrange
+    const expectedLedgerKey = "PI_CLAUDE_MARKETPLACE_PATH";
 
-    assert.equal(process.env.CLAUDECODE, "1");
-    assert.equal(process.env.CLAUDE_CODE_SESSION_ID, "");
-    assert.equal(process.env.CLAUDE_SESSION_ID, "");
+    // act
+    const ledgerKey = PATH_LEDGER_ENV;
+
+    // assert
+    assert.strictEqual(ledgerKey, expectedLedgerKey);
+  });
+});
+
+describe("applyPathLedger", () => {
+  test("removes owned entries and appends fresh entries in stable order", () => {
+    // arrange
+    const delimiter = path.delimiter;
+    const currentPath = `/system${delimiter}/owned-a${delimiter}/tools${delimiter}/owned-b`;
+    const priorLedger = `/owned-a${delimiter}/owned-b`;
+    const freshBinDirs = ["/plugin-b", "/plugin-a"];
+
+    // act
+    const pathUpdate = applyPathLedger(currentPath, priorLedger, freshBinDirs);
+
+    // assert
+    assert.deepStrictEqual(pathUpdate, {
+      path: `/system${delimiter}/tools${delimiter}/plugin-b${delimiter}/plugin-a`,
+      ledger: `/plugin-b${delimiter}/plugin-a`,
+    });
   });
 });
