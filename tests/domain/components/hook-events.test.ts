@@ -40,7 +40,7 @@ describe("BUCKET_A_EVENTS", () => {
       "SessionEnd",
       "Stop",
       "StopFailure",
-    ];
+    ] as const;
 
     // act
     const events = BUCKET_A_EVENTS;
@@ -53,7 +53,7 @@ describe("BUCKET_A_EVENTS", () => {
 describe("TOOL_EVENTS", () => {
   test("publishes the complete tool-event subset", () => {
     // arrange
-    const expectedEvents = ["PreToolUse", "PostToolUse", "PostToolUseFailure"];
+    const expectedEvents = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
 
     // act
     const events = TOOL_EVENTS;
@@ -111,7 +111,7 @@ describe("NON_TOOL_EVENT_FIELDS", () => {
       UserPromptSubmit: null,
       Stop: null,
       StopFailure: "error",
-    };
+    } as const;
 
     // act
     const fields = NON_TOOL_EVENT_FIELDS;
