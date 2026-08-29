@@ -79,6 +79,25 @@ describe("getAgentDir", () => {
     // assert
     assert.strictEqual(boundaryGetAgentDir, expectedGetAgentDir);
   });
+
+  test("returns the explicit Pi agent directory", (t) => {
+    // arrange
+    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+    t.after(() => {
+      if (previousAgentDirectory === undefined) {
+        delete process.env.PI_CODING_AGENT_DIR;
+      } else {
+        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+      }
+    });
+    process.env.PI_CODING_AGENT_DIR = "/tmp/pi-api-agent";
+
+    // act
+    const agentDirectory = getAgentDir();
+
+    // assert
+    assert.strictEqual(agentDirectory, "/tmp/pi-api-agent");
+  });
 });
 
 describe("parseFrontmatter", () => {
