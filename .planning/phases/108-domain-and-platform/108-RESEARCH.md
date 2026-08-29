@@ -66,7 +66,7 @@ None — discussion stayed within phase scope.
 
 Phase 108 is not a test-file fill-in exercise. It is 23 pair-atomic deliveries: 19 brownfield owners that already pass direct coverage but still require full lowercase AAA and guideline normalization, two owners that exist but miss direct coverage, and two owner modules that do not exist. A prior PASS is explicitly brownfield input, not completion evidence. [VERIFIED: `.planning/REQUIREMENTS.md`:7-10; `.planning/REQUIREMENTS.md`:155-181; `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:18-22]
 
-The phase has four carrier responsibilities. P108-18 owns the resolver discriminant and compile-time contract. P108-21, P108-12, and P108-22 own the credential, device-flow, and Git shared-contract migrations respectively. The three adapter carriers must also relocate their generic helpers, update affected test imports, create supplemental-evidence classification in the correspondence gate, and run all-pair direct coverage after any shared support change. [VERIFIED: `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:26-45; `.claude/rules/typescript-unit-testing.md`:29-32,186-186,225-225]
+The phase has four carrier responsibilities. P108-18 owns only the resolver discriminant and compile-time contract; its later production consumers remain pair-atomic assignments in P113-24, P114-07/08/09/10/11/12/14, and P115-06/07. P108-21, P108-12, and P108-22 own the credential, device-flow, and Git shared-contract cores respectively. The generic-helper consumer rewrites are distributed into bounded post-carrier batches in P108-02/03/04/05/07, and P108-23 deletes the three generic helpers only after those batches finish. P108-21 owns the supplemental-evidence classifier used by all three contract carriers. [VERIFIED: `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:26-45,94-97; `.planning/REQUIREMENTS.md`:76-85; `.claude/rules/typescript-unit-testing.md`:29-32,186-186,225-225]
 
 Current focused measurements confirm the two coverage repairs are narrow but real: `components/hooks.ts` is at 88.17% lines, 72.73% branches, and 62.50% functions; `source.ts` is at 99.38% lines, 95.06% branches, and 100% functions. Direct coverage fails closed for the absent resolver and Git owners. The current remote-ref supplemental suite also fails in a restricted environment because it binds a loopback HTTP server; replace that protocol stub with an injected `isomorphic-git/http/node` request boundary. [VERIFIED: focused direct-coverage commands run 2026-08-28; `tests/platform/git-remote-refs.test.ts`:1-92; focused `node --test tests/platform/git-remote-refs.test.ts` run 2026-08-28]
 
@@ -377,7 +377,7 @@ Have the first adapter carrier (recommended: P108-21) add a narrow structural ca
 5. **P108-06 and P108-19 coverage repairs:** these are independent of each other after carrier support stops moving shared imports. [VERIFIED: focused coverage runs 2026-08-28]
 6. **The remaining 17 PASS normalization pairs:** schedule in parallel waves where their owner files do not overlap; each remains its own plan and commit. [VERIFIED: `.planning/REQUIREMENTS.md`:155-181; `.planning/REQUIREMENTS.md`:76-85]
 
-The three generic helpers currently appear in 26 Git-related, 16 credential-related, and 8 device-flow-related test files (counts include the helper modules themselves), with overlap across architecture, integration, edge, orchestrator, platform, and shared tests. Serialize the three relocation carriers to avoid concurrent import rewrites in the same test modules. These import-only changes do not complete later production pairs. [VERIFIED: repository import inventory run 2026-08-28; `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:94-97]
+The three generic helpers currently appear in 26 Git-related, 16 credential-related, and 8 device-flow-related test files (counts include the helper modules themselves), with overlap across architecture, integration, edge, orchestrator, platform, and shared tests. Serialize the three replacement-adapter carriers, then migrate the 27 surviving consumer files once all replacement APIs exist. The five non-overlapping batches are assigned to P108-02/03/04/05/07; P108-23 proves no imports remain before deleting all three helpers. Import-only changes do not complete the consumers' later production pairs, and any case body changed for an explicit guarded-factory call must use exact lowercase `// arrange`, `// act`, `// assert`, or the permitted lowercase `// act & assert`. [VERIFIED: repository import inventory run 2026-08-28; `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:18-30,94-97]
 
 ### Anti-Patterns to Avoid
 
@@ -569,19 +569,17 @@ The concrete test must define the expected one-element array locally and indepen
 |---|-------|---------|---------------|
 | — | None. Recommendations are derived from locked decisions, opened source-of-truth files, focused commands, installed dependency inspection, and official documentation. | — | — |
 
-## Open Questions
+## Resolved Questions
 
-1. **How should lexical resolver caller migration satisfy pair atomicity?**
-   - What we know: The locked integration point says consumers narrow first on `installable`; RES-01 requires the boolean/type contract; DEL-01/DEL-03 prohibit P108-18 from changing a second production pair. CodeGraph finds resolver consumers in multiple later orchestrator pairs. [VERIFIED: `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:94-95; `.planning/REQUIREMENTS.md`:72-85; CodeGraph caller inventory 2026-08-28]
-   - What's unclear: Whether a lexical condition-only change in those later production modules is accepted as carrier support, or whether those changes must wait for each later owning pair while Phase 108 proves only the repository-wide type safety.
-   - Recommendation: Keep P108-18 pair-atomic: add the boolean to the schema/results, change its own narrowers, add compile-time proof, and record every caller. Ask the plan checker to resolve carrier-policy interpretation before placing any later production file in 108-18. Do not silently weaken either requirement.
+1. **RESOLVED — How lexical resolver caller migration satisfies pair atomicity.**
+   - Ruling: P108-18 changes only `domain/resolver.ts` and its canonical/legacy owner evidence. It adds the boolean to the schema/results, changes the resolver-owned narrowers, and proves runtime/type behavior. It does not edit `plugin-state-classifier.ts` or any other production consumer, and Phase 108 does not claim repository-wide lexical migration complete. [VERIFIED: `.planning/REQUIREMENTS.md`:72-85]
+   - Migration assignments: P113-24 owns `plugin-state-classifier.ts`; P114-07/08/09/10/11/12/14 own `enable-disable.ts`, `fetch.ts`, `info.ts`, `install.ts`, `list.ts`, `reinstall.ts`, and `update.ts`; P115-06/07 own `reconcile/backfill.ts` and `reconcile/notify.ts`. Those plans must narrow materializability on `installable` before using `state` as secondary detail. [VERIFIED: `.planning/ROADMAP.md`:305,344-351,377-378; CodeGraph and static caller inventory 2026-08-28]
+   - Already-safe direct consumers: P111-08/10/13/24/30 and P113-15/17/26 consume `MaterializablePlugin` or `GitPluginRootResult`, while P113-20 delegates full-union classification without a root-access gate. They require preservation, not a lexical boolean-first edit. Comment-only mentions are excluded. The full file/symbol ledger lives in `108-18-PLAN.md`.
 
-2. **Which carrier owns the supplemental-evidence gate change?**
-   - What we know: D-10 requires the gate to classify fake/contract tests, while the current gate has no such category. [VERIFIED: `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:26-30; `scripts/check-corresponding-tests.mjs`:39-42,78-106]
-   - What's unclear: The context does not assign the supporting script edit to a specific pair.
-   - Recommendation: Assign it to P108-21, the first serialized adapter-contract carrier, and make P108-12/P108-22 depend on that structural capability.
+2. **RESOLVED — Which carrier owns the supplemental-evidence gate change.**
+   - Ruling: P108-21 owns `scripts/check-corresponding-tests.mjs` and its negative fixture because it introduces the first contract/fake supplement. P108-12 and P108-22 depend on P108-21 and must satisfy the same structural rule. [VERIFIED: `.planning/phases/108-domain-and-platform/108-CONTEXT.md`:26-30; `scripts/check-corresponding-tests.mjs`:39-42,78-106]
 
-No missing technical information blocks planning once these carrier assignments are made.
+No research question remains open and no missing technical information blocks planning.
 
 ## Environment Availability
 
@@ -697,7 +695,7 @@ Security enforcement is enabled because the config does not set it to false. The
 - Standard stack: HIGH — exact installed/locked versions and current read-only registry metadata were checked; no package is added.
 - Architecture: HIGH — based on current source/call paths, locked context, canonical test guidelines, and official dependency APIs.
 - Pitfalls: HIGH — reproduced coverage/missing-owner behavior and the loopback listener failure; gate behavior was read from source.
-- Resolver caller rollout policy: MEDIUM — the source/call graph is clear, but lexical migration ownership has a real DEL-01/Phase-success interpretation conflict that the plan checker must resolve.
+- Resolver caller rollout policy: HIGH — the complete caller ledger is assigned to exact owning pairs, P108-18 remains pair-atomic, and Phase 108 explicitly avoids a repository-wide lexical-completion claim.
 
 **Research date:** 2026-08-28
 **Valid until:** 2026-09-27 for repository architecture; re-run package/version and direct-coverage probes if HEAD changes before planning.
