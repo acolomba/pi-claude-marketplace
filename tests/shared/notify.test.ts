@@ -6460,3 +6460,153 @@ test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
     "error",
   ]);
 });
+
+test("the central disabled arm preserves a caller-stamped reason", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "disabled",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["not in manifest"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi as never, message);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+  ]);
+});
+
+for (const { name, plugin, expected } of [
+  {
+    name: "the central available arm omits a reason that no central producer stamps",
+    plugin: {
+      status: "available",
+      name: "alpha",
+      version: "1.0.0",
+      reasons: ["installs disabled"],
+    },
+    expected: "● official [user]\n  ○ alpha v1.0.0 (available)",
+  },
+  {
+    name: "the central remote arm omits a reason that no central producer stamps",
+    plugin: {
+      status: "remote",
+      name: "alpha",
+      version: "1.0.0",
+      reasons: ["installs disabled"],
+    },
+    expected: "● official [user]\n  ◌ alpha v1.0.0 (remote)",
+  },
+] as const) {
+  test(name, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const pi = piWithBothLoaded();
+    const message = {
+      marketplaces: [{ name: "official", scope: "user", plugins: [plugin] }],
+    } satisfies NotificationMessage;
+
+    // act
+    notify(ctx as never, pi as never, message);
+
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
+  });
+}
+
+for (const { name, reasons, expected } of [
+  {
+    name: "plugin info preserves a stamped reason on an available row",
+    reasons: ["installs disabled"],
+    expected:
+      "● official [user] <autoupdate>\n  ○ alpha v1.0.0 (available) {installs disabled}\n    components: not resolved",
+  },
+  {
+    name: "plugin info omits the reasons brace when reasons are absent",
+    reasons: undefined,
+    expected:
+      "● official [user] <autoupdate>\n  ○ alpha v1.0.0 (available)\n    components: not resolved",
+  },
+  {
+    name: "plugin info omits the reasons brace when reasons are empty",
+    reasons: [],
+    expected:
+      "● official [user] <autoupdate>\n  ○ alpha v1.0.0 (available)\n    components: not resolved",
+  },
+] as const) {
+  test(name, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const pi = piWithBothLoaded();
+    const plugin = {
+      status: "available",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: false,
+      ...(reasons === undefined ? {} : { reasons }),
+    } satisfies PluginInfoRow;
+    const message = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: true },
+      plugin,
+    } satisfies NotificationMessage;
+
+    // act
+    notify(ctx as never, pi as never, message);
+
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
+  });
+}
+
+test("a single-target label remains inert without plural cardinality", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    label: "Plugin uninstall",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            name: "alpha",
+            reasons: ["not installed"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi as never, message);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not installed}",
+    "error",
+  ]);
+});
