@@ -1,127 +1,169 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { substituteClaudeVars } from "../../extensions/pi-claude-marketplace/shared/vars.ts";
+import {
+  substituteClaudeVars,
+  type ClaudePluginVars,
+} from "../../extensions/pi-claude-marketplace/shared/vars.ts";
 
-// SK-4 / CM-3 / PI-10 -- pure-string substitution helper for
-// ${CLAUDE_PLUGIN_ROOT} and ${CLAUDE_PLUGIN_DATA}.
+void ({
+  pluginRoot: "/plugin",
+  pluginData: "/data",
+} satisfies ClaudePluginVars);
 
-test("SK-4 substituteClaudeVars replaces ${CLAUDE_PLUGIN_ROOT} every occurrence", () => {
-  const body =
-    "First: ${CLAUDE_PLUGIN_ROOT}\n" +
-    "Second: ${CLAUDE_PLUGIN_ROOT}\n" +
-    "Third: ${CLAUDE_PLUGIN_ROOT}";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "/abs/path/to/plugin",
-    pluginData: "/abs/path/to/data",
+void ({
+  pluginRoot: "/plugin",
+  pluginData: "/data",
+  skillDir: "/skill",
+  projectDir: "/project",
+} satisfies ClaudePluginVars);
+
+void ({
+  pluginRoot: "/plugin",
+  pluginData: "/data",
+  skillDir: undefined,
+  projectDir: undefined,
+} satisfies ClaudePluginVars);
+
+// @ts-expect-error pluginRoot is required
+void ({ pluginData: "/data" } satisfies ClaudePluginVars);
+
+// @ts-expect-error pluginData is required
+void ({ pluginRoot: "/plugin" } satisfies ClaudePluginVars);
+
+// @ts-expect-error skillDir accepts only a string or undefined
+void ({ pluginRoot: "/plugin", pluginData: "/data", skillDir: 7 } satisfies ClaudePluginVars);
+
+interface SubstitutionCase {
+  readonly name: string;
+  readonly content: string;
+  readonly vars: ClaudePluginVars;
+  readonly expectedContent: string;
+}
+
+const substitutionCases = [
+  {
+    name: "returns empty content unchanged",
+    content: "",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "",
+  },
+  {
+    name: "returns token-free content byte-identically",
+    content: "Plain content with braces {and} a dollar $ sign.",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "Plain content with braces {and} a dollar $ sign.",
+  },
+  {
+    name: "replaces one plugin root token",
+    content: "Root: ${CLAUDE_PLUGIN_ROOT}",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "Root: /plugin",
+  },
+  {
+    name: "maps all supported tokens to their matching fields from left to right",
+    content:
+      "root=${CLAUDE_PLUGIN_ROOT};data=${CLAUDE_PLUGIN_DATA};" +
+      "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: "/skill",
+      projectDir: "/project",
+    },
+    expectedContent: "root=/plugin;data=/data;skill=/skill;project=/project",
+  },
+  {
+    name: "replaces adjacent touching tokens without separators",
+    content: "${CLAUDE_PLUGIN_ROOT}${CLAUDE_PLUGIN_DATA}${CLAUDE_SKILL_DIR}${CLAUDE_PROJECT_DIR}",
+    vars: {
+      pluginRoot: "R",
+      pluginData: "D",
+      skillDir: "S",
+      projectDir: "P",
+    },
+    expectedContent: "RDSP",
+  },
+  {
+    name: "replaces every repeated equal token",
+    content:
+      "${CLAUDE_PLUGIN_DATA}|${CLAUDE_PLUGIN_DATA}|${CLAUDE_PLUGIN_DATA}|${CLAUDE_PLUGIN_DATA}",
+    vars: { pluginRoot: "/plugin", pluginData: "/same" },
+    expectedContent: "/same|/same|/same|/same",
+  },
+  {
+    name: "leaves omitted optional values as literal tokens",
+    content: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+  },
+  {
+    name: "leaves explicitly undefined optional values as literal tokens",
+    content: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: undefined,
+      projectDir: undefined,
+    },
+    expectedContent: "skill=${CLAUDE_SKILL_DIR};project=${CLAUDE_PROJECT_DIR}",
+  },
+  {
+    name: "leaves an unknown Claude token unchanged",
+    content: "unknown=${CLAUDE_SOMETHING_ELSE}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: "/skill",
+      projectDir: "/project",
+    },
+    expectedContent: "unknown=${CLAUDE_SOMETHING_ELSE}",
+  },
+  {
+    name: "leaves almost-matching token names unchanged",
+    content:
+      "${CLAUDE_PLUGIN_ROO}|${CLAUDE_PLUGIN_ROOT_EXTRA}|${claude_plugin_root}|" +
+      "${CLAUDE-PROJECT-DIR}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: "/skill",
+      projectDir: "/project",
+    },
+    expectedContent:
+      "${CLAUDE_PLUGIN_ROO}|${CLAUDE_PLUGIN_ROOT_EXTRA}|${claude_plugin_root}|" +
+      "${CLAUDE-PROJECT-DIR}",
+  },
+  {
+    name: "scans original tokens left to right without expanding an injected token",
+    content: "${CLAUDE_PLUGIN_ROOT}|${CLAUDE_PLUGIN_DATA}",
+    vars: {
+      pluginRoot: "before/${CLAUDE_PLUGIN_DATA}/after",
+      pluginData: "/data",
+    },
+    expectedContent: "before/${CLAUDE_PLUGIN_DATA}/after|/data",
+  },
+  {
+    name: "does not re-expand an injected copy of the matched token",
+    content: "${CLAUDE_SKILL_DIR}",
+    vars: {
+      pluginRoot: "/plugin",
+      pluginData: "/data",
+      skillDir: "before/${CLAUDE_SKILL_DIR}/after",
+    },
+    expectedContent: "before/${CLAUDE_SKILL_DIR}/after",
+  },
+] satisfies readonly SubstitutionCase[];
+
+for (const substitutionCase of substitutionCases) {
+  test(substitutionCase.name, () => {
+    // arrange
+    const { content, vars, expectedContent } = substitutionCase;
+
+    // act
+    const substitutedContent = substituteClaudeVars(content, vars);
+
+    // assert
+    assert.strictEqual(substitutedContent, expectedContent);
   });
-  // All three occurrences replaced.
-  assert.equal(
-    out,
-    "First: /abs/path/to/plugin\n" + "Second: /abs/path/to/plugin\n" + "Third: /abs/path/to/plugin",
-  );
-});
-
-test("CM-3 substituteClaudeVars replaces ${CLAUDE_PLUGIN_DATA} every occurrence", () => {
-  const body = "A=${CLAUDE_PLUGIN_DATA} B=${CLAUDE_PLUGIN_DATA} C=${CLAUDE_PLUGIN_DATA}";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "/r",
-    pluginData: "/d",
-  });
-  assert.equal(out, "A=/d B=/d C=/d");
-});
-
-test("substituteClaudeVars passes through bodies with no placeholders unchanged", () => {
-  const body = "Hello world. No placeholders here.";
-  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
-  assert.equal(out, body);
-});
-
-test("substituteClaudeVars handles empty body (returns empty string)", () => {
-  const out = substituteClaudeVars("", { pluginRoot: "/r", pluginData: "/d" });
-  assert.equal(out, "");
-});
-
-test("T-03-01 substituteClaudeVars does NOT recursively substitute -- pluginRoot containing literal ${CLAUDE_PLUGIN_ROOT} is not re-fed", () => {
-  // pluginRoot's literal value contains the SAME placeholder string. After
-  // substitution the body must contain that literal verbatim -- the
-  // implementation must NOT re-feed its own output back through the
-  // ${CLAUDE_PLUGIN_ROOT} replaceAll, which would either loop or produce a
-  // doubly-substituted value.
-  const body = "Root is ${CLAUDE_PLUGIN_ROOT}";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "prefix/${CLAUDE_PLUGIN_ROOT}/suffix",
-    pluginData: "/d",
-  });
-  // The single replaceAll runs once; the literal ${CLAUDE_PLUGIN_ROOT}
-  // injected by the value itself MUST survive verbatim.
-  assert.equal(out, "Root is prefix/${CLAUDE_PLUGIN_ROOT}/suffix");
-});
-
-test("substituteClaudeVars replaces both placeholders in same body", () => {
-  const body = "${CLAUDE_PLUGIN_ROOT}/skills/x referencing ${CLAUDE_PLUGIN_DATA}/cache";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "/r",
-    pluginData: "/d",
-  });
-  assert.equal(out, "/r/skills/x referencing /d/cache");
-});
-
-// SUB-01 / SUB-02 / T-03-01 -- extended four-variable substitution contract.
-
-test("SUB-01/SUB-02 substituteClaudeVars replaces all four tokens when all values present", () => {
-  const body =
-    "R=${CLAUDE_PLUGIN_ROOT} D=${CLAUDE_PLUGIN_DATA} " +
-    "S=${CLAUDE_SKILL_DIR} P=${CLAUDE_PROJECT_DIR}";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "/r",
-    pluginData: "/d",
-    skillDir: "/s",
-    projectDir: "/p",
-  });
-  assert.equal(out, "R=/r D=/d S=/s P=/p");
-});
-
-test("SUB-01 absent skillDir leaves ${CLAUDE_SKILL_DIR} literal (never empty string)", () => {
-  const body = "before ${CLAUDE_SKILL_DIR} after";
-  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
-  assert.ok(out.includes("${CLAUDE_SKILL_DIR}"), "token stays literal");
-  assert.equal(out, "before ${CLAUDE_SKILL_DIR} after");
-});
-
-test("SUB-02 absent projectDir leaves ${CLAUDE_PROJECT_DIR} literal (never empty string)", () => {
-  const body = "before ${CLAUDE_PROJECT_DIR} after";
-  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
-  assert.ok(out.includes("${CLAUDE_PROJECT_DIR}"), "token stays literal");
-  assert.equal(out, "before ${CLAUDE_PROJECT_DIR} after");
-});
-
-test("substituteClaudeVars leaves an unknown ${CLAUDE_*} token unchanged", () => {
-  const body = "x ${CLAUDE_SOMETHING_ELSE} y";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "/r",
-    pluginData: "/d",
-    skillDir: "/s",
-    projectDir: "/p",
-  });
-  assert.equal(out, "x ${CLAUDE_SOMETHING_ELSE} y");
-});
-
-test("T-03-01 single-pass: a skillDir value embedding ${CLAUDE_PLUGIN_DATA} is not re-expanded", () => {
-  const body = "S=${CLAUDE_SKILL_DIR} D=${CLAUDE_PLUGIN_DATA}";
-  const out = substituteClaudeVars(body, {
-    pluginRoot: "/r",
-    pluginData: "/data",
-    skillDir: "/prefix/${CLAUDE_PLUGIN_DATA}/suffix",
-    projectDir: "/p",
-  });
-  // The embedded ${CLAUDE_PLUGIN_DATA} inside the skillDir value survives
-  // verbatim; only the standalone token is substituted.
-  assert.equal(out, "S=/prefix/${CLAUDE_PLUGIN_DATA}/suffix D=/data");
-});
-
-test("byte-identity: content using only the two plugin vars matches the pre-existing output", () => {
-  const body = "${CLAUDE_PLUGIN_ROOT}/skills/x referencing ${CLAUDE_PLUGIN_DATA}/cache";
-  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
-  assert.equal(out, "/r/skills/x referencing /d/cache");
-});
+}
