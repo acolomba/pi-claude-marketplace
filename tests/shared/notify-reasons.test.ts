@@ -49,6 +49,16 @@ void (true satisfies ReasonsCoverageProofIsExact);
 
 const skipSeverityCases = [
   {
+    title: "classifies absent reasons as an actionable skip",
+    reasons: undefined,
+    expectedSeverity: "warning",
+  },
+  {
+    title: "classifies an empty reason list as an actionable skip",
+    reasons: [],
+    expectedSeverity: "warning",
+  },
+  {
     title: "classifies up-to-date as an informational idempotent skip",
     reasons: ["up-to-date"],
     expectedSeverity: "info",
@@ -86,6 +96,31 @@ const skipSeverityCases = [
   {
     title: "classifies an unsupported reason as an actionable skip",
     reasons: ["unsupported source"],
+    expectedSeverity: "warning",
+  },
+  {
+    title: "classifies several idempotent reasons as an informational skip",
+    reasons: ["up-to-date", "already enabled", "already disabled"],
+    expectedSeverity: "info",
+  },
+  {
+    title: "classifies repeated equal idempotent reasons as an informational skip",
+    reasons: ["already installed", "already installed"],
+    expectedSeverity: "info",
+  },
+  {
+    title: "classifies an actionable reason after an idempotent reason as a warning",
+    reasons: ["already installed", "source missing"],
+    expectedSeverity: "warning",
+  },
+  {
+    title: "classifies an actionable reason before an idempotent reason as a warning",
+    reasons: ["source missing", "already installed"],
+    expectedSeverity: "warning",
+  },
+  {
+    title: "classifies an author-declared state reason as an actionable skip",
+    reasons: ["installs disabled"],
     expectedSeverity: "warning",
   },
 ] as const;
@@ -239,6 +274,16 @@ for (const {
 
 const malformedReasonCases = [
   {
+    title: "returns no malformed reasons when degraded kinds are absent",
+    kinds: undefined,
+    expectedReasons: [],
+  },
+  {
+    title: "returns no malformed reasons for an empty degraded-kind list",
+    kinds: [],
+    expectedReasons: [],
+  },
+  {
     title: "maps a degraded skill to its failure reason",
     kinds: ["skill"],
     expectedReasons: ["malformed skill"],
@@ -247,6 +292,21 @@ const malformedReasonCases = [
     title: "maps a degraded command to its failure reason",
     kinds: ["command"],
     expectedReasons: ["malformed command"],
+  },
+  {
+    title: "maps adjacent degraded kinds in canonical skill-before-command order",
+    kinds: ["skill", "command"],
+    expectedReasons: ["malformed skill", "malformed command"],
+  },
+  {
+    title: "keeps canonical malformed-reason order for reversed degraded kinds",
+    kinds: ["command", "skill"],
+    expectedReasons: ["malformed skill", "malformed command"],
+  },
+  {
+    title: "deduplicates equal degraded kinds without changing canonical order",
+    kinds: ["skill", "command", "skill", "command"],
+    expectedReasons: ["malformed skill", "malformed command"],
   },
 ] as const;
 
