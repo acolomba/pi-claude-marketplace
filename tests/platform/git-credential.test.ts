@@ -1,77 +1,12 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
-import { PassThrough, Writable } from "node:stream";
 import { describe, test } from "node:test";
 
-import { mock, verify, when } from "strong-mock";
-
 import {
-  DEFAULT_CREDENTIAL_OPS,
   createCredentialOps,
   type CredentialOps,
-  type CredentialProcess,
-  type CredentialSpawn,
-  type CredentialSpawnOptions,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-
-interface CredentialProcessControl {
-  readonly process: CredentialProcess;
-  close(code: number | null): void;
-  fail(error: Error): void;
-  failInput(error: Error): void;
-  standardInput(): string;
-  writeOutput(output: string): void;
-}
-
-function credentialProcess(
-  terminate: CredentialProcess["kill"] = () => true,
-): CredentialProcessControl {
-  const events = new EventEmitter();
-  const stdout = new PassThrough();
-  let stdinText = "";
-  const stdin = new Writable({
-    write(chunk: Buffer, _encoding, callback) {
-      stdinText += chunk.toString("utf8");
-      callback();
-    },
-  });
-  const child: CredentialProcess = {
-    stdin,
-    stdout,
-    kill: terminate,
-    on: (event, listener) => {
-      events.on(event, listener as (...args: unknown[]) => void);
-    },
-  };
-
-  return {
-    process: child,
-    close: (code) => {
-      events.emit("close", code);
-    },
-    fail: (error) => {
-      events.emit("error", error);
-    },
-    failInput: (error) => {
-      stdin.emit("error", error);
-    },
-    standardInput: () => stdinText,
-    writeOutput: (output) => {
-      stdout.write(Buffer.from(output));
-    },
-  };
-}
-
-function credentialSpawnOptions(): CredentialSpawnOptions {
-  return {
-    env: {
-      ...process.env,
-      GIT_TERMINAL_PROMPT: "0",
-      GCM_INTERACTIVE: "never",
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-  };
-}
+import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import { createCredentialProcessFake } from "./credential-process-fake.ts";
 
 void ({
   fill: () => Promise.resolve(null),
@@ -79,34 +14,37 @@ void ({
   reject: () => Promise.resolve(),
 } satisfies CredentialOps);
 
+function manualCredentialProcess() {
+  return createCredentialProcessFake({ onInput: () => {} });
+}
+
 describe("createCredentialOps", () => {
-  test("fills a credential from the git wire response", async () => {
+  test("fills a credential from the complete git wire response", async () => {
     // arrange
-    const child = credentialProcess();
-    const spawnProcess = mock<CredentialSpawn>({
-      exactParams: true,
-      name: "credential process launcher",
-    });
-    when(() => spawnProcess("git", ["credential", "fill"], credentialSpawnOptions())).thenReturn(
-      child.process,
-    );
-    const credentialOps = createCredentialOps({ spawn: spawnProcess });
-    queueMicrotask(() => {
-      child.writeOutput("ignored\n=missing-key\nusername=x-access-token\r\npassword=token-1\r\n\n");
-      child.failInput(new Error("closed input"));
-      child.close(0);
-    });
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn });
 
     // act
-    const credential = await credentialOps.fill("github.com");
+    const pendingCredential = credentialOps.fill("github.com");
+    const process = processes.process();
+    process.writeOutput("ignored\n=missing-key\nusername=x-access-token\r\n");
+    process.writeOutput("password=token-1\r\n\n");
+    process.failInput(new Error("closed input"));
+    process.close(0);
+    const credential = await pendingCredential;
 
     // assert
     assert.deepStrictEqual(credential, {
       username: "x-access-token",
       password: "token-1",
     });
-    assert.strictEqual(child.standardInput(), "protocol=https\nhost=github.com\n\n");
-    verify(spawnProcess);
+    assert.strictEqual(process.command, "git");
+    assert.deepStrictEqual(process.args, ["credential", "fill"]);
+    assert.strictEqual(process.options.env.GIT_TERMINAL_PROMPT, "0");
+    assert.strictEqual(process.options.env.GCM_INTERACTIVE, "never");
+    assert.deepStrictEqual(process.options.stdio, ["pipe", "pipe", "pipe"]);
+    assert.strictEqual(process.input(), "protocol=https\nhost=github.com\n\n");
+    assert.strictEqual(process.inputEnded(), true);
   });
 
   for (const { exitCode, behavior } of [
@@ -115,25 +53,16 @@ describe("createCredentialOps", () => {
   ]) {
     test(behavior, async () => {
       // arrange
-      const child = credentialProcess();
-      const spawnProcess = mock<CredentialSpawn>({
-        exactParams: true,
-        name: "credential process launcher",
-      });
-      when(() => spawnProcess("git", ["credential", "fill"], credentialSpawnOptions())).thenReturn(
-        child.process,
-      );
-      const credentialOps = createCredentialOps({ spawn: spawnProcess });
-      queueMicrotask(() => {
-        child.close(exitCode);
-      });
+      const processes = manualCredentialProcess();
+      const credentialOps = createCredentialOps({ spawn: processes.spawn });
 
       // act
-      const credential = await credentialOps.fill("github.com");
+      const pendingCredential = credentialOps.fill("github.com");
+      processes.process().close(exitCode);
+      const credential = await pendingCredential;
 
       // assert
       assert.strictEqual(credential, null);
-      verify(spawnProcess);
     });
   }
 
@@ -143,72 +72,44 @@ describe("createCredentialOps", () => {
   ]) {
     test(behavior, async () => {
       // arrange
-      const child = credentialProcess();
-      const spawnProcess = mock<CredentialSpawn>({
-        exactParams: true,
-        name: "credential process launcher",
-      });
-      when(() => spawnProcess("git", ["credential", "fill"], credentialSpawnOptions())).thenReturn(
-        child.process,
-      );
-      const credentialOps = createCredentialOps({ spawn: spawnProcess });
-      queueMicrotask(() => {
-        child.writeOutput(output);
-        child.close(0);
-      });
+      const processes = manualCredentialProcess();
+      const credentialOps = createCredentialOps({ spawn: processes.spawn });
 
       // act
-      const credential = await credentialOps.fill("github.com");
+      const pendingCredential = credentialOps.fill("github.com");
+      const process = processes.process();
+      process.writeOutput(output);
+      process.close(0);
+      const credential = await pendingCredential;
 
       // assert
       assert.strictEqual(credential, null);
-      verify(spawnProcess);
     });
   }
 
-  test("returns null when the fill process fails", async () => {
+  test("returns null and clears the timeout when the fill process fails", async (t) => {
     // arrange
-    const child = credentialProcess();
-    const spawnProcess = mock<CredentialSpawn>({
-      exactParams: true,
-      name: "credential process launcher",
-    });
-    when(() => spawnProcess("git", ["credential", "fill"], credentialSpawnOptions())).thenReturn(
-      child.process,
-    );
-    const credentialOps = createCredentialOps({ spawn: spawnProcess });
-    queueMicrotask(() => {
-      child.fail(new Error("git unavailable"));
-    });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn, timeoutMs: 50 });
 
     // act
-    const credential = await credentialOps.fill("github.com");
+    const pendingCredential = credentialOps.fill("github.com");
+    const process = processes.process();
+    process.fail(new Error("git unavailable"));
+    const credential = await pendingCredential;
+    t.mock.timers.tick(50);
 
     // assert
     assert.strictEqual(credential, null);
-    verify(spawnProcess);
+    assert.deepStrictEqual(process.terminations(), []);
   });
 
   test("terminates a timed-out fill and returns null", async (t) => {
     // arrange
     t.mock.timers.enable({ apis: ["setTimeout"] });
-    const terminate = mock<CredentialProcess["kill"]>({
-      exactParams: true,
-      name: "credential process termination",
-    });
-    when(() => terminate("SIGTERM")).thenReturn(true);
-    const child = credentialProcess(terminate);
-    const spawnProcess = mock<CredentialSpawn>({
-      exactParams: true,
-      name: "credential process launcher",
-    });
-    when(() => spawnProcess("git", ["credential", "fill"], credentialSpawnOptions())).thenReturn(
-      child.process,
-    );
-    const credentialOps = createCredentialOps({
-      spawn: spawnProcess,
-      timeoutMs: 50,
-    });
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn, timeoutMs: 50 });
 
     // act
     const pendingCredential = credentialOps.fill("github.com");
@@ -217,164 +118,196 @@ describe("createCredentialOps", () => {
 
     // assert
     assert.strictEqual(credential, null);
-    verify(spawnProcess);
-    verify(terminate);
+    assert.deepStrictEqual(processes.process().terminations(), ["SIGTERM"]);
   });
 
-  for (const host of ["github.com\ninjected=1", "github.com\rinjected=1", "github.com\0x"]) {
-    test(`rejects the host ${JSON.stringify(host)}`, async () => {
-      // arrange
-      const spawnProcess = mock<CredentialSpawn>({
-        exactParams: true,
-        name: "credential process launcher",
-      });
-      const credentialOps = createCredentialOps({ spawn: spawnProcess });
-
-      // act & assert
-      await assert.rejects(
-        () => credentialOps.fill(host),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.deepStrictEqual(
-            { name: error.name, message: error.message },
-            {
-              name: "Error",
-              message: "git-credential attribute 'host' contains a control character",
-            },
-          );
-          return true;
-        },
-      );
-      verify(spawnProcess);
-    });
-  }
-
-  test("approves a complete credential with the complete wire request", async () => {
+  test("clears the timeout after a successful fill", async (t) => {
     // arrange
-    const child = credentialProcess();
-    const spawnProcess = mock<CredentialSpawn>({
-      exactParams: true,
-      name: "credential process launcher",
-    });
-    when(() => spawnProcess("git", ["credential", "approve"], credentialSpawnOptions())).thenReturn(
-      child.process,
-    );
-    const credentialOps = createCredentialOps({ spawn: spawnProcess });
-    queueMicrotask(() => {
-      child.close(0);
-    });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn, timeoutMs: 50 });
 
     // act
-    await credentialOps.approve("github.com", {
+    const pendingCredential = credentialOps.fill("github.com");
+    const process = processes.process();
+    process.writeOutput("username=x-access-token\npassword=token-1\n");
+    process.close(0);
+    const credential = await pendingCredential;
+    t.mock.timers.tick(50);
+
+    // assert
+    assert.deepStrictEqual(credential, {
       username: "x-access-token",
       password: "token-1",
     });
+    assert.deepStrictEqual(process.terminations(), []);
+  });
+
+  test("approves a complete credential with the complete wire request", async () => {
+    // arrange
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn });
+
+    // act
+    const approved = credentialOps.approve("github.com", {
+      username: "x-access-token",
+      password: "token-1",
+    });
+    const process = processes.process();
+    process.close(0);
+    await approved;
 
     // assert
+    assert.deepStrictEqual(process.args, ["credential", "approve"]);
     assert.strictEqual(
-      child.standardInput(),
+      process.input(),
       "protocol=https\nhost=github.com\nusername=x-access-token\npassword=token-1\n\n",
     );
-    verify(spawnProcess);
+    assert.strictEqual(process.inputEnded(), true);
   });
 
   test("omits absent credential fields from an approve request", async () => {
     // arrange
-    const child = credentialProcess();
-    const spawnProcess = mock<CredentialSpawn>({
-      exactParams: true,
-      name: "credential process launcher",
-    });
-    when(() => spawnProcess("git", ["credential", "approve"], credentialSpawnOptions())).thenReturn(
-      child.process,
-    );
-    const credentialOps = createCredentialOps({ spawn: spawnProcess });
-    queueMicrotask(() => {
-      child.close(0);
-    });
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn });
 
     // act
-    await credentialOps.approve("github.com", {});
+    const approved = credentialOps.approve("github.com", {});
+    const process = processes.process();
+    process.close(0);
+    await approved;
 
     // assert
-    assert.strictEqual(child.standardInput(), "protocol=https\nhost=github.com\n\n");
-    verify(spawnProcess);
+    assert.strictEqual(process.input(), "protocol=https\nhost=github.com\n\n");
   });
 
   test("rejects a credential with the complete wire request", async () => {
     // arrange
-    const child = credentialProcess();
-    const spawnProcess = mock<CredentialSpawn>({
-      exactParams: true,
-      name: "credential process launcher",
-    });
-    when(() => spawnProcess("git", ["credential", "reject"], credentialSpawnOptions())).thenReturn(
-      child.process,
-    );
-    const credentialOps = createCredentialOps({ spawn: spawnProcess });
-    queueMicrotask(() => {
-      child.close(0);
-    });
+    const processes = manualCredentialProcess();
+    const credentialOps = createCredentialOps({ spawn: processes.spawn });
 
     // act
-    await credentialOps.reject("github.com", {
+    const rejected = credentialOps.reject("github.com", {
       username: "x-access-token",
       password: "token-1",
     });
+    const process = processes.process();
+    process.close(0);
+    await rejected;
 
     // assert
+    assert.deepStrictEqual(process.args, ["credential", "reject"]);
     assert.strictEqual(
-      child.standardInput(),
+      process.input(),
       "protocol=https\nhost=github.com\nusername=x-access-token\npassword=token-1\n\n",
     );
-    verify(spawnProcess);
+    assert.strictEqual(process.inputEnded(), true);
   });
 
   for (const subcommand of ["approve", "reject"] as const) {
-    test(`swallows a process failure during ${subcommand}`, async () => {
+    test(`swallows a process failure during ${subcommand}`, async (t) => {
       // arrange
-      const child = credentialProcess();
-      const spawnProcess = mock<CredentialSpawn>({
-        exactParams: true,
-        name: "credential process launcher",
-      });
-      when(() =>
-        spawnProcess("git", ["credential", subcommand], credentialSpawnOptions()),
-      ).thenReturn(child.process);
-      const credentialOps = createCredentialOps({ spawn: spawnProcess });
-      queueMicrotask(() => {
-        child.fail(new Error("git unavailable"));
-      });
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const processes = manualCredentialProcess();
+      const credentialOps = createCredentialOps({ spawn: processes.spawn, timeoutMs: 50 });
 
       // act
-      await credentialOps[subcommand]("github.com", {
+      const completed = credentialOps[subcommand]("github.com", {
         username: "x-access-token",
         password: "token-1",
       });
+      const process = processes.process();
+      process.fail(new Error("git unavailable"));
+      await completed;
+      t.mock.timers.tick(50);
 
       // assert
-      verify(spawnProcess);
+      assert.deepStrictEqual(process.terminations(), []);
     });
   }
-});
 
-describe("DEFAULT_CREDENTIAL_OPS", () => {
-  test("returns null when git is absent from PATH", async (t) => {
-    // arrange
-    const previousPath = process.env.PATH;
-    t.after(() => {
-      if (previousPath === undefined) {
-        delete process.env.PATH;
-      } else {
-        process.env.PATH = previousPath;
-      }
+  for (const { operation, field, character, text, credential } of [
+    ...["\n", "\r", "\0"].flatMap((character) => [
+      {
+        operation: "fill" as const,
+        field: "host" as const,
+        character,
+        text: `github.com${character}x`,
+      },
+      {
+        operation: "approve" as const,
+        field: "host" as const,
+        character,
+        text: `github.com${character}x`,
+        credential: { username: "x-access-token", password: "token-1" },
+      },
+      {
+        operation: "approve" as const,
+        field: "username" as const,
+        character,
+        text: "github.com",
+        credential: { username: `x${character}x`, password: "token-1" },
+      },
+      {
+        operation: "approve" as const,
+        field: "password" as const,
+        character,
+        text: "github.com",
+        credential: { username: "x-access-token", password: `x${character}x` },
+      },
+      {
+        operation: "reject" as const,
+        field: "host" as const,
+        character,
+        text: `github.com${character}x`,
+        credential: { username: "x-access-token", password: "token-1" },
+      },
+      {
+        operation: "reject" as const,
+        field: "username" as const,
+        character,
+        text: "github.com",
+        credential: { username: `x${character}x`, password: "token-1" },
+      },
+      {
+        operation: "reject" as const,
+        field: "password" as const,
+        character,
+        text: "github.com",
+        credential: { username: "x-access-token", password: `x${character}x` },
+      },
+    ]),
+  ] satisfies ReadonlyArray<{
+    readonly operation: "fill" | "approve" | "reject";
+    readonly field: "host" | "username" | "password";
+    readonly character: string;
+    readonly text: string;
+    readonly credential?: GitCredentials;
+  }>) {
+    test(`rejects ${JSON.stringify(character)} in ${operation} ${field}`, async () => {
+      // arrange
+      const processes = manualCredentialProcess();
+      const credentialOps = createCredentialOps({ spawn: processes.spawn });
+
+      // act
+      const rejected =
+        operation === "fill"
+          ? credentialOps.fill(text)
+          : credentialOps[operation](text, credential ?? {});
+
+      // assert
+      await assert.rejects(rejected, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message },
+          {
+            name: "Error",
+            message: `git-credential attribute '${field}' contains a control character`,
+          },
+        );
+        return true;
+      });
+      assert.deepStrictEqual(processes.invocations(), []);
     });
-    process.env.PATH = "/path/that/does/not/contain/git";
-
-    // act
-    const credential = await DEFAULT_CREDENTIAL_OPS.fill("missing.example");
-
-    // assert
-    assert.strictEqual(credential, null);
-  });
+  }
 });
