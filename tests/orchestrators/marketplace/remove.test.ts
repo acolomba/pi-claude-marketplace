@@ -27,10 +27,31 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function fixtureMarketplaceDir(
+  name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
+): string {
+  return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
+}
+
+function makeMockGitOps(options: { readonly fixtureSourceDir?: string } = {}) {
+  return createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ["https://gitlab.example.com/team/valid-marketplace.git"],
+    ...(options.fixtureSourceDir === undefined
+      ? {}
+      : {
+          cloneFixture: {
+            boundary: "local" as const,
+            sourceDir: options.fixtureSourceDir,
+          },
+        }),
+  });
+}
 
 interface NotifyRecord {
   message: string;

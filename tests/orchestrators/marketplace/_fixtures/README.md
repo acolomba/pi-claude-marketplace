@@ -1,6 +1,6 @@
 # Phase 4 Marketplace Orchestrator Test Fixtures
 
-Each subdirectory mimics a Claude marketplace clone (a working tree with `.claude-plugin/marketplace.json` at the root). The mock `GitOps.clone` from `tests/helpers/git-mock.ts` copies one of these directories into the orchestrator's requested staging dir when `fixtureSourceDir` is configured.
+Each subdirectory mimics a Claude marketplace clone. The clone has `.claude-plugin/marketplace.json` at its root. The guarded `createGitOpsFake` factory in `tests/platform/git-ops-fake.ts` copies a fixture when its local `cloneFixture` boundary is set.
 
 | Fixture              | Purpose                                                                                                                                                                       |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
