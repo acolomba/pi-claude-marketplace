@@ -31,7 +31,7 @@ test("maps every permission prefix to its complete Pi target", () => {
   assert.deepStrictEqual(targets, expectedTargets);
 });
 
-test("publishes permission prefixes in matching precedence", () => {
+test("publishes unique permission prefixes in matching precedence", () => {
   // arrange
   const expectedPrefixes = ["Bash", "Read", "Edit", "Write"];
 
@@ -40,4 +40,5 @@ test("publishes permission prefixes in matching precedence", () => {
 
   // assert
   assert.deepStrictEqual(prefixes, expectedPrefixes);
+  assert.strictEqual(new Set(prefixes).size, prefixes.length);
 });
