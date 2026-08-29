@@ -26,6 +26,20 @@ export interface GitTestRepository {
   readonly gitdir: string;
   readonly initialOid: string;
   commit(files: readonly GitTestCommitFile[], message: string): Promise<string>;
+  pack(ref?: string): Promise<{ readonly oid: string; readonly packfile: Buffer }>;
+}
+
+export async function createGitTestDirectory(
+  t: TestContext,
+  options: GitTestRepositoryOptions,
+): Promise<string> {
+  if (options.boundary !== "local") {
+    throw new Error("createGitTestDirectory requires the explicit local boundary");
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), "pi-cm-git-contract-empty-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  return dir;
 }
 
 export async function createGitTestRepository(
@@ -66,5 +80,47 @@ export async function createGitTestRepository(
 
   const initialOid = await commit([{ filepath: "README.md", contents: "# local\n" }], "initial");
 
-  return { dir, gitdir, initialOid, commit };
+  async function pack(ref = "HEAD"): Promise<{ readonly oid: string; readonly packfile: Buffer }> {
+    const oids = new Set<string>();
+
+    async function collectTree(oid: string): Promise<void> {
+      if (oids.has(oid)) {
+        return;
+      }
+
+      oids.add(oid);
+      const { tree } = await git.readTree({ fs, dir, oid });
+      for (const entry of tree) {
+        if (entry.type === "tree") {
+          await collectTree(entry.oid);
+        } else {
+          oids.add(entry.oid);
+        }
+      }
+    }
+
+    async function collectCommit(oid: string): Promise<void> {
+      if (oids.has(oid)) {
+        return;
+      }
+
+      oids.add(oid);
+      const { commit: gitCommit } = await git.readCommit({ fs, dir, oid });
+      await collectTree(gitCommit.tree);
+      for (const parent of gitCommit.parent) {
+        await collectCommit(parent);
+      }
+    }
+
+    const oid = await git.resolveRef({ fs, dir, ref });
+    await collectCommit(oid);
+    const { packfile } = await git.packObjects({ fs, dir, oids: [...oids] });
+    if (packfile === undefined) {
+      throw new Error("isomorphic-git returned no in-memory packfile");
+    }
+
+    return { oid, packfile: Buffer.from(packfile) };
+  }
+
+  return { dir, gitdir, initialOid, commit, pack };
 }

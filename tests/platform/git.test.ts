@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { readFile } from "node:fs/promises";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -19,8 +20,11 @@ import {
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
-import { createGitTestRepository } from "./git-test-repository.ts";
+import { registerGitOpsContract } from "./git-ops-contract.ts";
+import { createGitTestDirectory, createGitTestRepository } from "./git-test-repository.ts";
 
+import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
+import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   AuthAttemptResult,
   GitCredentials,
@@ -53,6 +57,10 @@ interface RecordedHttpRequest {
 
 function packet(payload: string): Buffer {
   const body = Buffer.from(payload, "utf8");
+  return packetBytes(body);
+}
+
+function packetBytes(body: Uint8Array): Buffer {
   return Buffer.concat([
     Buffer.from((body.length + 4).toString(16).padStart(4, "0"), "utf8"),
     body,
@@ -72,6 +80,16 @@ function advertisementBody(): Buffer {
 
 function refsBody(refs: readonly string[]): Buffer {
   return Buffer.concat([...refs.map((ref) => packet(`${ref}\n`)), FLUSH]);
+}
+
+function uploadPackAdvertisementBody(oid: string): Buffer {
+  return Buffer.concat([
+    packet("# service=git-upload-pack\n"),
+    FLUSH,
+    packet(`${oid} HEAD\0multi_ack_detailed side-band-64k ofs-delta symref=HEAD:refs/heads/main\n`),
+    packet(`${oid} refs/heads/main\n`),
+    FLUSH,
+  ]);
 }
 
 function expectedListRefsBody(): Buffer {
@@ -199,6 +217,114 @@ function installFailedDiscoveryTransport(
   });
 
   return requests;
+}
+
+async function installRepositoryTransport(
+  t: TestContext,
+  repository: Awaited<ReturnType<typeof createGitTestRepository>>,
+): Promise<void> {
+  const { oid, packfile } = await repository.pack();
+  const refs = [
+    `${oid} HEAD symref-target:refs/heads/main`,
+    `${oid} refs/heads/main`,
+    `${OID_TAG} refs/tags/v1.0.0 peeled:${oid}`,
+  ] as const;
+
+  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    await collectBody(request.body);
+    const infoUrl = `${REMOTE_URL}/info/refs?service=git-upload-pack`;
+    if (request.url === infoUrl && request.method === "GET") {
+      const protocolV2 = request.headers?.["Git-Protocol"] === "version=2";
+      return response(
+        request.url,
+        200,
+        "OK",
+        "application/x-git-upload-pack-advertisement",
+        protocolV2 ? advertisementBody() : uploadPackAdvertisementBody(oid),
+      );
+    }
+
+    if (request.url === `${REMOTE_URL}/git-upload-pack` && request.method === "POST") {
+      const protocolV2 = request.headers?.["Git-Protocol"] === "version=2";
+      return response(
+        request.url,
+        200,
+        "OK",
+        "application/x-git-upload-pack-result",
+        protocolV2
+          ? refsBody(refs)
+          : Buffer.concat([
+              packet("NAK\n"),
+              packetBytes(Buffer.concat([Buffer.from([1]), packfile])),
+              FLUSH,
+            ]),
+      );
+    }
+
+    throw new Error(`unplanned Git HTTP request: ${request.method ?? "undefined"} ${request.url}`);
+  });
+}
+
+const productionGitOps = {
+  clone,
+  fetch,
+  forceUpdateRef,
+  checkout,
+  resolveRef,
+  currentBranch,
+  resolveRemoteRef,
+} satisfies GitOps;
+
+async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
+  const remote = await createGitTestRepository(t, { boundary: "local" });
+  const updatedOid = await remote.commit(
+    [{ filepath: "README.md", contents: "# updated\n" }],
+    "updated",
+  );
+  const worktree = await createGitTestRepository(t, { boundary: "local" });
+  const localUpdatedOid = await worktree.commit(
+    [{ filepath: "README.md", contents: "# updated\n" }],
+    "updated",
+  );
+  assert.strictEqual(localUpdatedOid, updatedOid);
+  await git.writeRef({
+    fs,
+    dir: worktree.dir,
+    ref: "refs/heads/main",
+    value: worktree.initialOid,
+    force: true,
+  });
+  await git.writeRef({
+    fs,
+    dir: worktree.dir,
+    ref: "refs/heads/feature",
+    value: updatedOid,
+    force: true,
+  });
+  await git.checkout({ fs, dir: worktree.dir, ref: "main", force: true });
+  await git.addRemote({ fs, dir: worktree.dir, remote: "origin", url: REMOTE_URL });
+  const cloneDir = await createGitTestDirectory(t, { boundary: "local" });
+  await installRepositoryTransport(t, remote);
+
+  return {
+    gitOps: productionGitOps,
+    worktreeDir: worktree.dir,
+    cloneDir,
+    remoteUrl: REMOTE_URL,
+    initialOid: worktree.initialOid,
+    updatedOid,
+    readFile: async (dir, filepath) => {
+      try {
+        return await readFile(`${dir}/${filepath}`, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          return null;
+        }
+
+        throw error;
+      }
+    },
+  };
 }
 
 function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fetch"): boolean {
@@ -918,6 +1044,10 @@ describe("resolveRemoteRef", () => {
       },
     ]);
   });
+});
+
+describe("GitOps contract", () => {
+  registerGitOpsContract(createProductionGitOps);
 });
 
 void ({ username: "user", password: "secret" } satisfies GitCredentials);
