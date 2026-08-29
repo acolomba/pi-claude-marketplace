@@ -67,6 +67,29 @@ void ({
   piSubagentsLoaded: true,
   piMcpAdapterLoaded: false,
 } satisfies PiBoundary.SoftDepStatus);
+void (true satisfies Same<PiBoundary.AgentMessage, PiBoundary.AgentEndEvent["messages"][number]>);
+void (true satisfies Same<
+  PiBoundary.AssistantMessage,
+  Extract<PiBoundary.AgentMessage, { role: "assistant" }>
+>);
+void (true satisfies Same<PiBoundary.StopReason, PiBoundary.AssistantMessage["stopReason"]>);
+
+// @ts-expect-error a text content block requires text
+void ({ type: "text" } satisfies PiBoundary.PiTextContentBlock);
+// @ts-expect-error a tool result accepts text content blocks only
+void ({ content: [{ type: "image", text: "message" }] } satisfies PiBoundary.ToolResultEventResult);
+// @ts-expect-error a resources-discover event has a closed reason set
+void ("manual" satisfies PiBoundary.ResourcesDiscoverEvent["reason"]);
+// @ts-expect-error resource paths are strings
+void ({ skillPaths: [42] } satisfies PiBoundary.ResourcesDiscoverResult);
+// @ts-expect-error soft-dependency status reports both dependencies
+void ({ piSubagentsLoaded: true } satisfies PiBoundary.SoftDepStatus);
+// @ts-expect-error an agent message has a supported role
+void ({ role: "unsupported" } satisfies PiBoundary.AgentMessage);
+// @ts-expect-error an assistant message has the assistant role
+void ({ role: "user" } satisfies PiBoundary.AssistantMessage);
+// @ts-expect-error a stop reason has a closed value set
+void ("unsupported" satisfies PiBoundary.StopReason);
 
 describe("getAgentDir", () => {
   test("re-exports the peer binding", () => {
@@ -78,6 +101,25 @@ describe("getAgentDir", () => {
 
     // assert
     assert.strictEqual(boundaryGetAgentDir, expectedGetAgentDir);
+  });
+
+  test("returns the explicit Pi agent directory", (t) => {
+    // arrange
+    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+    t.after(() => {
+      if (previousAgentDirectory === undefined) {
+        delete process.env.PI_CODING_AGENT_DIR;
+      } else {
+        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+      }
+    });
+    process.env.PI_CODING_AGENT_DIR = "/tmp/pi-api-agent";
+
+    // act
+    const agentDirectory = getAgentDir();
+
+    // assert
+    assert.strictEqual(agentDirectory, "/tmp/pi-api-agent");
   });
 });
 
