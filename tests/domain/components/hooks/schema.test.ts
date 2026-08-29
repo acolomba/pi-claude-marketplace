@@ -1,7 +1,33 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { HOOKS_VALIDATOR } from "../../../../extensions/pi-claude-marketplace/domain/components/hooks/schema.ts";
+import {
+  HOOKS_VALIDATOR,
+  type HookHandlerEntry,
+  type HooksConfig,
+} from "../../../../extensions/pi-claude-marketplace/domain/components/hooks/schema.ts";
+
+void ({ type: "command", command: "/bin/true" } satisfies HookHandlerEntry);
+void ({ type: "future-handler", futureHandlerField: true } satisfies HookHandlerEntry);
+void ({
+  PreToolUse: [
+    {
+      matcher: "Edit",
+      hooks: [{ type: "command", command: "/bin/true" }],
+    },
+  ],
+} satisfies HooksConfig);
+
+// @ts-expect-error a hook handler requires its type
+void ({ command: "/bin/true" } satisfies HookHandlerEntry);
+// @ts-expect-error a hook handler type must be a string
+void ({ type: 1 } satisfies HookHandlerEntry);
+// @ts-expect-error a hook handler command must be a string when present
+void ({ type: "command", command: 1 } satisfies HookHandlerEntry);
+// @ts-expect-error a hook group requires its hooks array
+void ({ PreToolUse: [{ matcher: "Edit" }] } satisfies HooksConfig);
+// @ts-expect-error a hook group matcher must be a string when present
+void ({ PreToolUse: [{ matcher: 1, hooks: [] }] } satisfies HooksConfig);
 
 describe("HOOKS_VALIDATOR", () => {
   for (const { role, config } of [
