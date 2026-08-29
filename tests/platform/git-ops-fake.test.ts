@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test, type TestContext } from "node:test";
 
 import {
+  GIT_OPS_CASE_NAMES,
   gitOpsContractCases,
   registerGitOpsContract,
   type GitOpsContractParticipant,
@@ -116,5 +117,9 @@ test("the no-force-update fake fails only the force-update invariant", async (t)
   }
 
   // assert
+  assert.deepStrictEqual(
+    gitOpsContractCases.map((contractCase) => contractCase.name),
+    GIT_OPS_CASE_NAMES,
+  );
   assert.deepStrictEqual(failures, ["force-updates a ref to the requested commit"]);
 });
