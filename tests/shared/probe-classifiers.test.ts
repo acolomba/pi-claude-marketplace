@@ -161,6 +161,50 @@ describe("narrowResolverNotes", () => {
     assert.deepStrictEqual(reasons, ["malformed mcp"]);
   });
 
+  test("deduplicates repeated equal notes", () => {
+    // arrange
+    const notes = ["contains lspServers", "contains lspServers"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["lsp"]);
+  });
+
+  test("does not match a malformed MCP prefix that is one character short", () => {
+    // arrange
+    const notes = ["malformed mcp referenc"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported source"]);
+  });
+
+  test("matches a malformed MCP prefix with an adjacent suffix character", () => {
+    // arrange
+    const notes = ["malformed mcp referencex"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["malformed mcp"]);
+  });
+
+  test("prefers an unsupported hooks prefix over an embedded lspServers token", () => {
+    // arrange
+    const notes = ["unsupported hooks: contains lspServers"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported hooks"]);
+  });
+
   test("prefers a malformed MCP prefix over an embedded lspServers token", () => {
     // arrange
     const notes = ['malformed mcp reference: file not found: "config/lspServers/servers.mcp.json"'];
@@ -171,9 +215,42 @@ describe("narrowResolverNotes", () => {
     // assert
     assert.deepStrictEqual(reasons, ["malformed mcp"]);
   });
+
+  test("preserves the first-seen order of distinct classifications", () => {
+    // arrange
+    const notes = [
+      "source dir does not exist",
+      "unsupported hooks: regex matcher detected",
+      "contains lspServers",
+      'malformed mcp reference: file not found: "x.mcp.json"',
+      "another unmatched note",
+    ];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, [
+      "unsupported source",
+      "unsupported hooks",
+      "lsp",
+      "malformed mcp",
+    ]);
+  });
 });
 
 describe("narrowUnsupportedKinds", () => {
+  test("returns no reasons for no kinds", () => {
+    // arrange
+    const kinds: string[] = [];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, []);
+  });
+
   test("classifies hooks as unsupported hooks", () => {
     // arrange
     const kinds = ["hooks"];
@@ -228,6 +305,28 @@ describe("narrowUnsupportedKinds", () => {
 
     // assert
     assert.deepStrictEqual(reasons, ["lsp", "unsupported component"]);
+  });
+
+  test("classifies a one-character lspServers near miss as unsupported component", () => {
+    // arrange
+    const kinds = ["lspServer"];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported component"]);
+  });
+
+  test("preserves the first-seen order of distinct kind classifications", () => {
+    // arrange
+    const kinds = ["monitors", "hooks", "lspServers", "themes", "hooks"];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported component", "unsupported hooks", "lsp"]);
   });
 });
 
@@ -313,6 +412,34 @@ describe("narrowProbeError", () => {
 
     // assert
     assert.strictEqual(reason, "unparseable");
+  });
+
+  test("classifies a marketplace manifest with a generic cause as invalid manifest", () => {
+    // arrange
+    const error = new InvalidMarketplaceManifestError("marketplace schema invalid", {
+      cause: new Error("schema validation failed"),
+    });
+
+    // act
+    const reason = narrowProbeError(error);
+
+    // assert
+    assert.strictEqual(reason, "invalid manifest");
+  });
+
+  test("does not classify a nested SyntaxError cause as unparseable", () => {
+    // arrange
+    const error = new InvalidMarketplaceManifestError("marketplace schema invalid", {
+      cause: new Error("schema validation failed", {
+        cause: new SyntaxError("Unexpected token"),
+      }),
+    });
+
+    // act
+    const reason = narrowProbeError(error);
+
+    // assert
+    assert.strictEqual(reason, "invalid manifest");
   });
 
   test("classifies a generic Error as unreadable", () => {
