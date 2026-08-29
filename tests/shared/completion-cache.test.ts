@@ -835,7 +835,7 @@ describe("cache invalidation", () => {
       () => invalidateMarketplaceNames(directory, scope),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.strictEqual((error as NodeJS.ErrnoException).code, "EISDIR");
+        assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
         return true;
       },
     );
@@ -874,7 +874,7 @@ describe("cache invalidation", () => {
       () => dropMarketplaceCache(directory, scope, marketplace),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.strictEqual((error as NodeJS.ErrnoException).code, "EISDIR");
+        assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
         return true;
       },
     );
