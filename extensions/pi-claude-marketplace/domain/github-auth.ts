@@ -297,7 +297,7 @@ async function pollTokenImpl(
  * Build the real fetch-backed DeviceFlowHttp for a provider. The URLs are
  * captured in closures so the PUBLIC requestCode/pollToken signatures stay
  * (clientId, scope) / (clientId, deviceCode, intervalSec) -- the mock seam in
- * tests/helpers/device-flow-mock.ts needs no change.
+ * tests/domain/device-flow-fake.ts needs no change.
  */
 function makeDeviceFlowHttp(deviceCodeUrl: string, tokenUrl: string): DeviceFlowHttp {
   return {

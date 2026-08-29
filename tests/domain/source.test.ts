@@ -652,8 +652,11 @@ describe("pathSource", () => {
         message: "Path source must be a non-empty string.",
       };
 
-      // act & assert
-      assert.throws(() => Reflect.apply(pathSource, undefined, [invalidPath]), expectedError);
+      // act
+      const createPathSource = () => Reflect.apply(pathSource, undefined, [invalidPath]);
+
+      // assert
+      assert.throws(createPathSource, expectedError);
     });
   }
 
@@ -699,8 +702,11 @@ describe("githubSource", () => {
       // arrange
       const expectedError = { name: "Error", message };
 
-      // act & assert
-      assert.throws(() => githubSource(raw), expectedError);
+      // act
+      const createGithubSource = () => githubSource(raw);
+
+      // assert
+      assert.throws(createGithubSource, expectedError);
     });
   }
 });

@@ -14,10 +14,11 @@ describe("assertSafeName", () => {
       // arrange
       const safeName = name;
 
-      // act & assert
-      assert.doesNotThrow(() => {
-        assertSafeName(safeName);
-      });
+      // act
+      const assertSafeNameReturn = assertSafeName(safeName);
+
+      // assert
+      assert.strictEqual(assertSafeNameReturn, undefined);
     });
   }
 
@@ -95,28 +96,27 @@ describe("assertSafeName", () => {
       // arrange
       const safeName = safeNeighbor;
 
-      // act & assert
-      assert.doesNotThrow(() => {
-        assertSafeName(safeName);
-      });
+      // act
+      const assertSafeNameReturn = assertSafeName(safeName);
+
+      // assert
+      assert.strictEqual(assertSafeNameReturn, undefined);
     });
 
     test(`rejects ${JSON.stringify(unsafeName)}`, () => {
       // arrange
       const rejectedName = unsafeName;
 
-      // act & assert
-      assert.throws(
-        () => {
-          assertSafeName(rejectedName);
-        },
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.strictEqual(error.constructor, Error);
-          assert.strictEqual(error.message, errorMessage);
-          return true;
-        },
-      );
+      // act
+      const assertNameSafety = () => assertSafeName(rejectedName);
+
+      // assert
+      assert.throws(assertNameSafety, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
     });
   }
 
@@ -141,18 +141,16 @@ describe("assertSafeName", () => {
       // arrange
       const unsafeName = name;
 
-      // act & assert
-      assert.throws(
-        () => {
-          assertSafeName(unsafeName, label);
-        },
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.strictEqual(error.constructor, Error);
-          assert.strictEqual(error.message, errorMessage);
-          return true;
-        },
-      );
+      // act
+      const assertNameSafety = () => assertSafeName(unsafeName, label);
+
+      // assert
+      assert.throws(assertNameSafety, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
     });
   }
 });
@@ -209,16 +207,16 @@ describe("generatedSkillName", () => {
       const plugin = pluginName;
       const source = sourceName;
 
-      // act & assert
-      assert.throws(
-        () => generatedSkillName(plugin, source),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.strictEqual(error.constructor, Error);
-          assert.strictEqual(error.message, errorMessage);
-          return true;
-        },
-      );
+      // act
+      const generateSkillName = () => generatedSkillName(plugin, source);
+
+      // assert
+      assert.throws(generateSkillName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
     });
   }
 });
@@ -320,16 +318,16 @@ describe("generatedCommandName", () => {
       const plugin = pluginName;
       const source = sourceName;
 
-      // act & assert
-      assert.throws(
-        () => generatedCommandName(plugin, source),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.strictEqual(error.constructor, Error);
-          assert.strictEqual(error.message, errorMessage);
-          return true;
-        },
-      );
+      // act
+      const generateCommandName = () => generatedCommandName(plugin, source);
+
+      // assert
+      assert.throws(generateCommandName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
     });
   }
 });
@@ -402,16 +400,16 @@ describe("generatedAgentName", () => {
       const plugin = pluginName;
       const source = sourceName;
 
-      // act & assert
-      assert.throws(
-        () => generatedAgentName(plugin, source),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.strictEqual(error.constructor, Error);
-          assert.strictEqual(error.message, errorMessage);
-          return true;
-        },
-      );
+      // act
+      const generateAgentName = () => generatedAgentName(plugin, source);
+
+      // assert
+      assert.throws(generateAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
     });
   }
 });
