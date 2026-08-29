@@ -46,7 +46,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Canonical exceptions | Use `// act & assert` for one-expression cases; do not invent runtime phases for type-only modules. | ✓ |
+| Canonical exceptions | Use `// act & assert` only for one throwing/rejection expression; ordinary assertions and data rows use separate phases; do not invent runtime phases for type-only modules. | ✓ |
 | Always split runtime phases | Require separate act and assert markers for every runtime case. | |
 | Strict three-marker form | Require all three markers even for compile-time-only owner tests. | |
 

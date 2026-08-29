@@ -198,8 +198,9 @@ test("sends the provider's device and token requests through fetch", async (t) =
 ```
 
 Keep each current owner's public behavior. Replace legacy comments and weak
-field assertions with this structure. A data row uses `// act & assert` only
-when one assertion expression is the complete case.
+field assertions with this structure. A data row uses separate lowercase
+arrange, act, and assert phases. Use `// act & assert` only for one
+throwing/rejection expression.
 
 ### `extensions/pi-claude-marketplace/domain/components/hooks.ts`
 
@@ -296,6 +297,25 @@ function partiallyAvailable(
 
 Add the matching literal to all three constructor outputs. Narrow first on
 `installable`. Keep `state` checks for the secondary three-way behavior.
+
+**Pre-resolver supporting-fixture field pattern:**
+
+```typescript
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
+
+const fixture: ResolvedPluginInstallable = {
+  ...INSTALLABLE_FIXTURE_FIELDS,
+  state: "installable",
+  // existing exact fixture fields
+};
+```
+
+Use the equivalent false-literal bag only for unavailable fixtures. The spread
+is deliberate: it typechecks while the old structural type does not declare the
+member and satisfies the required literal after P108-18. Do not use an optional
+field, `any`, or a result-type cast. P108-06 owns seven agents/commands/integration
+construction sites; P108-19 owns the remaining twelve integration/skills/classifier
+sites. P108-18 edits none of those supporting files.
 
 ### `tests/domain/resolver.test.ts`
 
@@ -721,7 +741,7 @@ Apply this rule to every runtime case created or modified in Phase 108:
 
 1. Use lowercase `// arrange`, `// act`, and `// assert` in this order.
 2. Separate the phases with blank lines.
-3. Use `// act & assert` only for one assertion expression.
+3. Use `// act & assert` only for one throwing/rejection expression; data rows use separate phases.
 4. Give every stateful case fresh dependencies.
 5. Assert the whole public value or state before interaction verification.
 6. End each `strong-mock` case with `verify()` for every mock.
@@ -752,7 +772,9 @@ CLI, a keychain, or a real timer.
 
 The mirrored owner imports its production source and owns its direct coverage.
 Contract and fake tests are supplemental evidence. Import-only helper relocation
-does not complete a later production pair.
+does not complete a later production pair. Likewise, an exact-literal resolver
+fixture preflight in a supporting test does not complete that test's later
+production pair; the frontmatter owner remains the plan's sole pair.
 
 ## Relocation Reference Inventory
 

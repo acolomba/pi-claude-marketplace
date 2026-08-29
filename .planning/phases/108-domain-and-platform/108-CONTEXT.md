@@ -17,7 +17,7 @@ Deliver compliant mirrored owner tests for the 23 domain and platform production
 
 - **D-01:** Normalize all 19 Phase 108 owner tests that already pass focused coverage. Do not limit changes to the smallest patch when a test does not follow the v1.19 unit-testing structure. — **Reversibility:** costly — Reverting this convention would touch the owner and supporting tests across the 204-pair milestone.
 - **D-02:** Every runtime case created or modified during v1.19 uses explicit lowercase `// arrange`, `// act`, and `// assert` comments in that order, separated according to the canonical guideline. Every generated pair plan must state this requirement.
-- **D-03:** A single assertion expression can use lowercase `// act & assert`. Type-only owner tests use `satisfies` checks and `@ts-expect-error` negatives without artificial runtime cases or phase comments.
+- **D-03:** One throwing/rejection expression can use lowercase `// act & assert`. Ordinary assertions and data rows use separate lowercase phases. Type-only owner tests use `satisfies` checks and `@ts-expect-error` negatives without artificial runtime cases or phase comments.
 - **D-04:** Apply the normalization to all 204 owner tests and every contract, fake, negative-control, or supplemental case created or modified during v1.19. Do not sweep untouched legacy supplemental suites solely to change comments.
 - **D-05:** The canonical rule and guideline already specify lowercase comments. Treat them as locked references; do not rewrite preserved handoff inputs or create documentation churn where the required wording is already present.
 
@@ -101,7 +101,7 @@ Deliver compliant mirrored owner tests for the 23 domain and platform production
 <specifics>
 ## Specific Ideas
 
-- The exact phase comments are lowercase: `// arrange`, `// act`, `// assert`, and `// act & assert`.
+- The exact phase comments are lowercase: `// arrange`, `// act`, and `// assert`; `// act & assert` is limited to one throwing/rejection expression.
 - Normalization is intentional even for the 19 Phase 108 owner tests that already pass direct coverage.
 - A broken adapter is useful only when its defect is localized: exactly one independently named contract case fails and every other case stays green.
 

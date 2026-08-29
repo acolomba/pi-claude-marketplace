@@ -36,9 +36,9 @@ Use:
 - Coverage: Node's `--experimental-test-coverage`.
 
 ```ts
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
-import { mock, verify, when } from 'strong-mock'
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { mock, verify, when } from "strong-mock";
 ```
 
 Do not add another test runner, assertion library, or mocking library. Do not import the process-wide Node mock tracker (`mock` from `node:test`); use the context's `t.mock`.
@@ -138,77 +138,83 @@ The examples in this section are based on one small order module. It takes every
 ```ts
 // src/orders/cart-total.ts
 export interface CartLine {
-  sku: string
-  quantity: number
-  unitPrice: number
+  sku: string;
+  quantity: number;
+  unitPrice: number;
 }
 
 export function cartTotal(lines: readonly CartLine[]): number {
-  return lines.reduce((total, line) => total + line.quantity * line.unitPrice, 0)
+  return lines.reduce((total, line) => total + line.quantity * line.unitPrice, 0);
 }
 ```
 
 ```ts
 // src/orders/order-service.ts
-import { cartTotal, type CartLine } from './cart-total.js'
+import { cartTotal, type CartLine } from "./cart-total.js";
 
 export interface Cart {
-  customerId: string
-  lines: readonly CartLine[]
+  customerId: string;
+  lines: readonly CartLine[];
 }
 
 export interface Order {
-  id: string
-  customerId: string
-  lines: readonly CartLine[]
-  total: number
-  status: 'placed' | 'cancelled'
-  placedAt: Date
+  id: string;
+  customerId: string;
+  lines: readonly CartLine[];
+  total: number;
+  status: "placed" | "cancelled";
+  placedAt: Date;
 }
 
 export type OrderEvent =
-  | { type: 'order.placed'; orderId: string; total: number }
-  | { type: 'order.cancelled'; orderId: string }
+  | { type: "order.placed"; orderId: string; total: number }
+  | { type: "order.cancelled"; orderId: string };
 
 export interface OrderStore {
-  get(orderId: string): Promise<Order | undefined>
-  put(order: Order): Promise<void>
+  get(orderId: string): Promise<Order | undefined>;
+  put(order: Order): Promise<void>;
 }
 
 export interface Payments {
-  charge(customerId: string, amount: number): Promise<void>
+  charge(customerId: string, amount: number): Promise<void>;
 }
 
 export interface OrderEvents {
-  publish(event: OrderEvent): Promise<void>
+  publish(event: OrderEvent): Promise<void>;
 }
 
 export interface Clock {
-  now(): Date
+  now(): Date;
 }
 
 export interface OrderIds {
-  next(): string
+  next(): string;
 }
 
 export interface OrderServiceDependencies {
-  clock: Clock
-  events: OrderEvents
-  ids: OrderIds
-  orders: OrderStore
-  payments: Payments
+  clock: Clock;
+  events: OrderEvents;
+  ids: OrderIds;
+  orders: OrderStore;
+  payments: Payments;
 }
 
 export class OrderNotFoundError extends Error {
-  readonly code = 'ORDER_NOT_FOUND'
+  readonly code = "ORDER_NOT_FOUND";
 
   constructor(readonly orderId: string) {
-    super(`Order ${orderId} not found`)
-    this.name = 'OrderNotFoundError'
+    super(`Order ${orderId} not found`);
+    this.name = "OrderNotFoundError";
   }
 }
 
-export function createOrderService({ clock, events, ids, orders, payments }: OrderServiceDependencies) {
+export function createOrderService({
+  clock,
+  events,
+  ids,
+  orders,
+  payments,
+}: OrderServiceDependencies) {
   return {
     async place(cart: Cart): Promise<Order> {
       const order: Order = {
@@ -216,90 +222,90 @@ export function createOrderService({ clock, events, ids, orders, payments }: Ord
         customerId: cart.customerId,
         lines: cart.lines,
         total: cartTotal(cart.lines),
-        status: 'placed',
+        status: "placed",
         placedAt: clock.now(),
-      }
+      };
 
-      await payments.charge(order.customerId, order.total)
-      await orders.put(order)
-      await events.publish({ type: 'order.placed', orderId: order.id, total: order.total })
+      await payments.charge(order.customerId, order.total);
+      await orders.put(order);
+      await events.publish({ type: "order.placed", orderId: order.id, total: order.total });
 
-      return order
+      return order;
     },
 
     async cancel(orderId: string): Promise<Order> {
-      const order = await orders.get(orderId)
+      const order = await orders.get(orderId);
 
       if (order === undefined) {
-        throw new OrderNotFoundError(orderId)
+        throw new OrderNotFoundError(orderId);
       }
 
-      if (order.status === 'cancelled') {
-        return order
+      if (order.status === "cancelled") {
+        return order;
       }
 
-      const cancelled: Order = { ...order, status: 'cancelled' }
+      const cancelled: Order = { ...order, status: "cancelled" };
 
-      await orders.put(cancelled)
-      await events.publish({ type: 'order.cancelled', orderId })
+      await orders.put(cancelled);
+      await events.publish({ type: "order.cancelled", orderId });
 
-      return cancelled
+      return cancelled;
     },
-  }
+  };
 }
 
-export type OrderService = ReturnType<typeof createOrderService>
+export type OrderService = ReturnType<typeof createOrderService>;
 ```
 
 The test support for this concern lives next to its test modules: a fake for the stateful store and a seed module for shared values.
 
 ```ts
 // test/orders/create-fake-order-store.ts
-import type { Order, OrderStore } from '../../src/orders/order-service.js'
+import type { Order, OrderStore } from "../../src/orders/order-service.js";
 
 export function createFakeOrderStore(): OrderStore {
-  const orders = new Map<string, Order>()
+  const orders = new Map<string, Order>();
 
   return {
     async get(orderId) {
-      const order = orders.get(orderId)
+      const order = orders.get(orderId);
 
-      return order === undefined ? undefined : structuredClone(order)
+      return order === undefined ? undefined : structuredClone(order);
     },
 
     async put(order) {
-      orders.set(order.id, structuredClone(order))
+      orders.set(order.id, structuredClone(order));
     },
-  }
+  };
 }
 ```
 
 ```ts
 // test/orders/order-seeds.ts
-import type { Cart, Order } from '../../src/orders/order-service.js'
+import type { Cart, Order } from "../../src/orders/order-service.js";
 
 export function cart(): Cart {
   return {
-    customerId: 'customer-1',
+    customerId: "customer-1",
     lines: [
-      { sku: 'sku-a', quantity: 2, unitPrice: 10 },
-      { sku: 'sku-b', quantity: 1, unitPrice: 5 },
+      { sku: "sku-a", quantity: 2, unitPrice: 10 },
+      { sku: "sku-b", quantity: 1, unitPrice: 5 },
     ],
-  }
+  };
 }
 
 export function placedOrder(): Order {
   return {
-    id: 'order-123',
-    customerId: 'customer-1',
+    id: "order-123",
+    customerId: "customer-1",
     lines: [
-      { sku: 'sku-a', quantity: 2, unitPrice: 10 },
-      { sku: 'sku-b', quantity: 1, unitPrice: 5 },
+      { sku: "sku-a", quantity: 2, unitPrice: 10 },
+      { sku: "sku-b", quantity: 1, unitPrice: 5 },
     ],
     total: 25,
-    status: 'placed',
-    placedAt: new Date('2026-08-28T10:00:00Z'),
-  }
+    status: "placed",
+    placedAt: new Date("2026-08-28T10:00:00Z"),
+  };
 }
 ```
 
@@ -309,9 +315,9 @@ The test module uses a stub for the clock and the ID source, a fake for the stor
 
 ```ts
 // test/orders/order-service.test.ts
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
-import { mock, verify, when } from 'strong-mock'
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { mock, verify, when } from "strong-mock";
 import {
   type Clock,
   createOrderService,
@@ -320,97 +326,101 @@ import {
   type OrderIds,
   OrderNotFoundError,
   type Payments,
-} from '../../src/orders/order-service.js'
-import { createFakeOrderStore } from './create-fake-order-store.js'
-import { cart, placedOrder } from './order-seeds.js'
+} from "../../src/orders/order-service.js";
+import { createFakeOrderStore } from "./create-fake-order-store.js";
+import { cart, placedOrder } from "./order-seeds.js";
 
-const clock = { now: () => new Date('2026-08-28T10:00:00Z') } satisfies Clock
-const ids = { next: () => 'order-123' } satisfies OrderIds
+const clock = { now: () => new Date("2026-08-28T10:00:00Z") } satisfies Clock;
+const ids = { next: () => "order-123" } satisfies OrderIds;
 
-describe('place', () => {
-  test('charges the customer, stores the order, and publishes order.placed', async () => {
+describe("place", () => {
+  test("charges the customer, stores the order, and publishes order.placed", async () => {
     // arrange
-    const expectedOrder = placedOrder()
-    const orders = createFakeOrderStore()
-    const payments = mock<Payments>({ exactParams: true, name: 'payments' })
-    const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
-    when(() => payments.charge('customer-1', 25)).thenResolve(undefined)
-    when(() => events.publish({ type: 'order.placed', orderId: 'order-123', total: 25 })).thenResolve(undefined)
-    const orderService = createOrderService({ clock, events, ids, orders, payments })
+    const expectedOrder = placedOrder();
+    const orders = createFakeOrderStore();
+    const payments = mock<Payments>({ exactParams: true, name: "payments" });
+    const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
+    when(() => payments.charge("customer-1", 25)).thenResolve(undefined);
+    when(() =>
+      events.publish({ type: "order.placed", orderId: "order-123", total: 25 }),
+    ).thenResolve(undefined);
+    const orderService = createOrderService({ clock, events, ids, orders, payments });
 
     // act
-    const order = await orderService.place(cart())
+    const order = await orderService.place(cart());
 
     // assert
-    assert.deepStrictEqual(order, expectedOrder)
-    assert.deepStrictEqual(await orders.get('order-123'), expectedOrder)
-    verify(payments)
-    verify(events)
-  })
-})
+    assert.deepStrictEqual(order, expectedOrder);
+    assert.deepStrictEqual(await orders.get("order-123"), expectedOrder);
+    verify(payments);
+    verify(events);
+  });
+});
 
-describe('cancel', () => {
-  test('stores the cancelled order and publishes order.cancelled', async () => {
+describe("cancel", () => {
+  test("stores the cancelled order and publishes order.cancelled", async () => {
     // arrange
-    const expectedOrder: Order = { ...placedOrder(), status: 'cancelled' }
-    const orders = createFakeOrderStore()
-    await orders.put(placedOrder())
-    const payments = mock<Payments>({ exactParams: true, name: 'payments' })
-    const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
-    when(() => events.publish({ type: 'order.cancelled', orderId: 'order-123' })).thenResolve(undefined)
-    const orderService = createOrderService({ clock, events, ids, orders, payments })
+    const expectedOrder: Order = { ...placedOrder(), status: "cancelled" };
+    const orders = createFakeOrderStore();
+    await orders.put(placedOrder());
+    const payments = mock<Payments>({ exactParams: true, name: "payments" });
+    const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
+    when(() => events.publish({ type: "order.cancelled", orderId: "order-123" })).thenResolve(
+      undefined,
+    );
+    const orderService = createOrderService({ clock, events, ids, orders, payments });
 
     // act
-    const order = await orderService.cancel('order-123')
+    const order = await orderService.cancel("order-123");
 
     // assert
-    assert.deepStrictEqual(order, expectedOrder)
-    assert.deepStrictEqual(await orders.get('order-123'), expectedOrder)
-    verify(payments)
-    verify(events)
-  })
+    assert.deepStrictEqual(order, expectedOrder);
+    assert.deepStrictEqual(await orders.get("order-123"), expectedOrder);
+    verify(payments);
+    verify(events);
+  });
 
-  test('returns an already cancelled order without rewriting it', async (t) => {
+  test("returns an already cancelled order without rewriting it", async (t) => {
     // arrange
-    const expectedOrder: Order = { ...placedOrder(), status: 'cancelled' }
-    const orders = createFakeOrderStore()
-    await orders.put(expectedOrder)
-    const putSpy = t.mock.method(orders, 'put')
-    const payments = mock<Payments>({ exactParams: true, name: 'payments' })
-    const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
-    const orderService = createOrderService({ clock, events, ids, orders, payments })
+    const expectedOrder: Order = { ...placedOrder(), status: "cancelled" };
+    const orders = createFakeOrderStore();
+    await orders.put(expectedOrder);
+    const putSpy = t.mock.method(orders, "put");
+    const payments = mock<Payments>({ exactParams: true, name: "payments" });
+    const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
+    const orderService = createOrderService({ clock, events, ids, orders, payments });
 
     // act
-    const order = await orderService.cancel('order-123')
+    const order = await orderService.cancel("order-123");
 
     // assert
-    assert.deepStrictEqual(order, expectedOrder)
-    assert.strictEqual(putSpy.mock.callCount(), 0)
-    verify(payments)
-    verify(events)
-  })
+    assert.deepStrictEqual(order, expectedOrder);
+    assert.strictEqual(putSpy.mock.callCount(), 0);
+    verify(payments);
+    verify(events);
+  });
 
-  test('rejects an unknown order', async () => {
+  test("rejects an unknown order", async () => {
     // arrange
-    const orders = createFakeOrderStore()
-    const payments = mock<Payments>({ exactParams: true, name: 'payments' })
-    const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
-    const orderService = createOrderService({ clock, events, ids, orders, payments })
+    const orders = createFakeOrderStore();
+    const payments = mock<Payments>({ exactParams: true, name: "payments" });
+    const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
+    const orderService = createOrderService({ clock, events, ids, orders, payments });
 
     // act & assert
     await assert.rejects(
-      () => orderService.cancel('order-999'),
+      () => orderService.cancel("order-999"),
       (error: unknown) => {
-        assert.ok(error instanceof OrderNotFoundError)
-        assert.strictEqual(error.code, 'ORDER_NOT_FOUND')
-        assert.strictEqual(error.orderId, 'order-999')
-        return true
+        assert.ok(error instanceof OrderNotFoundError);
+        assert.strictEqual(error.code, "ORDER_NOT_FOUND");
+        assert.strictEqual(error.orderId, "order-999");
+        return true;
       },
-    )
-    verify(payments)
-    verify(events)
-  })
-})
+    );
+    verify(payments);
+    verify(events);
+  });
+});
 ```
 
 A mock with no expectations, such as `payments` in the `cancel` cases, proves that the module does not touch that port: any call throws immediately. The remainder of this section details the guidelines adopted by this sample.
@@ -460,21 +470,21 @@ Use a short sentence that states the public behavior.
 #### Good case names
 
 ```ts
-test('returns an already cancelled order without rewriting it', async (t) => {
+test("returns an already cancelled order without rewriting it", async (t) => {
   // ...
-})
+});
 
-test('rejects an unknown order', async () => {
+test("rejects an unknown order", async () => {
   // ...
-})
+});
 ```
 
 #### Bad case names
 
 ```ts
-test('works', () => {})
-test('happy path', () => {})
-test('cancel test', () => {})
+test("works", () => {});
+test("happy path", () => {});
+test("cancel test", () => {});
 ```
 
 If traceability helps, include a durable requirement or decision ID in the title. Do not put plan, phase, task, or ticket-workflow references in a title. Those labels describe a work session, not lasting behavior.
@@ -494,20 +504,20 @@ Name a value after what it is in the production vocabulary. Do not use placehold
 
 ```ts
 // act
-const order = await orderService.place(cart())
+const order = await orderService.place(cart());
 
 // assert
-assert.deepStrictEqual(order, expectedOrder)
+assert.deepStrictEqual(order, expectedOrder);
 ```
 
 #### Bad value names
 
 ```ts
 // act
-const result = await sut.place(data)
+const result = await sut.place(data);
 
 // assert
-assert.deepStrictEqual(result, expected)
+assert.deepStrictEqual(result, expected);
 ```
 
 ### Test layout
@@ -518,19 +528,17 @@ Structure every case as Arrange, Act, Assert, and mark each phase with a comment
 - `// act`: invoke the exported behavior and keep its result.
 - `// assert`: assert the public result and state, then verify every mock.
 
-Write the comments in lowercase, in that order, and separate the phases with a blank line. When the act and the assertion are one expression, such as `assert.rejects()`, `assert.throws()`, or a one-line data row, mark that phase `// act & assert`. Do not add other comments to a case unless the setup is not obvious.
+Write the comments in lowercase, in that order, and separate the phases with a blank line. Use `// act & assert` only when one `assert.rejects()` or `assert.throws()` expression performs both the action and assertion. Data rows still use separate phases. Do not add other comments to a case unless the setup is not obvious.
 
 ```ts
-test('stores the cancelled order and publishes order.cancelled', async () => {
+test("stores the cancelled order and publishes order.cancelled", async () => {
   // arrange
   // ...
-
   // act
   // ...
-
   // assert
   // ...
-})
+});
 ```
 
 ### Assertions
@@ -548,23 +556,23 @@ Compare the whole value with `assert.deepStrictEqual()`. Do not assert existence
 #### Good assertions
 
 ```ts
-assert.deepStrictEqual(order, expectedOrder)
-assert.deepStrictEqual(await orders.get('order-123'), expectedOrder)
+assert.deepStrictEqual(order, expectedOrder);
+assert.deepStrictEqual(await orders.get("order-123"), expectedOrder);
 ```
 
 **Bad** (passes for the wrong reasons)
 
 ```ts
-assert.ok(order)
-assert.strictEqual(order.lines.length, 2)
+assert.ok(order);
+assert.strictEqual(order.lines.length, 2);
 ```
 
 **Bad** (brittle and incomplete)
 
 ```ts
-assert.strictEqual(order.id, expectedOrder.id)
-assert.strictEqual(order.total, expectedOrder.total)
-assert.strictEqual(order.status, expectedOrder.status)
+assert.strictEqual(order.id, expectedOrder.id);
+assert.strictEqual(order.total, expectedOrder.total);
+assert.strictEqual(order.status, expectedOrder.status);
 ```
 
 An existence or length assertion is enough only when existence or length is the complete public promise. A standalone negative assertion such as `assert.notStrictEqual()` or `assert.ok(order !== undefined)` keeps passing no matter what the value actually is; assert what the value is instead.
@@ -575,14 +583,14 @@ Assert a typed error class and its structured fields. Do not match a message sub
 
 ```ts
 await assert.rejects(
-  () => orderService.cancel('order-999'),
+  () => orderService.cancel("order-999"),
   (error: unknown) => {
-    assert.ok(error instanceof OrderNotFoundError)
-    assert.strictEqual(error.code, 'ORDER_NOT_FOUND')
-    assert.strictEqual(error.orderId, 'order-999')
-    return true
+    assert.ok(error instanceof OrderNotFoundError);
+    assert.strictEqual(error.code, "ORDER_NOT_FOUND");
+    assert.strictEqual(error.orderId, "order-999");
+    return true;
   },
-)
+);
 ```
 
 Use `assert.throws()` in the same way for synchronous behavior.
@@ -652,33 +660,33 @@ Assert the module's result. Do not assert a stub's call count unless the call it
 #### Good stub
 
 ```ts
-test('stamps the order with the issued ID', async () => {
+test("stamps the order with the issued ID", async () => {
   // arrange
-  const ids = { next: () => 'order-123' } satisfies OrderIds
-  const orderService = createOrderService({ clock, events, ids, orders, payments })
+  const ids = { next: () => "order-123" } satisfies OrderIds;
+  const orderService = createOrderService({ clock, events, ids, orders, payments });
 
   // act
-  const order = await orderService.place(cart())
+  const order = await orderService.place(cart());
 
   // assert
-  assert.strictEqual(order.id, 'order-123')
-})
+  assert.strictEqual(order.id, "order-123");
+});
 ```
 
 **Bad** (asserts the stub instead of the behavior)
 
 ```ts
-test('stamps the order with the issued ID', async (t) => {
+test("stamps the order with the issued ID", async (t) => {
   // arrange
-  const next = t.mock.fn(() => 'order-123')
-  const orderService = createOrderService({ clock, events, ids: { next }, orders, payments })
+  const next = t.mock.fn(() => "order-123");
+  const orderService = createOrderService({ clock, events, ids: { next }, orders, payments });
 
   // act
-  await orderService.place(cart())
+  await orderService.place(cart());
 
   // assert
-  assert.strictEqual(next.mock.callCount(), 1)
-})
+  assert.strictEqual(next.mock.callCount(), 1);
+});
 ```
 
 #### Spies
@@ -686,21 +694,21 @@ test('stamps the order with the issued ID', async (t) => {
 Use a spy only when real behavior should still run and the observation itself is the promise: "writes exactly once", "does not rewrite", "invokes the callback for each item". Wrap the real method with `t.mock.method()` and give it no replacement implementation; with a replacement, it is a stub.
 
 ```ts
-test('returns an already cancelled order without rewriting it', async (t) => {
+test("returns an already cancelled order without rewriting it", async (t) => {
   // arrange
-  const expectedOrder: Order = { ...placedOrder(), status: 'cancelled' }
-  const orders = createFakeOrderStore()
-  await orders.put(expectedOrder)
-  const putSpy = t.mock.method(orders, 'put')
-  const orderService = createOrderService({ clock, events, ids, orders, payments })
+  const expectedOrder: Order = { ...placedOrder(), status: "cancelled" };
+  const orders = createFakeOrderStore();
+  await orders.put(expectedOrder);
+  const putSpy = t.mock.method(orders, "put");
+  const orderService = createOrderService({ clock, events, ids, orders, payments });
 
   // act
-  const order = await orderService.cancel('order-123')
+  const order = await orderService.cancel("order-123");
 
   // assert
-  assert.deepStrictEqual(order, expectedOrder)
-  assert.strictEqual(putSpy.mock.callCount(), 0)
-})
+  assert.deepStrictEqual(order, expectedOrder);
+  assert.strictEqual(putSpy.mock.callCount(), 0);
+});
 ```
 
 Call assertions come after public result and state assertions. Read arguments from `putSpy.mock.calls[i].arguments` when the arguments are part of the promise. If the call is not an explicit promise, leave it unasserted.
@@ -736,25 +744,27 @@ Every mock must define its complete promised interaction and be verified explici
 #### Good interaction mock
 
 ```ts
-test('charges the customer, stores the order, and publishes order.placed', async () => {
+test("charges the customer, stores the order, and publishes order.placed", async () => {
   // arrange
-  const expectedOrder = placedOrder()
-  const orders = createFakeOrderStore()
-  const payments = mock<Payments>({ exactParams: true, name: 'payments' })
-  const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
-  when(() => payments.charge('customer-1', 25)).thenResolve(undefined)
-  when(() => events.publish({ type: 'order.placed', orderId: 'order-123', total: 25 })).thenResolve(undefined)
-  const orderService = createOrderService({ clock, events, ids, orders, payments })
+  const expectedOrder = placedOrder();
+  const orders = createFakeOrderStore();
+  const payments = mock<Payments>({ exactParams: true, name: "payments" });
+  const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
+  when(() => payments.charge("customer-1", 25)).thenResolve(undefined);
+  when(() => events.publish({ type: "order.placed", orderId: "order-123", total: 25 })).thenResolve(
+    undefined,
+  );
+  const orderService = createOrderService({ clock, events, ids, orders, payments });
 
   // act
-  const order = await orderService.place(cart())
+  const order = await orderService.place(cart());
 
   // assert
-  assert.deepStrictEqual(order, expectedOrder)
-  assert.deepStrictEqual(await orders.get('order-123'), expectedOrder)
-  verify(payments)
-  verify(events)
-})
+  assert.deepStrictEqual(order, expectedOrder);
+  assert.deepStrictEqual(await orders.get("order-123"), expectedOrder);
+  verify(payments);
+  verify(events);
+});
 ```
 
 This pattern fails verification when `charge` or `publish` is omitted. It fails immediately when either is repeated, receives different arguments, or when an unpromised operation is called. `verify()` also reports an unexpected call that production code caught.
@@ -762,8 +772,8 @@ This pattern fails verification when `charge` or `publish` is omitted. It fails 
 **Bad** (passes when the amount or the event is wrong)
 
 ```ts
-when(() => payments.charge(It.isAny(), It.isAny())).thenResolve(undefined)
-when(() => events.publish(It.isAny())).thenResolve(undefined)
+when(() => payments.charge(It.isAny(), It.isAny())).thenResolve(undefined);
+when(() => events.publish(It.isAny())).thenResolve(undefined);
 ```
 
 Do not use `It.isAny()`. Use `It.matches()` or `It.containsObject()` only when an argument cannot be compared structurally, such as a function or a stream, and match every meaningful property of it.
@@ -771,9 +781,9 @@ Do not use `It.isAny()`. Use `It.matches()` or `It.containsObject()` only when a
 When a case uses several mocks, verify every one explicitly:
 
 ```ts
-assert.deepStrictEqual(order, expectedOrder)
-verify(payments)
-verify(events)
+assert.deepStrictEqual(order, expectedOrder);
+verify(payments);
+verify(events);
 ```
 
 Do not hide verification in a test hook, shared registry, or generic cleanup function. The verification calls belong in the case that states the promises.
@@ -783,28 +793,28 @@ Do not hide verification in a test hook, shared registry, or generic cleanup fun
 If order is part of the promise, record every relevant operation in one shared order log. Replace each promised method with a function that records its call, and record the meaningful arguments too, because the replacement function is no longer checked by `exactParams`:
 
 ```ts
-test('charges the customer before publishing order.placed', async () => {
+test("charges the customer before publishing order.placed", async () => {
   // arrange
-  const log: string[] = []
-  const orders = createFakeOrderStore()
-  const payments = mock<Payments>({ exactParams: true, name: 'payments' })
-  const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
+  const log: string[] = [];
+  const orders = createFakeOrderStore();
+  const payments = mock<Payments>({ exactParams: true, name: "payments" });
+  const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
   when(() => payments.charge).thenReturn(async (customerId, amount) => {
-    log.push(`charge ${customerId} ${amount}`)
-  })
+    log.push(`charge ${customerId} ${amount}`);
+  });
   when(() => events.publish).thenReturn(async (event) => {
-    log.push(`publish ${event.type}`)
-  })
-  const orderService = createOrderService({ clock, events, ids, orders, payments })
+    log.push(`publish ${event.type}`);
+  });
+  const orderService = createOrderService({ clock, events, ids, orders, payments });
 
   // act
-  await orderService.place(cart())
+  await orderService.place(cart());
 
   // assert
-  assert.deepStrictEqual(log, ['charge customer-1 25', 'publish order.placed'])
-  verify(payments)
-  verify(events)
-})
+  assert.deepStrictEqual(log, ["charge customer-1 25", "publish order.placed"]);
+  verify(payments);
+  verify(events);
+});
 ```
 
 Compare the shared log with the complete expected order and explicitly verify both mocks. Do not use separate per-method logs to prove order across methods. `strong-mock` does not verify cross-mock order for you.
@@ -841,22 +851,22 @@ Do not use module replacement to isolate a production module. Do not use `t.mock
 #### Good test data
 
 ```ts
-const orders = createFakeOrderStore()
-await orders.put({ ...placedOrder(), status: 'cancelled' })
+const orders = createFakeOrderStore();
+await orders.put({ ...placedOrder(), status: "cancelled" });
 ```
 
 **Bad** (obscures what matters to the case)
 
 ```ts
-const orders = createFakeOrderStore()
+const orders = createFakeOrderStore();
 await orders.put({
-  id: 'a3f1c9e2-7b44-4d0e-9c21-5e8f0a6b1d77',
-  customerId: 'jane.doe+orders@example.com',
-  lines: [{ sku: 'ISBN-978-0-13-468599-1', quantity: 1, unitPrice: 42.99 }],
+  id: "a3f1c9e2-7b44-4d0e-9c21-5e8f0a6b1d77",
+  customerId: "jane.doe+orders@example.com",
+  lines: [{ sku: "ISBN-978-0-13-468599-1", quantity: 1, unitPrice: 42.99 }],
   total: 42.99,
-  status: 'cancelled',
+  status: "cancelled",
   placedAt: new Date(),
-})
+});
 ```
 
 ### Data-driven cases
@@ -867,37 +877,49 @@ Keep cases as siblings, either at the file's top level or within one exported-en
 
 ```ts
 // test/orders/cart-total.test.ts
-import assert from 'node:assert/strict'
-import { test } from 'node:test'
-import { cartTotal } from '../../src/orders/cart-total.js'
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { cartTotal } from "../../src/orders/cart-total.js";
 
 for (const { lines, total } of [
   { lines: [], total: 0 },
-  { lines: [{ sku: 'sku-a', quantity: 2, unitPrice: 10 }], total: 20 },
+  { lines: [{ sku: "sku-a", quantity: 2, unitPrice: 10 }], total: 20 },
   {
     lines: [
-      { sku: 'sku-a', quantity: 2, unitPrice: 10 },
-      { sku: 'sku-b', quantity: 1, unitPrice: 5 },
+      { sku: "sku-a", quantity: 2, unitPrice: 10 },
+      { sku: "sku-b", quantity: 1, unitPrice: 5 },
     ],
     total: 25,
   },
 ]) {
   test(`totals ${lines.length} line(s) as ${total}`, () => {
-    // act & assert
-    assert.strictEqual(cartTotal(lines), total)
-  })
+    // arrange
+    const expectedTotal = total;
+
+    // act
+    const calculatedTotal = cartTotal(lines);
+
+    // assert
+    assert.strictEqual(calculatedTotal, expectedTotal);
+  });
 }
 ```
 
 **Bad** (one case, stops at the first failing row)
 
 ```ts
-test('totals the lines', () => {
-  // act & assert
+test("totals the lines", () => {
   for (const { lines, total } of rows) {
-    assert.strictEqual(cartTotal(lines), total)
+    // arrange
+    const expectedTotal = total;
+
+    // act
+    const calculatedTotal = cartTotal(lines);
+
+    // assert
+    assert.strictEqual(calculatedTotal, expectedTotal);
   }
-})
+});
 ```
 
 Do not put conditional setup in a data loop. Different branches, dependencies, or expected interactions deserve separate named cases.
@@ -905,14 +927,16 @@ Do not put conditional setup in a data loop. Different branches, dependencies, o
 **Bad** (a conditional hides two behaviors in one case)
 
 ```ts
-for (const status of ['placed', 'cancelled'] as const) {
+for (const status of ["placed", "cancelled"] as const) {
   test(`cancels a ${status} order`, async () => {
     // ...
-    if (status === 'placed') {
-      when(() => events.publish({ type: 'order.cancelled', orderId: 'order-123' })).thenResolve(undefined)
+    if (status === "placed") {
+      when(() => events.publish({ type: "order.cancelled", orderId: "order-123" })).thenResolve(
+        undefined,
+      );
     }
     // ...
-  })
+  });
 }
 ```
 
@@ -926,14 +950,14 @@ Prefer a small contract owned by the production consumer:
 
 ```ts
 interface Payments {
-  charge(customerId: string, amount: number): Promise<void>
+  charge(customerId: string, amount: number): Promise<void>;
 }
 ```
 
 Use structural typing and `satisfies` to check a hand-built dependency:
 
 ```ts
-const clock = { now: () => new Date('2026-08-28T10:00:00Z') } satisfies Clock
+const clock = { now: () => new Date("2026-08-28T10:00:00Z") } satisfies Clock;
 ```
 
 If that object is painful to build, narrow the production contract. Do not silence the compiler.
@@ -1019,24 +1043,30 @@ These are hidden dependencies, and each makes the module untestable through its 
 **Bad** (nothing here can be controlled from a test)
 
 ```ts
-import { randomUUID } from 'node:crypto'
-import { broker } from '../broker.js'
-import { db } from '../db.js'
+import { randomUUID } from "node:crypto";
+import { broker } from "../broker.js";
+import { db } from "../db.js";
 
 export async function placeOrder(cart: Cart): Promise<Order> {
-  const order = { id: randomUUID(), placedAt: new Date(), /* ... */ }
+  const order = { id: randomUUID(), placedAt: new Date() /* ... */ };
 
-  await db.orders.insert(order)
-  await broker.publish({ type: 'order.placed', orderId: order.id })
+  await db.orders.insert(order);
+  await broker.publish({ type: "order.placed", orderId: order.id });
 
-  return order
+  return order;
 }
 ```
 
 **Good** (the sample's `createOrderService`)
 
 ```ts
-export function createOrderService({ clock, events, ids, orders, payments }: OrderServiceDependencies) {
+export function createOrderService({
+  clock,
+  events,
+  ids,
+  orders,
+  payments,
+}: OrderServiceDependencies) {
   // ...
 }
 ```
@@ -1056,13 +1086,13 @@ A type-only production module still needs a corresponding test module. That test
 
 ```ts
 // test/orders/order-event.test.ts
-import type { OrderEvent } from '../../src/orders/order-event.js'
+import type { OrderEvent } from "../../src/orders/order-event.js";
 
-void ({ type: 'order.placed', orderId: 'order-123', total: 25 } satisfies OrderEvent)
-void ({ type: 'order.cancelled', orderId: 'order-123' } satisfies OrderEvent)
+void ({ type: "order.placed", orderId: "order-123", total: 25 } satisfies OrderEvent);
+void ({ type: "order.cancelled", orderId: "order-123" } satisfies OrderEvent);
 
 // @ts-expect-error an event carries its discriminant
-void ({ orderId: 'order-123' } satisfies OrderEvent)
+void ({ orderId: "order-123" } satisfies OrderEvent);
 ```
 
 ### Barrel modules
@@ -1076,28 +1106,28 @@ Use the real filesystem when the module's public behavior includes stored files,
 Create one temporary directory for each case with `mkdtemp`. Remove it when the case ends, in a `finally` block or through `t.after()`.
 
 ```ts
-import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { test } from 'node:test'
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
 
-test('returns an order stored by a previous instance', async () => {
+test("returns an order stored by a previous instance", async () => {
   // arrange
-  const directory = await mkdtemp(join(tmpdir(), 'file-order-store-'))
+  const directory = await mkdtemp(join(tmpdir(), "file-order-store-"));
 
   try {
-    await createFileOrderStore(directory).put(placedOrder())
+    await createFileOrderStore(directory).put(placedOrder());
 
     // act
-    const order = await createFileOrderStore(directory).get('order-123')
+    const order = await createFileOrderStore(directory).get("order-123");
 
     // assert
-    assert.deepStrictEqual(order, placedOrder())
+    assert.deepStrictEqual(order, placedOrder());
   } finally {
-    await rm(directory, { recursive: true, force: true })
+    await rm(directory, { recursive: true, force: true });
   }
-})
+});
 ```
 
 Do not share a temporary directory across cases. Do not write into the repository, the user's home directory, or a fixed system path.
@@ -1109,25 +1139,29 @@ If a production HTTP adapter must be isolated at the `fetch` boundary, replace `
 Return a fresh `Response` for every call. A response body is consumable state and must not be reused.
 
 ```ts
-test('rejects a declined charge with the decline reason', async (t) => {
+test("rejects a declined charge with the decline reason", async (t) => {
   // arrange
-  t.mock.method(globalThis, 'fetch', async () =>
-    new Response(JSON.stringify({ status: 'declined', reason: 'insufficient_funds' }), {
-      headers: { 'content-type': 'application/json' },
-      status: 402,
-    }))
-  const payments = createHttpPayments('http://payments.local')
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ status: "declined", reason: "insufficient_funds" }), {
+        headers: { "content-type": "application/json" },
+        status: 402,
+      }),
+  );
+  const payments = createHttpPayments("http://payments.local");
 
   // act & assert
   await assert.rejects(
-    () => payments.charge('customer-1', 25),
+    () => payments.charge("customer-1", 25),
     (error: unknown) => {
-      assert.ok(error instanceof PaymentDeclinedError)
-      assert.strictEqual(error.reason, 'insufficient_funds')
-      return true
+      assert.ok(error instanceof PaymentDeclinedError);
+      assert.strictEqual(error.reason, "insufficient_funds");
+      return true;
     },
-  )
-})
+  );
+});
 ```
 
 The context restores `fetch` after the case. When the request the adapter sends is itself the promise, read the recorded `Request` from the replaced function's `mock.calls` and assert its method, URL, headers, and body.
@@ -1139,21 +1173,21 @@ Prefer an injected `Clock` when the module needs the current time; `clock` in th
 When the module's behavior is scheduling itself, such as a timeout, a retry delay, or a debounce, enable the context's fake timers and advance time explicitly:
 
 ```ts
-test('publishes once the delay has elapsed', async (t) => {
+test("publishes once the delay has elapsed", async (t) => {
   // arrange
-  t.mock.timers.enable({ apis: ['setTimeout'] })
-  const event = { type: 'order.placed', orderId: 'order-123', total: 25 } as const
-  const events = mock<OrderEvents>({ exactParams: true, name: 'order events' })
-  when(() => events.publish(event)).thenResolve(undefined)
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const event = { type: "order.placed", orderId: "order-123", total: 25 } as const;
+  const events = mock<OrderEvents>({ exactParams: true, name: "order events" });
+  when(() => events.publish(event)).thenResolve(undefined);
 
   // act
-  const published = deferPublish(events, event, 500)
-  t.mock.timers.tick(500)
-  await published
+  const published = deferPublish(events, event, 500);
+  t.mock.timers.tick(500);
+  await published;
 
   // assert
-  verify(events)
-})
+  verify(events);
+});
 ```
 
 Enable only the timer APIs the module uses. Do not fake `Date` to fix the current time when an injected clock would do. The context resets the timers after the case. Do not `await` a real timer or poll in a test.
@@ -1165,27 +1199,32 @@ Prefer a module that takes its configuration as a parameter, so no case needs to
 #### Good environment boundary
 
 ```ts
-assert.deepStrictEqual(loadOrdersConfig({ ORDERS_DIR: '/srv/orders' }), { directory: '/srv/orders' })
+assert.deepStrictEqual(loadOrdersConfig({ ORDERS_DIR: "/srv/orders" }), {
+  directory: "/srv/orders",
+});
 ```
 
 When a case must change `process.env` or a global, save the old value and register restoration with `t.after()` before acting:
 
 ```ts
-test('reads the orders directory from ORDERS_DIR', async (t) => {
+test("reads the orders directory from ORDERS_DIR", async (t) => {
   // arrange
-  const previous = process.env.ORDERS_DIR
+  const previous = process.env.ORDERS_DIR;
   t.after(() => {
     if (previous === undefined) {
-      delete process.env.ORDERS_DIR
+      delete process.env.ORDERS_DIR;
     } else {
-      process.env.ORDERS_DIR = previous
+      process.env.ORDERS_DIR = previous;
     }
-  })
-  process.env.ORDERS_DIR = '/srv/orders'
+  });
+  process.env.ORDERS_DIR = "/srv/orders";
 
-  // act & assert
-  assert.deepStrictEqual(loadOrdersConfig(), { directory: '/srv/orders' })
-})
+  // act
+  const ordersConfig = loadOrdersConfig();
+
+  // assert
+  assert.deepStrictEqual(ordersConfig, { directory: "/srv/orders" });
+});
 ```
 
 Do not run cases that mutate the same process global concurrently. Do not add a production reset function to clean up a test mutation.
@@ -1206,89 +1245,91 @@ Do not place contracts in a generic `test/helpers/` directory.
 
 ```ts
 // test/orders/order-store-contract.ts
-import assert from 'node:assert/strict'
-import { test, type TestContext } from 'node:test'
-import type { OrderStore } from '../../src/orders/order-service.js'
-import { placedOrder } from './order-seeds.js'
+import assert from "node:assert/strict";
+import { test, type TestContext } from "node:test";
+import type { OrderStore } from "../../src/orders/order-service.js";
+import { placedOrder } from "./order-seeds.js";
 
-export function orderStoreContract(createOrderStore: (t: TestContext) => Promise<OrderStore>): void {
-  test('returns undefined for an unknown order', async (t) => {
+export function orderStoreContract(
+  createOrderStore: (t: TestContext) => Promise<OrderStore>,
+): void {
+  test("returns undefined for an unknown order", async (t) => {
     // arrange
-    const orders = await createOrderStore(t)
+    const orders = await createOrderStore(t);
 
     // act
-    const order = await orders.get('order-999')
+    const order = await orders.get("order-999");
 
     // assert
-    assert.strictEqual(order, undefined)
-  })
+    assert.strictEqual(order, undefined);
+  });
 
-  test('returns a stored order', async (t) => {
+  test("returns a stored order", async (t) => {
     // arrange
-    const orders = await createOrderStore(t)
-    await orders.put(placedOrder())
+    const orders = await createOrderStore(t);
+    await orders.put(placedOrder());
 
     // act
-    const order = await orders.get('order-123')
+    const order = await orders.get("order-123");
 
     // assert
-    assert.deepStrictEqual(order, placedOrder())
-  })
+    assert.deepStrictEqual(order, placedOrder());
+  });
 
-  test('overwrites an order with the same ID', async (t) => {
+  test("overwrites an order with the same ID", async (t) => {
     // arrange
-    const orders = await createOrderStore(t)
-    await orders.put(placedOrder())
-    await orders.put({ ...placedOrder(), status: 'cancelled' })
+    const orders = await createOrderStore(t);
+    await orders.put(placedOrder());
+    await orders.put({ ...placedOrder(), status: "cancelled" });
 
     // act
-    const order = await orders.get('order-123')
+    const order = await orders.get("order-123");
 
     // assert
-    assert.deepStrictEqual(order, { ...placedOrder(), status: 'cancelled' })
-  })
+    assert.deepStrictEqual(order, { ...placedOrder(), status: "cancelled" });
+  });
 
-  test('does not share a stored order with the caller', async (t) => {
+  test("does not share a stored order with the caller", async (t) => {
     // arrange
-    const orders = await createOrderStore(t)
-    const stored = placedOrder()
-    await orders.put(stored)
-    stored.status = 'cancelled'
+    const orders = await createOrderStore(t);
+    const stored = placedOrder();
+    await orders.put(stored);
+    stored.status = "cancelled";
 
     // act
-    const order = await orders.get('order-123')
+    const order = await orders.get("order-123");
 
     // assert
-    assert.deepStrictEqual(order, placedOrder())
-  })
+    assert.deepStrictEqual(order, placedOrder());
+  });
 }
 ```
 
 ```ts
 // test/orders/create-fake-order-store.test.ts
-import { describe } from 'node:test'
-import { createFakeOrderStore } from './create-fake-order-store.js'
-import { orderStoreContract } from './order-store-contract.js'
+import { describe } from "node:test";
+import { createFakeOrderStore } from "./create-fake-order-store.js";
+import { orderStoreContract } from "./order-store-contract.js";
 
-describe('createFakeOrderStore', () => {
-  orderStoreContract(async () => createFakeOrderStore())
-})
+describe("createFakeOrderStore", () => {
+  orderStoreContract(async () => createFakeOrderStore());
+});
 ```
 
 ```ts
 // test/orders/file-order-store.test.ts
-describe('createFileOrderStore', () => {
+describe("createFileOrderStore", () => {
   orderStoreContract(async (t) => {
-    const directory = await mkdtemp(join(tmpdir(), 'file-order-store-'))
-    t.after(() => rm(directory, { recursive: true, force: true }))
+    const directory = await mkdtemp(join(tmpdir(), "file-order-store-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
 
-    return createFileOrderStore(directory)
-  })
+    return createFileOrderStore(directory);
+  });
 
-  test('stores each order as a JSON file named by ID', async () => {
+  test("stores each order as a JSON file named by ID", async () => {
     // adapter-specific case
-  })
-})
+  });
+});
 ```
 
 #### Contract rules
@@ -1334,7 +1375,7 @@ A unit-test change is complete when:
 - [ ] No production export, reset hook, mutator, or state reader was added for testing.
 - [ ] Any production refactor created a coherent module, an explicit dependency, a narrow port, or removed hidden global state.
 - [ ] Tests use independent `node:test` cases and `node:assert/strict`, with no `only`, `skip`, or `todo`.
-- [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert` (or `// act & assert`) comments.
+- [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert`; `// act & assert` appears only for one throwing/rejection expression.
 - [ ] Any `describe()` block is top-level, names an exported entrypoint, and owns no shared mutable state.
 - [ ] Each stateful case gets fresh dependencies and fresh graph state.
 - [ ] Case titles state public behavior; values and doubles are named after their production role.
