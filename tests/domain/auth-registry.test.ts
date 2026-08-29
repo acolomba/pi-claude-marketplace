@@ -29,145 +29,75 @@ const incompleteProvider: GitAuthProvider = {
 void incompleteProvider;
 
 describe("GITHUB_PROVIDER", () => {
-  test("exposes the complete GitHub descriptor data", () => {
+  test("exposes the complete GitHub descriptor", () => {
     // arrange
     const expectedDescriptor = {
       id: "github",
+      host: { name: "github.com", matches: true },
       deviceCodeUrl: "https://github.com/login/device/code",
       tokenUrl: "https://github.com/login/oauth/access_token",
       clientId: "Ov23liNcyK08uGdU0mMl",
       scope: "repo",
+      credentialsByEnvironment: {
+        GH_TOKEN: { username: "x-access-token", password: "GH_TOKEN" },
+        GITHUB_TOKEN: { username: "x-access-token", password: "GITHUB_TOKEN" },
+      },
     };
 
     // act
     const descriptor = {
       id: GITHUB_PROVIDER.id,
+      host: { name: "github.com", matches: GITHUB_PROVIDER.hostMatch("github.com") },
       deviceCodeUrl: GITHUB_PROVIDER.deviceCodeUrl,
       tokenUrl: GITHUB_PROVIDER.tokenUrl,
       clientId: GITHUB_PROVIDER.clientId,
       scope: GITHUB_PROVIDER.scope,
+      credentialsByEnvironment: {
+        GH_TOKEN: GITHUB_PROVIDER.credentialFrom("GH_TOKEN"),
+        GITHUB_TOKEN: GITHUB_PROVIDER.credentialFrom("GITHUB_TOKEN"),
+      },
     };
 
     // assert
     assert.deepStrictEqual(descriptor, expectedDescriptor);
   });
-
-  test("matches github.com", () => {
-    // arrange
-    const host = "github.com";
-
-    // act
-    const matches = GITHUB_PROVIDER.hostMatch(host);
-
-    // assert
-    assert.strictEqual(matches, true);
-  });
-
-  for (const host of [
-    "api.github.com",
-    "sub.github.com",
-    "github.com.example",
-    "GitHub.com",
-    "github.com:8443",
-  ]) {
-    test(`does not match ${host}`, () => {
-      // arrange
-      const remoteHost = host;
-
-      // act
-      const matches = GITHUB_PROVIDER.hostMatch(remoteHost);
-
-      // assert
-      assert.strictEqual(matches, false);
-    });
-  }
-
-  test("maps an access token to x-access-token credentials", () => {
-    // arrange
-    const accessToken = "github-token";
-
-    // act
-    const credentials = GITHUB_PROVIDER.credentialFrom(accessToken);
-
-    // assert
-    assert.deepStrictEqual(credentials, {
-      username: "x-access-token",
-      password: "github-token",
-    });
-  });
 });
 
 describe("GITLAB_PROVIDER", () => {
-  test("exposes the complete GitLab descriptor data", () => {
+  test("exposes the complete GitLab descriptor", () => {
     // arrange
     const expectedDescriptor = {
       id: "gitlab",
+      host: { name: "gitlab.com", matches: true },
       deviceCodeUrl: "https://gitlab.com/oauth/authorize_device",
       tokenUrl: "https://gitlab.com/oauth/token",
       clientId: "bb5b5605c21f02f3b41991e3d5f713488b4f0c5cf969de8f7d82f2811f99192d",
       scope: "read_repository",
+      credentialsByEnvironment: {
+        GITLAB_TOKEN: { username: "oauth2", password: "GITLAB_TOKEN" },
+      },
     };
 
     // act
     const descriptor = {
       id: GITLAB_PROVIDER.id,
+      host: { name: "gitlab.com", matches: GITLAB_PROVIDER.hostMatch("gitlab.com") },
       deviceCodeUrl: GITLAB_PROVIDER.deviceCodeUrl,
       tokenUrl: GITLAB_PROVIDER.tokenUrl,
       clientId: GITLAB_PROVIDER.clientId,
       scope: GITLAB_PROVIDER.scope,
+      credentialsByEnvironment: {
+        GITLAB_TOKEN: GITLAB_PROVIDER.credentialFrom("GITLAB_TOKEN"),
+      },
     };
 
     // assert
     assert.deepStrictEqual(descriptor, expectedDescriptor);
   });
-
-  test("matches gitlab.com", () => {
-    // arrange
-    const host = "gitlab.com";
-
-    // act
-    const matches = GITLAB_PROVIDER.hostMatch(host);
-
-    // assert
-    assert.strictEqual(matches, true);
-  });
-
-  for (const host of [
-    "api.gitlab.com",
-    "sub.gitlab.com",
-    "gitlab.example.com",
-    "GitLab.com",
-    "gitlab.com:8443",
-  ]) {
-    test(`does not match ${host}`, () => {
-      // arrange
-      const remoteHost = host;
-
-      // act
-      const matches = GITLAB_PROVIDER.hostMatch(remoteHost);
-
-      // assert
-      assert.strictEqual(matches, false);
-    });
-  }
-
-  test("maps an access token to oauth2 credentials", () => {
-    // arrange
-    const accessToken = "gitlab-token";
-
-    // act
-    const credentials = GITLAB_PROVIDER.credentialFrom(accessToken);
-
-    // assert
-    assert.deepStrictEqual(credentials, {
-      username: "oauth2",
-      password: "gitlab-token",
-    });
-  });
 });
 
 describe("findProviderForHost", () => {
-  test("returns the GitHub provider for github.com", () => {
+  test("returns the exact GitHub descriptor for github.com", () => {
     // arrange
     const host = "github.com";
 
@@ -189,14 +119,16 @@ describe("findProviderForHost", () => {
     assert.strictEqual(provider, GITLAB_PROVIDER);
   });
 
-  test("returns undefined when no provider claims the host", () => {
-    // arrange
-    const host = "git.example";
+  for (const host of ["", "GitHub.com", "GitLab.com", "githvb.com", "gitlab.cam"]) {
+    test(`returns undefined for unknown host ${JSON.stringify(host)}`, () => {
+      // arrange
+      const remoteHost = host;
 
-    // act
-    const provider = findProviderForHost(host);
+      // act
+      const provider = findProviderForHost(remoteHost);
 
-    // assert
-    assert.strictEqual(provider, undefined);
-  });
+      // assert
+      assert.strictEqual(provider, undefined);
+    });
+  }
 });
