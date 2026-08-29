@@ -3,61 +3,178 @@ import test from "node:test";
 
 import { classifyGitTransportFailure } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
-// Closed-set ladder coverage for the shared git transport-failure classifier:
-// every arm (non-Error input, HttpError 401/403, HttpError with a non-auth
-// status, UserCanceledError via `code` and via `name`, each network errno,
-// unrecognized Error fallthrough) is pinned so the install / update / fetch
-// surfaces keep classifying the SAME underlying failure onto the SAME
-// closed-set REASON.
+for (const { title, createFailure } of [
+  {
+    title: "leaves an empty string unclassified",
+    createFailure: () => "",
+  },
+  {
+    title: "leaves null unclassified",
+    createFailure: () => null,
+  },
+  {
+    title: "leaves an empty object unclassified",
+    createFailure: () => ({}),
+  },
+  {
+    title: "leaves undefined unclassified",
+    createFailure: () => undefined,
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = createFailure();
 
-test("classifyGitTransportFailure returns undefined for a non-Error throw (string)", () => {
-  assert.equal(classifyGitTransportFailure("disk exploded"), undefined);
+    // act
+    const reason = classifyGitTransportFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, undefined);
+  });
+}
+
+for (const { title, statusCode, expectedReason } of [
+  {
+    title: "leaves HTTP 400 unclassified",
+    statusCode: 400,
+    expectedReason: undefined,
+  },
+  {
+    title: "classifies HTTP 401 as authentication required",
+    statusCode: 401,
+    expectedReason: "authentication required",
+  },
+  {
+    title: "classifies HTTP 403 as authentication required",
+    statusCode: 403,
+    expectedReason: "authentication required",
+  },
+  {
+    title: "leaves HTTP 404 unclassified",
+    statusCode: 404,
+    expectedReason: undefined,
+  },
+  {
+    title: "leaves HTTP 500 unclassified",
+    statusCode: 500,
+    expectedReason: undefined,
+  },
+  {
+    title: "requires an exact integer authentication status",
+    statusCode: 401.5,
+    expectedReason: undefined,
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = Object.assign(new Error("HTTP transport failure"), {
+      code: "HttpError",
+      data: { statusCode },
+    });
+
+    // act
+    const reason = classifyGitTransportFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, expectedReason);
+  });
+}
+
+test("leaves an HTTP error without a status unclassified", () => {
+  // arrange
+  const failure = Object.assign(new Error("HTTP transport failure"), { code: "HttpError" });
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, undefined);
 });
 
-test("classifyGitTransportFailure returns undefined for a non-Error throw (undefined)", () => {
-  assert.equal(classifyGitTransportFailure(undefined), undefined);
+for (const { title, createFailure } of [
+  {
+    title: "classifies a cancellation code as authentication required",
+    createFailure: () =>
+      Object.assign(new Error("The operation was canceled."), { code: "UserCanceledError" }),
+  },
+  {
+    title: "classifies a cancellation name as authentication required",
+    createFailure: () =>
+      Object.assign(new Error("The operation was canceled."), { name: "UserCanceledError" }),
+  },
+  {
+    title: "classifies matching cancellation code and name as authentication required",
+    createFailure: () =>
+      Object.assign(new Error("The operation was canceled."), {
+        code: "UserCanceledError",
+        name: "UserCanceledError",
+      }),
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = createFailure();
+
+    // act
+    const reason = classifyGitTransportFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "authentication required");
+  });
+}
+
+test("classifies a cancellation name before a network code", () => {
+  // arrange
+  const failure = Object.assign(new Error("The operation was canceled."), {
+    code: "ENETUNREACH",
+    name: "UserCanceledError",
+  });
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "authentication required");
 });
 
-test("classifyGitTransportFailure maps HttpError 401 to authentication required", () => {
-  const err = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+test("falls through a non-auth HTTP status to a cancellation name", () => {
+  // arrange
+  const failure = Object.assign(new Error("The operation was canceled."), {
     code: "HttpError",
-    data: { statusCode: 401 },
+    data: { statusCode: 404 },
+    name: "UserCanceledError",
   });
-  assert.equal(classifyGitTransportFailure(err), "authentication required");
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "authentication required");
 });
 
-test("classifyGitTransportFailure maps HttpError 403 to authentication required", () => {
-  const err = Object.assign(new Error("HTTP Error: 403 Forbidden"), {
-    code: "HttpError",
-    data: { statusCode: 403 },
+test("classifies a direct network code on an error with a cause", () => {
+  // arrange
+  const failure = Object.assign(new Error("outer failure", { cause: new Error("inner failure") }), {
+    code: "ECONNRESET",
   });
-  assert.equal(classifyGitTransportFailure(err), "authentication required");
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "network unreachable");
 });
 
-test("classifyGitTransportFailure leaves an HttpError with a non-auth status unclassified", () => {
-  const err = Object.assign(new Error("HTTP Error: 500 Internal Server Error"), {
-    code: "HttpError",
-    data: { statusCode: 500 },
-  });
-  assert.equal(classifyGitTransportFailure(err), undefined);
-});
+test("leaves a network code on an error cause for the caller to unwrap", () => {
+  // arrange
+  const cause = Object.assign(new Error("inner failure"), { code: "ECONNRESET" });
+  const failure = new Error("outer failure", { cause });
 
-test("classifyGitTransportFailure leaves an HttpError with no data payload unclassified", () => {
-  const err = Object.assign(new Error("HTTP Error"), { code: "HttpError" });
-  assert.equal(classifyGitTransportFailure(err), undefined);
-});
+  // act
+  const reason = classifyGitTransportFailure(failure);
 
-test("classifyGitTransportFailure maps UserCanceledError (code) to authentication required", () => {
-  const err = Object.assign(new Error("The operation was canceled."), {
-    code: "UserCanceledError",
-  });
-  assert.equal(classifyGitTransportFailure(err), "authentication required");
-});
-
-test("classifyGitTransportFailure maps UserCanceledError (name only) to authentication required", () => {
-  const err = new Error("The operation was canceled.");
-  err.name = "UserCanceledError";
-  assert.equal(classifyGitTransportFailure(err), "authentication required");
+  // assert
+  assert.strictEqual(reason, undefined);
 });
 
 for (const code of [
@@ -67,20 +184,41 @@ for (const code of [
   "ETIMEDOUT",
   "ECONNRESET",
   "EAI_AGAIN",
-]) {
-  test(`classifyGitTransportFailure maps ${code} to network unreachable`, () => {
-    const err = new Error(`socket failure ${code}`) as NodeJS.ErrnoException;
-    err.code = code;
-    assert.equal(classifyGitTransportFailure(err), "network unreachable");
+] as const) {
+  test(`classifies ${code} as network unreachable`, () => {
+    // arrange
+    const failure = Object.assign(new Error("Git transport failure"), { code });
+
+    // act
+    const reason = classifyGitTransportFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "network unreachable");
   });
 }
 
-test("classifyGitTransportFailure leaves an unrecognized Error unclassified (caller fallthrough)", () => {
-  assert.equal(classifyGitTransportFailure(new Error("clone corrupted")), undefined);
-});
+for (const { title, createFailure } of [
+  {
+    title: "leaves a generic error unclassified",
+    createFailure: () => new Error("clone corrupted"),
+  },
+  {
+    title: "leaves an error with an empty message unclassified",
+    createFailure: () => new Error(""),
+  },
+  {
+    title: "leaves a filesystem error for the caller to classify",
+    createFailure: () => Object.assign(new Error("permission denied"), { code: "EACCES" }),
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = createFailure();
 
-test("classifyGitTransportFailure leaves fs errnos (EACCES) unclassified for the caller's own ladder", () => {
-  const err = new Error("permission denied") as NodeJS.ErrnoException;
-  err.code = "EACCES";
-  assert.equal(classifyGitTransportFailure(err), undefined);
-});
+    // act
+    const reason = classifyGitTransportFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, undefined);
+  });
+}
