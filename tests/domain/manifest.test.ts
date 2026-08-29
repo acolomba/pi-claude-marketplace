@@ -102,7 +102,7 @@ describe("MARKETPLACE_VALIDATOR", () => {
 });
 
 describe("loadMarketplaceManifest", () => {
-  test("returns the complete raw manifest with unknown fields", async (t) => {
+  test("preserves a complete raw manifest by reference with key order and unknown fields", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
     t.after(async () => {
@@ -111,32 +111,41 @@ describe("loadMarketplaceManifest", () => {
     const manifestPath = path.join(directory, "marketplace.json");
     await writeFile(
       manifestPath,
-      '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","mcpServers":"./missing.mcp.json","vendorEntry":1},{"name":"sibling","source":"./sibling"}],"strict":false,"owner":{"name":"Owner"},"vendorRoot":{"enabled":true}}',
+      '{"vendorRoot":{"enabled":true},"plugins":[{"vendorEntry":1,"source":"./broken","name":"broken","mcpServers":"./missing.mcp.json"},{"source":"./sibling","name":"sibling"}],"name":"marketplace","owner":{"name":"Owner"},"strict":false}',
       "utf8",
     );
 
     // act
     const marketplaceManifest = await loadMarketplaceManifest(manifestPath);
+    const cachedMarketplaceManifest = await loadMarketplaceManifest(manifestPath);
 
     // assert
     assert.deepStrictEqual(marketplaceManifest, {
-      name: "marketplace",
+      vendorRoot: { enabled: true },
       plugins: [
         {
-          name: "broken",
-          source: "./broken",
-          mcpServers: "./missing.mcp.json",
           vendorEntry: 1,
+          source: "./broken",
+          name: "broken",
+          mcpServers: "./missing.mcp.json",
         },
-        { name: "sibling", source: "./sibling" },
+        { source: "./sibling", name: "sibling" },
       ],
-      strict: false,
+      name: "marketplace",
       owner: { name: "Owner" },
-      vendorRoot: { enabled: true },
+      strict: false,
     });
+    assert.deepStrictEqual(Object.keys(marketplaceManifest), [
+      "vendorRoot",
+      "plugins",
+      "name",
+      "owner",
+      "strict",
+    ]);
+    assert.strictEqual(cachedMarketplaceManifest, marketplaceManifest);
   });
 
-  test("returns the same manifest reference for an unchanged file", async (t) => {
+  test("returns the smallest valid manifest", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
     t.after(async () => {
@@ -147,10 +156,9 @@ describe("loadMarketplaceManifest", () => {
 
     // act
     const marketplaceManifest = await loadMarketplaceManifest(manifestPath);
-    const cachedMarketplaceManifest = await loadMarketplaceManifest(manifestPath);
 
     // assert
-    assert.strictEqual(cachedMarketplaceManifest, marketplaceManifest);
+    assert.deepStrictEqual(marketplaceManifest, { name: "marketplace", plugins: [] });
   });
 
   test("preserves a SyntaxError cause for malformed JSON", async (t) => {
@@ -161,6 +169,8 @@ describe("loadMarketplaceManifest", () => {
     });
     const manifestPath = path.join(directory, "marketplace.json");
     await writeFile(manifestPath, "{", "utf8");
+    const syntaxErrorMessage =
+      "Expected property name or '}' in JSON at position 1 (line 1 column 2)";
 
     // act & assert
     await assert.rejects(
@@ -168,7 +178,13 @@ describe("loadMarketplaceManifest", () => {
       (error: unknown) => {
         assert.ok(error instanceof InvalidMarketplaceManifestError);
         assert.strictEqual(error.name, "InvalidMarketplaceManifestError");
+        assert.strictEqual(
+          error.message,
+          `marketplace.json is not valid JSON: SyntaxError: ${syntaxErrorMessage}`,
+        );
         assert.ok(error.cause instanceof SyntaxError);
+        assert.strictEqual(error.cause.name, "SyntaxError");
+        assert.strictEqual(error.cause.message, syntaxErrorMessage);
         return true;
       },
     );
