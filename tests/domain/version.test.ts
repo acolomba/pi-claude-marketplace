@@ -48,23 +48,33 @@ describe("computeHashVersion", () => {
     assert.strictEqual(version, "hash-7f044a9c40a0");
   });
 
-  test("ignores Git, dependency, and Finder entries", async (t) => {
+  test("ignores Git, dependency, and Finder entry contents", async (t) => {
     // arrange
-    const pluginRoot = await createVersionSandbox(t);
-    await writeFile(path.join(pluginRoot, "main.txt"), "main\n");
-    await mkdir(path.join(pluginRoot, ".git"));
-    await writeFile(path.join(pluginRoot, ".git", "HEAD"), "ignored\n");
-    await mkdir(path.join(pluginRoot, "node_modules", "package"), {
+    const directory = await createVersionSandbox(t);
+    const cleanPluginRoot = path.join(directory, "clean");
+    const ignoredPluginRoot = path.join(directory, "ignored");
+    await mkdir(cleanPluginRoot);
+    await mkdir(ignoredPluginRoot);
+    await writeFile(path.join(cleanPluginRoot, "main.txt"), "main\n");
+    await writeFile(path.join(ignoredPluginRoot, "main.txt"), "main\n");
+    await mkdir(path.join(ignoredPluginRoot, ".git"));
+    await writeFile(path.join(ignoredPluginRoot, ".git", "HEAD"), "ignored\n");
+    await mkdir(path.join(ignoredPluginRoot, "node_modules", "package"), {
       recursive: true,
     });
-    await writeFile(path.join(pluginRoot, "node_modules", "package", "index.js"), "ignored\n");
-    await writeFile(path.join(pluginRoot, ".DS_Store"), "ignored\n");
+    await writeFile(
+      path.join(ignoredPluginRoot, "node_modules", "package", "index.js"),
+      "ignored\n",
+    );
+    await writeFile(path.join(ignoredPluginRoot, ".DS_Store"), "ignored\n");
 
     // act
-    const version = await computeHashVersion(pluginRoot);
+    const cleanVersion = await computeHashVersion(cleanPluginRoot);
+    const ignoredVersion = await computeHashVersion(ignoredPluginRoot);
 
     // assert
-    assert.strictEqual(version, "hash-c5994021316d");
+    assert.strictEqual(cleanVersion, "hash-c5994021316d");
+    assert.strictEqual(ignoredVersion, "hash-c5994021316d");
   });
 
   test("normalizes a UTF-8 BOM and CRLF line endings", async (t) => {
