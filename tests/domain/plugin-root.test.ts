@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -23,6 +23,7 @@ test("returns an absolute root resolved from relative segments", async (t) => {
 
   // assert
   assert.strictEqual(pluginRoot, path.join(directory, "plugins", "test-plugin"));
+  assert.strictEqual(path.relative(directory, pluginRoot), path.join("plugins", "test-plugin"));
 });
 
 test("returns an already absolute root unchanged", async (t) => {
@@ -36,6 +37,7 @@ test("returns an already absolute root unchanged", async (t) => {
 
   // assert
   assert.strictEqual(pluginRoot, path.join(directory, "plugins", "test-plugin"));
+  assert.strictEqual(path.relative(directory, pluginRoot), path.join("plugins", "test-plugin"));
 });
 
 test("accepts an already branded root without changing it", async (t) => {
@@ -50,6 +52,10 @@ test("accepts an already branded root without changing it", async (t) => {
 
   // assert
   assert.strictEqual(rebrandedPluginRoot, path.join(directory, "plugins", "test-plugin"));
+  assert.strictEqual(
+    path.relative(directory, rebrandedPluginRoot),
+    path.join("plugins", "test-plugin"),
+  );
 });
 
 test("preserves parent segments that resolve within the temporary root", async (t) => {
@@ -66,39 +72,103 @@ test("preserves parent segments that resolve within the temporary root", async (
     pluginRoot,
     `${directory}${path.sep}plugins${path.sep}a${path.sep}..${path.sep}b`,
   );
+  assert.strictEqual(path.relative(directory, path.resolve(pluginRoot)), path.join("plugins", "b"));
 });
 
-for (const { pluginRoot, errorMessage } of [
+for (const {
+  name,
+  makeUnsafePluginRoot,
+  makeContainedPaths,
+  containedRelativePaths,
+  errorMessage,
+} of [
   {
-    pluginRoot: "",
+    name: "an empty root",
+    makeUnsafePluginRoot: (_directory: string) => "",
+    makeContainedPaths: (directory: string) => [directory],
+    containedRelativePaths: [""],
     errorMessage: "AbsolutePluginRoot: empty string",
   },
   {
-    pluginRoot: `${path.resolve("test")}\0plugin`,
+    name: "a root with a null byte",
+    makeUnsafePluginRoot: (directory: string) => `${path.join(directory, "test")}\0plugin`,
+    makeContainedPaths: (directory: string) => [path.join(directory, "test")],
+    containedRelativePaths: ["test"],
     errorMessage: "AbsolutePluginRoot: contains null byte",
   },
   {
-    pluginRoot: path.resolve(`test${path.delimiter}plugin`),
-    errorMessage: `AbsolutePluginRoot: contains PATH delimiter: ${path.resolve(`test${path.delimiter}plugin`)}`,
+    name: "a PATH delimiter by itself",
+    makeUnsafePluginRoot: (_directory: string) => path.delimiter,
+    makeContainedPaths: (directory: string) => [directory],
+    containedRelativePaths: [""],
+    errorMessage: `AbsolutePluginRoot: contains PATH delimiter: ${path.delimiter}`,
   },
   {
-    pluginRoot: `relative${path.sep}plugin`,
-    errorMessage: `AbsolutePluginRoot: not absolute: relative${path.sep}plugin`,
+    name: "a leading PATH delimiter",
+    makeUnsafePluginRoot: (directory: string) =>
+      `${path.delimiter}${path.join(directory, "plugin")}`,
+    makeContainedPaths: (directory: string) => [path.join(directory, "plugin")],
+    containedRelativePaths: ["plugin"],
+    errorMessage: (directory: string) =>
+      `AbsolutePluginRoot: contains PATH delimiter: ${path.delimiter}${path.join(directory, "plugin")}`,
+  },
+  {
+    name: "a PATH delimiter between roots",
+    makeUnsafePluginRoot: (directory: string) =>
+      `${path.join(directory, "first")}${path.delimiter}${path.join(directory, "second")}`,
+    makeContainedPaths: (directory: string) => [
+      path.join(directory, "first"),
+      path.join(directory, "second"),
+    ],
+    containedRelativePaths: ["first", "second"],
+    errorMessage: (directory: string) =>
+      `AbsolutePluginRoot: contains PATH delimiter: ${path.join(directory, "first")}${path.delimiter}${path.join(directory, "second")}`,
+  },
+  {
+    name: "a trailing PATH delimiter",
+    makeUnsafePluginRoot: (directory: string) =>
+      `${path.join(directory, "plugin")}${path.delimiter}`,
+    makeContainedPaths: (directory: string) => [path.join(directory, "plugin")],
+    containedRelativePaths: ["plugin"],
+    errorMessage: (directory: string) =>
+      `AbsolutePluginRoot: contains PATH delimiter: ${path.join(directory, "plugin")}${path.delimiter}`,
+  },
+  {
+    name: "a relative root",
+    makeUnsafePluginRoot: (directory: string) =>
+      path.relative(directory, path.join(directory, "plugin")),
+    makeContainedPaths: (directory: string) => [path.join(directory, "plugin")],
+    containedRelativePaths: ["plugin"],
+    errorMessage: `AbsolutePluginRoot: not absolute: plugin`,
   },
 ]) {
-  test(`rejects ${JSON.stringify(pluginRoot)}`, () => {
+  test(`rejects ${name} without creating filesystem content`, async (t) => {
     // arrange
-    const unsafePluginRoot = pluginRoot;
+    const directory = await mkdtemp(path.join(tmpdir(), "plugin-root-invalid-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const unsafePluginRoot = makeUnsafePluginRoot(directory);
+    const expectedErrorMessage =
+      typeof errorMessage === "function" ? errorMessage(directory) : errorMessage;
+    const containedPaths = makeContainedPaths(directory);
 
-    // act & assert
-    assert.throws(
-      () => asAbsolutePluginRoot(unsafePluginRoot),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.strictEqual(error.constructor, Error);
-        assert.strictEqual(error.message, errorMessage);
-        return true;
-      },
+    // act
+    const pluginRootError: unknown = (() => {
+      try {
+        asAbsolutePluginRoot(unsafePluginRoot);
+        return undefined;
+      } catch (error) {
+        return error;
+      }
+    })();
+
+    // assert
+    assert.ok(pluginRootError instanceof Error);
+    assert.strictEqual(pluginRootError.constructor, Error);
+    assert.strictEqual(pluginRootError.message, expectedErrorMessage);
+    assert.deepStrictEqual(
+      containedPaths.map((containedPath) => path.relative(directory, containedPath)),
+      containedRelativePaths,
     );
+    assert.deepStrictEqual(await readdir(directory), []);
   });
 }
