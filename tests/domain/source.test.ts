@@ -503,6 +503,15 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
     },
   },
   {
+    name: "preserves the parser reason for an invalid stored GitHub shorthand",
+    raw: { kind: "github", raw: "not-a-source" },
+    source: {
+      kind: "unknown",
+      raw: "not-a-source",
+      reason: "non-relative string source not-a-source cannot be classified",
+    },
+  },
+  {
     name: "uses the stored unknown reason fallback",
     raw: { kind: "unknown", raw: "stored-raw", reason: 42 },
     source: {
@@ -558,8 +567,69 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
   },
 ];
 
+const INVALID_INPUT_CASES: readonly ParseCase[] = [
+  {
+    name: "rejects null at the exported parse boundary",
+    raw: null,
+    source: {
+      kind: "unknown",
+      raw: "null",
+      reason: "source must be a string or object",
+    },
+  },
+  {
+    name: "rejects a boolean at the exported parse boundary",
+    raw: true,
+    source: {
+      kind: "unknown",
+      raw: "true",
+      reason: "source must be a string or object",
+    },
+  },
+  {
+    name: "rejects a number at the exported parse boundary",
+    raw: 42,
+    source: {
+      kind: "unknown",
+      raw: "42",
+      reason: "source must be a string or object",
+    },
+  },
+  {
+    name: "rejects an unstructured object at the exported parse boundary",
+    raw: {},
+    source: {
+      kind: "unknown",
+      raw: "{}",
+      reason: "object source is missing source discriminator",
+    },
+  },
+  {
+    name: "rejects an empty array at the exported parse boundary",
+    raw: [],
+    source: {
+      kind: "unknown",
+      raw: "",
+      reason: "source must be a string or object",
+    },
+  },
+  {
+    name: "rejects a non-empty array at the exported parse boundary",
+    raw: ["source"],
+    source: {
+      kind: "unknown",
+      raw: "source",
+      reason: "source must be a string or object",
+    },
+  },
+];
+
 describe("parsePluginSource", () => {
-  for (const { name, raw, source } of [...PARSE_CASES, ...UNKNOWN_PARSE_CASES]) {
+  for (const { name, raw, source } of [
+    ...PARSE_CASES,
+    ...UNKNOWN_PARSE_CASES,
+    ...INVALID_INPUT_CASES,
+  ]) {
     test(name, () => {
       // arrange
       const expectedSource = source;
@@ -574,7 +644,7 @@ describe("parsePluginSource", () => {
 });
 
 describe("pathSource", () => {
-  for (const invalidPath of ["", "   "]) {
+  for (const invalidPath of ["", "   ", 42]) {
     test("rejects " + JSON.stringify(invalidPath) + " as an empty path", () => {
       // arrange
       const expectedError = {
@@ -583,7 +653,7 @@ describe("pathSource", () => {
       };
 
       // act & assert
-      assert.throws(() => pathSource(invalidPath), expectedError);
+      assert.throws(() => Reflect.apply(pathSource, undefined, [invalidPath]), expectedError);
     });
   }
 
@@ -660,6 +730,18 @@ describe("samePlannedSource", () => {
       stored: { kind: "path", raw: "./local", logical: "./local" },
       plannedRaw: "./local",
       sourceOutcome: "same",
+    },
+    {
+      name: "distinguishes unequal logical paths",
+      stored: { kind: "path", raw: "./plugins/b", logical: "./plugins/b" },
+      plannedRaw: "./plugins/a",
+      sourceOutcome: "different",
+    },
+    {
+      name: "distinguishes adjacent path text",
+      stored: { kind: "path", raw: "./plugins/a", logical: "./plugins/a" },
+      plannedRaw: "./plugins/ab",
+      sourceOutcome: "different",
     },
     {
       name: "distinguishes recognized source kinds",
