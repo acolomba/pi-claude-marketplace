@@ -51,6 +51,24 @@ describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
     // assert
     assert.deepStrictEqual(mappings, expectedMappings);
   });
+
+  for (const { suppliedToolName, expectedPiToolName } of [
+    { suppliedToolName: "", expectedPiToolName: "" },
+    { suppliedToolName: "bash", expectedPiToolName: "bash" },
+    { suppliedToolName: "mcp__server__tool", expectedPiToolName: "mcp__server__tool" },
+  ]) {
+    test(`passes ${JSON.stringify(suppliedToolName)} through an inverse lookup`, () => {
+      // arrange
+      const toolName = suppliedToolName;
+
+      // act
+      const piToolName =
+        (CLAUDE_TO_PI_TOOL_NAMES as Readonly<Record<string, string>>)[toolName] ?? toolName;
+
+      // assert
+      assert.strictEqual(piToolName, expectedPiToolName);
+    });
+  }
 });
 
 describe("mapPiToClaudeToolName", () => {
