@@ -8,7 +8,7 @@ describe("HOOKS_VALIDATOR", () => {
     { role: "an empty configuration", config: {} },
     { role: "an empty event", config: { SessionStart: [] } },
     {
-      role: "a command handler",
+      role: "a command handler without extra properties",
       config: {
         PreToolUse: [
           {
@@ -25,26 +25,9 @@ describe("HOOKS_VALIDATOR", () => {
       },
     },
     {
-      role: "unknown fields at every level",
+      role: "a command handler with extra properties",
       config: {
         FutureEvent: [
-          {
-            futureGroupField: true,
-            hooks: [
-              {
-                type: "command",
-                command: "/bin/true",
-                futureHandlerField: { nested: true },
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      role: "all optional group fields",
-      config: {
-        PreToolUse: [
           {
             matcher: "Edit",
             statusMessage: "running",
@@ -52,16 +35,7 @@ describe("HOOKS_VALIDATOR", () => {
             async: false,
             shell: "/bin/bash",
             args: ["-c", "true"],
-            hooks: [{ type: "command", command: "/bin/true" }],
-          },
-        ],
-      },
-    },
-    {
-      role: "all optional handler fields",
-      config: {
-        PreToolUse: [
-          {
+            futureGroupField: true,
             hooks: [
               {
                 type: "command",
@@ -76,6 +50,7 @@ describe("HOOKS_VALIDATOR", () => {
                 asyncRewake: "yes",
                 rewakeMessage: 42,
                 rewakeSummary: null,
+                futureHandlerField: { nested: true },
               },
             ],
           },
@@ -97,13 +72,16 @@ describe("HOOKS_VALIDATOR", () => {
   for (const { role, config } of [
     { role: "null", config: null },
     { role: "a top-level array", config: [] },
+    { role: "a string primitive", config: "invalid" },
+    { role: "a number primitive", config: 1 },
+    { role: "a boolean primitive", config: true },
     { role: "a non-array event", config: { PreToolUse: "invalid" } },
     { role: "a group without handlers", config: { PreToolUse: [{}] } },
     {
       role: "a group with a non-string matcher",
       config: { PreToolUse: [{ matcher: 1, hooks: [] }] },
     },
-    { role: "a handler without a type", config: { PreToolUse: [{ hooks: [{}] }] } },
+    { role: "an empty handler object", config: { PreToolUse: [{ hooks: [{}] }] } },
     {
       role: "a handler with a non-string type",
       config: { PreToolUse: [{ hooks: [{ type: 1 }] }] },
