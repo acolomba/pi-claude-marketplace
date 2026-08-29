@@ -53,9 +53,86 @@ describe("AgentForeignContentError", () => {
       },
     );
   });
+
+  test("keeps adjacent target paths and reasons distinct", () => {
+    // arrange
+    const firstTargetPath = "/scope/agents/a.md";
+    const secondTargetPath = "/scope/agents/aa.md";
+
+    // act
+    const firstError = new AgentForeignContentError(firstTargetPath, "a");
+    const secondError = new AgentForeignContentError(secondTargetPath, "aa");
+
+    // assert
+    assert.deepStrictEqual(
+      [
+        {
+          message: firstError.message,
+          parent: firstError.parent,
+          child: firstError.child,
+          targetPath: firstError.targetPath,
+          reason: firstError.reason,
+        },
+        {
+          message: secondError.message,
+          parent: secondError.parent,
+          child: secondError.child,
+          targetPath: secondError.targetPath,
+          reason: secondError.reason,
+        },
+      ],
+      [
+        {
+          message: "Refusing to overwrite agent file at /scope/agents/a.md: a.",
+          parent: "/scope/agents",
+          child: "/scope/agents/a.md",
+          targetPath: "/scope/agents/a.md",
+          reason: "a",
+        },
+        {
+          message: "Refusing to overwrite agent file at /scope/agents/aa.md: aa.",
+          parent: "/scope/agents",
+          child: "/scope/agents/aa.md",
+          targetPath: "/scope/agents/aa.md",
+          reason: "aa",
+        },
+      ],
+    );
+  });
 });
 
 describe("AgentOwnershipConflictError", () => {
+  test("exposes an empty ownership conflict collection exactly", () => {
+    // arrange
+    const conflicts = [] satisfies AgentOwnershipConflict[];
+
+    // act
+    const error = new AgentOwnershipConflictError(
+      { marketplace: "official", plugin: "acme" },
+      conflicts,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        conflicts: error.conflicts,
+        conflictsFrozen: Object.isFrozen(error.conflicts),
+        stagingFor: error.stagingFor,
+        stagingForFrozen: Object.isFrozen(error.stagingFor),
+      },
+      {
+        name: "AgentOwnershipConflictError",
+        message: "Refusing to stage agents for official/acme: .",
+        conflicts: [],
+        conflictsFrozen: true,
+        stagingFor: { marketplace: "official", plugin: "acme" },
+        stagingForFrozen: true,
+      },
+    );
+  });
+
   test("exposes one ownership conflict as a complete refusal", () => {
     // arrange
     const stagingFor = { marketplace: "official", plugin: "acme" };
@@ -125,6 +202,67 @@ describe("AgentOwnershipConflictError", () => {
     );
   });
 
+  test("keeps equal generated names separate and ordered", () => {
+    // arrange
+    const conflicts = [
+      { generatedName: "same", owner: { marketplace: "mp", plugin: "first" } },
+      { generatedName: "same", owner: { marketplace: "mp", plugin: "second" } },
+    ] satisfies AgentOwnershipConflict[];
+
+    // act
+    const error = new AgentOwnershipConflictError(
+      { marketplace: "mp", plugin: "candidate" },
+      conflicts,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        message: error.message,
+        conflicts: error.conflicts,
+      },
+      {
+        message:
+          'Refusing to stage agents for mp/candidate: "same" already owned by mp/first; "same" already owned by mp/second.',
+        conflicts: [
+          { generatedName: "same", owner: { marketplace: "mp", plugin: "first" } },
+          { generatedName: "same", owner: { marketplace: "mp", plugin: "second" } },
+        ],
+      },
+    );
+  });
+
+  test("copies mutable top-level constructor inputs", () => {
+    // arrange
+    const stagingFor = { marketplace: "mp", plugin: "candidate" };
+    const conflicts = [
+      { generatedName: "same", owner: { marketplace: "mp", plugin: "owner" } },
+    ] satisfies AgentOwnershipConflict[];
+
+    // act
+    const error = new AgentOwnershipConflictError(stagingFor, conflicts);
+    stagingFor.marketplace = "changed";
+    stagingFor.plugin = "changed";
+    conflicts.push({
+      generatedName: "later",
+      owner: { marketplace: "changed", plugin: "changed" },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        message: error.message,
+        conflicts: error.conflicts,
+        stagingFor: error.stagingFor,
+      },
+      {
+        message: 'Refusing to stage agents for mp/candidate: "same" already owned by mp/owner.',
+        conflicts: [{ generatedName: "same", owner: { marketplace: "mp", plugin: "owner" } }],
+        stagingFor: { marketplace: "mp", plugin: "candidate" },
+      },
+    );
+  });
+
   test("freezes the exposed conflict collection and staging owner", () => {
     // arrange
     const conflicts = [
@@ -182,6 +320,44 @@ describe("McpServerCollisionError", () => {
         owningPath: "/scope/mcp.json",
         cause: undefined,
       },
+    );
+  });
+
+  test("keeps adjacent server names and owning paths distinct", () => {
+    // arrange
+    const firstServerName = "server";
+    const secondServerName = "server-1";
+
+    // act
+    const firstError = new McpServerCollisionError(firstServerName, "/scope/mcp.json");
+    const secondError = new McpServerCollisionError(secondServerName, "/scope/mcp-1.json");
+
+    // assert
+    assert.deepStrictEqual(
+      [
+        {
+          message: firstError.message,
+          serverName: firstError.serverName,
+          owningPath: firstError.owningPath,
+        },
+        {
+          message: secondError.message,
+          serverName: secondError.serverName,
+          owningPath: secondError.owningPath,
+        },
+      ],
+      [
+        {
+          message: 'Refusing to stage MCP server "server": already exists in /scope/mcp.json.',
+          serverName: "server",
+          owningPath: "/scope/mcp.json",
+        },
+        {
+          message: 'Refusing to stage MCP server "server-1": already exists in /scope/mcp-1.json.',
+          serverName: "server-1",
+          owningPath: "/scope/mcp-1.json",
+        },
+      ],
     );
   });
 });
@@ -264,6 +440,48 @@ describe("CommandNameError", () => {
         commandsDir: "/plugins/acme/commands",
         cause,
       },
+    );
+  });
+
+  test("keeps adjacent source names and directories distinct", () => {
+    // arrange
+    const firstSourceName = "a";
+    const secondSourceName = "aa";
+
+    // act
+    const firstError = new CommandNameError(firstSourceName, "/commands/a");
+    const secondError = new CommandNameError(secondSourceName, "/commands/aa");
+
+    // assert
+    assert.deepStrictEqual(
+      [
+        {
+          message: firstError.message,
+          sourceName: firstError.sourceName,
+          commandsDir: firstError.commandsDir,
+          cause: firstError.cause,
+        },
+        {
+          message: secondError.message,
+          sourceName: secondError.sourceName,
+          commandsDir: secondError.commandsDir,
+          cause: secondError.cause,
+        },
+      ],
+      [
+        {
+          message: 'invalid command source "a" in "/commands/a"',
+          sourceName: "a",
+          commandsDir: "/commands/a",
+          cause: undefined,
+        },
+        {
+          message: 'invalid command source "aa" in "/commands/aa"',
+          sourceName: "aa",
+          commandsDir: "/commands/aa",
+          cause: undefined,
+        },
+      ],
     );
   });
 });
