@@ -126,13 +126,13 @@ Plans:
 3. Tests own and restore filesystem, environment, cache, and notification state without a generic helper directory.
 4. Shared modules keep their current public surface and expose no test-only state or reset operation.
 
-**Plans**: 2/19 plans executed
+**Plans**: 3/19 plans executed
 
 Plans:
 
 - [x] 109-01-PLAN.md
 - [x] 109-02-PLAN.md
-- [ ] 109-03-PLAN.md
+- [x] 109-03-PLAN.md
 - [ ] 109-04-PLAN.md
 - [ ] 109-05-PLAN.md
 - [ ] 109-06-PLAN.md
@@ -151,8 +151,8 @@ Plans:
 - [ ] 109-19-PLAN.md
 
 - [x] **109-01** (`109-01-PLAN.md`, `P109-01`) - `extensions/pi-claude-marketplace/shared/atomic-json.ts` → `tests/shared/atomic-json.test.ts`
-- [ ] **109-02** (`109-02-PLAN.md`, `P109-02`) - `extensions/pi-claude-marketplace/shared/completion-cache.ts` → `tests/shared/completion-cache.test.ts`
-- [ ] **109-03** (`109-03-PLAN.md`, `P109-03`) - `extensions/pi-claude-marketplace/shared/concerns/hooks.ts` → `tests/shared/concerns/hooks.test.ts`
+- [x] **109-02** (`109-02-PLAN.md`, `P109-02`) - `extensions/pi-claude-marketplace/shared/completion-cache.ts` → `tests/shared/completion-cache.test.ts`
+- [x] **109-03** (`109-03-PLAN.md`, `P109-03`) - `extensions/pi-claude-marketplace/shared/concerns/hooks.ts` → `tests/shared/concerns/hooks.test.ts`
 - [ ] **109-04** (`109-04-PLAN.md`, `P109-04`) - `extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts` → `tests/shared/concerns/soft-dep.test.ts`
 - [ ] **109-05** (`109-05-PLAN.md`, `P109-05`) - `extensions/pi-claude-marketplace/shared/debug-log.ts` → `tests/shared/debug-log.test.ts`
 - [ ] **109-06** (`109-06-PLAN.md`, `P109-06`) - `extensions/pi-claude-marketplace/shared/errors-bridges.ts` → `tests/shared/errors-bridges.test.ts`
@@ -527,7 +527,7 @@ and commit still owns one pair.
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
-| 109. Shared Contracts                    | 2/19 | In Progress|  |
+| 109. Shared Contracts                    | 3/19 | In Progress|  |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
