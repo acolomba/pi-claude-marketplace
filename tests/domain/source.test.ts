@@ -653,7 +653,9 @@ describe("pathSource", () => {
       };
 
       // act
-      const createPathSource = () => Reflect.apply(pathSource, undefined, [invalidPath]);
+      const createPathSource = () => {
+        Reflect.apply(pathSource, undefined, [invalidPath]);
+      };
 
       // assert
       assert.throws(createPathSource, expectedError);

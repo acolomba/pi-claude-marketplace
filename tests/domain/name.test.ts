@@ -13,12 +13,17 @@ describe("assertSafeName", () => {
     test(`accepts ${JSON.stringify(name)}`, () => {
       // arrange
       const safeName = name;
+      let actualError: unknown = undefined;
 
       // act
-      const assertSafeNameReturn = assertSafeName(safeName);
+      try {
+        assertSafeName(safeName);
+      } catch (error) {
+        actualError = error;
+      }
 
       // assert
-      assert.strictEqual(assertSafeNameReturn, undefined);
+      assert.strictEqual(actualError, undefined);
     });
   }
 
@@ -95,12 +100,17 @@ describe("assertSafeName", () => {
     test(`accepts ${JSON.stringify(safeNeighbor)} adjacent to rejected ${JSON.stringify(unsafeName)}`, () => {
       // arrange
       const safeName = safeNeighbor;
+      let actualError: unknown = undefined;
 
       // act
-      const assertSafeNameReturn = assertSafeName(safeName);
+      try {
+        assertSafeName(safeName);
+      } catch (error) {
+        actualError = error;
+      }
 
       // assert
-      assert.strictEqual(assertSafeNameReturn, undefined);
+      assert.strictEqual(actualError, undefined);
     });
 
     test(`rejects ${JSON.stringify(unsafeName)}`, () => {
@@ -108,7 +118,9 @@ describe("assertSafeName", () => {
       const rejectedName = unsafeName;
 
       // act
-      const assertNameSafety = () => assertSafeName(rejectedName);
+      const assertNameSafety = () => {
+        assertSafeName(rejectedName);
+      };
 
       // assert
       assert.throws(assertNameSafety, (error: unknown) => {
@@ -142,7 +154,9 @@ describe("assertSafeName", () => {
       const unsafeName = name;
 
       // act
-      const assertNameSafety = () => assertSafeName(unsafeName, label);
+      const assertNameSafety = () => {
+        assertSafeName(unsafeName, label);
+      };
 
       // assert
       assert.throws(assertNameSafety, (error: unknown) => {

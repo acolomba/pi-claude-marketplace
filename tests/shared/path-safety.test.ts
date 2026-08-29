@@ -5,13 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import type { PathLike } from "node:fs";
-
 import {
   PathContainmentError,
   SymlinkRefusedError,
   assertPathInside,
 } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+
+import type { PathLike } from "node:fs";
 
 test("PathContainmentError exposes its complete containment failure", () => {
   // arrange
@@ -83,12 +83,17 @@ test("accepts a parent as its own child boundary", async (t) => {
   // arrange
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "path-safety-equal-"));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let actualError: unknown = undefined;
 
   // act
-  const containment = await assertPathInside(directory, directory, "equal boundary");
+  try {
+    await assertPathInside(directory, directory, "equal boundary");
+  } catch (error) {
+    actualError = error;
+  }
 
   // assert
-  assert.strictEqual(containment, undefined);
+  assert.strictEqual(actualError, undefined);
 });
 
 test("accepts an existing direct child", async (t) => {
@@ -97,12 +102,17 @@ test("accepts an existing direct child", async (t) => {
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const child = path.join(directory, "component.md");
   await fs.writeFile(child, "content");
+  let actualError: unknown = undefined;
 
   // act
-  const containment = await assertPathInside(directory, child, "direct child");
+  try {
+    await assertPathInside(directory, child, "direct child");
+  } catch (error) {
+    actualError = error;
+  }
 
   // assert
-  assert.strictEqual(containment, undefined);
+  assert.strictEqual(actualError, undefined);
 });
 
 test("rejects the direct parent as a one-step escape", async (t) => {
@@ -157,10 +167,9 @@ test("accepts a missing intermediate segment before a write", async (t) => {
   syncBuiltinESMExports();
 
   // act
-  const containment = await assertPathInside(directory, child, "future component");
+  await assertPathInside(directory, child, "future component");
 
   // assert
-  assert.strictEqual(containment, undefined);
   assert.deepStrictEqual(lstatPaths, [path.join(directory, "missing")]);
 });
 
@@ -184,10 +193,9 @@ test("walks touching components in parent-to-child order", async (t) => {
   syncBuiltinESMExports();
 
   // act
-  const containment = await assertPathInside(directory, child, "ordered component");
+  await assertPathInside(directory, child, "ordered component");
 
   // assert
-  assert.strictEqual(containment, undefined);
   assert.deepStrictEqual(lstatPaths, [
     path.join(directory, "alpha"),
     path.join(directory, "alpha", "beta"),
