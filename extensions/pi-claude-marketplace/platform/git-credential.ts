@@ -97,12 +97,6 @@ export interface CreateCredentialOpsOptions {
   readonly timeoutMs?: number;
 }
 
-const spawnCredentialProcess: CredentialSpawn = (command, args, options) =>
-  spawn(command, [...args], {
-    env: options.env,
-    stdio: [...options.stdio],
-  });
-
 /**
  * Spawn `git credential <subcommand>` and feed `input` over stdin. Returns
  * { stdout, code } on close. Rejects on subprocess "error" (ENOENT
@@ -301,7 +295,7 @@ async function credentialReject(
 }
 
 export function createCredentialOps(options: CreateCredentialOpsOptions = {}): CredentialOps {
-  const spawnProcess = options.spawn ?? spawnCredentialProcess;
+  const spawnProcess = options.spawn ?? (spawn as CredentialSpawn);
   const timeoutMs = options.timeoutMs ?? 5_000;
   const runGitCredential: RunGitCredential = (subcommand, input) =>
     gitCredentialIO(subcommand, input, spawnProcess, timeoutMs);

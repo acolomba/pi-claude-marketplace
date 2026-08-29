@@ -42,6 +42,20 @@ function isCorrespondingTestCandidate(testPath) {
   return !nonCorrespondingRoots.has(firstSegment);
 }
 
+function supplementalCompanions(testPath) {
+  const match = testPath.match(/^tests\/(domain|platform)\/(.+)-fake\.test\.ts$/);
+  if (match === null) {
+    return undefined;
+  }
+
+  const [, concern, relativeName] = match;
+  const prefix = `tests/${concern}/${relativeName}`;
+  return {
+    contractPath: `${prefix}-contract.ts`,
+    fakePath: `${prefix}-fake.ts`,
+  };
+}
+
 function importedPaths(projectRoot, testPath) {
   const absoluteTestPath = path.join(projectRoot, testPath);
   const sourceFile = ts.createSourceFile(
@@ -75,6 +89,23 @@ function importedPaths(projectRoot, testPath) {
   return paths;
 }
 
+function isStructuralSupplement(projectRoot, testPath) {
+  const companions = supplementalCompanions(testPath);
+  if (companions === undefined) {
+    return false;
+  }
+
+  if (
+    !existsSync(path.join(projectRoot, companions.fakePath)) ||
+    !existsSync(path.join(projectRoot, companions.contractPath))
+  ) {
+    return false;
+  }
+
+  const imports = importedPaths(projectRoot, testPath);
+  return imports.includes(companions.fakePath) && imports.includes(companions.contractPath);
+}
+
 export function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
   const sourcePaths = filesBelow(projectRoot, productionRoot, (name) => name.endsWith(".ts"));
   const testPaths = filesBelow(projectRoot, testRoot, (name) => name.endsWith(".test.ts"));
@@ -96,6 +127,10 @@ export function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
   }
 
   for (const testPath of testPaths.filter(isCorrespondingTestCandidate)) {
+    if (isStructuralSupplement(projectRoot, testPath)) {
+      continue;
+    }
+
     const sourcePath = expectedSourcePath(testPath);
 
     if (!sourceSet.has(sourcePath)) {
