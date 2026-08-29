@@ -15,6 +15,8 @@ test("exports the complete recovery reinstall prefix", () => {
 
   // assert
   assert.strictEqual(recoveryPrefix, expectedPrefix);
+  assert.notStrictEqual(recoveryPrefix, "plugin-uninstall + plugin-install fo");
+  assert.notStrictEqual(recoveryPrefix, "plugin-uninstall + plugin-install for ");
 });
 
 test("exports the complete state-lock contention prefix", () => {
@@ -26,4 +28,12 @@ test("exports the complete state-lock contention prefix", () => {
 
   // assert
   assert.strictEqual(stateLockPrefix, expectedPrefix);
+  assert.notStrictEqual(
+    stateLockPrefix,
+    "Another pi-claude-marketplace operation is in progress fo",
+  );
+  assert.notStrictEqual(
+    stateLockPrefix,
+    "Another pi-claude-marketplace operation is in progress for ",
+  );
 });
