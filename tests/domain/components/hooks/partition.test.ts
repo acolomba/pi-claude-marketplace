@@ -29,7 +29,16 @@ describe("partitionHooks", () => {
     const partition = partitionHooks(config);
 
     // assert
-    assert.deepStrictEqual(partition, { supported: config, dropped: [] });
+    assert.deepStrictEqual(partition, {
+      supported: {
+        PreToolUse: [
+          { matcher: "Edit", hooks: [{ type: "command", command: "edit" }] },
+          { matcher: "mcp__github__issue", hooks: [{ type: "command", command: "issue" }] },
+          { hooks: [{ type: "command", command: "all" }] },
+        ],
+      },
+      dropped: [],
+    });
   });
 
   test("drops regex and unmapped tool groups but keeps their supported sibling", () => {
@@ -114,7 +123,15 @@ describe("partitionHooks", () => {
     const partition = partitionHooks(config);
 
     // assert
-    assert.deepStrictEqual(partition, { supported: config, dropped: [] });
+    assert.deepStrictEqual(partition, {
+      supported: {
+        Stop: [
+          { hooks: [{ type: "command", command: "absent" }] },
+          { matcher: "*", hooks: [{ type: "command", command: "star" }] },
+        ],
+      },
+      dropped: [],
+    });
   });
 
   test("keeps a closed-set value and drops values outside the set", () => {
