@@ -59,14 +59,14 @@ secondary detail.
 3. Production and fake Git, credential, and device-flow adapters pass the same public contract cases, including an independent broken-adapter control.
 4. Domain and platform tests run without live network access, developer credentials, or test-only production exports.
 
-**Plans**: 17/23 plans executed
+**Plans**: 20/23 plans executed
 
 Plans:
 
 - [x] 108-01-PLAN.md
-- [ ] 108-02-PLAN.md
-- [ ] 108-03-PLAN.md
-- [ ] 108-04-PLAN.md
+- [x] 108-02-PLAN.md
+- [x] 108-03-PLAN.md
+- [x] 108-04-PLAN.md
 - [ ] 108-05-PLAN.md
 - [x] 108-06-PLAN.md
 - [ ] 108-07-PLAN.md
@@ -88,9 +88,9 @@ Plans:
 - [ ] 108-23-PLAN.md
 
 - [x] **108-01** (`108-01-PLAN.md`, `P108-01`) - `extensions/pi-claude-marketplace/domain/auth-registry.ts` → `tests/domain/auth-registry.test.ts`
-- [ ] **108-02** (`108-02-PLAN.md`, `P108-02`) - `extensions/pi-claude-marketplace/domain/clone-key.ts` → `tests/domain/clone-key.test.ts`
-- [ ] **108-03** (`108-03-PLAN.md`, `P108-03`) - `extensions/pi-claude-marketplace/domain/components/hook-events.ts` → `tests/domain/components/hook-events.test.ts`
-- [ ] **108-04** (`108-04-PLAN.md`, `P108-04`) - `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` → `tests/domain/components/hook-if-targets.test.ts`
+- [x] **108-02** (`108-02-PLAN.md`, `P108-02`) - `extensions/pi-claude-marketplace/domain/clone-key.ts` → `tests/domain/clone-key.test.ts`
+- [x] **108-03** (`108-03-PLAN.md`, `P108-03`) - `extensions/pi-claude-marketplace/domain/components/hook-events.ts` → `tests/domain/components/hook-events.test.ts`
+- [x] **108-04** (`108-04-PLAN.md`, `P108-04`) - `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` → `tests/domain/components/hook-if-targets.test.ts`
 - [ ] **108-05** (`108-05-PLAN.md`, `P108-05`) - `extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts` → `tests/domain/components/hook-tool-names.test.ts`
 - [x] **108-06** (`108-06-PLAN.md`, `P108-06`) - `extensions/pi-claude-marketplace/domain/components/hooks.ts` → `tests/domain/components/hooks.test.ts`
 - [ ] **108-07** (`108-07-PLAN.md`, `P108-07`) - `extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts` → `tests/domain/components/hooks/matcher.test.ts`
@@ -502,7 +502,7 @@ and commit still owns one pair.
 
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
-| 108. Domain and Platform                 | 17/23 | In Progress|  |
+| 108. Domain and Platform                 | 20/23 | In Progress|  |
 | 109. Shared Contracts                    |           0/19 | Not started     | -         |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
@@ -512,4 +512,4 @@ and commit still owns one pair.
 | 115. Composition Orchestrators           |            0/8 | Not started     | -         |
 | 116. Edge Surface                        |           0/30 | Not started     | -         |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -         |
-| **Total**                                |      **0/204** | **Not started** | **-**     |
+| **Total**                                |     **20/204** | **In Progress** | **-**     |
