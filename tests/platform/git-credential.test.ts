@@ -5,9 +5,11 @@ import {
   createCredentialOps,
   type CredentialOps,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+
 import { registerCredentialOpsContract } from "./credential-ops-contract.ts";
 import { createCredentialProcessFake } from "./credential-process-fake.ts";
+
+import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
 void ({
   fill: () => Promise.resolve(null),
@@ -69,6 +71,7 @@ function createProductionCredentialOps(): CredentialOps {
           credentials.delete(host);
         }
       }
+
       process.close(0);
     },
   });

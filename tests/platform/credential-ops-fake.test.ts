@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { CredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import {
   CREDENTIAL_OPS_CASE_NAMES,
   credentialOpsContractCases,
   registerCredentialOpsContract,
 } from "./credential-ops-contract.ts";
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
+
+import type { CredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 
 function createAliasingCredentialOpsFake(): CredentialOps {
   const credentialOps = createCredentialOpsFake({ boundary: "memory" }).credentialOps;
@@ -27,6 +28,7 @@ function createAliasingCredentialOpsFake(): CredentialOps {
       if (credential !== null) {
         returnedCredentials.set(host, credential);
       }
+
       return credential;
     },
     async approve(host, credential) {
@@ -77,6 +79,7 @@ describe("createCredentialOpsFake", () => {
         if (!(error instanceof assert.AssertionError)) {
           throw error;
         }
+
         failures.push(contractCase.name);
       }
     }

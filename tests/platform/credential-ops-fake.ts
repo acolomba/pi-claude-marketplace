@@ -32,6 +32,7 @@ function validateCredential(host: string, credential?: GitCredentials): void {
   if (credential?.username !== undefined) {
     validateAttribute(credential.username, "username");
   }
+
   if (credential?.password !== undefined) {
     validateAttribute(credential.password, "password");
   }
@@ -63,6 +64,7 @@ export function createCredentialOpsFake(options: CredentialOpsFakeOptions): Cred
         throw options.fillError;
       }
 
+      await Promise.resolve();
       const credential = credentials.get(host);
       return credential === undefined ? null : structuredClone(credential);
     },
@@ -73,6 +75,7 @@ export function createCredentialOpsFake(options: CredentialOpsFakeOptions): Cred
         throw options.approveError;
       }
 
+      await Promise.resolve();
       credentials.set(host, structuredClone(credential));
     },
     async reject(host, credential) {
@@ -82,6 +85,7 @@ export function createCredentialOpsFake(options: CredentialOpsFakeOptions): Cred
         throw options.rejectError;
       }
 
+      await Promise.resolve();
       const stored = credentials.get(host);
       if (stored !== undefined && sameCredential(stored, credential)) {
         credentials.delete(host);

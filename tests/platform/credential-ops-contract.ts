@@ -55,6 +55,10 @@ const credential = {
   password: "token-1",
 } satisfies GitCredentials;
 
+function observeVoid(promise: Promise<void>): Promise<unknown> {
+  return promise;
+}
+
 function validationCase({
   name,
   operation,
@@ -124,7 +128,7 @@ const behaviorCases: readonly CredentialOpsContractCase[] = [
       const credentialOps = await createCredentialOps();
 
       // act
-      const approval = await credentialOps.approve("github.com", credential);
+      const approval = await observeVoid(credentialOps.approve("github.com", credential));
 
       // assert
       assert.strictEqual(approval, undefined);
@@ -207,7 +211,7 @@ const behaviorCases: readonly CredentialOpsContractCase[] = [
       await credentialOps.approve("github.com", credential);
 
       // act
-      const rejection = await credentialOps.reject("github.com", credential);
+      const rejection = await observeVoid(credentialOps.reject("github.com", credential));
       const storedCredential = await credentialOps.fill("github.com");
 
       // assert
@@ -242,7 +246,7 @@ const behaviorCases: readonly CredentialOpsContractCase[] = [
       await credentialOps.reject("github.com", credential);
 
       // act
-      const rejection = await credentialOps.reject("github.com", credential);
+      const rejection = await observeVoid(credentialOps.reject("github.com", credential));
       const storedCredential = await credentialOps.fill("github.com");
 
       // assert
