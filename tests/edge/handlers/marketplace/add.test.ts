@@ -17,7 +17,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { makeAddHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts";
-import { makeMockGitOps } from "../../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { PluginUpdateOutcome } from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -26,6 +26,25 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+function makeMockGitOps() {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ["https://github.com/owner/repo.git"],
+  });
+  const gitOps: EdgeDeps["gitOps"] = {
+    ...git.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneOptionsWithoutCredentials } = cloneOptions;
+      await git.gitOps.clone(cloneOptionsWithoutCredentials);
+    },
+  };
+
+  return {
+    gitOps,
+    state: { cloneCalls: git.state.calls.clone },
+  };
 }
 
 function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
