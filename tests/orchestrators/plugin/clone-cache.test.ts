@@ -15,16 +15,155 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type {
   GitSubdirSource,
   UrlSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 const PIN_40 = "1234567890abcdef1234567890abcdef12345678";
 const PIN2_40 = "abcdef1234567890abcdef1234567890abcdef12";
+const DEFAULT_CLONE_OID = "0000000000000000000000000000000000000001";
+
+interface GitOpsAdapterOptions {
+  readonly remoteHead?: string;
+  readonly remoteResolveMap?: Readonly<Record<string, string>>;
+  readonly resolveRemoteRefThrows?: Error;
+  readonly cloneThrows?: Error;
+  readonly head?: string;
+  readonly localRefs?: Readonly<Record<string, string>>;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+}
+
+const ALLOWED_CLONE_CACHE_REMOTES = [
+  "https://example.com/mono",
+  "https://example.com/mono.git",
+  "https://example.com/repo",
+  "https://example.com/repo.git",
+  "https://github.com/owner/repo",
+  "https://github.com/owner/repo.git",
+  "https://gitlab.example.com/o/r",
+  "https://gitlab.example.com/o/r.git",
+] as const;
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const normalizedRemoteRefs = Object.fromEntries(
+    Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
+      ref.replace(/^refs\/remotes\/[^/]+\//, ""),
+      oid,
+    ]),
+  );
+  const initialOid = initial.head ?? "";
+  const remoteHead = initial.remoteHead ?? initial.head ?? "";
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ALLOWED_CLONE_CACHE_REMOTES,
+    initialOid,
+    remoteHead,
+    remoteRefs: {
+      ...normalizedRemoteRefs,
+      ...(initial.remoteRefs ?? {}),
+      ...(initial.remoteResolveMap ?? {}),
+    },
+    ...(initial.localRefs === undefined ? {} : { localRefs: initial.localRefs }),
+    ...(initial.cloneThrows === undefined ? {} : { cloneError: initial.cloneThrows }),
+    ...(initial.resolveRemoteRefThrows === undefined
+      ? {}
+      : { resolveRemoteRefError: initial.resolveRemoteRefThrows }),
+  });
+
+  for (const ref of Object.keys(git.state.localRefs)) {
+    Reflect.deleteProperty(git.state.localRefs, ref);
+  }
+
+  Object.assign(git.state.localRefs, initial.localRefs ?? {});
+  git.state.head = initialOid;
+  git.state.branch = Object.keys(git.state.localRefs).includes("refs/heads/main")
+    ? "main"
+    : undefined;
+
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async clone(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.clone(authlessOptions);
+      await mkdir(options.dir, { recursive: true });
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
+      }
+
+      if (initial.head === undefined && initial.localRefs === undefined) {
+        git.state.localRefs["refs/heads/main"] = DEFAULT_CLONE_OID;
+        git.state.head = DEFAULT_CLONE_OID;
+        git.state.branch = "main";
+      }
+    },
+    async fetch(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.fetch(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.fetch.at(-1) ?? {}, { auth });
+      }
+    },
+    async checkout(options) {
+      try {
+        await git.gitOps.checkout(options);
+      } catch (error) {
+        const remoteOid =
+          git.state.remoteRefs[options.ref] ??
+          git.state.remoteRefs[`refs/remotes/origin/${options.ref}`];
+        if (remoteOid !== undefined) {
+          git.state.head = remoteOid;
+          git.state.branch = undefined;
+          return;
+        }
+
+        throw error;
+      }
+    },
+    async resolveRef(options) {
+      try {
+        return await git.gitOps.resolveRef(options);
+      } catch (error) {
+        const remoteOid =
+          git.state.remoteRefs[options.ref] ??
+          (options.ref === "refs/remotes/origin/HEAD"
+            ? git.state.remoteRefs["refs/remotes/origin/main"]
+            : undefined);
+        if (remoteOid !== undefined) {
+          return remoteOid;
+        }
+
+        throw error;
+      }
+    },
+    async resolveRemoteRef(options) {
+      const { auth, ...authlessOptions } = options;
+      const oid = await git.gitOps.resolveRemoteRef(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.resolveRemoteRef.at(-1) ?? {}, { auth });
+      }
+
+      return oid;
+    },
+  };
+
+  return {
+    gitOps,
+    state: Object.assign(git.state, {
+      cloneCalls: git.state.calls.clone,
+      fetchCalls: git.state.calls.fetch,
+      forceUpdateRefCalls: git.state.calls.forceUpdateRef,
+      checkoutCalls: git.state.calls.checkout,
+      resolveRefCalls: git.state.calls.resolveRef,
+      currentBranchCalls: git.state.calls.currentBranch,
+      resolveRemoteRefCalls: git.state.calls.resolveRemoteRef,
+    }),
+  };
+}
 
 async function freshLocations(): Promise<ScopedLocations> {
   const cwd = await mkdtemp(path.join(tmpdir(), "clone-cache-"));

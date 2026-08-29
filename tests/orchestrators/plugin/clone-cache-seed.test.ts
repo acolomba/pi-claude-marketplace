@@ -30,7 +30,7 @@ import { readMirrorHeadSha } from "../../../extensions/pi-claude-marketplace/orc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -39,6 +39,27 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 const REPO_URL = "https://example.com/repo";
 const OTHER_URL = "https://other.example.com/different";
 const PIN_40 = "1234567890abcdef1234567890abcdef12345678";
+
+interface GitOpsAdapterOptions {
+  readonly checkoutThrows?: Error;
+}
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [],
+    ...(initial.checkoutThrows === undefined ? {} : { checkoutError: initial.checkoutThrows }),
+  });
+
+  return {
+    gitOps: git.gitOps,
+    state: {
+      get checkoutCalls() {
+        return git.state.calls.checkout;
+      },
+    },
+  };
+}
 
 async function freshLocations(): Promise<ScopedLocations> {
   const cwd = await mkdtemp(path.join(tmpdir(), "clone-cache-seed-"));

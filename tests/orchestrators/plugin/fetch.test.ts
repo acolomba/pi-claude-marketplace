@@ -17,14 +17,163 @@ import {
 import { fetchPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
+import type { PollResult } from "../../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { FetchCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps: credentials.credentialOps };
+}
+
+function makeMockDeviceFlowHttp(initial: { readonly pollQueue?: readonly PollResult[] } = {}) {
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    ...(initial.pollQueue === undefined ? {} : { pollResponses: initial.pollQueue }),
+  });
+
+  return {
+    http: deviceFlow.http,
+    state: {
+      get requestCodeCalls() {
+        return deviceFlow.calls.requestCode;
+      },
+    },
+  };
+}
+
+interface GitOpsAdapterOptions {
+  readonly fixtureSourceDir?: string;
+  readonly head?: string;
+  readonly localRefs?: Readonly<Record<string, string>>;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+}
+
+const ALLOWED_FETCH_REMOTES = [
+  "https://example.com/o/a",
+  "https://example.com/o/a.git",
+  "https://example.com/o/b",
+  "https://example.com/o/b.git",
+  "https://example.com/o/c",
+  "https://example.com/o/c.git",
+  "https://example.com/org/bad",
+  "https://example.com/org/bad.git",
+  "https://example.com/org/canceled",
+  "https://example.com/org/canceled.git",
+  "https://example.com/org/denied",
+  "https://example.com/org/denied.git",
+  "https://example.com/org/monorepo",
+  "https://example.com/org/monorepo.git",
+  "https://example.com/org/ok",
+  "https://example.com/org/ok.git",
+  "https://example.com/org/repo",
+  "https://example.com/org/repo.git",
+  "https://github.com/acme/a",
+  "https://github.com/acme/a.git",
+  "https://github.com/acme/b",
+  "https://github.com/acme/b.git",
+  "https://github.com/acme/lspy",
+  "https://github.com/acme/lspy.git",
+  "https://github.com/acme/priv",
+  "https://github.com/acme/priv.git",
+] as const;
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const normalizedRemoteRefs = Object.fromEntries(
+    Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
+      ref.replace(/^refs\/remotes\/[^/]+\//, ""),
+      oid,
+    ]),
+  );
+  const initialOid =
+    initial.head ??
+    initial.localRefs?.["refs/heads/main"] ??
+    "0000000000000000000000000000000000000001";
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ALLOWED_FETCH_REMOTES,
+    initialOid,
+    remoteHead:
+      initial.remoteRefs?.["refs/remotes/origin/HEAD"] ??
+      initial.remoteRefs?.["refs/remotes/origin/main"] ??
+      initialOid,
+    remoteRefs: { ...normalizedRemoteRefs, ...(initial.remoteRefs ?? {}) },
+    ...(initial.localRefs === undefined ? {} : { localRefs: initial.localRefs }),
+    ...(initial.fixtureSourceDir === undefined
+      ? {}
+      : {
+          cloneFixture: {
+            boundary: "local" as const,
+            sourceDir: initial.fixtureSourceDir,
+          },
+        }),
+  });
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async clone(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.clone(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
+      }
+    },
+    async fetch(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.fetch(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.fetch.at(-1) ?? {}, { auth });
+      }
+    },
+    async resolveRef(options) {
+      try {
+        return await git.gitOps.resolveRef(options);
+      } catch (error) {
+        const remoteOid =
+          git.state.remoteRefs[options.ref] ??
+          (options.ref === "refs/remotes/origin/HEAD"
+            ? git.state.remoteRefs["refs/remotes/origin/main"]
+            : undefined);
+        if (remoteOid !== undefined) {
+          return remoteOid;
+        }
+
+        throw error;
+      }
+    },
+    async resolveRemoteRef(options) {
+      const { auth, ...authlessOptions } = options;
+      const oid = await git.gitOps.resolveRemoteRef(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.resolveRemoteRef.at(-1) ?? {}, { auth });
+      }
+
+      return oid;
+    },
+  };
+
+  return {
+    gitOps,
+    state: {
+      get cloneCalls() {
+        return git.state.calls.clone;
+      },
+    },
+  };
+}
 
 // FTCH-01/02/04/06/07 coverage for the fetch orchestrator:
 //
