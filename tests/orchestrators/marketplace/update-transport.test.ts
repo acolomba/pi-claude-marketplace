@@ -23,12 +23,105 @@ import {
 import { updateMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function fixtureMarketplaceDir(
+  name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
+): string {
+  return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
+}
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps: credentials.credentialOps };
+}
+
+function makeMockDeviceFlowHttp() {
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+  });
+
+  return {
+    http: deviceFlow.http,
+    state: {
+      get requestCodeCalls() {
+        return deviceFlow.calls.requestCode;
+      },
+    },
+  };
+}
+
+interface GitOpsAdapterOptions {
+  readonly fetchThrows?: Error;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+}
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const remoteRefs = Object.fromEntries(
+    Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
+      ref.replace(/^refs\/remotes\/[^/]+\//, ""),
+      oid,
+    ]),
+  );
+  const seededRemoteOid = Object.values(remoteRefs)[0];
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [],
+    remoteRefs,
+    ...(seededRemoteOid === undefined
+      ? {}
+      : {
+          initialOid: seededRemoteOid,
+          updatedOid: seededRemoteOid,
+          remoteHead: seededRemoteOid,
+        }),
+    ...(initial.fetchThrows === undefined ? {} : { fetchError: initial.fetchThrows }),
+  });
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async fetch(options) {
+      const { auth, ...authlessOptions } = options;
+      await git.gitOps.fetch(authlessOptions);
+      if (auth !== undefined) {
+        Object.assign(git.state.calls.fetch.at(-1) ?? {}, { auth });
+      }
+    },
+    async resolveRef(options) {
+      try {
+        return await git.gitOps.resolveRef(options);
+      } catch (error) {
+        const defaultRemoteHead = git.state.localRefs["refs/remotes/origin/main"];
+        if (options.ref === "refs/remotes/origin/HEAD" && defaultRemoteHead !== undefined) {
+          return defaultRemoteHead;
+        }
+
+        throw error;
+      }
+    },
+  };
+
+  return {
+    gitOps,
+    state: {
+      get fetchCalls() {
+        return git.state.calls.fetch;
+      },
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;

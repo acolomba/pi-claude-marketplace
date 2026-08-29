@@ -30,8 +30,8 @@ import { probeManifestEntry } from "../../../extensions/pi-claude-marketplace/or
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -39,6 +39,47 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 const REPO_URL = "https://example.com/repo";
 const OTHER_URL = "https://other.example.com/different";
 const PIN_40 = "1234567890abcdef1234567890abcdef12345678";
+
+function makeMockCredentialOps() {
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  return { credOps: credentials.credentialOps };
+}
+
+interface GitOpsAdapterOptions {
+  readonly fixtureSourceDir?: string;
+  readonly checkoutThrows?: Error;
+}
+
+function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [REPO_URL, `${REPO_URL}.git`],
+    ...(initial.fixtureSourceDir === undefined
+      ? {}
+      : {
+          cloneFixture: {
+            boundary: "local" as const,
+            sourceDir: initial.fixtureSourceDir,
+          },
+        }),
+    ...(initial.checkoutThrows === undefined ? {} : { checkoutError: initial.checkoutThrows }),
+  });
+
+  return {
+    gitOps: git.gitOps,
+    state: {
+      get cloneCalls() {
+        return git.state.calls.clone;
+      },
+      get fetchCalls() {
+        return git.state.calls.fetch;
+      },
+      get resolveRemoteRefCalls() {
+        return git.state.calls.resolveRemoteRef;
+      },
+    },
+  };
+}
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI } {
   const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
