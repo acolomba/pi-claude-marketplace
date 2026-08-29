@@ -332,6 +332,57 @@ describe("initiateDeviceFlow", () => {
     verify(pollingWait);
   });
 
+  test("waits for the default polling interval before polling", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+      deviceCode({ interval: 1 }),
+    );
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 1)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
+      scope: "read_repository",
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const pendingDeviceFlow = initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+    });
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+    t.mock.timers.tick(1_000);
+    const deviceFlow = await pendingDeviceFlow;
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: true,
+      cred: { username: "oauth2", password: "token-1" },
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+  });
+
   for (const { pollResponse, expectedDeviceFlow, behavior } of [
     {
       behavior: "reports denied authorization",
@@ -568,6 +619,46 @@ describe("initiateDeviceFlow", () => {
     verify(credentialOps);
     verify(notification);
     verify(pollingWait);
+  });
+
+  test("cancels the default polling wait through an abort signal", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const provider = authProvider();
+    const controller = new AbortController();
+    controller.abort();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+      deviceCode({ interval: 60 }),
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      signal: controller.signal,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow cancelled.",
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
   });
 
   for (const { requestFailure, expectedReason, behavior } of [
