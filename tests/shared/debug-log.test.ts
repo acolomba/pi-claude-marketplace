@@ -40,12 +40,35 @@ test("emits the exact custom-tag message under the exact debug gate", (t) => {
   process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
 
   // act
-  hookDebugLog("cache miss", "env");
+  hookDebugLog("x", "env");
 
   // assert
   assert.deepStrictEqual(
     consoleError.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
-    [["[env] cache miss"]],
+    [["[env] x"]],
+  );
+});
+
+test("emits the default tag and separator for an empty detail", (t) => {
+  // arrange
+  const previousDebugGate = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebugGate === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebugGate;
+    }
+  });
+  const consoleError = t.mock.method(console, "error", () => undefined);
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+
+  // act
+  hookDebugLog("");
+
+  // assert
+  assert.deepStrictEqual(
+    consoleError.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
+    [["[hooks] "]],
   );
 });
 
@@ -68,3 +91,25 @@ test("stays silent when the debug gate is undefined", (t) => {
   // assert
   assert.deepStrictEqual(consoleError.mock.calls, []);
 });
+
+for (const debugGate of ["", "0", "true", " 1 "] as const) {
+  test(`stays silent when the debug gate is ${JSON.stringify(debugGate)}`, (t) => {
+    // arrange
+    const previousDebugGate = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    t.after(() => {
+      if (previousDebugGate === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebugGate;
+      }
+    });
+    const consoleError = t.mock.method(console, "error", () => undefined);
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugGate;
+
+    // act
+    hookDebugLog("suppressed detail");
+
+    // assert
+    assert.deepStrictEqual(consoleError.mock.calls, []);
+  });
+}
