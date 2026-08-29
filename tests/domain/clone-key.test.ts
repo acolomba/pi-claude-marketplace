@@ -8,16 +8,22 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 
 describe("pluginCloneKey", () => {
-  test("combines the URL hash with the first 12 SHA characters", () => {
+  test("returns the same clone key for identical URL and SHA inputs", () => {
     // arrange
     const canonicalUrl = "https://github.com/o/r";
     const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
 
     // act
-    const cloneKey = pluginCloneKey(canonicalUrl, fullSha);
+    const cloneKeys = [
+      pluginCloneKey(canonicalUrl, fullSha),
+      pluginCloneKey(canonicalUrl, fullSha),
+    ];
 
     // assert
-    assert.strictEqual(cloneKey, "97393e7e6b5a-a1b2c3d4e5f6");
+    assert.deepStrictEqual(cloneKeys, [
+      "97393e7e6b5a-a1b2c3d4e5f6",
+      "97393e7e6b5a-a1b2c3d4e5f6",
+    ]);
   });
 
   test("changes the URL half when the canonical URL changes", () => {
@@ -58,15 +64,15 @@ describe("pluginCloneKey", () => {
 });
 
 describe("pluginMirrorKey", () => {
-  test("returns the bare 12-character URL hash", () => {
+  test("returns the same mirror key for an identical URL", () => {
     // arrange
     const canonicalUrl = "https://github.com/o/r";
 
     // act
-    const mirrorKey = pluginMirrorKey(canonicalUrl);
+    const mirrorKeys = [pluginMirrorKey(canonicalUrl), pluginMirrorKey(canonicalUrl)];
 
     // assert
-    assert.strictEqual(mirrorKey, "97393e7e6b5a");
+    assert.deepStrictEqual(mirrorKeys, ["97393e7e6b5a", "97393e7e6b5a"]);
   });
 
   test("changes when the canonical URL changes", () => {
