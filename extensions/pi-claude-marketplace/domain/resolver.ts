@@ -16,12 +16,12 @@
 // Literal-tagged variants ARE the discriminator -- TypeScript narrowing
 // works automatically on `switch (r.state)` / `if (r.state === ...)`.
 //
-// Per D-64-01: a three-way string-literal discriminant
-// `state: "installable" | "partially-available" | "unavailable"` (supersedes D-05's
-// boolean `installable: true | false`). `installable` and `partially-available` both
-// carry `pluginRoot` + component lists (D-64-06: `partially-available` is the
-// partially-available arm); `unavailable` is the minimal structural-defect arm
-// and never carries `pluginRoot` (D-64-05, NFR-7). Structural precedence
+// RES-01: `installable: true | false` is the primary materializability
+// discriminator. The three-way `state` field keeps the secondary
+// `"installable" | "partially-available" | "unavailable"` detail. Both true
+// arms carry `pluginRoot` + component lists (D-64-06); the false `unavailable`
+// arm is the minimal structural-defect arm and never carries `pluginRoot`
+// (D-64-05, NFR-7). Structural precedence
 // (D-64-07): a plugin that is both structurally broken AND declares
 // unsupported component kinds resolves `unavailable`.
 //
@@ -165,6 +165,7 @@ export type _DroppedHookArmKeysCheck = _AssertTrue<
 // token-identical by construction (spreading `state` first keeps the literal
 // discriminant on each arm; TypeBox key order does not affect the static type).
 const MATERIALIZABLE_FIELDS = {
+  installable: Type.Literal(true),
   name: Type.String(),
   // pluginRoot is present on installable + partially-available only (NFR-7); D-64-06
   // lets a partial install degrade past the unsupported parts, so both arms
@@ -223,6 +224,7 @@ const ResolvedPluginPartiallyAvailableSchema = Type.Object({
 // cannot be reliably enumerated once the manifest/structure is broken.
 const ResolvedPluginUnavailableSchema = Type.Object({
   state: Type.Literal("unavailable"),
+  installable: Type.Literal(false),
   name: Type.String(),
   notes: Type.Array(Type.String()), // structural reasons
   // pluginRoot intentionally absent -- NFR-7 enforces non-readability
@@ -439,6 +441,7 @@ function emptyResolution(): PartialResolution {
 function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
   return {
     state: "unavailable",
+    installable: false,
     name,
     notes,
   };
@@ -446,8 +449,8 @@ function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
 
 // The non-discriminant payload shared by the two materializable arms.
 // Because `ResolvedPluginInstallable` and `ResolvedPluginPartiallyAvailable` differ
-// ONLY in `state`, `Omit<..., "state">` is the same structural type for both,
-// so each constructor re-adds its own `state` literal and keeps its precise
+// only in `state`, `Omit<..., "state">` is the same structural type for both.
+// Each constructor re-adds its own `state` literal and keeps its precise
 // discriminated-union return type with no cast.
 function materializableFields(
   name: string,
@@ -456,6 +459,7 @@ function materializableFields(
   defaultEnabled: boolean,
 ): Omit<ResolvedPluginInstallable, "state"> {
   return {
+    installable: true,
     name,
     pluginRoot,
     supported: partial.supported,
@@ -1690,6 +1694,16 @@ export function requireInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
 ): asserts r is ResolvedPluginInstallable {
+  if (!r.installable) {
+    throw new PluginShapeError({
+      kind: op === "update" ? "no-longer-installable" : "not-installable",
+      plugin: r.name,
+      reasons: r.notes,
+      partialable: false,
+      unsupportedKinds: [],
+    });
+  }
+
   if (r.state === "installable") {
     return;
   }
@@ -1701,13 +1715,13 @@ export function requireInstallable(
     // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
     // a structural defect `--partial` cannot help -- carry the distinction the
     // render row uses to condition the `--partial` hint.
-    partialable: r.state === "partially-available",
+    partialable: true,
     // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
     // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
     // `partially-available` arm carries the field; `unavailable` keeps an empty list so
     // its structural reasons stay sourced from `notes` (unchanged).
-    unsupportedKinds: r.state === "partially-available" ? r.unsupported : [],
+    unsupportedKinds: r.unsupported,
   });
 }
 
@@ -1728,7 +1742,7 @@ export function requirePartialInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
 ): asserts r is ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable {
-  if (r.state === "installable" || r.state === "partially-available") {
+  if (r.installable) {
     return;
   }
 
