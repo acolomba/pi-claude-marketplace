@@ -23,33 +23,75 @@ describe("MCP_SERVERS_SCHEMA", () => {
 });
 
 describe("MCP_SERVERS_VALIDATOR", () => {
-  for (const servers of [
-    {},
-    { local: { command: "node", args: ["server.js"] } },
-    { nil: null, scalar: "opaque", list: [1, 2] },
+  for (const { description, servers, expectedServers } of [
+    {
+      description: "an empty record",
+      servers: {},
+      expectedServers: {},
+    },
+    {
+      description: "a record with arbitrary values",
+      servers: {
+        nested: { command: "node", args: ["server.js"] },
+        scalar: "opaque",
+        list: [1, 2],
+        disabled: false,
+        nil: null,
+      },
+      expectedServers: {
+        nested: { command: "node", args: ["server.js"] },
+        scalar: "opaque",
+        list: [1, 2],
+        disabled: false,
+        nil: null,
+      },
+    },
   ]) {
-    test(`accepts ${JSON.stringify(servers)}`, () => {
+    test(`parses ${description}`, () => {
       // arrange
       const mcpServers = servers;
+      const expectedMcpServers = expectedServers;
 
       // act
-      const isValid = MCP_SERVERS_VALIDATOR.Check(mcpServers);
+      const parsedMcpServers = MCP_SERVERS_VALIDATOR.Parse(mcpServers);
 
       // assert
-      assert.strictEqual(isValid, true);
+      assert.deepStrictEqual(parsedMcpServers, expectedMcpServers);
     });
   }
 
-  for (const servers of [null, [], "server", 42]) {
-    test(`rejects ${JSON.stringify(servers)}`, () => {
+  for (const { description, servers } of [
+    { description: "null", servers: null },
+    { description: "an empty array", servers: [] },
+    { description: "a non-empty array", servers: [{}] },
+    { description: "a string", servers: "server" },
+    { description: "a number", servers: 42 },
+    { description: "a boolean", servers: false },
+  ]) {
+    test(`rejects ${description}`, () => {
       // arrange
       const mcpServers = servers;
 
-      // act
-      const isValid = MCP_SERVERS_VALIDATOR.Check(mcpServers);
-
-      // assert
-      assert.strictEqual(isValid, false);
+      // act & assert
+      assert.throws(
+        () => MCP_SERVERS_VALIDATOR.Parse(mcpServers),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.deepStrictEqual(
+            {
+              constructorName: error.constructor.name,
+              name: error.name,
+              message: error.message,
+            },
+            {
+              constructorName: "ParseError",
+              name: "Error",
+              message: "Parse",
+            },
+          );
+          return true;
+        },
+      );
     });
   }
 });
