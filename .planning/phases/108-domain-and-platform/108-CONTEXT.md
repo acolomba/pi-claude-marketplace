@@ -43,6 +43,7 @@ Deliver compliant mirrored owner tests for the 23 domain and platform production
 - **D-17:** Test device-flow HTTP by replacing `globalThis.fetch` through the current test context, returning a fresh `Response` per call, and asserting exact method, URL, headers, and body. Inject polling waits so no live network or real timer runs.
 - **D-18:** Provide concern-local guarded test factories that require explicit local or fake boundaries and throw when a required boundary is missing. Use poison controls for remote URLs and credential access. Do not add a generic global test harness.
 - **D-19:** Every mutable global, mock, timer, environment change, and temporary directory belongs to the current case and is restored or removed by that case.
+- **D-20:** Plan 108-21 owns the behavior-preserving removal or inlining of the private default `spawnCredentialProcess` wrapper in `platform/git-credential.ts`. The injected public factory remains the production boundary; tests must not invoke the real Git credential helper or PATH to cover a private fallback. This checkpoint expansion preserves source-test pair atomicity and the phase's 100 percent direct-coverage requirement.
 
 ### the agent's Discretion
 
