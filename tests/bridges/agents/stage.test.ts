@@ -31,9 +31,11 @@ import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/pers
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(HERE, "..", "_fixtures");
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 function makeResolved(name: string, pluginRoot: string): ResolvedPluginInstallable {
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name,
     pluginRoot,

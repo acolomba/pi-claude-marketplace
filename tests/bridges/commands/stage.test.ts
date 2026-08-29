@@ -29,6 +29,7 @@ const FIXTURE_UNPARSEABLE_COMMAND_ROOT = path.resolve(
   "_fixtures",
   "unparseable-command-plugin",
 );
+const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
 
 interface TmpScope {
   loc: ScopedLocations;
@@ -51,6 +52,7 @@ async function tmpScope(): Promise<TmpScope> {
 function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginInstallable {
   // D-07: componentPaths.commands is `readonly string[]`.
   return {
+    ...INSTALLABLE_FIXTURE_FIELDS,
     state: "installable",
     name: "acme",
     pluginRoot,

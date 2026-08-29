@@ -141,11 +141,11 @@ function isPluginWrapper(v: unknown): v is { hooks: object } {
 
 /** Format the first validator error into a single-line message. */
 function firstHookValidationDetail(value: unknown): string {
-  const errors = HOOKS_VALIDATOR.Errors(value);
-  const first = errors[0];
-  if (!first) {
-    return "(no detail available)";
-  }
+  type HookValidationError = ReturnType<typeof HOOKS_VALIDATOR.Errors>[number];
+
+  // This function is called only after Check(value) returned false, so the
+  // compiled validator guarantees a non-empty diagnostic collection.
+  const [first] = HOOKS_VALIDATOR.Errors(value) as [HookValidationError, ...HookValidationError[]];
 
   return `${first.instancePath || "<root>"}: ${first.message}`;
 }
@@ -310,12 +310,7 @@ function buildIfPredicateMap<P>(
   const out = new Map<string, P>();
   for (const [eventName, groups] of Object.entries(config)) {
     const claudeEvent = eventName as BucketAEvent;
-    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
-      const group = groups[groupIndex];
-      if (group === undefined) {
-        continue;
-      }
-
+    for (const [groupIndex, group] of groups.entries()) {
       compileGroupIfPredicates(claudeEvent, groupIndex, group.hooks, ctx, compileIf, out);
     }
   }
@@ -337,12 +332,7 @@ function compileGroupIfPredicates<P>(
   compileIf: CompileIfCallback<P>,
   out: Map<string, P>,
 ): void {
-  for (let handlerIndex = 0; handlerIndex < hooks.length; handlerIndex++) {
-    const handler = hooks[handlerIndex];
-    if (handler === undefined) {
-      continue;
-    }
-
+  for (const [handlerIndex, handler] of hooks.entries()) {
     const rawIf = handler.if;
     if (rawIf === undefined) {
       continue;
