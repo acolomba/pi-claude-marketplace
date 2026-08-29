@@ -13,14 +13,19 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **OWN-01**: A maintainer can map each of the 204 production TypeScript
   modules at the milestone baseline to exactly one mirrored owner test.
+
 - [ ] **OWN-02**: Each owner test directly imports its paired production module
   without using a barrel or alternate module as a proxy.
+
 - [ ] **OWN-03**: Barrels and type-only production modules follow the same
   ownership rule without exemptions.
+
 - [ ] **OWN-04**: The correspondence gate rejects missing mirrors, unexpected
   legacy tests, and owner tests that import the wrong production module.
+
 - [ ] **OWN-05**: Every inventory row remains open until its new pair plan records
   complete guideline evidence.
+
 - [ ] **OWN-06**: Supplemental architecture, integration, and contract tests do
   not replace the mirrored owner test.
 
@@ -28,10 +33,13 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **CASE-01**: Each runtime case has explicit arrange, act, and assert phases
   in that order.
+
 - [ ] **CASE-02**: Each case title states public behavior, and values use names
   that describe their production roles.
+
 - [ ] **CASE-03**: Each case owns its mutable state, dependencies, timers,
   environment changes, and temporary directories.
+
 - [ ] **CASE-04**: Each owner test uses independent `test()` cases without
   `only`, `skip`, or `todo` markers.
 
@@ -39,11 +47,14 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **TEST-01**: Each case asserts the complete public result or state with an
   expected value that is independent from production code.
+
 - [ ] **TEST-02**: Each error case asserts the public error type and all stable
   fields that callers use.
+
 - [ ] **TEST-03**: Each fake, stub, spy, and mock matches its role in the case.
 - [ ] **TEST-04**: Each interaction mock uses `strong-mock`, exact parameters,
   complete expectations, and explicit final verification.
+
 - [ ] **TEST-05**: Node test doubles and fake timers belong to the current test
   context and are restored by that case.
 
@@ -51,12 +62,16 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **COV-01**: Each source-test pair reaches 100 percent function, line, and
   branch coverage when its owner test runs alone.
+
 - [ ] **COV-02**: The focused direct-coverage command fails closed for a missing,
   ambiguous, or unmapped source or test path.
+
 - [ ] **COV-03**: Changed-pair and all-pair commands use the focused command's
   mapping and coverage rules.
+
 - [ ] **COV-04**: Each structural gate has a small negative control that proves
   the gate rejects its target violation.
+
 - [ ] **COV-05**: The all-pair result contains one complete direct coverage
   record for each of the 204 inventory rows; aggregate coverage is not a
   substitute.
@@ -65,10 +80,13 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **DES-01**: Production code exposes no symbol, reset hook, state reader, or
   test mode only for a test.
+
 - [ ] **DES-02**: A production change for testability extracts a concern, injects
   a dependency, narrows a port, or removes hidden global state.
+
 - [ ] **DES-03**: A refactor keeps the current HEAD module boundary unless a
   production responsibility requires a legal one-pair split.
+
 - [x] **RES-01**: Each resolver result exposes `installable: true | false`;
   materializable arms use `true`, and the `false` arm does not expose
   `pluginRoot`. The existing three-way `state` remains secondary detail.
@@ -77,28 +95,36 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **DEL-01**: Each executable plan and implementation commit owns exactly one
   production source-test pair.
+
 - [ ] **DEL-02**: Each pair plan traces production callers and public contracts
   before changing its source module.
+
 - [ ] **DEL-03**: Supporting edits stay within the owning concern and do not
   change a second production pair.
+
 - [ ] **DEL-04**: Phase and milestone gates are acceptance criteria or carrier
   work for an owning pair, never a verification-only executable plan.
 
 ### Module Completion
 
 - [x] **MOD-01**: All 23 domain and platform pairs complete the pair contract.
-- [ ] **MOD-02**: All 19 shared-contract pairs complete the pair contract.
+- [x] **MOD-02**: All 19 shared-contract pairs complete the pair contract.
 - [ ] **MOD-03**: All 12 persistence and transaction pairs complete the pair
   contract.
+
 - [ ] **MOD-04**: All 31 non-hook component bridge pairs complete the pair
   contract.
+
 - [ ] **MOD-05**: All 31 hook-runtime pairs complete the pair contract.
 - [ ] **MOD-06**: All 35 orchestrator support and presenter pairs complete the
   pair contract.
+
 - [ ] **MOD-07**: All 14 plugin and marketplace lifecycle pairs complete the pair
   contract.
+
 - [ ] **MOD-08**: All eight composition orchestrator pairs complete the pair
   contract.
+
 - [ ] **MOD-09**: All 30 edge-surface pairs complete the pair contract.
 - [ ] **MOD-10**: The extension entry pair completes the pair contract and
   carries the final repository gates.
@@ -107,25 +133,33 @@ brownfield input and do not prove compliance for later phases.
 
 - [ ] **PRES-01**: The refactor preserves every behavior, public-surface, and
   persistence replay contract named by the handoff manifests.
+
 - [ ] **PRES-02**: The refactor preserves the eight product corrections named by
   the handoff decisions.
+
 - [x] **PRES-03**: Production and fake Git, credential, and device-flow adapters
   pass the same public contract cases.
+
 - [x] **PRES-04**: Each adapter contract has an independent negative control.
 
 ### Suite Quality
 
 - [ ] **SUITE-01**: Unit tests run offline without developer credentials or a
   shared external service.
+
 - [ ] **SUITE-02**: Test support stays beside its concern and does not use a
   generic helper directory.
+
 - [ ] **SUITE-03**: Source and test files contain no migration notes, relocation
   history, or work-session comments.
+
 - [ ] **SUITE-04**: The refactor does not restore the preservation kit, abandoned
   patch, exemption list, ownership registry, sharded coverage, or generic
   helper mechanisms.
+
 - [ ] **SUITE-05**: Focused tests, direct coverage for all pairs, planted negative
   controls, and `npm run check` pass on the completed tree.
+
 - [ ] **SUITE-06**: The final inventory contains exactly the production modules
   at the accepted milestone baseline, with no missing or unexpected owner test.
 
@@ -184,25 +218,25 @@ Every row starts `Open`.
 
 | Pair | Production source | Mirrored owner test | HEAD triage | Status |
 | --- | --- | --- | --- | --- |
-| P109-01 | `extensions/pi-claude-marketplace/shared/atomic-json.ts` | `tests/shared/atomic-json.test.ts` | `PASS` | Open |
-| P109-02 | `extensions/pi-claude-marketplace/shared/completion-cache.ts` | `tests/shared/completion-cache.test.ts` | `COVERAGE_FAIL` | Open |
-| P109-03 | `extensions/pi-claude-marketplace/shared/concerns/hooks.ts` | `tests/shared/concerns/hooks.test.ts` | `MISSING` | Open |
-| P109-04 | `extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts` | `tests/shared/concerns/soft-dep.test.ts` | `MISSING` | Open |
-| P109-05 | `extensions/pi-claude-marketplace/shared/debug-log.ts` | `tests/shared/debug-log.test.ts` | `PASS` | Open |
-| P109-06 | `extensions/pi-claude-marketplace/shared/errors-bridges.ts` | `tests/shared/errors-bridges.test.ts` | `COVERAGE_FAIL` | Open |
-| P109-07 | `extensions/pi-claude-marketplace/shared/errors.ts` | `tests/shared/errors.test.ts` | `COVERAGE_FAIL` | Open |
-| P109-08 | `extensions/pi-claude-marketplace/shared/extension-version.ts` | `tests/shared/extension-version.test.ts` | `MISSING` | Open |
-| P109-09 | `extensions/pi-claude-marketplace/shared/fs-utils.ts` | `tests/shared/fs-utils.test.ts` | `COVERAGE_FAIL` | Open |
-| P109-10 | `extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts` | `tests/shared/git-failure-classifiers.test.ts` | `PASS` | Open |
-| P109-11 | `extensions/pi-claude-marketplace/shared/markers.ts` | `tests/shared/markers.test.ts` | `MISSING` | Open |
-| P109-12 | `extensions/pi-claude-marketplace/shared/notify-context.ts` | `tests/shared/notify-context.test.ts` | `MISSING` | Open |
-| P109-13 | `extensions/pi-claude-marketplace/shared/notify-reasons.ts` | `tests/shared/notify-reasons.test.ts` | `MISSING` | Open |
-| P109-14 | `extensions/pi-claude-marketplace/shared/notify.ts` | `tests/shared/notify.test.ts` | `MISSING` | Open |
-| P109-15 | `extensions/pi-claude-marketplace/shared/path-safety.ts` | `tests/shared/path-safety.test.ts` | `COVERAGE_FAIL` | Open |
-| P109-16 | `extensions/pi-claude-marketplace/shared/probe-classifiers.ts` | `tests/shared/probe-classifiers.test.ts` | `PASS` | Open |
-| P109-17 | `extensions/pi-claude-marketplace/shared/session-env.ts` | `tests/shared/session-env.test.ts` | `COVERAGE_FAIL` | Open |
-| P109-18 | `extensions/pi-claude-marketplace/shared/types.ts` | `tests/shared/types.test.ts` | `MISSING` | Open |
-| P109-19 | `extensions/pi-claude-marketplace/shared/vars.ts` | `tests/shared/vars.test.ts` | `PASS` | Open |
+| P109-01 | `extensions/pi-claude-marketplace/shared/atomic-json.ts` | `tests/shared/atomic-json.test.ts` | `PASS` | Complete |
+| P109-02 | `extensions/pi-claude-marketplace/shared/completion-cache.ts` | `tests/shared/completion-cache.test.ts` | `COVERAGE_FAIL` | Complete |
+| P109-03 | `extensions/pi-claude-marketplace/shared/concerns/hooks.ts` | `tests/shared/concerns/hooks.test.ts` | `MISSING` | Complete |
+| P109-04 | `extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts` | `tests/shared/concerns/soft-dep.test.ts` | `MISSING` | Complete |
+| P109-05 | `extensions/pi-claude-marketplace/shared/debug-log.ts` | `tests/shared/debug-log.test.ts` | `PASS` | Complete |
+| P109-06 | `extensions/pi-claude-marketplace/shared/errors-bridges.ts` | `tests/shared/errors-bridges.test.ts` | `COVERAGE_FAIL` | Complete |
+| P109-07 | `extensions/pi-claude-marketplace/shared/errors.ts` | `tests/shared/errors.test.ts` | `COVERAGE_FAIL` | Complete |
+| P109-08 | `extensions/pi-claude-marketplace/shared/extension-version.ts` | `tests/shared/extension-version.test.ts` | `MISSING` | Complete |
+| P109-09 | `extensions/pi-claude-marketplace/shared/fs-utils.ts` | `tests/shared/fs-utils.test.ts` | `COVERAGE_FAIL` | Complete |
+| P109-10 | `extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts` | `tests/shared/git-failure-classifiers.test.ts` | `PASS` | Complete |
+| P109-11 | `extensions/pi-claude-marketplace/shared/markers.ts` | `tests/shared/markers.test.ts` | `MISSING` | Complete |
+| P109-12 | `extensions/pi-claude-marketplace/shared/notify-context.ts` | `tests/shared/notify-context.test.ts` | `MISSING` | Complete |
+| P109-13 | `extensions/pi-claude-marketplace/shared/notify-reasons.ts` | `tests/shared/notify-reasons.test.ts` | `MISSING` | Complete |
+| P109-14 | `extensions/pi-claude-marketplace/shared/notify.ts` | `tests/shared/notify.test.ts` | `MISSING` | Complete |
+| P109-15 | `extensions/pi-claude-marketplace/shared/path-safety.ts` | `tests/shared/path-safety.test.ts` | `COVERAGE_FAIL` | Complete |
+| P109-16 | `extensions/pi-claude-marketplace/shared/probe-classifiers.ts` | `tests/shared/probe-classifiers.test.ts` | `PASS` | Complete |
+| P109-17 | `extensions/pi-claude-marketplace/shared/session-env.ts` | `tests/shared/session-env.test.ts` | `COVERAGE_FAIL` | Complete |
+| P109-18 | `extensions/pi-claude-marketplace/shared/types.ts` | `tests/shared/types.test.ts` | `MISSING` | Complete |
+| P109-19 | `extensions/pi-claude-marketplace/shared/vars.ts` | `tests/shared/vars.test.ts` | `PASS` | Complete |
 
 ### Phase 110: Persistence and Transaction
 
@@ -458,7 +492,7 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | DEL-03      | Phase 117 | Pending |
 | DEL-04      | Phase 117 | Pending |
 | MOD-01      | Phase 108 | Complete |
-| MOD-02      | Phase 109 | Pending |
+| MOD-02      | Phase 109 | Complete |
 | MOD-03      | Phase 110 | Pending |
 | MOD-04      | Phase 111 | Pending |
 | MOD-05      | Phase 112 | Pending |

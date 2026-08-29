@@ -226,8 +226,8 @@ compliance. The preserved handoff is evidence, not prior milestone state.
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** start Phase 108 with the domain and platform pairs. Each plan owns one
-pair and must prove the complete guideline through exported behavior.
+**Next:** start Phase 110 with the persistence and transaction pairs. Each plan
+owns one pair and must prove replay and recovery behavior through exported contracts.
 
 ## Requirements
 
@@ -542,7 +542,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-08-28 after the v1.19 Unit Test Refactor baseline audit. The milestone has 204 open source-test pairs. Retained commits and retired Phase 106/107 summaries give no completion credit. Prior updates follow.*
+*Last updated: 2026-08-29 after Phase 109 Shared Contracts completed and passed verification, Nyquist validation, code review, regression, and ASVS L1 security gates. Forty-two of 204 source-test pairs are complete; 162 remain open. Runtime tests use separate lowercase `// arrange`, `// act`, and `// assert` phases; lowercase `// act & assert` is limited to one `assert.throws()` or `assert.rejects()` expression; type-only evidence stays module-scoped. Prior updates follow.*
 
 *Last updated: 2026-08-12 after milestone v1.18 Manifest-Independent Installed Plugin Info shipped (Phases 95-100, 29 plans, audit passed 32/32 requirements + 5/5 integration seams + 3/3 flows + 0 open threats; archived to `.planning/milestones/v1.18-*`; npm 0.14.0 on PR #120). An installed plugin now stays visible, inspectable and uninstallable after its marketplace manifest stops declaring it: every absence verdict is judged against the record's own manifest through a `ManifestLookup` discriminated value, `info` reads hooks from the new additive `hookEntries` record key with the materialized file as legacy fallback, and a failed manifest read never claims absence. The `(disabled)` classification was repaired by collapsing four drifting copies of `installable && !enabled` onto one `enabled`-keyed predicate under a whole-tree drift gate, and Phase 100 — added mid-milestone rather than opening v1.19 — made disable retain the record's inventory, which retired ENBL-04's empty-resources marker and re-based the hook-routing and self-conflict guards that had depended on it. Closed on live human UAT against Pi 0.84.1. At close, SEED-001 and the coverage todo were promoted to BACKLOG.md, and the stale global pi-subagents peer was upgraded 0.24.3 → 0.47.1, taking the integration suite 16/18 → 18/18. Prior updates below.*
 
