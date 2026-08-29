@@ -12,6 +12,27 @@ void ("bash" satisfies PiToolName);
 void ("custom" satisfies PiToolName);
 
 describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
+  for (const { claudeToolName, expectedPiToolName } of [
+    { claudeToolName: "Bash", expectedPiToolName: "bash" },
+    { claudeToolName: "Read", expectedPiToolName: "read" },
+    { claudeToolName: "Edit", expectedPiToolName: "edit" },
+    { claudeToolName: "Write", expectedPiToolName: "write" },
+    { claudeToolName: "Grep", expectedPiToolName: "grep" },
+    { claudeToolName: "Glob", expectedPiToolName: "find" },
+    { claudeToolName: "LS", expectedPiToolName: "ls" },
+  ] as const) {
+    test(`maps ${claudeToolName} to ${expectedPiToolName}`, () => {
+      // arrange
+      const toolName = claudeToolName;
+
+      // act
+      const piToolName = CLAUDE_TO_PI_TOOL_NAMES[toolName];
+
+      // assert
+      assert.strictEqual(piToolName, expectedPiToolName);
+    });
+  }
+
   test("maps every supported Claude tool name to its Pi spelling", () => {
     // arrange
     const expectedMappings = {
