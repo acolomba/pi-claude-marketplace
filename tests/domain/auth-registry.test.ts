@@ -29,38 +29,37 @@ const incompleteProvider: GitAuthProvider = {
 void incompleteProvider;
 
 describe("GITHUB_PROVIDER", () => {
-  test("exposes the complete GitHub descriptor data", () => {
+  test("exposes the complete GitHub descriptor", () => {
     // arrange
     const expectedDescriptor = {
       id: "github",
+      host: { name: "github.com", matches: true },
       deviceCodeUrl: "https://github.com/login/device/code",
       tokenUrl: "https://github.com/login/oauth/access_token",
       clientId: "Ov23liNcyK08uGdU0mMl",
       scope: "repo",
+      credentialsByEnvironment: {
+        GH_TOKEN: { username: "x-access-token", password: "GH_TOKEN" },
+        GITHUB_TOKEN: { username: "x-access-token", password: "GITHUB_TOKEN" },
+      },
     };
 
     // act
     const descriptor = {
       id: GITHUB_PROVIDER.id,
+      host: { name: "github.com", matches: GITHUB_PROVIDER.hostMatch("github.com") },
       deviceCodeUrl: GITHUB_PROVIDER.deviceCodeUrl,
       tokenUrl: GITHUB_PROVIDER.tokenUrl,
       clientId: GITHUB_PROVIDER.clientId,
       scope: GITHUB_PROVIDER.scope,
+      credentialsByEnvironment: {
+        GH_TOKEN: GITHUB_PROVIDER.credentialFrom("GH_TOKEN"),
+        GITHUB_TOKEN: GITHUB_PROVIDER.credentialFrom("GITHUB_TOKEN"),
+      },
     };
 
     // assert
     assert.deepStrictEqual(descriptor, expectedDescriptor);
-  });
-
-  test("matches github.com", () => {
-    // arrange
-    const host = "github.com";
-
-    // act
-    const matches = GITHUB_PROVIDER.hostMatch(host);
-
-    // assert
-    assert.strictEqual(matches, true);
   });
 
   for (const host of [
@@ -82,19 +81,6 @@ describe("GITHUB_PROVIDER", () => {
     });
   }
 
-  test("maps an access token to x-access-token credentials", () => {
-    // arrange
-    const accessToken = "github-token";
-
-    // act
-    const credentials = GITHUB_PROVIDER.credentialFrom(accessToken);
-
-    // assert
-    assert.deepStrictEqual(credentials, {
-      username: "x-access-token",
-      password: "github-token",
-    });
-  });
 });
 
 describe("GITLAB_PROVIDER", () => {
@@ -167,7 +153,7 @@ describe("GITLAB_PROVIDER", () => {
 });
 
 describe("findProviderForHost", () => {
-  test("returns the GitHub provider for github.com", () => {
+  test("returns the exact GitHub descriptor for github.com", () => {
     // arrange
     const host = "github.com";
 
