@@ -6,8 +6,8 @@ component as a working Pi artifact.
 
 ## v1.19 Requirements
 
-All requirements are open. Retained source and test commits are brownfield input.
-They do not prove compliance.
+Phase 108 requirements are complete. Retained source and test commits remain
+brownfield input and do not prove compliance for later phases.
 
 ### Pair Ownership
 
@@ -69,7 +69,7 @@ They do not prove compliance.
   a dependency, narrows a port, or removes hidden global state.
 - [ ] **DES-03**: A refactor keeps the current HEAD module boundary unless a
   production responsibility requires a legal one-pair split.
-- [ ] **RES-01**: Each resolver result exposes `installable: true | false`;
+- [x] **RES-01**: Each resolver result exposes `installable: true | false`;
   materializable arms use `true`, and the `false` arm does not expose
   `pluginRoot`. The existing three-way `state` remains secondary detail.
 
@@ -86,7 +86,7 @@ They do not prove compliance.
 
 ### Module Completion
 
-- [ ] **MOD-01**: All 23 domain and platform pairs complete the pair contract.
+- [x] **MOD-01**: All 23 domain and platform pairs complete the pair contract.
 - [ ] **MOD-02**: All 19 shared-contract pairs complete the pair contract.
 - [ ] **MOD-03**: All 12 persistence and transaction pairs complete the pair
   contract.
@@ -109,9 +109,9 @@ They do not prove compliance.
   persistence replay contract named by the handoff manifests.
 - [ ] **PRES-02**: The refactor preserves the eight product corrections named by
   the handoff decisions.
-- [ ] **PRES-03**: Production and fake Git, credential, and device-flow adapters
+- [x] **PRES-03**: Production and fake Git, credential, and device-flow adapters
   pass the same public contract cases.
-- [ ] **PRES-04**: Each adapter contract has an independent negative control.
+- [x] **PRES-04**: Each adapter contract has an independent negative control.
 
 ### Suite Quality
 
@@ -156,29 +156,29 @@ Every row starts `Open`.
 
 | Pair | Production source | Mirrored owner test | HEAD triage | Status |
 | --- | --- | --- | --- | --- |
-| P108-01 | `extensions/pi-claude-marketplace/domain/auth-registry.ts` | `tests/domain/auth-registry.test.ts` | `PASS` | Open |
-| P108-02 | `extensions/pi-claude-marketplace/domain/clone-key.ts` | `tests/domain/clone-key.test.ts` | `PASS` | Open |
-| P108-03 | `extensions/pi-claude-marketplace/domain/components/hook-events.ts` | `tests/domain/components/hook-events.test.ts` | `PASS` | Open |
-| P108-04 | `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` | `tests/domain/components/hook-if-targets.test.ts` | `PASS` | Open |
-| P108-05 | `extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts` | `tests/domain/components/hook-tool-names.test.ts` | `PASS` | Open |
-| P108-06 | `extensions/pi-claude-marketplace/domain/components/hooks.ts` | `tests/domain/components/hooks.test.ts` | `COVERAGE_FAIL` | Open |
-| P108-07 | `extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts` | `tests/domain/components/hooks/matcher.test.ts` | `PASS` | Open |
-| P108-08 | `extensions/pi-claude-marketplace/domain/components/hooks/partition.ts` | `tests/domain/components/hooks/partition.test.ts` | `PASS` | Open |
-| P108-09 | `extensions/pi-claude-marketplace/domain/components/hooks/schema.ts` | `tests/domain/components/hooks/schema.test.ts` | `PASS` | Open |
-| P108-10 | `extensions/pi-claude-marketplace/domain/components/mcp.ts` | `tests/domain/components/mcp.test.ts` | `PASS` | Open |
-| P108-11 | `extensions/pi-claude-marketplace/domain/components/plugin.ts` | `tests/domain/components/plugin.test.ts` | `PASS` | Open |
-| P108-12 | `extensions/pi-claude-marketplace/domain/github-auth.ts` | `tests/domain/github-auth.test.ts` | `PASS` | Open |
-| P108-13 | `extensions/pi-claude-marketplace/domain/manifest-cache.ts` | `tests/domain/manifest-cache.test.ts` | `PASS` | Open |
-| P108-14 | `extensions/pi-claude-marketplace/domain/manifest-lookup.ts` | `tests/domain/manifest-lookup.test.ts` | `PASS` | Open |
-| P108-15 | `extensions/pi-claude-marketplace/domain/manifest.ts` | `tests/domain/manifest.test.ts` | `PASS` | Open |
-| P108-16 | `extensions/pi-claude-marketplace/domain/name.ts` | `tests/domain/name.test.ts` | `PASS` | Open |
-| P108-17 | `extensions/pi-claude-marketplace/domain/plugin-root.ts` | `tests/domain/plugin-root.test.ts` | `PASS` | Open |
-| P108-18 | `extensions/pi-claude-marketplace/domain/resolver.ts` | `tests/domain/resolver.test.ts` | `MISSING` | Open |
-| P108-19 | `extensions/pi-claude-marketplace/domain/source.ts` | `tests/domain/source.test.ts` | `COVERAGE_FAIL` | Open |
-| P108-20 | `extensions/pi-claude-marketplace/domain/version.ts` | `tests/domain/version.test.ts` | `PASS` | Open |
-| P108-21 | `extensions/pi-claude-marketplace/platform/git-credential.ts` | `tests/platform/git-credential.test.ts` | `PASS` | Open |
-| P108-22 | `extensions/pi-claude-marketplace/platform/git.ts` | `tests/platform/git.test.ts` | `MISSING` | Open |
-| P108-23 | `extensions/pi-claude-marketplace/platform/pi-api.ts` | `tests/platform/pi-api.test.ts` | `PASS` | Open |
+| P108-01 | `extensions/pi-claude-marketplace/domain/auth-registry.ts` | `tests/domain/auth-registry.test.ts` | `PASS` | Complete |
+| P108-02 | `extensions/pi-claude-marketplace/domain/clone-key.ts` | `tests/domain/clone-key.test.ts` | `PASS` | Complete |
+| P108-03 | `extensions/pi-claude-marketplace/domain/components/hook-events.ts` | `tests/domain/components/hook-events.test.ts` | `PASS` | Complete |
+| P108-04 | `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` | `tests/domain/components/hook-if-targets.test.ts` | `PASS` | Complete |
+| P108-05 | `extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts` | `tests/domain/components/hook-tool-names.test.ts` | `PASS` | Complete |
+| P108-06 | `extensions/pi-claude-marketplace/domain/components/hooks.ts` | `tests/domain/components/hooks.test.ts` | `COVERAGE_FAIL` | Complete |
+| P108-07 | `extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts` | `tests/domain/components/hooks/matcher.test.ts` | `PASS` | Complete |
+| P108-08 | `extensions/pi-claude-marketplace/domain/components/hooks/partition.ts` | `tests/domain/components/hooks/partition.test.ts` | `PASS` | Complete |
+| P108-09 | `extensions/pi-claude-marketplace/domain/components/hooks/schema.ts` | `tests/domain/components/hooks/schema.test.ts` | `PASS` | Complete |
+| P108-10 | `extensions/pi-claude-marketplace/domain/components/mcp.ts` | `tests/domain/components/mcp.test.ts` | `PASS` | Complete |
+| P108-11 | `extensions/pi-claude-marketplace/domain/components/plugin.ts` | `tests/domain/components/plugin.test.ts` | `PASS` | Complete |
+| P108-12 | `extensions/pi-claude-marketplace/domain/github-auth.ts` | `tests/domain/github-auth.test.ts` | `PASS` | Complete |
+| P108-13 | `extensions/pi-claude-marketplace/domain/manifest-cache.ts` | `tests/domain/manifest-cache.test.ts` | `PASS` | Complete |
+| P108-14 | `extensions/pi-claude-marketplace/domain/manifest-lookup.ts` | `tests/domain/manifest-lookup.test.ts` | `PASS` | Complete |
+| P108-15 | `extensions/pi-claude-marketplace/domain/manifest.ts` | `tests/domain/manifest.test.ts` | `PASS` | Complete |
+| P108-16 | `extensions/pi-claude-marketplace/domain/name.ts` | `tests/domain/name.test.ts` | `PASS` | Complete |
+| P108-17 | `extensions/pi-claude-marketplace/domain/plugin-root.ts` | `tests/domain/plugin-root.test.ts` | `PASS` | Complete |
+| P108-18 | `extensions/pi-claude-marketplace/domain/resolver.ts` | `tests/domain/resolver.test.ts` | `MISSING` | Complete |
+| P108-19 | `extensions/pi-claude-marketplace/domain/source.ts` | `tests/domain/source.test.ts` | `COVERAGE_FAIL` | Complete |
+| P108-20 | `extensions/pi-claude-marketplace/domain/version.ts` | `tests/domain/version.test.ts` | `PASS` | Complete |
+| P108-21 | `extensions/pi-claude-marketplace/platform/git-credential.ts` | `tests/platform/git-credential.test.ts` | `PASS` | Complete |
+| P108-22 | `extensions/pi-claude-marketplace/platform/git.ts` | `tests/platform/git.test.ts` | `MISSING` | Complete |
+| P108-23 | `extensions/pi-claude-marketplace/platform/pi-api.ts` | `tests/platform/pi-api.test.ts` | `PASS` | Complete |
 
 ### Phase 109: Shared Contracts
 
@@ -452,12 +452,12 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | DES-01      | Phase 117 | Pending |
 | DES-02      | Phase 117 | Pending |
 | DES-03      | Phase 117 | Pending |
-| RES-01      | Phase 108 | Pending |
+| RES-01      | Phase 108 | Complete |
 | DEL-01      | Phase 117 | Pending |
 | DEL-02      | Phase 117 | Pending |
 | DEL-03      | Phase 117 | Pending |
 | DEL-04      | Phase 117 | Pending |
-| MOD-01      | Phase 108 | Pending |
+| MOD-01      | Phase 108 | Complete |
 | MOD-02      | Phase 109 | Pending |
 | MOD-03      | Phase 110 | Pending |
 | MOD-04      | Phase 111 | Pending |
@@ -469,8 +469,8 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | MOD-10      | Phase 117 | Pending |
 | PRES-01     | Phase 117 | Pending |
 | PRES-02     | Phase 117 | Pending |
-| PRES-03     | Phase 108 | Pending |
-| PRES-04     | Phase 108 | Pending |
+| PRES-03     | Phase 108 | Complete |
+| PRES-04     | Phase 108 | Complete |
 | SUITE-01    | Phase 117 | Pending |
 | SUITE-02    | Phase 117 | Pending |
 | SUITE-03    | Phase 117 | Pending |
