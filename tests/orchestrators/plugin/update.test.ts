@@ -33,12 +33,119 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+const UPDATE_REMOTE_URLS = [
+  "https://github.com/anthropics/test.git",
+  "https://github.com/test/repo.git",
+  "https://example.com/org/repo.git",
+  "https://example.com/org/mono.git",
+  "https://example.com/org/monorepo.git",
+] as const;
+
+function fixtureMarketplaceDir(
+  name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
+): string {
+  return path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    "..",
+    "marketplace",
+    "_fixtures",
+    name,
+  );
+}
+
+function makeMockGitOps(
+  options: {
+    readonly fixtureSourceDir?: string;
+    readonly head?: string;
+    readonly remoteHead?: string;
+    readonly localRefs?: Readonly<Record<string, string>>;
+    readonly remoteRefs?: Readonly<Record<string, string>>;
+    readonly remoteResolveMap?: Readonly<Record<string, string>>;
+    readonly cloneThrows?: Error;
+    readonly fetchThrows?: Error;
+    readonly checkoutThrows?: Error;
+    readonly resolveRemoteRefThrows?: Error;
+  } = {},
+): {
+  readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
+  readonly state: {
+    readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
+    readonly fetchCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"];
+    readonly forceUpdateRefCalls: ReturnType<
+      typeof createGitOpsFake
+    >["state"]["calls"]["forceUpdateRef"];
+    readonly checkoutCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["checkout"];
+    readonly resolveRefCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["resolveRef"];
+    readonly resolveRemoteRefCalls: ReturnType<
+      typeof createGitOpsFake
+    >["state"]["calls"]["resolveRemoteRef"];
+  };
+} {
+  const remoteRefs = {
+    ...Object.fromEntries(
+      Object.entries(options.remoteRefs ?? {}).map(([ref, oid]) => [ref.split("/").at(-1)!, oid]),
+    ),
+    ...(options.remoteResolveMap ?? {}),
+  };
+  const fake = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: UPDATE_REMOTE_URLS,
+    ...(options.fixtureSourceDir !== undefined && {
+      cloneFixture: { boundary: "local" as const, sourceDir: options.fixtureSourceDir },
+    }),
+    ...((options.head ?? options.remoteHead) !== undefined && {
+      initialOid: options.head ?? options.remoteHead!,
+      remoteHead: options.remoteHead ?? options.head!,
+    }),
+    ...(options.localRefs !== undefined && { localRefs: options.localRefs }),
+    ...(Object.keys(remoteRefs).length > 0 && { remoteRefs }),
+    ...(options.cloneThrows !== undefined && { cloneError: options.cloneThrows }),
+    ...(options.fetchThrows !== undefined && { fetchError: options.fetchThrows }),
+    ...(options.checkoutThrows !== undefined && { checkoutError: options.checkoutThrows }),
+    ...(options.resolveRemoteRefThrows !== undefined && {
+      resolveRemoteRefError: options.resolveRemoteRefThrows,
+    }),
+  });
+  const gitOps: typeof fake.gitOps = {
+    ...fake.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneWithoutCallbacks } = cloneOptions;
+      await fake.gitOps.clone(cloneWithoutCallbacks);
+    },
+    async resolveRef(resolveOptions) {
+      if (resolveOptions.ref === "refs/remotes/origin/HEAD") {
+        const remoteMain = fake.state.localRefs["refs/remotes/origin/main"];
+        if (remoteMain !== undefined) {
+          return remoteMain;
+        }
+      }
+
+      return fake.gitOps.resolveRef(resolveOptions);
+    },
+    async resolveRemoteRef(resolveOptions) {
+      const { auth: _auth, ...resolveWithoutCallbacks } = resolveOptions;
+      return fake.gitOps.resolveRemoteRef(resolveWithoutCallbacks);
+    },
+  };
+  return {
+    gitOps,
+    state: {
+      cloneCalls: fake.state.calls.clone,
+      fetchCalls: fake.state.calls.fetch,
+      forceUpdateRefCalls: fake.state.calls.forceUpdateRef,
+      checkoutCalls: fake.state.calls.checkout,
+      resolveRefCalls: fake.state.calls.resolveRef,
+      resolveRemoteRefCalls: fake.state.calls.resolveRemoteRef,
+    },
+  };
+}
 
 // PUP-1..9 + AS-3 (3-phase) + AS-7 + WR-04 + NFR-2 + NFR-3 coverage:
 //

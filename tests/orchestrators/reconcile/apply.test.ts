@@ -43,7 +43,7 @@ import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { PluginConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -59,6 +59,58 @@ function makeCtx(): MockCtx {
 }
 
 const STUB_PI = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+const RECONCILE_REMOTE_URLS = [
+  "https://github.com/acme/valid.git",
+  "https://github.com/acme/flaky.git",
+  "https://github.com/acme/ok.git",
+] as const;
+
+function fixtureMarketplaceDir(
+  name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
+): string {
+  return path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    "..",
+    "marketplace",
+    "_fixtures",
+    name,
+  );
+}
+
+function makeMockGitOps(options: { readonly fixtureSourceDir: string }): {
+  readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
+  readonly state: {
+    readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
+  };
+} {
+  const fake = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: RECONCILE_REMOTE_URLS,
+    cloneFixture: { boundary: "local", sourceDir: options.fixtureSourceDir },
+  });
+  const gitOps: typeof fake.gitOps = {
+    ...fake.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneWithoutCallbacks } = cloneOptions;
+      await fake.gitOps.clone(cloneWithoutCallbacks);
+    },
+    async resolveRef(resolveOptions) {
+      if (resolveOptions.ref === "refs/remotes/origin/HEAD") {
+        const remoteMain = fake.state.localRefs["refs/remotes/origin/main"];
+        if (remoteMain !== undefined) {
+          return remoteMain;
+        }
+      }
+
+      return fake.gitOps.resolveRef(resolveOptions);
+    },
+    async resolveRemoteRef(resolveOptions) {
+      const { auth: _auth, ...resolveWithoutCallbacks } = resolveOptions;
+      return fake.gitOps.resolveRemoteRef(resolveWithoutCallbacks);
+    },
+  };
+  return { gitOps, state: { cloneCalls: fake.state.calls.clone } };
+}
 
 async function withHermeticHome<T>(
   fn: (env: { cwd: string; home: string }) => Promise<T>,
