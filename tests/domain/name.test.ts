@@ -9,7 +9,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 
 describe("assertSafeName", () => {
-  for (const name of ["foo", "foo-bar-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
+  for (const name of ["a", "Foo.Bar_Baz-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
     test(`accepts ${JSON.stringify(name)}`, () => {
       // arrange
       const safeName = name;
@@ -39,40 +39,76 @@ describe("assertSafeName", () => {
     );
   });
 
-  for (const { name, errorMessage } of [
-    { name: "", errorMessage: "Name must be a non-empty string." },
-    { name: "   ", errorMessage: "Name must be a non-empty string." },
-    { name: ".", errorMessage: 'Name must not be "." or "..".' },
-    { name: "..", errorMessage: 'Name must not be "." or "..".' },
+  for (const { unsafeName, safeNeighbor, errorMessage } of [
     {
-      name: "foo/bar",
+      unsafeName: "",
+      safeNeighbor: "a",
+      errorMessage: "Name must be a non-empty string.",
+    },
+    {
+      unsafeName: " ",
+      safeNeighbor: "a",
+      errorMessage: "Name must be a non-empty string.",
+    },
+    {
+      unsafeName: ".",
+      safeNeighbor: ".a",
+      errorMessage: 'Name must not be "." or "..".',
+    },
+    {
+      unsafeName: "..",
+      safeNeighbor: "...",
+      errorMessage: 'Name must not be "." or "..".',
+    },
+    {
+      unsafeName: "foo/bar",
+      safeNeighbor: "foo-bar",
       errorMessage: 'Name "foo/bar" must not contain path separators.',
     },
     {
-      name: "foo\\bar",
+      unsafeName: "foo\\bar",
+      safeNeighbor: "foo-bar",
       errorMessage: 'Name "foo\\bar" must not contain path separators.',
     },
     {
-      name: "foo\tbar",
+      unsafeName: "foo\tbar",
+      safeNeighbor: "foo bar",
       errorMessage: 'Name "foo\tbar" must not contain ASCII control characters.',
     },
     {
-      name: "foo\x00bar",
+      unsafeName: "foo\x00bar",
+      safeNeighbor: "foo bar",
       errorMessage: 'Name "foo\x00bar" must not contain ASCII control characters.',
     },
     {
-      name: "foo\x7fbar",
+      unsafeName: "foo\x1fbar",
+      safeNeighbor: "foo\x20bar",
+      errorMessage: 'Name "foo\x1fbar" must not contain ASCII control characters.',
+    },
+    {
+      unsafeName: "foo\x7fbar",
+      safeNeighbor: "foo\x80bar",
       errorMessage: 'Name "foo\x7fbar" must not contain ASCII control characters.',
     },
   ]) {
-    test(`rejects ${JSON.stringify(name)}`, () => {
+    test(`accepts ${JSON.stringify(safeNeighbor)} adjacent to rejected ${JSON.stringify(unsafeName)}`, () => {
       // arrange
-      const unsafeName = name;
+      const safeName = safeNeighbor;
+
+      // act & assert
+      assert.doesNotThrow(() => {
+        assertSafeName(safeName);
+      });
+    });
+
+    test(`rejects ${JSON.stringify(unsafeName)}`, () => {
+      // arrange
+      const rejectedName = unsafeName;
 
       // act & assert
       assert.throws(
         () => {
-          assertSafeName(unsafeName);
+          assertSafeName(rejectedName);
         },
         (error: unknown) => {
           assert.ok(error instanceof Error);
@@ -130,6 +166,11 @@ describe("generatedSkillName", () => {
       plugin: "acme",
       source: "acme-acme-foo",
       expectedSkillName: "acme-acme-foo",
+    },
+    {
+      plugin: "Ac.Me",
+      source: "Ac.Me-Task_Name",
+      expectedSkillName: "Ac.Me-Task_Name",
     },
     { plugin: "foo", source: "foo", expectedSkillName: "foo" },
   ]) {
@@ -227,6 +268,11 @@ describe("generatedCommandName", () => {
       source: "acme-/lint",
       expectedCommandName: "acme:acme-:lint",
     },
+    {
+      plugin: "Ac.Me",
+      source: "Ac.Me-Build_v2/Web.Cmd",
+      expectedCommandName: "Ac.Me:Build_v2:Web.Cmd",
+    },
   ]) {
     test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)}`, () => {
       // arrange
@@ -309,6 +355,11 @@ describe("generatedAgentName", () => {
       plugin: "acme",
       source: "acme-acme-bot",
       expectedAgentName: "pi-claude-marketplace-acme-acme-bot",
+    },
+    {
+      plugin: "Ac.Me",
+      source: "Ac.Me-Bot_v2",
+      expectedAgentName: "pi-claude-marketplace-Ac.Me-Bot_v2",
     },
     {
       plugin: "acme",
