@@ -50,6 +50,7 @@ import {
   parsePluginSource,
   type GitHubSource,
   type GitSubdirSource,
+  type PathSource,
   type ParsedSource,
   type UrlSource,
 } from "./source.ts";
@@ -576,17 +577,26 @@ async function collectUnsupportedKinds(
 // derive theirs from the injected `resolveGitPluginRoot` callback. `npm` stays
 // out of scope, and `unknown` is the NFR-12 forward-compat tail. The exhaustive
 // switch keeps this sound: a future ParsedSource kind fails the compile.
-function sourceUnsupportedReason(parsedSource: ParsedSource): string | undefined {
+type SupportedParsedSource = PathSource | GitHubSource | UrlSource | GitSubdirSource;
+
+type SourceSupport =
+  | { readonly kind: "supported"; readonly source: SupportedParsedSource }
+  | { readonly kind: "rejected"; readonly reason: string };
+
+function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
   switch (parsedSource.kind) {
     case "path":
     case "github":
     case "url":
     case "git-subdir":
-      return undefined;
+      return { kind: "supported", source: parsedSource };
     case "npm":
-      return `unsupported source kind: npm`;
+      return { kind: "rejected", reason: `unsupported source kind: npm` };
     case "unknown":
-      return `unsupported source kind: unknown (${parsedSource.reason})`;
+      return {
+        kind: "rejected",
+        reason: `unsupported source kind: unknown (${parsedSource.reason})`,
+      };
   }
 }
 
@@ -621,10 +631,10 @@ async function readManifest(
     const parsed: unknown = JSON.parse(raw);
 
     if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
-      const firstErr = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)[0];
-      const detail = firstErr
-        ? `${firstErr.instancePath || "(root)"}: ${firstErr.message}`
-        : "(no detail)";
+      const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
+        .slice(0, 1)
+        .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
+        .join("");
       return { ok: false, reason: `malformed plugin.json: ${detail}` };
     }
 
@@ -768,7 +778,7 @@ function resolveDefaultEnabled(
 async function deriveSourcePluginRoot(
   entry: PluginEntry,
   ctx: ResolveContext,
-  parsedSource: ParsedSource,
+  parsedSource: SupportedParsedSource,
   partial: PartialResolution,
 ): Promise<
   { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable }
@@ -784,24 +794,6 @@ async function deriveSourcePluginRoot(
     }
 
     return { kind: "ok", pluginRoot };
-  }
-
-  // The caller's `sourceUnsupportedReason` gate already rejected `npm` /
-  // `unknown`, so only the three git kinds remain. Narrow explicitly so the
-  // callback receives its precise `UrlSource | GitSubdirSource | GitHubSource`
-  // parameter type.
-  if (
-    parsedSource.kind !== "url" &&
-    parsedSource.kind !== "git-subdir" &&
-    parsedSource.kind !== "github"
-  ) {
-    return {
-      kind: "unavailable",
-      result: unavailable(entry.name, [
-        ...partial.notes,
-        `unsupported source kind: ${parsedSource.kind}`,
-      ]),
-    };
   }
 
   // url | git-subdir | github -- the injected policy owns clone-vs-probe and,
@@ -868,11 +860,11 @@ async function preflightStages(
 
   // PR-2 case 1 / PURL-01: url / git-subdir / github / path are installable;
   // npm and unknown reject here.
-  const unsupportedReason = sourceUnsupportedReason(parsedSource);
-  if (unsupportedReason !== undefined) {
+  const sourceSupport = classifySourceSupport(parsedSource);
+  if (sourceSupport.kind === "rejected") {
     return {
       kind: "unavailable",
-      result: unavailable(entry.name, [...partial.notes, unsupportedReason]),
+      result: unavailable(entry.name, [...partial.notes, sourceSupport.reason]),
     };
   }
 
@@ -882,7 +874,7 @@ async function preflightStages(
   // discriminated result already carries the clone-root-anchored containment
   // outcome (D-77-03: git-subdir containment is the callback's responsibility,
   // never a marketplaceRoot-anchored check).
-  const rooted = await deriveSourcePluginRoot(entry, ctx, parsedSource, partial);
+  const rooted = await deriveSourcePluginRoot(entry, ctx, sourceSupport.source, partial);
   if (rooted.kind === "unavailable") {
     return rooted;
   }
@@ -1163,7 +1155,7 @@ async function readReferencedMcp(
   } catch (err) {
     return {
       ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${err instanceof Error ? err.message : String(err)}`,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${(err as SyntaxError).message}`,
     };
   }
 }
@@ -1228,7 +1220,7 @@ async function readStandaloneHooks(
   // bridge `IfPredicate` union (D-11), and the resolver-emitted map is
   // unreachable from any consumer at this call site.
   const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
-  const noopCompileIf = (): null => null;
+  const noopCompileIf = JSON.parse.bind(JSON, "null") as () => null;
   const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
   if (!parsed.ok) {
     return { ok: false, reason: `malformed hooks.json: ${parsed.reason}` };
@@ -1357,8 +1349,11 @@ function applyMcpValue(partial: PartialResolution, mcp: unknown, detail = true):
   }
 
   if (detail) {
-    const firstErr = MCP_SERVERS_VALIDATOR.Errors(mcp)[0];
-    partial.notes.push(`malformed mcpServers: ${firstErr ? firstErr.message : "shape mismatch"}`);
+    const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
+      .slice(0, 1)
+      .map((error) => error.message)
+      .join("");
+    partial.notes.push(`malformed mcpServers: ${errorDetail}`);
   } else {
     partial.notes.push(`malformed mcpServers`);
   }

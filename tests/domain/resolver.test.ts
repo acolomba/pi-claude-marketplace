@@ -3323,6 +3323,510 @@ test("RSTATE-04 loose: requirePartialInstallable throws on unavailable", async (
   );
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// RES-01: exact materializability, ordering, and public error boundaries
+// ──────────────────────────────────────────────────────────────────────────
+
+test("resolveStrict returns the complete installable true arm", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./materializable");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./materializable" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("resolveStrict returns the complete partially-available true arm", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./partially-materializable");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./partially-materializable", themes: ["dark"] }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["themes"],
+    notes: ["contains themes"],
+    componentPaths: { skills: [], commands: [], agents: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("resolveStrict returns the minimal unavailable false arm", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {});
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./empty-input" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["source dir does not exist: /abs/marketplace/empty-input"],
+  });
+});
+
+test("resolveStrict preserves declared-first implicit-last ordering with first-wins deduplication", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./ordered");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [manifestPath]: {
+      contents: JSON.stringify({ name: "p1", skills: ["shared", "manifest-only"] }),
+    },
+    [path.join(localRoot, "skills")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./ordered", skills: ["entry-only", "shared"] }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: ["skills"],
+    unsupported: [],
+    notes: [],
+    componentPaths: {
+      skills: ["entry-only", "shared", "manifest-only", "skills"],
+      commands: [],
+      agents: [],
+    },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("resolveStrict rejects an absolute component path with the exact unavailable result", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./absolute-component");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./absolute-component", skills: ["/absolute/skills"] }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ['component path for "skills" must be relative (got absolute "/absolute/skills")'],
+  });
+});
+
+test("requirePartialInstallable admits both true arms and exposes pluginRoot", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./narrowable");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+  const installablePlugin: ResolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./narrowable" }),
+    context,
+  );
+  const partiallyAvailablePlugin: ResolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./narrowable", themes: ["dark"] }),
+    context,
+  );
+
+  // act
+  requirePartialInstallable(installablePlugin);
+  requirePartialInstallable(partiallyAvailablePlugin);
+
+  // assert
+  assert.deepStrictEqual(
+    [installablePlugin.pluginRoot, partiallyAvailablePlugin.pluginRoot],
+    [localRoot, localRoot],
+  );
+});
+
+test("requirePartialInstallable rejects the false arm with the exact shape", async () => {
+  // arrange
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./missing-for-partial-gate" }),
+    resolveContext(marketplaceRoot, {}),
+  );
+
+  // act & assert
+  assert.throws(
+    () => {
+      requirePartialInstallable(resolvedPlugin);
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.deepStrictEqual(error.shape, {
+        kind: "not-installable",
+        plugin: "p1",
+        reasons: ["source dir does not exist: /abs/marketplace/missing-for-partial-gate"],
+        partialable: false,
+      });
+      return true;
+    },
+  );
+});
+
+test("requireInstallable rejects the partial true arm with secondary detail", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./partial-gate");
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./partial-gate", themes: ["dark"] }),
+    resolveContext(marketplaceRoot, { [localRoot]: "dir" }),
+  );
+
+  // act & assert
+  assert.throws(
+    () => {
+      requireInstallable(resolvedPlugin);
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.deepStrictEqual(error.shape, {
+        kind: "not-installable",
+        plugin: "p1",
+        reasons: ["contains themes"],
+        partialable: true,
+        unsupportedKinds: ["themes"],
+      });
+      return true;
+    },
+  );
+});
+
+test("requireInstallable rejects the false arm before secondary state detail", async () => {
+  // arrange
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./missing-for-strict-gate" }),
+    resolveContext(marketplaceRoot, {}),
+  );
+
+  // act & assert
+  assert.throws(
+    () => {
+      requireInstallable(resolvedPlugin, "update");
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.deepStrictEqual(error.shape, {
+        kind: "no-longer-installable",
+        plugin: "p1",
+        reasons: ["source dir does not exist: /abs/marketplace/missing-for-strict-gate"],
+        partialable: false,
+        unsupportedKinds: [],
+      });
+      return true;
+    },
+  );
+});
+
+test("resolveStrict classifies a real file source through the default stat reader", async (testContext) => {
+  // arrange
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "pi-cm-source-file-"));
+  const sourcePath = path.join(temporaryMarketplace, "plugin-file");
+  await writeFile(sourcePath, "not a directory", "utf8");
+  testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugin-file" }), {
+    marketplaceRoot: temporaryMarketplace,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: [`source dir does not exist: ${sourcePath}`],
+  });
+});
+
+test("resolveStrict classifies an existing special-file source through the default stat reader", async () => {
+  // arrange
+  const context: ResolveContext = { marketplaceRoot: "/" };
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./dev/null" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["source dir does not exist: /dev/null"],
+  });
+});
+
+test("resolveStrict reads a real manifest through the default file reader", async (testContext) => {
+  // arrange
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "pi-cm-default-read-"));
+  const localRoot = path.join(temporaryMarketplace, "local");
+  const manifestDirectory = path.join(localRoot, ".claude-plugin");
+  await mkdir(manifestDirectory, { recursive: true });
+  await writeFile(
+    path.join(manifestDirectory, "plugin.json"),
+    JSON.stringify({ name: "p1", defaultEnabled: false }),
+    "utf8",
+  );
+  testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry(), {
+    marketplaceRoot: temporaryMarketplace,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [] },
+    mcpServers: {},
+    defaultEnabled: false,
+  });
+});
+
+test("resolveStrict propagates a default stat error below a non-directory manifest segment", async (testContext) => {
+  // arrange
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-notdir-"));
+  const localRoot = path.join(temporaryMarketplace, "local");
+  await mkdir(localRoot, { recursive: true });
+  await writeFile(path.join(localRoot, ".claude-plugin"), "not a directory", "utf8");
+  testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry(), { marketplaceRoot: temporaryMarketplace }),
+    (error: unknown) =>
+      error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
+  );
+});
+
+test("resolveStrict propagates a source containment error below a non-directory segment", async (testContext) => {
+  // arrange
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "pi-cm-source-notdir-"));
+  await writeFile(path.join(temporaryMarketplace, "afile"), "not a directory", "utf8");
+  testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      resolveStrict(pluginEntry({ source: "./afile/child" }), {
+        marketplaceRoot: temporaryMarketplace,
+      }),
+    (error: unknown) =>
+      error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
+  );
+});
+
+test("resolveStrict propagates a component containment error below a non-directory segment", async (testContext) => {
+  // arrange
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "pi-cm-component-notdir-"));
+  const localRoot = path.join(temporaryMarketplace, "local");
+  await mkdir(localRoot, { recursive: true });
+  await writeFile(path.join(localRoot, "afile"), "not a directory", "utf8");
+  testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      resolveStrict(pluginEntry({ skills: ["afile/child"] }), {
+        marketplaceRoot: temporaryMarketplace,
+      }),
+    (error: unknown) =>
+      error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
+  );
+});
+
+test("resolveStrict reports a root-level manifest validation error", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./root-invalid-manifest");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: { contents: "[]" },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./root-invalid-manifest" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.some((note) => note.startsWith("malformed plugin.json: (root):")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
+test("resolveStrict reports a non-Error manifest read rejection", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./manifest-read-rejection");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const manifestReadFailure: unknown = "manifest read failure";
+  const context: ResolveContext = {
+    marketplaceRoot,
+    statKind(filePath) {
+      if (filePath === localRoot) {
+        return Promise.resolve("dir");
+      }
+
+      if (filePath === manifestPath) {
+        return Promise.resolve("file");
+      }
+
+      return Promise.resolve(null);
+    },
+    readFileText() {
+      return new Promise<string>((_resolve, reject) => {
+        Reflect.apply(reject, undefined, [manifestReadFailure]);
+      });
+    },
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./manifest-read-rejection" }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["malformed plugin.json: manifest read failure"],
+  });
+});
+
+test("resolveStrict unwraps a standalone mcpServers document", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./wrapped-standalone-mcp");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".mcp.json")]: {
+      contents: JSON.stringify({ mcpServers: { srv: { command: "node" } } }),
+    },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./wrapped-standalone-mcp" }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [] },
+    mcpServers: { srv: { command: "node" } },
+    defaultEnabled: true,
+  });
+});
+
+test("resolveStrict reports a non-Error standalone mcp read rejection", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./mcp-read-rejection");
+  const mcpPath = path.join(localRoot, ".mcp.json");
+  const mcpReadFailure: unknown = "standalone mcp read failure";
+  const context: ResolveContext = {
+    marketplaceRoot,
+    statKind(filePath) {
+      if (filePath === localRoot) {
+        return Promise.resolve("dir");
+      }
+
+      if (filePath === mcpPath) {
+        return Promise.resolve("file");
+      }
+
+      return Promise.resolve(null);
+    },
+    readFileText() {
+      return new Promise<string>((_resolve, reject) => {
+        Reflect.apply(reject, undefined, [mcpReadFailure]);
+      });
+    },
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./mcp-read-rejection" }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["malformed mcpServers (.mcp.json): standalone mcp read failure"],
+  });
+});
+
+test("requireInstallable classifies an update of the partial true arm", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./partial-update-gate");
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./partial-update-gate", themes: ["dark"] }),
+    resolveContext(marketplaceRoot, { [localRoot]: "dir" }),
+  );
+
+  // act & assert
+  assert.throws(
+    () => {
+      requireInstallable(resolvedPlugin, "update");
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.strictEqual(error.shape.kind, "no-longer-installable");
+      return true;
+    },
+  );
+});
+
 declare const resolvedPluginContract: ResolvedPlugin;
 declare const installablePluginContract: ResolvedPluginInstallable;
 declare const partiallyAvailablePluginContract: ResolvedPluginPartiallyAvailable;
