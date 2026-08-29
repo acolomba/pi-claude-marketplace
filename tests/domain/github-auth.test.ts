@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
@@ -12,6 +12,13 @@ import {
   type NotifyFn,
   type PollResult,
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
+
+import {
+  createDeviceFlowContractParticipant,
+  registerDeviceFlowContract,
+  type DeviceFlowContractParticipant,
+  type DeviceFlowContractScenario,
+} from "./device-flow-contract.ts";
 
 import type { GitAuthProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import type { CredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
@@ -53,9 +60,9 @@ function unexpectedFetch(): Promise<Response> {
   return Promise.reject(new Error("Unexpected fetch"));
 }
 
-function expectedPollingWait(...milliseconds: readonly number[]): NonNullable<
-  InitiateDeviceFlowOpts["waitForPoll"]
-> {
+function expectedPollingWait(
+  ...milliseconds: readonly number[]
+): NonNullable<InitiateDeviceFlowOpts["waitForPoll"]> {
   const pollingWait = mock<NonNullable<InitiateDeviceFlowOpts["waitForPoll"]>>({
     exactParams: true,
     name: "polling wait",
@@ -67,6 +74,60 @@ function expectedPollingWait(...milliseconds: readonly number[]): NonNullable<
   return pollingWait;
 }
 
+function pollResponseBody(pollResponse: PollResult): Record<string, unknown> {
+  switch (pollResponse.kind) {
+    case "success":
+      return {
+        access_token: pollResponse.accessToken,
+        token_type: pollResponse.tokenType,
+        scope: pollResponse.scope,
+      };
+    case "pending":
+      return { error: "authorization_pending" };
+    case "slow_down":
+      return { error: "slow_down" };
+    case "access_denied":
+      return { error: "access_denied" };
+    case "expired_token":
+      return { error: "expired_token" };
+    case "unexpected":
+      return {
+        error: pollResponse.error,
+        ...(pollResponse.description === undefined
+          ? {}
+          : { error_description: pollResponse.description }),
+      };
+  }
+}
+
+function createProductionDeviceFlowParticipant(
+  scenario: DeviceFlowContractScenario,
+  context: TestContext,
+): DeviceFlowContractParticipant {
+  const storedDeviceCode = structuredClone(scenario.deviceCode);
+  const pollResponses = [...structuredClone(scenario.pollResponses)];
+  const requestCodeError = scenario.requestCodeError;
+  context.mock.method(globalThis, "fetch", (input: string | URL | Request): Promise<Response> => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url === "https://auth.example/device") {
+      if (requestCodeError !== undefined) {
+        return Promise.reject(requestCodeError);
+      }
+
+      return fetchResponse(JSON.stringify(storedDeviceCode));
+    }
+
+    if (url === "https://auth.example/token") {
+      const pollResponse = pollResponses.shift() ?? ({ kind: "pending" } as const);
+      return fetchResponse(JSON.stringify(pollResponseBody(pollResponse)));
+    }
+
+    return Promise.reject(new Error(`Unexpected URL: ${url}`));
+  });
+
+  return createDeviceFlowContractParticipant({ contractScenario: scenario });
+}
+
 void ({ kind: "pending" } satisfies PollResult);
 void ({
   ok: false,
@@ -75,6 +136,8 @@ void ({
 } satisfies DeviceFlowResult);
 
 describe("initiateDeviceFlow", () => {
+  registerDeviceFlowContract(createProductionDeviceFlowParticipant);
+
   test("uses the GitHub provider, notifies the user, and persists the credential", async () => {
     // arrange
     const deviceFlowHttp = mock<DeviceFlowHttp>({
@@ -591,13 +654,10 @@ describe("initiateDeviceFlow", () => {
     });
 
     // assert
-    await assert.rejects(
-      deviceFlow,
-      (error: unknown) => {
-        assert.strictEqual(error, persistenceFailure);
-        return true;
-      },
-    );
+    await assert.rejects(deviceFlow, (error: unknown) => {
+      assert.strictEqual(error, persistenceFailure);
+      return true;
+    });
     verify(deviceFlowHttp);
     verify(credentialOps);
     verify(notification);
