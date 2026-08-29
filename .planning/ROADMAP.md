@@ -126,11 +126,31 @@ Plans:
 3. Tests own and restore filesystem, environment, cache, and notification state without a generic helper directory.
 4. Shared modules keep their current public surface and expose no test-only state or reset operation.
 
-**Plans**: 19 plans
+**Plans**: 1/19 plans executed
 
 Plans:
 
-- [ ] **109-01** (`109-01-PLAN.md`, `P109-01`) - `extensions/pi-claude-marketplace/shared/atomic-json.ts` → `tests/shared/atomic-json.test.ts`
+- [x] 109-01-PLAN.md
+- [ ] 109-02-PLAN.md
+- [ ] 109-03-PLAN.md
+- [ ] 109-04-PLAN.md
+- [ ] 109-05-PLAN.md
+- [ ] 109-06-PLAN.md
+- [ ] 109-07-PLAN.md
+- [ ] 109-08-PLAN.md
+- [ ] 109-09-PLAN.md
+- [ ] 109-10-PLAN.md
+- [ ] 109-11-PLAN.md
+- [ ] 109-12-PLAN.md
+- [ ] 109-13-PLAN.md
+- [ ] 109-14-PLAN.md
+- [ ] 109-15-PLAN.md
+- [ ] 109-16-PLAN.md
+- [ ] 109-17-PLAN.md
+- [ ] 109-18-PLAN.md
+- [ ] 109-19-PLAN.md
+
+- [x] **109-01** (`109-01-PLAN.md`, `P109-01`) - `extensions/pi-claude-marketplace/shared/atomic-json.ts` → `tests/shared/atomic-json.test.ts`
 - [ ] **109-02** (`109-02-PLAN.md`, `P109-02`) - `extensions/pi-claude-marketplace/shared/completion-cache.ts` → `tests/shared/completion-cache.test.ts`
 - [ ] **109-03** (`109-03-PLAN.md`, `P109-03`) - `extensions/pi-claude-marketplace/shared/concerns/hooks.ts` → `tests/shared/concerns/hooks.test.ts`
 - [ ] **109-04** (`109-04-PLAN.md`, `P109-04`) - `extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts` → `tests/shared/concerns/soft-dep.test.ts`
@@ -507,7 +527,7 @@ and commit still owns one pair.
 | Phase                                    | Plans Complete | Status          | Completed |
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
-| 109. Shared Contracts                    |           0/19 | Not started     | -         |
+| 109. Shared Contracts                    | 1/19 | In Progress|  |
 | 110. Persistence and Transaction         |           0/12 | Not started     | -         |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
