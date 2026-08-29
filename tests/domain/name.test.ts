@@ -9,7 +9,12 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 
 describe("assertSafeName", () => {
-  for (const name of ["foo", "foo-bar-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
+  for (const name of [
+    "a",
+    "Foo.Bar_Baz-123",
+    "acme:foo",
+    "pi-claude-marketplace-acme-bot",
+  ]) {
     test(`accepts ${JSON.stringify(name)}`, () => {
       // arrange
       const safeName = name;
@@ -131,6 +136,11 @@ describe("generatedSkillName", () => {
       source: "acme-acme-foo",
       expectedSkillName: "acme-acme-foo",
     },
+    {
+      plugin: "Ac.Me",
+      source: "Ac.Me-Task_Name",
+      expectedSkillName: "Ac.Me-Task_Name",
+    },
     { plugin: "foo", source: "foo", expectedSkillName: "foo" },
   ]) {
     test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)}`, () => {
@@ -227,6 +237,11 @@ describe("generatedCommandName", () => {
       source: "acme-/lint",
       expectedCommandName: "acme:acme-:lint",
     },
+    {
+      plugin: "Ac.Me",
+      source: "Ac.Me-Build_v2/Web.Cmd",
+      expectedCommandName: "Ac.Me:Build_v2:Web.Cmd",
+    },
   ]) {
     test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)}`, () => {
       // arrange
@@ -309,6 +324,11 @@ describe("generatedAgentName", () => {
       plugin: "acme",
       source: "acme-acme-bot",
       expectedAgentName: "pi-claude-marketplace-acme-acme-bot",
+    },
+    {
+      plugin: "Ac.Me",
+      source: "Ac.Me-Bot_v2",
+      expectedAgentName: "pi-claude-marketplace-Ac.Me-Bot_v2",
     },
     {
       plugin: "acme",
