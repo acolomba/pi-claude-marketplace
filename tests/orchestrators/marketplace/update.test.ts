@@ -27,16 +27,107 @@ import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
-import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+interface MarketplaceGitOpsSeed {
+  readonly checkoutThrows?: Error;
+  readonly currentBranchOverride?: string | null;
+  readonly fetchThrows?: Error;
+  readonly localRefs?: Readonly<Record<string, string>>;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+}
+
+function fixtureMarketplaceDir(
+  name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
+): string {
+  return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
+}
+
+function makeMockGitOps(options: MarketplaceGitOpsSeed = {}) {
+  const remoteRefs = Object.fromEntries(
+    Object.entries(options.remoteRefs ?? {}).map(([ref, oid]) => [
+      ref.replace(/^refs\/remotes\/origin\//, ""),
+      oid,
+    ]),
+  );
+  const git = createGitOpsFake({
+    boundary: "memory",
+    remoteRefs,
+    localRefs: { ...(options.remoteRefs ?? {}), ...(options.localRefs ?? {}) },
+    ...(options.localRefs?.["refs/heads/main"] === undefined
+      ? {}
+      : { initialOid: options.localRefs["refs/heads/main"] }),
+    ...(options.fetchThrows === undefined ? {} : { fetchError: options.fetchThrows }),
+    ...(options.checkoutThrows === undefined ? {} : { checkoutError: options.checkoutThrows }),
+  });
+
+  if (options.currentBranchOverride !== undefined) {
+    git.state.branch = options.currentBranchOverride ?? undefined;
+  }
+
+  const gitOps: typeof git.gitOps = {
+    ...git.gitOps,
+    async fetch(fetchOptions): Promise<void> {
+      const { auth, ...cloneableOptions } = fetchOptions;
+      try {
+        await git.gitOps.fetch(cloneableOptions);
+        if (
+          fetchOptions.ref !== undefined &&
+          /^[a-f0-9]{40}$/i.test(fetchOptions.ref) &&
+          options.remoteRefs?.[`refs/remotes/origin/${fetchOptions.ref}`] === undefined
+        ) {
+          Reflect.deleteProperty(git.state.localRefs, `refs/remotes/origin/${fetchOptions.ref}`);
+        }
+      } finally {
+        const recorded = git.state.calls.fetch.at(-1);
+        if (recorded !== undefined && auth !== undefined) {
+          Object.assign(recorded, { auth });
+        }
+      }
+    },
+  };
+
+  return {
+    ...git,
+    gitOps,
+    state: Object.assign(git.state, {
+      cloneCalls: git.state.calls.clone,
+      fetchCalls: git.state.calls.fetch,
+      forceUpdateRefCalls: git.state.calls.forceUpdateRef,
+      checkoutCalls: git.state.calls.checkout,
+      resolveRefCalls: git.state.calls.resolveRef,
+      currentBranchCalls: git.state.calls.currentBranch,
+      resolveRemoteRefCalls: git.state.calls.resolveRemoteRef,
+    }),
+  };
+}
+
+function makeMockCredentialOps(
+  options: { readonly store?: ReadonlyMap<string, GitCredentials> } = {},
+) {
+  const credentials = createCredentialOpsFake({
+    boundary: "memory",
+    credentials: [...(options.store ?? new Map()).entries()],
+  });
+  return {
+    credOps: credentials.credentialOps,
+    state: {
+      fillCalls: credentials.calls.fill,
+      approveCalls: credentials.calls.approve,
+      rejectCalls: credentials.calls.reject,
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;
