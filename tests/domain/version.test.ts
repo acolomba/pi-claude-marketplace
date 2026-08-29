@@ -29,6 +29,49 @@ describe("computeHashVersion", () => {
     assert.strictEqual(version, "hash-e3b0c44298fc");
   });
 
+  test("returns one hash for opposite filesystem insertion orders", async (t) => {
+    // arrange
+    const directory = await createVersionSandbox(t);
+    const forwardPluginRoot = path.join(directory, "forward");
+    const reversePluginRoot = path.join(directory, "reverse");
+    await mkdir(forwardPluginRoot);
+    await writeFile(path.join(forwardPluginRoot, "a.txt"), "alpha\n");
+    await mkdir(path.join(forwardPluginRoot, "nested"));
+    await writeFile(path.join(forwardPluginRoot, "nested", "a.txt"), "inner-a\n");
+    await writeFile(path.join(forwardPluginRoot, "nested", "b.txt"), "inner-b\n");
+    await writeFile(path.join(forwardPluginRoot, "z.txt"), "zulu\n");
+    await mkdir(reversePluginRoot);
+    await writeFile(path.join(reversePluginRoot, "z.txt"), "zulu\n");
+    await mkdir(path.join(reversePluginRoot, "nested"));
+    await writeFile(path.join(reversePluginRoot, "nested", "b.txt"), "inner-b\n");
+    await writeFile(path.join(reversePluginRoot, "nested", "a.txt"), "inner-a\n");
+    await writeFile(path.join(reversePluginRoot, "a.txt"), "alpha\n");
+
+    // act
+    const forwardVersion = await computeHashVersion(forwardPluginRoot);
+    const reverseVersion = await computeHashVersion(reversePluginRoot);
+
+    // assert
+    assert.strictEqual(forwardVersion, "hash-6e4d4d577c91");
+    assert.strictEqual(reverseVersion, "hash-6e4d4d577c91");
+  });
+
+  test("hashes equal content by sorted path and changed bytes", async (t) => {
+    // arrange
+    const pluginRoot = await createVersionSandbox(t);
+    await writeFile(path.join(pluginRoot, "a.txt"), "same\n");
+    await writeFile(path.join(pluginRoot, "b.txt"), "same\n");
+
+    // act
+    const equalContentVersion = await computeHashVersion(pluginRoot);
+    await writeFile(path.join(pluginRoot, "b.txt"), "same!\n");
+    const changedContentVersion = await computeHashVersion(pluginRoot);
+
+    // assert
+    assert.strictEqual(equalContentVersion, "hash-73ef760ab281");
+    assert.strictEqual(changedContentVersion, "hash-3bc00f0d259c");
+  });
+
   test("hashes sorted nested paths and normalized bytes deterministically", async (t) => {
     // arrange
     const pluginRoot = await createVersionSandbox(t);
