@@ -74,6 +74,8 @@ repos:
     rev: v0.20.0
     hooks:
       - id: yamlfmt
+        # Historical JSON-compatible evidence exceeds yamlfmt's scanner.
+        exclude: ^\.planning/inputs/unit-test-refactor-handoff/TRANSFORMATIONS\.yaml$
 
   - repo: https://github.com/hukkin/mdformat
     rev: 1.0.0
