@@ -109,7 +109,7 @@ brownfield input and do not prove compliance for later phases.
 
 - [x] **MOD-01**: All 23 domain and platform pairs complete the pair contract.
 - [x] **MOD-02**: All 19 shared-contract pairs complete the pair contract.
-- [ ] **MOD-03**: All 12 persistence and transaction pairs complete the pair
+- [x] **MOD-03**: All 12 persistence and transaction pairs complete the pair
   contract.
 
 - [ ] **MOD-04**: All 31 non-hook component bridge pairs complete the pair
@@ -493,7 +493,7 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | DEL-04      | Phase 117 | Pending |
 | MOD-01      | Phase 108 | Complete |
 | MOD-02      | Phase 109 | Complete |
-| MOD-03      | Phase 110 | Pending |
+| MOD-03      | Phase 110 | Complete |
 | MOD-04      | Phase 111 | Pending |
 | MOD-05      | Phase 112 | Pending |
 | MOD-06      | Phase 113 | Pending |
