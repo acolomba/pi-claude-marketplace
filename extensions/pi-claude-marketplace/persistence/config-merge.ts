@@ -89,24 +89,22 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
   const basePlugins = base.plugins ?? {};
   const localPlugins = local.plugins ?? {};
 
-  const marketplaceEntries: Array<[string, MergedConfigEntry<MarketplaceConfigEntry>]> = [];
-  for (const key of new Set([...Object.keys(baseMps), ...Object.keys(localMps)])) {
-    if (Object.hasOwn(localMps, key)) {
-      marketplaceEntries.push([key, { entry: localMps[key]!, source: "local" }]);
-      continue;
-    }
-
-    marketplaceEntries.push([key, { entry: baseMps[key]!, source: "base" }]);
+  const marketplaceEntries = new Map<string, MergedConfigEntry<MarketplaceConfigEntry>>();
+  for (const [key, entry] of Object.entries(baseMps)) {
+    marketplaceEntries.set(key, { entry, source: "base" });
   }
 
-  const pluginEntries: Array<[string, MergedConfigEntry<PluginConfigEntry>]> = [];
-  for (const key of new Set([...Object.keys(basePlugins), ...Object.keys(localPlugins)])) {
-    if (Object.hasOwn(localPlugins, key)) {
-      pluginEntries.push([key, { entry: localPlugins[key]!, source: "local" }]);
-      continue;
-    }
+  for (const [key, entry] of Object.entries(localMps)) {
+    marketplaceEntries.set(key, { entry, source: "local" });
+  }
 
-    pluginEntries.push([key, { entry: basePlugins[key]!, source: "base" }]);
+  const pluginEntries = new Map<string, MergedConfigEntry<PluginConfigEntry>>();
+  for (const [key, entry] of Object.entries(basePlugins)) {
+    pluginEntries.set(key, { entry, source: "base" });
+  }
+
+  for (const [key, entry] of Object.entries(localPlugins)) {
+    pluginEntries.set(key, { entry, source: "local" });
   }
 
   return {
