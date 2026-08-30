@@ -76,7 +76,9 @@ test("returns the complete frozen user location bundle and restores the agent di
   // arrange
   const hadAgentDirectory = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
   const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-  t.after(() => restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory));
+  t.after(() => {
+    restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory);
+  });
   const userRoot = path.join(path.parse(process.cwd()).root, "scope-fixture", "user-agent");
   process.env.PI_CODING_AGENT_DIR = userRoot;
   const extensionRoot = path.join(userRoot, "pi-claude-marketplace");
@@ -164,7 +166,9 @@ test("uses the default Pi agent root when the override is absent and restores th
   // arrange
   const hadAgentDirectory = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
   const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-  t.after(() => restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory));
+  t.after(() => {
+    restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory);
+  });
   delete process.env.PI_CODING_AGENT_DIR;
   const expectedScopeRoot = path.join(os.homedir(), ".pi", "agent");
 

@@ -7,8 +7,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { formatRollbackError } from "../../extensions/pi-claude-marketplace/transaction/rollback.ts";
 
-import type { RollbackErrorResult } from "../../extensions/pi-claude-marketplace/transaction/rollback.ts";
 import type { RunPhasesResult } from "../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
+import type { RollbackErrorResult } from "../../extensions/pi-claude-marketplace/transaction/rollback.ts";
 
 test("returns an ordinary error unchanged when rollback has no partials", () => {
   // arrange

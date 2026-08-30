@@ -520,6 +520,7 @@ describe("saveAgentsIndex", () => {
     } catch (error) {
       saveError = error;
     }
+
     const jsonBytes = await readFile(indexPath, "utf8");
 
     // assert
