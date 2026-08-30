@@ -17,9 +17,9 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
+import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
-import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 async function createStageTree(t: TestContext, prefix: string) {
   const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
@@ -900,7 +900,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
 
     // act
     const cleanupLeak = await commitPreparedAgents(prepared);
-    const storedIndex = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
+    const storedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
@@ -990,7 +990,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
 
     // act
     const cleanupLeak = await commitPreparedAgents(prepared);
-    const storedIndex = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
+    const storedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
@@ -1216,7 +1216,9 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
         rmSync(prepared.stagingDir, { recursive: true, force: true });
       }
     });
-    t.after(() => watcher.close());
+    t.after(() => {
+      watcher.close();
+    });
 
     // act
     const error = await commitPreparedAgents(prepared).then(
@@ -1514,7 +1516,7 @@ describe("replacePreparedAgents", () => {
 
     // act
     const replacement = await replacePreparedAgents(prepared, { force: true });
-    const replacedIndex = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
+    const replacedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
     const rollbackLeaks = await rollbackAgentsReplacement(replacement);
 
     // assert
@@ -1681,7 +1683,7 @@ Current.
 
     // act
     const replacement = await replacePreparedAgents(prepared);
-    const installedIndex = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
+    const installedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
     const rollbackLeaks = await rollbackAgentsReplacement(replacement);
 
     // assert
