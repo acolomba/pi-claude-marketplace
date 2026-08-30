@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 110
 current_phase_name: Persistence and Transaction
 status: executing
-stopped_at: Completed 110-04-PLAN.md
-last_updated: "2026-08-30T03:08:46.967Z"
+stopped_at: Completed 110-07-PLAN.md
+last_updated: "2026-08-30T03:28:18.110Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 110 execution started
-state_head: b65e7b128548ed988e60e48747c47b5650360162
+state_head: 4d78cdb33e908714584066b9f9a046c5e1220e2e
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 55
-  completed_plans: 52
+  completed_plans: 53
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 110 (Persistence and Transaction) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 110 execution started
 
@@ -112,6 +112,7 @@ evidence.
 | Phase 110 P08 | 10min | 2 tasks | 2 files |
 | Phase 110 P10 | 9 min | 2 tasks | 1 files |
 | Phase 110 P04 | 11 min | 2 tasks | 1 files |
+| Phase 110 P07 | 16 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -143,6 +144,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Phase-ledger evidence uses the literal skills, commands, agents, hooks, mcp, state order with complete logs, results, causes, leaks, and final context.
 - [Phase 110]: Kept config-merge.ts byte-identical because its two public functions expose every real merge and load branch.
 - [Phase 110]: Used independent complete reducer values and all nine base/local status pairs to keep provenance and fallback behavior explicit.
+- [Phase 110]: Narrowed buildConfigFromState with an inline intersection return type so existing exports stay unchanged while marketplace and plugin records become statically present.
+- [Phase 110]: Removed only the redundant entry-count fallbacks and left migration runtime ordering, stored bytes, and result arms unchanged.
+- [Phase 110]: Used independent complete state and config values plus exact bytes and metadata to prove first-run replay without sleeps or shared fixtures.
 
 ### Pending Todos
 
@@ -161,6 +165,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T03:08:46.632Z
-Stopped at: Completed 110-04-PLAN.md
+Last session: 2026-08-30T03:28:17.753Z
+Stopped at: Completed 110-07-PLAN.md
 Resume file: None
