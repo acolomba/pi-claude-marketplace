@@ -234,12 +234,12 @@ Plans:
 3. Staging and unstage cases preserve atomic replacement, rollback, containment, and foreign-content behavior in case-owned temporary trees.
 4. Barrel and type-only bridge modules have direct binding or compile-time owner tests without runtime exemptions.
 
-**Plans**: 1/31 plans executed
+**Plans**: 2/31 plans executed
 
 Plans:
 
 - [x] 111-01-PLAN.md
-- [ ] 111-02-PLAN.md
+- [x] 111-02-PLAN.md
 - [ ] 111-03-PLAN.md
 - [ ] 111-04-PLAN.md
 - [ ] 111-05-PLAN.md
@@ -580,7 +580,7 @@ and commit still owns one pair.
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
-| 111. Non-Hook Component Bridges          |           1/31 | In Progress     |            |
+| 111. Non-Hook Component Bridges          |           2/31 | In Progress     |            |
 | 112. Hook Runtime                        |           0/31 | Not started     | -          |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |

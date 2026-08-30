@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 111
 current_phase_name: Non-Hook Component Bridges
 status: executing
-stopped_at: Completed 111-01-PLAN.md
-last_updated: "2026-08-30T13:43:36.383Z"
+stopped_at: Completed 111-02-PLAN.md
+last_updated: "2026-08-30T13:57:05.576Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 111 execution started
-state_head: 7656d073b820cd58f16c65ce5c3522b594288cc8
+state_head: a4deea696e6e91e1d13c275fc960444396d1e8b4
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 86
-  completed_plans: 56
+  completed_plans: 57
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 111 (Non-Hook Component Bridges) — EXECUTING
-Plan: 2 of 31
+Plan: 3 of 31
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 111 execution started
 
@@ -117,6 +117,7 @@ evidence.
 | Phase 110 P09 | 19 min   | 2 tasks | 3 files |
 | Phase 110 P12 | 17 min   | 2 tasks | 1 files |
 | Phase 111 P01 | 14 min   | 2 tasks | 2 files |
+| Phase 111 P02 | 10 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Used the existing loadState and saveState dependency seam for deterministic persistence failures and case-local proper-lockfile method restoration for acquisition and release failures.
 - [Phase 111]: Kept agents/convert.ts byte-identical because its public conversion and collision exports expose every real branch.
 - [Phase 111]: Moved all seven byte-identity cases into the canonical owner and removed the duplicate supplemental suite.
+- [Phase 111]: Kept agents/discover.ts byte-identical because its public discovery function exposes every real branch.
+- [Phase 111]: Agent discovery evidence uses case-owned trees with independently pinned complete records and raw-byte digests.
+- [Phase 111]: Pinned first-wins generated-name warnings separately from the hard empty-elision failure.
 
 ### Pending Todos
 
@@ -176,6 +180,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T13:43:35.876Z
-Stopped at: Completed 111-01-PLAN.md
+Last session: 2026-08-30T13:57:05.095Z
+Stopped at: Completed 111-02-PLAN.md
 Resume file: None
