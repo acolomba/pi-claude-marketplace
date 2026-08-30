@@ -93,7 +93,7 @@ test("D-57-01: migrateLegacyMarketplaceRecords is idempotent over the hooks defa
   const first = migrateLegacyMarketplaceRecords(v1_12Parsed, "/ext-root", false);
   assert.equal(first.mutated, true, "first pass must report mutation (hooks default-fill ran)");
 
-  const firstMp = first.marketplaces.mp as Record<string, unknown>;
+  const firstMp = first.marketplaces.mp!;
   const firstPlugins = firstMp.plugins as Record<string, Record<string, unknown>>;
   const firstResources = firstPlugins.pl?.resources as Record<string, unknown>;
   assert.deepEqual(firstResources.hooks, [], "first pass must default-fill resources.hooks to []");
