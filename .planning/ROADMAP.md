@@ -234,7 +234,7 @@ Plans:
 3. Staging and unstage cases preserve atomic replacement, rollback, containment, and foreign-content behavior in case-owned temporary trees.
 4. Barrel and type-only bridge modules have direct binding or compile-time owner tests without runtime exemptions.
 
-**Plans**: 30/31 plans executed
+**Plans**: 31/31 plans executed
 
 Plans:
 
@@ -268,7 +268,7 @@ Plans:
 - [x] 111-28-PLAN.md
 - [x] 111-29-PLAN.md
 - [x] 111-30-PLAN.md
-- [ ] 111-31-PLAN.md
+- [x] 111-31-PLAN.md
 
 - [x] **111-01** (`111-01-PLAN.md`, `P111-01`) - `extensions/pi-claude-marketplace/bridges/agents/convert.ts` → `tests/bridges/agents/convert.test.ts`
 - [x] **111-02** (`111-02-PLAN.md`, `P111-02`) - `extensions/pi-claude-marketplace/bridges/agents/discover.ts` → `tests/bridges/agents/discover.test.ts`
@@ -298,7 +298,7 @@ Plans:
 - [x] **111-26** (`111-26-PLAN.md`, `P111-26`) - `extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts` → `tests/bridges/skills/frontmatter-scan.test.ts`
 - [x] **111-27** (`111-27-PLAN.md`, `P111-27`) - `extensions/pi-claude-marketplace/bridges/skills/index.ts` → `tests/bridges/skills/index.test.ts`
 - [x] **111-28** (`111-28-PLAN.md`, `P111-28`) - `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts` → `tests/bridges/skills/rewrite-frontmatter.test.ts`
-- [ ] **111-29** (`111-29-PLAN.md`, `P111-29`) - `extensions/pi-claude-marketplace/bridges/skills/stage.ts` → `tests/bridges/skills/stage.test.ts`
+- [x] **111-29** (`111-29-PLAN.md`, `P111-29`) - `extensions/pi-claude-marketplace/bridges/skills/stage.ts` → `tests/bridges/skills/stage.test.ts`
 - [x] **111-30** (`111-30-PLAN.md`, `P111-30`) - `extensions/pi-claude-marketplace/bridges/skills/types.ts` → `tests/bridges/skills/types.test.ts`
 - [ ] **111-31** (`111-31-PLAN.md`, `P111-31`) - `extensions/pi-claude-marketplace/bridges/skills/unstage.ts` → `tests/bridges/skills/unstage.test.ts`
 
@@ -580,7 +580,7 @@ and commit still owns one pair.
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
-| 111. Non-Hook Component Bridges          | 30/31 | In Progress|  |
+| 111. Non-Hook Component Bridges          | 31/31 | In Progress|  |
 | 112. Hook Runtime                        |           0/31 | Not started     | -          |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
