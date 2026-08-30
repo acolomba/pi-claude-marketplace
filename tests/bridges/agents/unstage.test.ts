@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -128,4 +128,386 @@ test("removes owned current and legacy agents while preserving foreign and other
   assert.strictEqual(retainedForeignBytes, foreignBytes);
   assert.strictEqual(retainedOtherBytes, otherBytes);
   assert.strictEqual(indexBytes, expectedIndexBytes);
+});
+
+test("returns no changes and keeps exact index bytes when the plugin has no entries", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-no-match-");
+  const otherTarget = path.join(locations.agentsDir, "pi-claude-marketplace-other-agent.md");
+  const storedBytes = `{"schemaVersion":1,"agents":[{"plugin":"other","marketplace":"catalog","sourceAgent":"agent","generatedName":"pi-claude-marketplace-other-agent","sourcePath":"/plugins/other/agents/agent.md","targetPath":${JSON.stringify(otherTarget)},"sourceHash":"other-hash","droppedFields":[],"droppedTools":[],"warnings":[]}]}\n`;
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(locations.agentsIndexPath, storedBytes);
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const retainedBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: [],
+    failed: [],
+    warnings: [],
+  });
+  assert.strictEqual(retainedBytes, storedBytes);
+});
+
+test("treats a missing owned target as removed and makes the next call a fixed point", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-missing-");
+  const missingTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-missing.md");
+  const storedIndex: AgentsIndex = {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "acme",
+        marketplace: "catalog",
+        sourceAgent: "missing",
+        generatedName: "pi-claude-marketplace-acme-missing",
+        sourcePath: "/plugins/acme/agents/missing.md",
+        targetPath: missingTarget,
+        sourceHash: "missing-hash",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  };
+  const expectedIndexBytes = '{\n  "schemaVersion": 1,\n  "agents": []\n}\n';
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(locations.agentsIndexPath, JSON.stringify(storedIndex));
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const firstIndexMetadata = await stat(locations.agentsIndexPath, { bigint: true });
+  const replayedUnstage = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const replayedIndexBytes = await readFile(locations.agentsIndexPath, "utf8");
+  const replayedIndexMetadata = await stat(locations.agentsIndexPath, { bigint: true });
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: ["pi-claude-marketplace-acme-missing"],
+    failed: [],
+    warnings: [],
+  });
+  assert.deepStrictEqual(replayedUnstage, {
+    removedNames: [],
+    failed: [],
+    warnings: [],
+  });
+  assert.strictEqual(replayedIndexBytes, expectedIndexBytes);
+  assert.deepStrictEqual(
+    {
+      ino: replayedIndexMetadata.ino,
+      size: replayedIndexMetadata.size,
+      mtimeNs: replayedIndexMetadata.mtimeNs,
+      ctimeNs: replayedIndexMetadata.ctimeNs,
+    },
+    {
+      ino: firstIndexMetadata.ino,
+      size: firstIndexMetadata.size,
+      mtimeNs: firstIndexMetadata.mtimeNs,
+      ctimeNs: firstIndexMetadata.ctimeNs,
+    },
+  );
+});
+
+test("preserves a marker-bearing target outside the generated filename boundary", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-boundary-");
+  const outsideTarget = path.join(path.dirname(locations.scopeRoot), "manual-agent.md");
+  const outsideBytes =
+    "---\nname: manual-agent\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nManual.\n";
+  const outsideEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "manual",
+    generatedName: "pi-claude-marketplace-acme-manual",
+    sourcePath: "/plugins/acme/agents/manual.md",
+    targetPath: outsideTarget,
+    sourceHash: "manual-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const storedIndex: AgentsIndex = { schemaVersion: 1, agents: [outsideEntry] };
+  const expectedIndexBytes = `${JSON.stringify(storedIndex, null, 2)}\n`;
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(outsideTarget, outsideBytes);
+  await writeFile(locations.agentsIndexPath, JSON.stringify(storedIndex));
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const retainedBytes = await readFile(outsideTarget, "utf8");
+  const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: [],
+    failed: [
+      {
+        generatedName: "pi-claude-marketplace-acme-manual",
+        targetPath: outsideTarget,
+        reason: 'target filename "manual-agent.md" does not start with "pi-claude-marketplace-"',
+      },
+    ],
+    warnings: [],
+  });
+  assert.strictEqual(retainedBytes, outsideBytes);
+  assert.strictEqual(indexBytes, expectedIndexBytes);
+});
+
+test("preserves an unreadable target and records its complete filesystem failure", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-unreadable-");
+  const unreadableTarget = path.join(
+    locations.agentsDir,
+    "pi-claude-marketplace-acme-directory.md",
+  );
+  const unreadableEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "directory",
+    generatedName: "pi-claude-marketplace-acme-directory",
+    sourcePath: "/plugins/acme/agents/directory.md",
+    targetPath: unreadableTarget,
+    sourceHash: "directory-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const storedIndex: AgentsIndex = { schemaVersion: 1, agents: [unreadableEntry] };
+  const expectedIndexBytes = `${JSON.stringify(storedIndex, null, 2)}\n`;
+  await mkdir(unreadableTarget, { recursive: true });
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(locations.agentsIndexPath, JSON.stringify(storedIndex));
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
+  const targetMetadata = await stat(unreadableTarget);
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: [],
+    failed: [
+      {
+        generatedName: "pi-claude-marketplace-acme-directory",
+        targetPath: unreadableTarget,
+        reason: "EISDIR: illegal operation on a directory, read",
+      },
+    ],
+    warnings: [],
+  });
+  assert.strictEqual(indexBytes, expectedIndexBytes);
+  assert.strictEqual(targetMetadata.isDirectory(), true);
+});
+
+test("keeps removal and failure ordering while preserving every failed index row", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-partial-");
+  const removedTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-removed.md");
+  const lockedDirectory = path.join(locations.agentsDir, "locked");
+  const lockedTarget = path.join(lockedDirectory, "pi-claude-marketplace-acme-locked.md");
+  const missingTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-missing.md");
+  const markerlessTarget = path.join(
+    locations.agentsDir,
+    "pi-claude-marketplace-acme-markerless.md",
+  );
+  const otherTarget = path.join(locations.agentsDir, "pi-claude-marketplace-other-agent.md");
+  const ownedBytes =
+    "---\nname: generated\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nOwned.\n";
+  const markerlessBytes = "---\nname: markerless\n---\n\nForeign.\n";
+  const otherEntry: AgentsIndexEntry = {
+    plugin: "other",
+    marketplace: "catalog",
+    sourceAgent: "agent",
+    generatedName: "pi-claude-marketplace-other-agent",
+    sourcePath: "/plugins/other/agents/agent.md",
+    targetPath: otherTarget,
+    sourceHash: "other-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const removedEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "removed",
+    generatedName: "pi-claude-marketplace-acme-removed",
+    sourcePath: "/plugins/acme/agents/removed.md",
+    targetPath: removedTarget,
+    sourceHash: "removed-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const lockedEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "locked",
+    generatedName: "pi-claude-marketplace-acme-locked",
+    sourcePath: "/plugins/acme/agents/locked.md",
+    targetPath: lockedTarget,
+    sourceHash: "locked-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const missingEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "missing",
+    generatedName: "pi-claude-marketplace-acme-missing",
+    sourcePath: "/plugins/acme/agents/missing.md",
+    targetPath: missingTarget,
+    sourceHash: "missing-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const markerlessEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "markerless",
+    generatedName: "pi-claude-marketplace-acme-markerless",
+    sourcePath: "/plugins/acme/agents/markerless.md",
+    targetPath: markerlessTarget,
+    sourceHash: "markerless-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const storedIndex: AgentsIndex = {
+    schemaVersion: 1,
+    agents: [otherEntry, removedEntry, lockedEntry, missingEntry, markerlessEntry],
+  };
+  const expectedIndex: AgentsIndex = {
+    schemaVersion: 1,
+    agents: [otherEntry, lockedEntry, markerlessEntry],
+  };
+  const expectedIndexBytes = `${JSON.stringify(expectedIndex, null, 2)}\n`;
+  await mkdir(lockedDirectory, { recursive: true });
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(removedTarget, ownedBytes);
+  await writeFile(lockedTarget, ownedBytes);
+  await writeFile(markerlessTarget, markerlessBytes);
+  await writeFile(locations.agentsIndexPath, JSON.stringify(storedIndex));
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  await chmod(lockedDirectory, 0o700);
+  const agentEntries = await readdir(locations.agentsDir);
+  const lockedFiles = await readdir(lockedDirectory);
+  const retainedLockedBytes = await readFile(lockedTarget, "utf8");
+  const retainedMarkerlessBytes = await readFile(markerlessTarget, "utf8");
+  const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: ["pi-claude-marketplace-acme-removed", "pi-claude-marketplace-acme-missing"],
+    failed: [
+      {
+        generatedName: "pi-claude-marketplace-acme-locked",
+        targetPath: lockedTarget,
+        reason: `EACCES: permission denied, unlink '${lockedTarget}'`,
+      },
+      {
+        generatedName: "pi-claude-marketplace-acme-markerless",
+        targetPath: markerlessTarget,
+        reason: `target ${markerlessTarget} is missing the generated marker`,
+      },
+    ],
+    warnings: [],
+  });
+  assert.deepStrictEqual(agentEntries.sort(), [
+    "locked",
+    "pi-claude-marketplace-acme-markerless.md",
+  ]);
+  assert.deepStrictEqual(lockedFiles, ["pi-claude-marketplace-acme-locked.md"]);
+  assert.strictEqual(retainedLockedBytes, ownedBytes);
+  assert.strictEqual(retainedMarkerlessBytes, markerlessBytes);
+  assert.strictEqual(indexBytes, expectedIndexBytes);
+});
+
+test("surfaces an exact corrupt-row warning without normalizing an unmatched index", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-corruption-");
+  const otherTarget = path.join(locations.agentsDir, "pi-claude-marketplace-other-agent.md");
+  const storedIndex = {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "other",
+        marketplace: "catalog",
+        sourceAgent: "agent",
+        generatedName: "pi-claude-marketplace-other-agent",
+        sourcePath: "/plugins/other/agents/agent.md",
+        targetPath: otherTarget,
+        sourceHash: "other-hash",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      {
+        plugin: "acme",
+        marketplace: "catalog",
+        sourceAgent: "broken",
+        generatedName: "pi-claude-marketplace-acme-broken",
+        sourcePath: "/plugins/acme/agents/broken.md",
+        sourceHash: "broken-hash",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  };
+  const storedBytes = `${JSON.stringify(storedIndex)}\n`;
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(locations.agentsIndexPath, storedBytes);
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const retainedBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: [],
+    failed: [],
+    warnings: [
+      `${locations.agentsIndexPath}.agents[1]: row failed schema validation (entry dropped) -- <root>: must have required properties targetPath`,
+    ],
+  });
+  assert.strictEqual(retainedBytes, storedBytes);
 });
