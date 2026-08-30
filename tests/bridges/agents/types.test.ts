@@ -1,13 +1,20 @@
 import type {
+  AgentsReplacement,
+  AgentsReplacementNoop,
+  AgentsReplacementReplaced,
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsNoop,
+  PreparedAgentsStaging,
   PreparedAgentsStaged,
   RawAgentFrontmatter,
+  ReplacePreparedAgentsOptions,
   StageAgentsCommitResult,
   StageAgentsInput,
   StagedAgentRecord,
   UnstageAgentFailure,
+  UnstageAgentsInput,
+  UnstageAgentsResult,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 const rawAgentFrontmatter: RawAgentFrontmatter = {
@@ -165,3 +172,98 @@ const stageAgentsCommitResultWithoutFailures: StageAgentsCommitResult = {
 void stageAgentsCommitResultWithoutFailures;
 // @ts-expect-error a preparation handle has a closed discriminant set
 void ({ kind: "prepared", result: stageAgentsCommitResult } satisfies PreparedAgentsNoop);
+
+void (preparedAgentsNoop satisfies PreparedAgentsStaging);
+void (preparedAgentsStaged satisfies PreparedAgentsStaging);
+void (preparedAgentsNoop.kind satisfies "noop");
+void (preparedAgentsStaged.kind satisfies "staged");
+
+const replacePreparedAgentsOptions: ReplacePreparedAgentsOptions = {
+  force: true,
+} satisfies ReplacePreparedAgentsOptions;
+void replacePreparedAgentsOptions;
+void ({} satisfies ReplacePreparedAgentsOptions);
+
+const agentsReplacementNoop: AgentsReplacementNoop = {
+  kind: "noop",
+  prepared: preparedAgentsNoop,
+} satisfies AgentsReplacementNoop;
+void agentsReplacementNoop;
+
+const agentsReplacementReplaced: AgentsReplacementReplaced = {
+  kind: "replaced",
+  prepared: preparedAgentsStaged,
+} satisfies AgentsReplacementReplaced;
+void agentsReplacementReplaced;
+void (agentsReplacementNoop satisfies AgentsReplacement);
+void (agentsReplacementReplaced satisfies AgentsReplacement);
+void (agentsReplacementNoop.kind satisfies "noop");
+void (agentsReplacementReplaced.kind satisfies "replaced");
+void (agentsReplacementNoop.prepared.kind satisfies "noop");
+void (agentsReplacementReplaced.prepared.kind satisfies "staged");
+
+const unstageAgentsInput: UnstageAgentsInput = {
+  locations: undefined!,
+  marketplaceName: "official",
+  pluginName: "acme",
+} satisfies UnstageAgentsInput;
+void unstageAgentsInput;
+
+const unstageAgentsResult: UnstageAgentsResult = {
+  removedNames: ["pi-claude-marketplace-acme-reviewer"],
+  failed: [unstageAgentFailure],
+  warnings: ["preserved foreign content"],
+} satisfies UnstageAgentsResult;
+void unstageAgentsResult;
+
+// @ts-expect-error raw frontmatter fields are readonly
+rawAgentFrontmatter.name = "changed";
+// @ts-expect-error discovered agent identities are readonly
+discoveredAgent.sourceName = "changed";
+// @ts-expect-error converted agent warnings are readonly
+convertedAgent.warnings = [];
+// @ts-expect-error stage input paths are readonly
+stageAgentsInput.cwd = "/changed";
+// @ts-expect-error staged record targets are readonly
+stagedAgentRecord.targetPath = "/changed";
+// @ts-expect-error unstage failure reasons are readonly
+unstageAgentFailure.reason = "changed";
+// @ts-expect-error commit result failure rows are readonly
+stageAgentsCommitResult.failed = [];
+// @ts-expect-error prepare discriminants are readonly
+preparedAgentsNoop.kind = "noop";
+// @ts-expect-error replacement options are readonly
+replacePreparedAgentsOptions.force = false;
+// @ts-expect-error replacement discriminants are readonly
+agentsReplacementReplaced.kind = "replaced";
+// @ts-expect-error unstage input identities are readonly
+unstageAgentsInput.pluginName = "changed";
+// @ts-expect-error unstage result warnings are readonly
+unstageAgentsResult.warnings = [];
+
+// @ts-expect-error noop preparations do not expose staging paths
+void preparedAgentsNoop.stagingDir;
+// @ts-expect-error staged preparations do not expose a replacement handle
+void preparedAgentsStaged.prepared;
+// @ts-expect-error noop replacements contain only noop preparations
+void agentsReplacementNoop.prepared.stagingDir;
+// @ts-expect-error replaced handles require a staged preparation
+void ({ kind: "replaced", prepared: preparedAgentsNoop } satisfies AgentsReplacement);
+// @ts-expect-error replacement options accept only a boolean force flag
+void ({ force: "yes" } satisfies ReplacePreparedAgentsOptions);
+// @ts-expect-error exact optional properties reject an explicit undefined force flag
+void ({ force: undefined } satisfies ReplacePreparedAgentsOptions);
+// @ts-expect-error an agent replacement has a closed discriminant set
+void ({ kind: "staged", prepared: preparedAgentsStaged } satisfies AgentsReplacement);
+// @ts-expect-error unstage input always identifies its plugin
+const unstageAgentsInputWithoutPlugin: UnstageAgentsInput = {
+  locations: undefined!,
+  marketplaceName: "official",
+};
+void unstageAgentsInputWithoutPlugin;
+// @ts-expect-error unstage results always expose warnings
+const unstageAgentsResultWithoutWarnings: UnstageAgentsResult = {
+  removedNames: [],
+  failed: [],
+};
+void unstageAgentsResultWithoutWarnings;
