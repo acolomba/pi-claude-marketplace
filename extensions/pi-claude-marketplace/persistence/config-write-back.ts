@@ -96,6 +96,7 @@ export async function deleteMarketplaceConfigEntryWithCascade(
       pluginEntries.push([key, entry]);
     }
   }
+
   const plugins = Object.fromEntries(pluginEntries);
 
   const patched: ScopeConfig = {
@@ -187,12 +188,14 @@ export async function writeBatchedConfigEntries(
     const existing = marketplaceEntries.get(name) ?? {};
     marketplaceEntries.set(name, { ...existing, ...patch } as MarketplaceConfigEntry);
   }
+
   const marketplaces = Object.fromEntries(marketplaceEntries);
 
   const pluginEntries = new Map(Object.entries(current.plugins ?? {}));
   for (const [key, patch] of Object.entries(batch.plugins ?? {})) {
     pluginEntries.set(key, { ...pluginEntries.get(key), ...patch });
   }
+
   const plugins = Object.fromEntries(pluginEntries);
 
   const patched: ScopeConfig = {

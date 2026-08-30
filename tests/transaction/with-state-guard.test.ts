@@ -75,6 +75,7 @@ function waitForControlledPromise(
     const rejectOnAbort = (): void => {
       reject(new Error(timeoutMessage, { cause: signal.reason }));
     };
+
     if (signal.aborted) {
       rejectOnAbort();
       return;
@@ -504,19 +505,9 @@ test(
     const locations = locationsFor("project", directory);
     const entered = createControlledPromise();
     const release = createControlledPromise();
-    let holderTransaction: Promise<"holder released"> | undefined;
     let holderEntries = 0;
     let contenderEntries = 0;
     let retryEntries = 0;
-    const releaseHolder = (): void => {
-      release.resolve();
-      void holderTransaction?.catch(() => undefined);
-    };
-    t.signal.addEventListener("abort", releaseHolder, { once: true });
-    t.after(() => {
-      t.signal.removeEventListener("abort", releaseHolder);
-      releaseHolder();
-    });
     const expectedState = {
       schemaVersion: 2,
       marketplaces: {},
@@ -526,11 +517,21 @@ test(
       '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
 
     // act
-    holderTransaction = withLockedStateTransaction(locations, async () => {
+    const holderTransaction = withLockedStateTransaction(locations, async () => {
       holderEntries += 1;
       entered.resolve();
       await release.promise;
       return "holder released" as const;
+    });
+    const releaseHolder = (): void => {
+      release.resolve();
+      void holderTransaction.catch(() => undefined);
+    };
+
+    t.signal.addEventListener("abort", releaseHolder, { once: true });
+    t.after(() => {
+      t.signal.removeEventListener("abort", releaseHolder);
+      releaseHolder();
     });
     await waitForControlledPromise(
       entered,
