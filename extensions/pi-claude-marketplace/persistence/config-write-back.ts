@@ -84,17 +84,19 @@ export async function deleteMarketplaceConfigEntryWithCascade(
   scopeRoot: string,
   marketplace: string,
 ): Promise<void> {
-  const marketplaces = { ...current.marketplaces };
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- marketplaces is a dynamic-key Record<string, ...>.
-  delete marketplaces[marketplace];
+  const marketplaceEntries = Object.entries(current.marketplaces ?? {}).filter(
+    ([name]) => name !== marketplace,
+  );
+  const marketplaces = Object.fromEntries(marketplaceEntries);
 
   const suffix = `@${marketplace}`;
-  const plugins: Record<string, PluginConfigEntry> = {};
+  const pluginEntries: Array<[string, PluginConfigEntry]> = [];
   for (const [key, entry] of Object.entries(current.plugins ?? {})) {
     if (!key.endsWith(suffix)) {
-      plugins[key] = entry;
+      pluginEntries.push([key, entry]);
     }
   }
+  const plugins = Object.fromEntries(pluginEntries);
 
   const patched: ScopeConfig = {
     ...current,
@@ -180,16 +182,18 @@ export async function writeBatchedConfigEntries(
   scopeRoot: string,
   batch: BatchedConfigPatch,
 ): Promise<void> {
-  const marketplaces = { ...current.marketplaces };
+  const marketplaceEntries = new Map(Object.entries(current.marketplaces ?? {}));
   for (const [name, patch] of Object.entries(batch.marketplaces ?? {})) {
-    const existing = marketplaces[name] ?? {};
-    marketplaces[name] = { ...existing, ...patch } as MarketplaceConfigEntry;
+    const existing = marketplaceEntries.get(name) ?? {};
+    marketplaceEntries.set(name, { ...existing, ...patch } as MarketplaceConfigEntry);
   }
+  const marketplaces = Object.fromEntries(marketplaceEntries);
 
-  const plugins = { ...current.plugins };
+  const pluginEntries = new Map(Object.entries(current.plugins ?? {}));
   for (const [key, patch] of Object.entries(batch.plugins ?? {})) {
-    plugins[key] = { ...plugins[key], ...patch };
+    pluginEntries.set(key, { ...pluginEntries.get(key), ...patch });
   }
+  const plugins = Object.fromEntries(pluginEntries);
 
   const patched: ScopeConfig = {
     ...current,

@@ -146,6 +146,27 @@ describe("writeMarketplaceConfigEntry", () => {
 });
 
 describe("deleteMarketplaceConfigEntryWithCascade", () => {
+  test("writes empty maps when both persisted maps are absent", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-empty-cascade-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    const current = { schemaVersion: 1 } satisfies ScopeConfig;
+    const expectedBytes = `{
+  "schemaVersion": 1,
+  "marketplaces": {},
+  "plugins": {}
+}
+`;
+
+    // act
+    await deleteMarketplaceConfigEntryWithCascade(current, filePath, scopeRoot, "tools");
+    const configBytes = await readFile(filePath, "utf8");
+
+    // assert
+    assert.strictEqual(configBytes, expectedBytes);
+  });
+
   test("deletes a marketplace when the plugin map is absent", async (t) => {
     // arrange
     const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-no-plugins-"));
@@ -224,6 +245,66 @@ describe("deleteMarketplaceConfigEntryWithCascade", () => {
 
     // assert
     assert.strictEqual(configBytes, expectedBytes);
+  });
+
+  test("retains JSON-derived prototype-named keys in exact order during a cascade", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-prototype-cascade-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    const current = JSON.parse(`{
+      "schemaVersion": 1,
+      "marketplaces": {
+        "__proto__": { "source": "acme/prototype" },
+        "tools": { "source": "acme/tools" },
+        "constructor": { "source": "acme/constructor" },
+        "toString": { "source": "acme/to-string" }
+      },
+      "plugins": {
+        "__proto__": { "enabled": true },
+        "reviewer@tools": { "enabled": true },
+        "constructor": { "enabled": false },
+        "toString": { "enabled": true }
+      }
+    }`) as ScopeConfig;
+    const expectedMarketplaceKeys = ["__proto__", "constructor", "toString"];
+    const expectedPluginKeys = ["__proto__", "constructor", "toString"];
+    const expectedBytes = `{
+  "schemaVersion": 1,
+  "marketplaces": {
+    "__proto__": {
+      "source": "acme/prototype"
+    },
+    "constructor": {
+      "source": "acme/constructor"
+    },
+    "toString": {
+      "source": "acme/to-string"
+    }
+  },
+  "plugins": {
+    "__proto__": {
+      "enabled": true
+    },
+    "constructor": {
+      "enabled": false
+    },
+    "toString": {
+      "enabled": true
+    }
+  }
+}
+`;
+
+    // act
+    await deleteMarketplaceConfigEntryWithCascade(current, filePath, scopeRoot, "tools");
+    const configBytes = await readFile(filePath, "utf8");
+    const stored = JSON.parse(configBytes) as ScopeConfig;
+
+    // assert
+    assert.strictEqual(configBytes, expectedBytes);
+    assert.deepStrictEqual(Object.keys(stored.marketplaces ?? {}), expectedMarketplaceKeys);
+    assert.deepStrictEqual(Object.keys(stored.plugins ?? {}), expectedPluginKeys);
   });
 });
 
@@ -547,5 +628,64 @@ describe("writeBatchedConfigEntries", () => {
     // assert
     assert.strictEqual(configBytes, expectedBytes);
     assert.deepStrictEqual(storedFiles, ["claude-plugins.json"]);
+  });
+
+  test("writes JSON-derived prototype-named batch entries in exact own-key order", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-prototype-batch-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    const current = JSON.parse('{ "schemaVersion": 1 }') as ScopeConfig;
+    const batch = JSON.parse(`{
+      "marketplaces": {
+        "__proto__": { "source": "acme/prototype", "autoupdate": true },
+        "constructor": { "source": "acme/constructor" },
+        "toString": { "source": "acme/to-string" }
+      },
+      "plugins": {
+        "__proto__": { "enabled": true },
+        "constructor": { "enabled": false },
+        "toString": { "enabled": true }
+      }
+    }`) as BatchedConfigPatch;
+    const expectedMarketplaceKeys = ["__proto__", "constructor", "toString"];
+    const expectedPluginKeys = ["__proto__", "constructor", "toString"];
+    const expectedBytes = `{
+  "schemaVersion": 1,
+  "marketplaces": {
+    "__proto__": {
+      "source": "acme/prototype",
+      "autoupdate": true
+    },
+    "constructor": {
+      "source": "acme/constructor"
+    },
+    "toString": {
+      "source": "acme/to-string"
+    }
+  },
+  "plugins": {
+    "__proto__": {
+      "enabled": true
+    },
+    "constructor": {
+      "enabled": false
+    },
+    "toString": {
+      "enabled": true
+    }
+  }
+}
+`;
+
+    // act
+    await writeBatchedConfigEntries(current, filePath, scopeRoot, batch);
+    const configBytes = await readFile(filePath, "utf8");
+    const stored = JSON.parse(configBytes) as ScopeConfig;
+
+    // assert
+    assert.strictEqual(configBytes, expectedBytes);
+    assert.deepStrictEqual(Object.keys(stored.marketplaces ?? {}), expectedMarketplaceKeys);
+    assert.deepStrictEqual(Object.keys(stored.plugins ?? {}), expectedPluginKeys);
   });
 });
