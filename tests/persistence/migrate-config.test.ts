@@ -188,6 +188,33 @@ test("projects complete marketplaces, plugins, legacy flags, and nullish sources
   assert.deepStrictEqual(config, expectedConfig);
 });
 
+test("projects JSON-derived prototype-named marketplaces as own config entries", () => {
+  // arrange
+  const state = JSON.parse(
+    '{"schemaVersion":2,"marketplaces":{"__proto__":{"source":{"raw":"./proto"},"plugins":{}},"constructor":{"source":{"raw":"./constructor"},"plugins":{}},"toString":{"source":{"raw":"./to-string"},"plugins":{}}}}',
+  ) as ExtensionState;
+  const expectedConfig = {
+    schemaVersion: 1,
+    marketplaces: Object.fromEntries([
+      ["__proto__", { source: "./proto" }],
+      ["constructor", { source: "./constructor" }],
+      ["toString", { source: "./to-string" }],
+    ]),
+    plugins: {},
+  } satisfies CompleteProjection;
+
+  // act
+  const config = buildConfigFromState(state);
+
+  // assert
+  assert.deepStrictEqual(config, expectedConfig);
+  assert.deepStrictEqual(Object.keys(config.marketplaces), [
+    "__proto__",
+    "constructor",
+    "toString",
+  ]);
+});
+
 test("preserves an existing valid config without rewriting its bytes", async (t) => {
   // arrange
   const { locations } = await createCaseLocations(t);

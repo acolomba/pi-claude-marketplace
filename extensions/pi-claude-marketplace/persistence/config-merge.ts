@@ -89,37 +89,30 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
   const basePlugins = base.plugins ?? {};
   const localPlugins = local.plugins ?? {};
 
-  const marketplaces: Record<string, MergedConfigEntry<MarketplaceConfigEntry>> = {};
+  const marketplaceEntries: Array<[string, MergedConfigEntry<MarketplaceConfigEntry>]> = [];
   for (const key of new Set([...Object.keys(baseMps), ...Object.keys(localMps)])) {
-    const localEntry = localMps[key];
-    if (localEntry !== undefined) {
-      marketplaces[key] = { entry: localEntry, source: "local" };
+    if (Object.hasOwn(localMps, key)) {
+      marketplaceEntries.push([key, { entry: localMps[key]!, source: "local" }]);
       continue;
     }
 
-    const baseEntry = baseMps[key];
-    if (baseEntry !== undefined) {
-      // Belt-and-suspenders: key came from one of the two maps and the local
-      // branch already handled local-present, so baseEntry is defined here.
-      marketplaces[key] = { entry: baseEntry, source: "base" };
-    }
+    marketplaceEntries.push([key, { entry: baseMps[key]!, source: "base" }]);
   }
 
-  const plugins: Record<string, MergedConfigEntry<PluginConfigEntry>> = {};
+  const pluginEntries: Array<[string, MergedConfigEntry<PluginConfigEntry>]> = [];
   for (const key of new Set([...Object.keys(basePlugins), ...Object.keys(localPlugins)])) {
-    const localEntry = localPlugins[key];
-    if (localEntry !== undefined) {
-      plugins[key] = { entry: localEntry, source: "local" };
+    if (Object.hasOwn(localPlugins, key)) {
+      pluginEntries.push([key, { entry: localPlugins[key]!, source: "local" }]);
       continue;
     }
 
-    const baseEntry = basePlugins[key];
-    if (baseEntry !== undefined) {
-      plugins[key] = { entry: baseEntry, source: "base" };
-    }
+    pluginEntries.push([key, { entry: basePlugins[key]!, source: "base" }]);
   }
 
-  return { marketplaces, plugins };
+  return {
+    marketplaces: Object.fromEntries(marketplaceEntries),
+    plugins: Object.fromEntries(pluginEntries),
+  };
 }
 
 /**

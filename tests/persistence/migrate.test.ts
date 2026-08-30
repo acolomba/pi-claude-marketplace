@@ -366,6 +366,58 @@ test("filters a primitive marketplace row from the normalized result", () => {
   });
 });
 
+test("keeps JSON-derived prototype-named marketplaces as own migrated entries", () => {
+  // arrange
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const legacyState = JSON.parse(
+    '{"schemaVersion":2,"marketplaces":{"__proto__":{"name":"__proto__","manifestPath":"/proto/marketplace.json","marketplaceRoot":"/proto","plugins":{}},"constructor":{"name":"constructor","manifestPath":"/constructor/marketplace.json","marketplaceRoot":"/constructor","plugins":{}},"toString":{"name":"toString","manifestPath":"/to-string/marketplace.json","marketplaceRoot":"/to-string","plugins":{}}}}',
+  ) as unknown;
+  const expectedMarketplaces = Object.fromEntries([
+    [
+      "__proto__",
+      {
+        name: "__proto__",
+        manifestPath: "/proto/marketplace.json",
+        marketplaceRoot: "/proto",
+        plugins: {},
+      },
+    ],
+    [
+      "constructor",
+      {
+        name: "constructor",
+        manifestPath: "/constructor/marketplace.json",
+        marketplaceRoot: "/constructor",
+        plugins: {},
+      },
+    ],
+    [
+      "toString",
+      {
+        name: "toString",
+        manifestPath: "/to-string/marketplace.json",
+        marketplaceRoot: "/to-string",
+        plugins: {},
+      },
+    ],
+  ]);
+  const expectedMigration = {
+    marketplaces: expectedMarketplaces,
+    mutated: false,
+  } satisfies MigrationResult;
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.deepStrictEqual(migration, expectedMigration);
+  assert.deepStrictEqual(Object.keys(migration.marketplaces), [
+    "__proto__",
+    "constructor",
+    "toString",
+  ]);
+});
+
 test("leaves a primitive plugin row for schema rejection without default filling", () => {
   // arrange
   const extensionRoot = path.join(path.sep, "extension-root");

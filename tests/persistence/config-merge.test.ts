@@ -468,6 +468,42 @@ describe("mergeScopeConfigs", () => {
     assert.deepStrictEqual(mergedConfig, expectedConfig);
   });
 
+  test("keeps JSON-derived prototype-named base entries as own merged values", () => {
+    // arrange
+    const baseConfig = JSON.parse(
+      '{"marketplaces":{"__proto__":{"source":"base/proto"},"constructor":{"source":"base/constructor"},"toString":{"source":"base/to-string"}},"plugins":{"__proto__":{"enabled":true},"constructor":{"enabled":false},"toString":{}}}',
+    ) as ScopeConfig;
+    const localConfig = JSON.parse('{"marketplaces":{},"plugins":{}}') as ScopeConfig;
+    const expectedConfig = {
+      marketplaces: Object.fromEntries([
+        ["__proto__", { entry: { source: "base/proto" }, source: "base" }],
+        ["constructor", { entry: { source: "base/constructor" }, source: "base" }],
+        ["toString", { entry: { source: "base/to-string" }, source: "base" }],
+      ]),
+      plugins: Object.fromEntries([
+        ["__proto__", { entry: { enabled: true }, source: "base" }],
+        ["constructor", { entry: { enabled: false }, source: "base" }],
+        ["toString", { entry: {}, source: "base" }],
+      ]),
+    } satisfies MergedConfig;
+
+    // act
+    const mergedConfig = mergeScopeConfigs(baseConfig, localConfig);
+
+    // assert
+    assert.deepStrictEqual(mergedConfig, expectedConfig);
+    assert.deepStrictEqual(Object.keys(mergedConfig.marketplaces), [
+      "__proto__",
+      "constructor",
+      "toString",
+    ]);
+    assert.deepStrictEqual(Object.keys(mergedConfig.plugins), [
+      "__proto__",
+      "constructor",
+      "toString",
+    ]);
+  });
+
   for (const { name, baseConfig, localConfig, expectedConfig } of mergeCases) {
     test(name, () => {
       // arrange

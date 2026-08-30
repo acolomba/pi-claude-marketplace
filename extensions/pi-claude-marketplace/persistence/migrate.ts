@@ -232,7 +232,7 @@ export function migrateLegacyMarketplaceRecords(
   }
 
   let mutated = false;
-  const marketplaces: Record<string, Record<string, unknown>> = {};
+  const marketplaceEntries: Array<[string, Record<string, unknown>]> = [];
 
   for (const [mpName, mpRaw] of Object.entries(rawMps as Record<string, unknown>)) {
     if (typeof mpRaw !== "object" || mpRaw === null || Array.isArray(mpRaw)) {
@@ -250,10 +250,10 @@ export function migrateLegacyMarketplaceRecords(
       mutated = ensureNoLegacyAutoupdate(mp) || mutated;
     }
 
-    marketplaces[mpName] = mp;
+    marketplaceEntries.push([mpName, mp]);
   }
 
-  return { marketplaces, mutated };
+  return { marketplaces: Object.fromEntries(marketplaceEntries), mutated };
 }
 
 /**
