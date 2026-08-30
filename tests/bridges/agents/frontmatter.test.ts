@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  emitGeneratedAgentFile,
   emitYamlScalar,
   parseFrontmatter,
   sanitizeProvenanceValue,
@@ -272,5 +273,207 @@ Body.
 
     // assert
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("treats an intercepted empty key as an empty folded list", (t) => {
+    // arrange
+    const previousInterceptedKey = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      "interceptedAgentField",
+    );
+    t.after(() => {
+      if (previousInterceptedKey === undefined) {
+        Reflect.deleteProperty(Object.prototype, "interceptedAgentField");
+      } else {
+        Object.defineProperty(Object.prototype, "interceptedAgentField", previousInterceptedKey);
+      }
+    });
+    Object.defineProperty(Object.prototype, "interceptedAgentField", {
+      configurable: true,
+      set() {
+        return;
+      },
+    });
+    const sourceAgentFile = `---
+interceptedAgentField:
+  - retained only by the inherited setter
+---
+Body.
+`;
+    const expectedParsedAgentFile = { raw: {}, body: "Body.\n" };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+});
+
+describe("emitGeneratedAgentFile", () => {
+  test("emits complete metadata, sanitized provenance, a skill legend, and exact body bytes", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-reviewer",
+        description: '"Review\nsource changes"',
+        model: "anthropic/claude-sonnet-4-6",
+        tools: ["read", "bash"] as const,
+        thinking: "high",
+        skills: ["acme-review", "acme-check"],
+        inheritSkills: true,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "reviewer",
+        sourcePath: "agents/reviewer.md\ninjectedKey: blocked",
+        originalModel: "sonnet\r\noriginalModelInjection: blocked",
+        droppedFields: ["color\nfieldInjection: blocked", "permissionMode"],
+        droppedTools: ["WebFetch\r\ntoolInjection: blocked"],
+        warnings: ["first warning\nwarningInjection: blocked", "second warning"],
+      },
+      body: "Review the source.",
+      legend: [
+        { token: "acme:review", generatedName: "acme-review" },
+        { token: "acme:check", generatedName: "acme-check" },
+      ],
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-reviewer
+description: '"Review source changes"'
+model: anthropic/claude-sonnet-4-6
+tools: read,bash
+thinking: high
+skills: acme-review,acme-check
+skillPath: ../pi-claude-marketplace/resources/skills
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: agents/reviewer.md injectedKey: blocked
+  originalModel: sonnet originalModelInjection: blocked
+  droppedFields:
+    - color fieldInjection: blocked
+    - permissionMode
+  droppedTools:
+    - WebFetch toolInjection: blocked
+  warnings:
+    - first warning warningInjection: blocked
+    - second warning
+---
+
+## Pi coding agent skill legend
+
+These instructions reference Claude skills by their original names. In this Pi session:
+
+- \`acme:review\` → skill \`acme-review\` (available on demand)
+- \`acme:check\` → skill \`acme-check\` (available on demand)
+
+Review the source.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
+  test("omits optional metadata and renders empty provenance lists inline", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-reader",
+        description: "Read source changes",
+        tools: ["read"] as const,
+        skills: [],
+        inheritSkills: false,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "reader",
+        sourcePath: "agents/reader.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "\nBody already has framing.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-reader
+description: Read source changes
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reader
+  sourcePath: agents/reader.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body already has framing.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
+  test("treats an empty legend as absent and adds only the missing trailing newline", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-writer",
+        description: "Write source changes",
+        tools: ["write"] as const,
+        skills: [],
+        inheritSkills: false,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "writer",
+        sourcePath: "agents/writer.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "\nBody lacks its final newline.",
+      legend: [],
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-writer
+description: Write source changes
+tools: write
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: writer
+  sourcePath: agents/writer.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body lacks its final newline.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
 });
