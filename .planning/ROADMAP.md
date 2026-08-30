@@ -189,11 +189,11 @@ Plans:
 3. Ledger, guard, and rollback cases prove atomic replacement, failure isolation, idempotency, and retry behavior through public effects.
 4. Each filesystem case owns and removes its temporary directory, including corrupt-input and partial-failure cases.
 
-**Plans**: 3/12 plans executed
+**Plans**: 4/12 plans executed
 
 Plans:
 
-- [ ] 110-01-PLAN.md
+- [x] 110-01-PLAN.md
 - [x] 110-02-PLAN.md
 - [ ] 110-03-PLAN.md
 - [ ] 110-04-PLAN.md
@@ -541,7 +541,7 @@ and commit still owns one pair.
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    | 19/19 | Complete    | 2026-08-29 |
-| 110. Persistence and Transaction         | 3/12 | In Progress|  |
+| 110. Persistence and Transaction         | 4/12 | In Progress|  |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -         |

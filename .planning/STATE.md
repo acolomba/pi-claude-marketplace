@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 110
 current_phase_name: Persistence and Transaction
 status: executing
-stopped_at: Completed 110-11-PLAN.md
-last_updated: "2026-08-30T01:35:31.069Z"
+stopped_at: Completed 110-01-PLAN.md
+last_updated: "2026-08-30T01:49:35.734Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 110 execution started
-state_head: f177bd39c46f4498125414ac7e34421510dacb20
+state_head: 4d167068af1046ce8ee39bbee9b031ddd0f84e07
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 55
-  completed_plans: 46
+  completed_plans: 47
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 110 (Persistence and Transaction) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 110 execution started
 
@@ -106,6 +106,7 @@ evidence.
 | Phase 110 P02 | 11 min | 2 tasks | 1 files |
 | Phase 110 P06 | 7 min | 2 tasks | 1 files |
 | Phase 110 P11 | 7 min | 2 tasks | 1 files |
+| Phase 110 P01 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Locations evidence uses complete bundles and adjacent safe-path probes with platform-aware separators.
 - [Phase 110]: Kept rollback.ts byte-identical because its public formatter exposes every bypass and wrapping branch.
 - [Phase 110]: Rollback evidence compares whole structured results before pinning original cause and raw partial identities.
+- [Phase 110]: Kept agents-index-io.ts byte-identical because its public load and save functions expose every real branch.
+- [Phase 110]: Agents-index I/O evidence uses case-owned literal documents, complete loaded values, structured failures, and exact stored bytes.
 
 ### Pending Todos
 
@@ -142,6 +145,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T01:35:30.796Z
-Stopped at: Completed 110-11-PLAN.md
+Last session: 2026-08-30T01:49:35.478Z
+Stopped at: Completed 110-01-PLAN.md
 Resume file: None
