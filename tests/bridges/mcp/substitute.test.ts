@@ -71,8 +71,8 @@ describe("deepSubstitute", () => {
     assert.deepStrictEqual(server, originalServer);
     assert.notStrictEqual(substitutedServer, server);
     assert.ok(typeof substitutedServer === "object" && substitutedServer !== null);
-    assert.notStrictEqual((substitutedServer as typeof expectedServer).args, server.args);
-    assert.notStrictEqual((substitutedServer as typeof expectedServer).headers, server.headers);
+    assert.notStrictEqual(substitutedServer.args, server.args);
+    assert.notStrictEqual(substitutedServer.headers, server.headers);
   });
 
   for (const { description, leaf, bindings, expectedLeaf } of [
