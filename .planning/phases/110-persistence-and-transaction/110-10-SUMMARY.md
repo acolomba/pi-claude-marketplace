@@ -13,16 +13,18 @@ provides:
 affects: [install-recovery, reinstall-recovery, rollback-formatting, transaction-integrity]
 
 actuals:
-  tokens: 8860
+  tokens: 9111
   tasks: 2
-  commits: 3
+  commits: 4
 
 tech-stack:
   added: []
   patterns: [named production schedule rows, complete operation logs, exact final context]
 
 key-files:
-  created: [.planning/phases/110-persistence-and-transaction/110-10-SUMMARY.md]
+  created:
+    - .planning/phases/110-persistence-and-transaction/110-10-SUMMARY.md
+    - .planning/phases/110-persistence-and-transaction/deferred-items.md
   modified: [tests/transaction/phase-ledger.test.ts]
 
 key-decisions:
@@ -93,6 +95,8 @@ Each task was committed atomically:
 1. **Task 1: Establish one production-shaped forward failure through complete compensation** - `01acad86` (test)
 2. **Task 2: Enumerate every failure position and exceptional undo branch** - `da107ae7` (test)
 
+**Plan metadata:** `230ee2e5` (docs: initial closeout)
+
 ## Files Created/Modified
 
 - `tests/transaction/phase-ledger.test.ts` - Canonical direct owner for the production schedule, compensation ordering, partials, causes, containment failures, and no-op behavior.
@@ -126,6 +130,7 @@ None - plan executed exactly as written.
 ## Issues Encountered
 
 - The state handler added a duplicate phase prefix to both decisions and left the detailed 110-10 roadmap row unchecked. Both tracking-only formatting defects were corrected before the closeout commit; summary counts and plan status now agree.
+- `npm run check` stopped during repository-wide lint on two Plan 110-09-owned `state-io.ts` findings and one unrelated architecture-owner style finding. The Phase 110 plan 10 owner passes focused ESLint, direct coverage, typecheck, and integration; the out-of-scope findings are recorded in `deferred-items.md`.
 
 ## User Setup Required
 
