@@ -399,6 +399,19 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     });
   }
 
+  const parsedRecord =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  if (
+    parsedRecord !== undefined &&
+    Object.hasOwn(parsedRecord, "schemaVersion") &&
+    parsedRecord.schemaVersion !== 1 &&
+    parsedRecord.schemaVersion !== 2
+  ) {
+    throw new Error(`state.json at ${stateJsonPath} has an unsupported schema version`);
+  }
+
   // ST-4 / ST-5 / D-13: normalize legacy records. The third argument is the
   // D-13 ORDERING RAIL gate: the `autoupdate` scrub fires only when the
   // scope's `claude-plugins.json` already exists, preserving the legacy

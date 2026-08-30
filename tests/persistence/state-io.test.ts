@@ -231,6 +231,33 @@ for (const { name, state, accepted } of [
   });
 }
 
+test("rejects an unsupported stored schema version without replacing future bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-future-version-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedBytes = '{"schemaVersion":3,"marketplaces":{},"futureField":"keep"}\n';
+  await writeFile(stateJsonPath, storedBytes);
+
+  // act
+  const error = await loadState(extensionRoot).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.ok(error instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.name, message: error.message, cause: error.cause },
+    {
+      name: "Error",
+      message: `state.json at ${stateJsonPath} has an unsupported schema version`,
+      cause: undefined,
+    },
+  );
+  assert.strictEqual(retainedBytes, storedBytes);
+});
+
 test("validates complete hook and resolved-sha plugin records", () => {
   // arrange
   const storedState = {
