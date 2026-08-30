@@ -168,26 +168,28 @@ const unstageCommandsResult: UnstageCommandsResult = {
 } satisfies UnstageCommandsResult;
 void unstageCommandsResult;
 
+type IsMutableArray<T extends readonly unknown[]> = T extends unknown[] ? true : false;
+
 // @ts-expect-error stage input command names are a readonly array
-stageCommandsInput.previousCommandNames?.push("acme:changed");
+void (true satisfies IsMutableArray<NonNullable<StageCommandsInput["previousCommandNames"]>>);
 // @ts-expect-error commit result staged names are a readonly array
-stageCommandsCommitResult.stagedNames.push("acme:changed");
+void (true satisfies IsMutableArray<StageCommandsCommitResult["stagedNames"]>);
 // @ts-expect-error commit result records are a readonly array
-stageCommandsCommitResult.recorded.push(stagedCommandRecord);
+void (true satisfies IsMutableArray<StageCommandsCommitResult["recorded"]>);
 // @ts-expect-error commit result warnings are a readonly array
-stageCommandsCommitResult.warnings.push("changed");
+void (true satisfies IsMutableArray<StageCommandsCommitResult["warnings"]>);
 // @ts-expect-error commit result degraded rows are a readonly array
-stageCommandsCommitResult.degraded.push(commandDegradeRecord);
+void (true satisfies IsMutableArray<StageCommandsCommitResult["degraded"]>);
 // @ts-expect-error staged preparation previous names are a readonly array
-preparedCommandsStaged._previousNames.push("acme:changed");
+void (true satisfies IsMutableArray<PreparedCommandsStaged["_previousNames"]>);
 // @ts-expect-error staged preparation rename pairs are a readonly array
-preparedCommandsStaged._renamePairs.push({ from: "/changed", to: "/changed" });
+void (true satisfies IsMutableArray<PreparedCommandsStaged["_renamePairs"]>);
 // @ts-expect-error unstage input command names are a readonly array
-unstageCommandsInput.previousCommandNames.push("acme:changed");
+void (true satisfies IsMutableArray<UnstageCommandsInput["previousCommandNames"]>);
 // @ts-expect-error unstage result removed names are a readonly array
-unstageCommandsResult.removedNames.push("acme:changed");
+void (true satisfies IsMutableArray<UnstageCommandsResult["removedNames"]>);
 // @ts-expect-error unstage result warnings are a readonly array
-unstageCommandsResult.warnings.push("changed");
+void (true satisfies IsMutableArray<UnstageCommandsResult["warnings"]>);
 
 // @ts-expect-error noop preparations do not expose staging roots
 void preparedCommandsNoop.stagingRoot;
