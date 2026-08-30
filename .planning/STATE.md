@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.19
 current_phase: 111
-current_phase_name: non-hook-component-bridges
+current_phase_name: Non-Hook Component Bridges
 status: executing
-stopped_at: Phase 111 context gathered
-last_updated: "2026-08-30T13:25:45.568Z"
+stopped_at: Completed 111-01-PLAN.md
+last_updated: "2026-08-30T13:43:36.383Z"
 last_activity: 2026-08-30
-last_activity_desc: Phase 110 complete, transitioned to Phase 111
-state_head: e84f15b455cc7ff3b11fba1e5ac71ec5558dc6eb
+last_activity_desc: Phase 111 execution started
+state_head: 7656d073b820cd58f16c65ce5c3522b594288cc8
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 86
-  completed_plans: 55
+  completed_plans: 56
 milestone_name: Unit Test Refactor
 ---
 
@@ -30,10 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 111 (non-hook-component-bridges) — READY TO EXECUTE
-Plan: Not started
+Phase: 111 (Non-Hook Component Bridges) — EXECUTING
+Plan: 2 of 31
 Status: Ready to execute
-Last activity: 2026-08-30 — Phase 110 complete, transitioned to Phase 111
+Last activity: 2026-08-30 — Phase 111 execution started
 
 Progress: [███░░░░░░░] 26%
 
@@ -51,71 +51,72 @@ evidence.
 
 **By Phase:**
 
-| Phase                    | Plans | Total | Avg/Plan |
-| ------------------------ | ----: | ----- | -------- |
+| Phase                    | Plans | Total   | Avg/Plan |
+| ------------------------ | ----: | ------- | -------- |
 | 108. Domain and Platform |    23 | 10h 58m | 28.6 min |
-| 109. Shared Contracts | 19 | 3h 19m | 10.5 min |
-| 110 | 12 | - | - |
+| 109. Shared Contracts    |    19 | 3h 19m  | 10.5 min |
+| 110                      |    12 | -       | -        |
 
 **Recent Trend:** 19 Phase 109 plans completed at a 10.5-minute average.
 **Per-Plan Metrics:**
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 108 P01 | 10 min | 2 tasks | 1 files |
-| Phase 108 P06 | 18 min | 3 tasks | 7 files |
-| Phase 108 P08 | 13 min | 2 tasks | 1 files |
-| Phase 108 P09 | 15 min | 2 tasks | 1 files |
-| Phase 108 P10 | 12 min | 2 tasks | 1 files |
-| Phase 108 P11 | 14 min | 2 tasks | 1 files |
-| Phase 108 P13 | 14 min | 2 tasks | 1 files |
-| Phase 108 P14 | 10 min | 2 tasks | 1 files |
-| Phase 108 P15 | 10 min | 2 tasks | 1 files |
-| Phase 108 P16 | 16 min | 2 tasks | 1 files |
-| Phase 108 P17 | 26 min | 2 tasks | 1 files |
-| Phase 108 P19 | 28 min | 3 tasks | 5 files |
-| Phase 108 P20 | 12 min | 2 tasks | 1 files |
-| Phase 108 P18 | 43 min | 3 tasks | 8 files |
-| Phase 108 P21 | 3h 40m | 3 tasks | 9 files |
-| Phase 108 P12 | 27 min | 3 tasks | 5 files |
-| Phase 108 P22 | 42 min | 3 tasks | 8 files |
-| Phase 108 P02 | 20 min | 3 tasks | 7 files |
-| Phase 108 P03 | 19 min | 3 tasks | 8 files |
-| Phase 108 P04 | 22 min | 3 tasks | 5 files |
-| Phase 108 P05 | 20 min | 3 tasks | 8 files |
-| Phase 108 P07 | 27 min | 3 tasks | 9 files |
-| Phase 108 P23 | 20 min | 3 tasks | 5 files |
-| Phase 109 P01 | 7 min | 2 tasks | 1 files |
-| Phase 109 P02 | 10 min | 2 tasks | 1 files |
-| Phase 109 P03 | 12 min | 2 tasks | 1 files |
-| Phase 109 P04 | 7 min | 2 tasks | 1 files |
-| Phase 109 P05 | 5 min | 2 tasks | 1 files |
-| Phase 109 P06 | 7 min | 2 tasks | 1 files |
-| Phase 109 P07 | 16min | 2 tasks | 1 files |
-| Phase 109 P08 | 6min | 2 tasks | 1 files |
-| Phase 109 P09 | 19 min | 2 tasks | 2 files |
-| Phase 109 P10 | 9 min | 2 tasks | 1 files |
-| Phase 109 P11 | 6 min | 2 tasks | 1 files |
-| Phase 109 P12 | 12 min | 2 tasks | 1 files |
-| Phase 109 P13 | 6 min | 2 tasks | 1 files |
-| Phase 109 P14 | 40 min | 3 tasks | 9 files |
-| Phase 109 P15 | 6 min | 2 tasks | 1 files |
-| Phase 109 P16 | 9 min | 2 tasks | 1 files |
-| Phase 109 P17 | 11 min | 2 tasks | 1 files |
-| Phase 109 P18 | 4 min | 2 tasks | 1 files |
-| Phase 109 P19 | 7 min | 2 tasks | 1 files |
-| Phase 110 P02 | 11 min | 2 tasks | 1 files |
-| Phase 110 P06 | 7 min | 2 tasks | 1 files |
-| Phase 110 P11 | 7 min | 2 tasks | 1 files |
-| Phase 110 P01 | 8min | 2 tasks | 1 files |
-| Phase 110 P03 | 11 min | 2 tasks | 1 files |
-| Phase 110 P05 | 10 min | 2 tasks | 1 files |
-| Phase 110 P08 | 10min | 2 tasks | 2 files |
-| Phase 110 P10 | 9 min | 2 tasks | 1 files |
-| Phase 110 P04 | 11 min | 2 tasks | 1 files |
-| Phase 110 P07 | 16 min | 2 tasks | 2 files |
-| Phase 110 P09 | 19 min | 2 tasks | 3 files |
-| Phase 110 P12 | 17 min | 2 tasks | 1 files |
+| Plan          | Duration | Tasks   | Files   |
+| ------------- | -------- | ------- | ------- |
+| Phase 108 P01 | 10 min   | 2 tasks | 1 files |
+| Phase 108 P06 | 18 min   | 3 tasks | 7 files |
+| Phase 108 P08 | 13 min   | 2 tasks | 1 files |
+| Phase 108 P09 | 15 min   | 2 tasks | 1 files |
+| Phase 108 P10 | 12 min   | 2 tasks | 1 files |
+| Phase 108 P11 | 14 min   | 2 tasks | 1 files |
+| Phase 108 P13 | 14 min   | 2 tasks | 1 files |
+| Phase 108 P14 | 10 min   | 2 tasks | 1 files |
+| Phase 108 P15 | 10 min   | 2 tasks | 1 files |
+| Phase 108 P16 | 16 min   | 2 tasks | 1 files |
+| Phase 108 P17 | 26 min   | 2 tasks | 1 files |
+| Phase 108 P19 | 28 min   | 3 tasks | 5 files |
+| Phase 108 P20 | 12 min   | 2 tasks | 1 files |
+| Phase 108 P18 | 43 min   | 3 tasks | 8 files |
+| Phase 108 P21 | 3h 40m   | 3 tasks | 9 files |
+| Phase 108 P12 | 27 min   | 3 tasks | 5 files |
+| Phase 108 P22 | 42 min   | 3 tasks | 8 files |
+| Phase 108 P02 | 20 min   | 3 tasks | 7 files |
+| Phase 108 P03 | 19 min   | 3 tasks | 8 files |
+| Phase 108 P04 | 22 min   | 3 tasks | 5 files |
+| Phase 108 P05 | 20 min   | 3 tasks | 8 files |
+| Phase 108 P07 | 27 min   | 3 tasks | 9 files |
+| Phase 108 P23 | 20 min   | 3 tasks | 5 files |
+| Phase 109 P01 | 7 min    | 2 tasks | 1 files |
+| Phase 109 P02 | 10 min   | 2 tasks | 1 files |
+| Phase 109 P03 | 12 min   | 2 tasks | 1 files |
+| Phase 109 P04 | 7 min    | 2 tasks | 1 files |
+| Phase 109 P05 | 5 min    | 2 tasks | 1 files |
+| Phase 109 P06 | 7 min    | 2 tasks | 1 files |
+| Phase 109 P07 | 16min    | 2 tasks | 1 files |
+| Phase 109 P08 | 6min     | 2 tasks | 1 files |
+| Phase 109 P09 | 19 min   | 2 tasks | 2 files |
+| Phase 109 P10 | 9 min    | 2 tasks | 1 files |
+| Phase 109 P11 | 6 min    | 2 tasks | 1 files |
+| Phase 109 P12 | 12 min   | 2 tasks | 1 files |
+| Phase 109 P13 | 6 min    | 2 tasks | 1 files |
+| Phase 109 P14 | 40 min   | 3 tasks | 9 files |
+| Phase 109 P15 | 6 min    | 2 tasks | 1 files |
+| Phase 109 P16 | 9 min    | 2 tasks | 1 files |
+| Phase 109 P17 | 11 min   | 2 tasks | 1 files |
+| Phase 109 P18 | 4 min    | 2 tasks | 1 files |
+| Phase 109 P19 | 7 min    | 2 tasks | 1 files |
+| Phase 110 P02 | 11 min   | 2 tasks | 1 files |
+| Phase 110 P06 | 7 min    | 2 tasks | 1 files |
+| Phase 110 P11 | 7 min    | 2 tasks | 1 files |
+| Phase 110 P01 | 8min     | 2 tasks | 1 files |
+| Phase 110 P03 | 11 min   | 2 tasks | 1 files |
+| Phase 110 P05 | 10 min   | 2 tasks | 1 files |
+| Phase 110 P08 | 10min    | 2 tasks | 2 files |
+| Phase 110 P10 | 9 min    | 2 tasks | 1 files |
+| Phase 110 P04 | 11 min   | 2 tasks | 1 files |
+| Phase 110 P07 | 16 min   | 2 tasks | 2 files |
+| Phase 110 P09 | 19 min   | 2 tasks | 3 files |
+| Phase 110 P12 | 17 min   | 2 tasks | 1 files |
+| Phase 111 P01 | 14 min   | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Kept with-state-guard.ts byte-identical because its public state operations and lockfile collaborator expose every real lifecycle branch.
 - [Phase 110]: Used entered and release promises to prove real lock contention without sleeps, polling, elapsed-time checks, or platform skips.
 - [Phase 110]: Used the existing loadState and saveState dependency seam for deterministic persistence failures and case-local proper-lockfile method restoration for acquisition and release failures.
+- [Phase 111]: Kept agents/convert.ts byte-identical because its public conversion and collision exports expose every real branch.
+- [Phase 111]: Moved all seven byte-identity cases into the canonical owner and removed the duplicate supplemental suite.
 
 ### Pending Todos
 
@@ -173,6 +176,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T12:01:25.333Z
-Stopped at: Phase 111 context gathered
-Resume file: .planning/phases/111-non-hook-component-bridges/111-CONTEXT.md
+Last session: 2026-08-30T13:43:35.876Z
+Stopped at: Completed 111-01-PLAN.md
+Resume file: None

@@ -234,11 +234,43 @@ Plans:
 3. Staging and unstage cases preserve atomic replacement, rollback, containment, and foreign-content behavior in case-owned temporary trees.
 4. Barrel and type-only bridge modules have direct binding or compile-time owner tests without runtime exemptions.
 
-**Plans**: 31 plans
+**Plans**: 1/31 plans executed
 
 Plans:
 
-- [ ] **111-01** (`111-01-PLAN.md`, `P111-01`) - `extensions/pi-claude-marketplace/bridges/agents/convert.ts` → `tests/bridges/agents/convert.test.ts`
+- [x] 111-01-PLAN.md
+- [ ] 111-02-PLAN.md
+- [ ] 111-03-PLAN.md
+- [ ] 111-04-PLAN.md
+- [ ] 111-05-PLAN.md
+- [ ] 111-06-PLAN.md
+- [ ] 111-07-PLAN.md
+- [ ] 111-08-PLAN.md
+- [ ] 111-09-PLAN.md
+- [ ] 111-10-PLAN.md
+- [ ] 111-11-PLAN.md
+- [ ] 111-12-PLAN.md
+- [ ] 111-13-PLAN.md
+- [ ] 111-14-PLAN.md
+- [ ] 111-15-PLAN.md
+- [ ] 111-16-PLAN.md
+- [ ] 111-17-PLAN.md
+- [ ] 111-18-PLAN.md
+- [ ] 111-19-PLAN.md
+- [ ] 111-20-PLAN.md
+- [ ] 111-21-PLAN.md
+- [ ] 111-22-PLAN.md
+- [ ] 111-23-PLAN.md
+- [ ] 111-24-PLAN.md
+- [ ] 111-25-PLAN.md
+- [ ] 111-26-PLAN.md
+- [ ] 111-27-PLAN.md
+- [ ] 111-28-PLAN.md
+- [ ] 111-29-PLAN.md
+- [ ] 111-30-PLAN.md
+- [ ] 111-31-PLAN.md
+
+- [x] **111-01** (`111-01-PLAN.md`, `P111-01`) - `extensions/pi-claude-marketplace/bridges/agents/convert.ts` → `tests/bridges/agents/convert.test.ts`
 - [ ] **111-02** (`111-02-PLAN.md`, `P111-02`) - `extensions/pi-claude-marketplace/bridges/agents/discover.ts` → `tests/bridges/agents/discover.test.ts`
 - [ ] **111-03** (`111-03-PLAN.md`, `P111-03`) - `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts` → `tests/bridges/agents/frontmatter.test.ts`
 - [ ] **111-04** (`111-04-PLAN.md`, `P111-04`) - `extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts` → `tests/bridges/agents/index-mutation.test.ts`
@@ -543,16 +575,16 @@ in the phase that owns its pair group.
 116 → 117. Phases 111 and 112 can use parallel waves after Phase 110. Each plan
 and commit still owns one pair.
 
-| Phase                                    | Plans Complete | Status          | Completed |
-| ---------------------------------------- | -------------: | --------------- | --------- |
+| Phase                                    | Plans Complete | Status          | Completed  |
+| ---------------------------------------- | -------------: | --------------- | ---------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
-| 109. Shared Contracts                    | 19/19 | Complete    | 2026-08-29 |
-| 110. Persistence and Transaction         | 12/12 | Complete    | 2026-08-30 |
-| 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
-| 112. Hook Runtime                        |           0/31 | Not started     | -         |
-| 113. Orchestrator Support and Presenters |           0/35 | Not started     | -         |
-| 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -         |
-| 115. Composition Orchestrators           |            0/8 | Not started     | -         |
-| 116. Edge Surface                        |           0/30 | Not started     | -         |
-| 117. Extension Entry and Final Gate      |            0/1 | Not started     | -         |
-| **Total**                                |     **54/204** | **In Progress** | **-**     |
+| 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
+| 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
+| 111. Non-Hook Component Bridges          |           1/31 | In Progress     |            |
+| 112. Hook Runtime                        |           0/31 | Not started     | -          |
+| 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
+| 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
+| 115. Composition Orchestrators           |            0/8 | Not started     | -          |
+| 116. Edge Surface                        |           0/30 | Not started     | -          |
+| 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
+| **Total**                                |     **54/204** | **In Progress** | **-**      |
