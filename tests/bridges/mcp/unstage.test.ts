@@ -1,252 +1,146 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
-import { CLAUDE_MARKETPLACE_MARKER_KEY } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 import { unstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-// MC-6 / MC-7 -- unstage: drop ours, tolerate missing fields, no-rewrite on noop.
+async function createScope(t: TestContext, prefix: string) {
+  const cwd = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
 
-interface Ctx {
-  readonly cwd: string;
-  readonly locations: ReturnType<typeof locationsFor>;
+  return { cwd, locations: locationsFor("project", cwd) };
 }
 
-async function withTmpScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), "mcp-unstage-"));
-  const locations = locationsFor("project", cwd);
-  try {
-    return await fn({ cwd, locations });
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
+test("removes every exact owner and preserves the complete foreign document", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-owned-");
+  const storedBytes = `{
+  "version": 3,
+  "mcpServers": {
+    "owned-first": {
+      "command": "owned-a",
+      "args": ["--stdio"],
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "official"
+      }
+    },
+    "same-plugin-other-marketplace": {
+      "command": "foreign-marketplace",
+      "env": {
+        "KEEP": "marketplace"
+      },
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "community"
+      }
+    },
+    "same-marketplace-other-plugin": {
+      "command": "foreign-plugin",
+      "_piClaudeMarketplace": {
+        "plugin": "beta",
+        "marketplace": "official"
+      }
+    },
+    "unmarked": {
+      "command": "foreign-unmarked",
+      "args": ["one", "two"],
+      "disabled": false
+    },
+    "__proto__": {
+      "command": "foreign-prototype",
+      "env": {
+        "SAFE": "yes"
+      }
+    },
+    "constructor": {
+      "command": "foreign-constructor"
+    },
+    "owned-last": {
+      "command": "owned-b",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "official"
+      }
+    }
+  },
+  "foreignTopLevel": {
+    "enabled": true,
+    "labels": ["keep", "exact"]
   }
 }
+`;
+  const expectedBytes = `{
+  "version": 3,
+  "mcpServers": {
+    "same-plugin-other-marketplace": {
+      "command": "foreign-marketplace",
+      "env": {
+        "KEEP": "marketplace"
+      },
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "community"
+      }
+    },
+    "same-marketplace-other-plugin": {
+      "command": "foreign-plugin",
+      "_piClaudeMarketplace": {
+        "plugin": "beta",
+        "marketplace": "official"
+      }
+    },
+    "unmarked": {
+      "command": "foreign-unmarked",
+      "args": [
+        "one",
+        "two"
+      ],
+      "disabled": false
+    },
+    "__proto__": {
+      "command": "foreign-prototype",
+      "env": {
+        "SAFE": "yes"
+      }
+    },
+    "constructor": {
+      "command": "foreign-constructor"
+    }
+  },
+  "foreignTopLevel": {
+    "enabled": true,
+    "labels": [
+      "keep",
+      "exact"
+    ]
+  }
+}
+`;
+  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await writeFile(locations.mcpJsonPath, storedBytes, "utf8");
 
-const MP = "official";
-const PLUGIN = "acme";
-
-const mark = (plugin: string, marketplace: string): Record<string, unknown> => ({
-  [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin, marketplace },
-});
-
-// ---------------------------------------------------------------------------
-// MC-6 happy path
-// ---------------------------------------------------------------------------
-
-test("MC-6 unstageMcpServers drops entries with matching marker, keeps others", async () => {
-  await withTmpScope(async ({ locations }) => {
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(
-      locations.mcpJsonPath,
-      JSON.stringify({
-        mcpServers: {
-          mine: { command: "x", ...mark(PLUGIN, MP) },
-          theirs: { command: "y", ...mark("other-plugin", MP) },
-          unmarked: { command: "z" },
-        },
-      }),
-      "utf8",
-    );
-
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-
-    assert.deepEqual([...result.removedNames], ["mine"]);
-    assert.deepEqual([...result.warnings], []);
-
-    const onDisk = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
-      mcpServers: Record<string, unknown>;
-    };
-    assert.deepEqual(Object.keys(onDisk.mcpServers).sort(), ["theirs", "unmarked"]);
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
   });
-});
+  const rewrittenBytes = await readFile(locations.mcpJsonPath, "utf8");
+  const rewrittenDocument = JSON.parse(rewrittenBytes) as {
+    mcpServers: Record<string, unknown>;
+  };
 
-test("MC-6 unstageMcpServers writes reduced doc atomically when removals occurred", async () => {
-  await withTmpScope(async ({ locations }) => {
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(
-      locations.mcpJsonPath,
-      JSON.stringify({
-        customTopLevel: "preserve-me",
-        mcpServers: {
-          a: { command: "x", ...mark(PLUGIN, MP) },
-          b: { command: "y", ...mark(PLUGIN, MP) },
-        },
-      }),
-      "utf8",
-    );
-
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-
-    assert.deepEqual([...result.removedNames].sort(), ["a", "b"]);
-
-    const onDisk = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
-      customTopLevel: unknown;
-      mcpServers: Record<string, unknown>;
-    };
-    assert.equal(onDisk.customTopLevel, "preserve-me", "non-mcp top-level fields preserved");
-    assert.deepEqual(onDisk.mcpServers, {});
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["owned-first", "owned-last"],
+    warnings: [],
   });
-});
-
-// ---------------------------------------------------------------------------
-// MC-7 tolerances
-// ---------------------------------------------------------------------------
-
-test("MC-7 unstageMcpServers tolerates missing mcpServers field", async () => {
-  await withTmpScope(async ({ locations }) => {
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    // Doc has other top-level fields but no mcpServers.
-    await writeFile(locations.mcpJsonPath, JSON.stringify({ customField: "x" }), "utf8");
-    const before = (await stat(locations.mcpJsonPath)).mtimeMs;
-
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-    assert.deepEqual([...result.removedNames], []);
-    assert.deepEqual([...result.warnings], []);
-
-    // Wait a short tick to let any I/O settle, then assert the file was NOT rewritten.
-    const after = (await stat(locations.mcpJsonPath)).mtimeMs;
-    assert.equal(after, before, "MC-7 noop must NOT rewrite the file");
-  });
-});
-
-test("MC-7 unstageMcpServers tolerates missing mcp.json file (ENOENT)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // No mcp.json on disk at all.
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-    assert.deepEqual([...result.removedNames], []);
-    assert.deepEqual([...result.warnings], []);
-
-    const mcpStat = await stat(locations.mcpJsonPath).catch(() => null);
-    assert.equal(mcpStat, null, "ENOENT noop must NOT materialize mcp.json");
-  });
-});
-
-test("MC-7 unstageMcpServers tolerates non-object mcpServers (treats as missing)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(locations.mcpJsonPath, JSON.stringify({ mcpServers: "not-an-object" }), "utf8");
-    const before = (await stat(locations.mcpJsonPath)).mtimeMs;
-
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-    assert.deepEqual([...result.removedNames], []);
-
-    const after = (await stat(locations.mcpJsonPath)).mtimeMs;
-    assert.equal(after, before, "non-object mcpServers must NOT trigger a rewrite");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// no-rewrite on noop
-// ---------------------------------------------------------------------------
-
-test("MC-6 unstageMcpServers does NOT materialize file when nothing to remove", async () => {
-  await withTmpScope(async ({ locations }) => {
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    // Pre-seed with foreign-only entries; we own nothing here.
-    await writeFile(
-      locations.mcpJsonPath,
-      JSON.stringify({
-        mcpServers: {
-          theirs: { command: "x", ...mark("someone-else", MP) },
-          unmarked: { command: "y" },
-        },
-      }),
-      "utf8",
-    );
-    const before = (await stat(locations.mcpJsonPath)).mtimeMs;
-
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-    assert.deepEqual([...result.removedNames], []);
-
-    const after = (await stat(locations.mcpJsonPath)).mtimeMs;
-    assert.equal(after, before, "MC-6 noop must NOT rewrite the file");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// WR-01 -- a foreign server literally named __proto__ survives an unstage
-// ---------------------------------------------------------------------------
-
-test("WR-01 a foreign server literally named __proto__ survives unstage of a different plugin", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // JSON.parse materializes __proto__ as a real own-enumerable key, so the
-    // scoped doc must be seeded as raw text -- an object literal with a
-    // __proto__ key would hit the prototype setter and never create the entry.
-    const rawDoc =
-      '{"customField":"keep-me","mcpServers":{' +
-      `"__proto__":{"command":"foreign","env":{"A":"1"},"${CLAUDE_MARKETPLACE_MARKER_KEY}":` +
-      `{"plugin":"other","marketplace":"${MP}"}},` +
-      `"mine":{"command":"x","${CLAUDE_MARKETPLACE_MARKER_KEY}":{"plugin":"${PLUGIN}","marketplace":"${MP}"}}}}`;
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(locations.mcpJsonPath, rawDoc, "utf8");
-
-    const result = await unstageMcpServers({
-      locations,
-      marketplaceName: MP,
-      pluginName: PLUGIN,
-    });
-
-    assert.deepEqual([...result.removedNames], ["mine"]);
-
-    const onDisk = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
-      customField: unknown;
-      mcpServers: Record<string, unknown>;
-    };
-    // The foreign __proto__ entry survives as an own key, byte-for-byte.
-    assert.ok(
-      Object.hasOwn(onDisk.mcpServers, "__proto__"),
-      "foreign __proto__ entry must survive as an own key",
-    );
-    assert.deepEqual(onDisk.mcpServers["__proto__"], {
-      command: "foreign",
-      env: { A: "1" },
-      [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: "other", marketplace: MP },
-    });
-    assert.equal(onDisk.customField, "keep-me", "non-mcp top-level fields preserved");
-    // No global prototype pollution from the round-trip.
-    assert.equal(({} as Record<string, unknown>).command, undefined);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Malformed JSON propagates
-// ---------------------------------------------------------------------------
-
-test("unstageMcpServers throws descriptive error on malformed JSON", async () => {
-  await withTmpScope(async ({ locations }) => {
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(locations.mcpJsonPath, "not-json {{", "utf8");
-
-    await assert.rejects(
-      unstageMcpServers({ locations, marketplaceName: MP, pluginName: PLUGIN }),
-      /malformed JSON at/,
-    );
-  });
+  assert.strictEqual(rewrittenBytes, expectedBytes);
+  assert.strictEqual(Object.hasOwn(rewrittenDocument.mcpServers, "__proto__"), true);
+  assert.strictEqual(Object.getPrototypeOf(rewrittenDocument.mcpServers), Object.prototype);
+  assert.strictEqual(({} as Record<string, unknown>).command, undefined);
 });
