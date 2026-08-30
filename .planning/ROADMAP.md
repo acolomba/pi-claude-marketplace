@@ -189,12 +189,25 @@ Plans:
 3. Ledger, guard, and rollback cases prove atomic replacement, failure isolation, idempotency, and retry behavior through public effects.
 4. Each filesystem case owns and removes its temporary directory, including corrupt-input and partial-failure cases.
 
-**Plans**: 12 plans
+**Plans**: 1/12 plans executed
 
 Plans:
 
+- [ ] 110-01-PLAN.md
+- [x] 110-02-PLAN.md
+- [ ] 110-03-PLAN.md
+- [ ] 110-04-PLAN.md
+- [ ] 110-05-PLAN.md
+- [ ] 110-06-PLAN.md
+- [ ] 110-07-PLAN.md
+- [ ] 110-08-PLAN.md
+- [ ] 110-09-PLAN.md
+- [ ] 110-10-PLAN.md
+- [ ] 110-11-PLAN.md
+- [ ] 110-12-PLAN.md
+
 - [ ] **110-01** (`110-01-PLAN.md`, `P110-01`) - `extensions/pi-claude-marketplace/persistence/agents-index-io.ts` → `tests/persistence/agents-index-io.test.ts`
-- [ ] **110-02** (`110-02-PLAN.md`, `P110-02`) - `extensions/pi-claude-marketplace/persistence/agents-index-schema.ts` → `tests/persistence/agents-index-schema.test.ts`
+- [x] **110-02** (`110-02-PLAN.md`, `P110-02`) - `extensions/pi-claude-marketplace/persistence/agents-index-schema.ts` → `tests/persistence/agents-index-schema.test.ts`
 - [ ] **110-03** (`110-03-PLAN.md`, `P110-03`) - `extensions/pi-claude-marketplace/persistence/config-io.ts` → `tests/persistence/config-io.test.ts`
 - [ ] **110-04** (`110-04-PLAN.md`, `P110-04`) - `extensions/pi-claude-marketplace/persistence/config-merge.ts` → `tests/persistence/config-merge.test.ts`
 - [ ] **110-05** (`110-05-PLAN.md`, `P110-05`) - `extensions/pi-claude-marketplace/persistence/config-write-back.ts` → `tests/persistence/config-write-back.test.ts`
@@ -528,7 +541,7 @@ and commit still owns one pair.
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    | 19/19 | Complete    | 2026-08-29 |
-| 110. Persistence and Transaction         |           0/12 | Not started     | -         |
+| 110. Persistence and Transaction         | 1/12 | In Progress|  |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -         |
