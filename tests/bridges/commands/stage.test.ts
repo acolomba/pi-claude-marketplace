@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test, type TestContext } from "node:test";
 
 import {
   abortPreparedCommands,
@@ -13,55 +13,42 @@ import {
   rollbackCommandsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-// Helpers ---------------------------------------------------------------
+const MARKETPLACE_NAME = "catalog";
+const PLUGIN_NAME = "acme";
 
-const FIXTURE_PLUGIN_ROOT = path.resolve(import.meta.dirname, "..", "_fixtures", "test-plugin");
-const FIXTURE_EMPTY_MCP_ROOT = path.resolve(import.meta.dirname, "..", "_fixtures", "empty-mcp");
-const FIXTURE_UNPARSEABLE_COMMAND_ROOT = path.resolve(
-  import.meta.dirname,
-  "..",
-  "_fixtures",
-  "unparseable-command-plugin",
-);
-const INSTALLABLE_FIXTURE_FIELDS = { installable: true } as const;
-
-interface TmpScope {
-  loc: ScopedLocations;
-  cleanup: () => Promise<void>;
+async function createProjectLocations(t: TestContext, prefix: string): Promise<ScopedLocations> {
+  const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
+  const locations = locationsFor("project", scopeRoot);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  return locations;
 }
 
-async function tmpScope(): Promise<TmpScope> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "stage-cmds-"));
-  const loc = locationsFor("project", dir);
-  await mkdir(loc.extensionRoot, { recursive: true });
-
-  return {
-    loc,
-    cleanup: async () => {
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
+async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
+  const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(pluginRoot, { recursive: true, force: true, maxRetries: 3 }));
+  return pluginRoot;
 }
 
-function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginInstallable {
-  // D-07: componentPaths.commands is `readonly string[]`.
+function resolvedFor(
+  pluginRoot: string,
+  commandPaths: readonly string[] = ["commands"],
+): ResolvedPluginInstallable {
   return {
-    ...INSTALLABLE_FIXTURE_FIELDS,
+    installable: true,
     state: "installable",
-    name: "acme",
+    name: PLUGIN_NAME,
     pluginRoot,
-    supported: commandsRel === undefined ? [] : ["commands"],
+    supported: commandPaths.length === 0 ? [] : ["commands"],
     unsupported: [],
     notes: [],
     componentPaths: {
       skills: [],
-      commands: commandsRel === undefined ? [] : [commandsRel],
+      commands: commandPaths,
       agents: [],
     },
     mcpServers: {},
@@ -69,1139 +56,342 @@ function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginI
   };
 }
 
-// Happy-path commit -----------------------------------------------------
-
-test("CM-1 commitPreparedCommands lands files at <extensionRoot>/resources/prompts/<plugin>:<command>.md", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-
-    assert.equal(prepared.kind, "staged");
-    const leak = await commitPreparedCommands(prepared);
-    assert.equal(leak, undefined, "happy-path commit must not leak");
-
-    // Files land at the colon-bearing target paths.
-    const deployTarget = path.join(scope.loc.promptsTargetDir, "acme:deploy.md");
-    const statusTarget = path.join(scope.loc.promptsTargetDir, "acme:status.md");
-    assert.equal(await pathExists(deployTarget), true);
-    assert.equal(await pathExists(statusTarget), true);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("CM-4 nested command stages at <ext>/resources/prompts/<plugin>:<dir>:<cmd>.md", async () => {
-  const scope = await tmpScope();
-
-  try {
-    // Build a tmp plugin root with a nested command file.
-    const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "nested-cmd-plugin-"));
-    const commandsDir = path.join(pluginRoot, "commands", "build");
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(path.join(commandsDir, "web.md"), "---\ndescription: nested\n---\nbody\n");
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(pluginRoot, "commands"),
-    });
-
-    assert.equal(prepared.kind, "staged");
-    assert.deepEqual([...prepared.result.recorded.map((r) => r.generatedName)], ["acme:build:web"]);
-
-    const leak = await commitPreparedCommands(prepared);
-    assert.equal(leak, undefined, "nested commit must not leak");
-
-    const target = path.join(scope.loc.promptsTargetDir, "acme:build:web.md");
-    assert.equal(
-      await pathExists(target),
-      true,
-      "nested command file lands at the colon-joined target path",
-    );
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// CM-3 substitution -----------------------------------------------------
-
-test("CM-3 substituted body has no remaining ${CLAUDE_PLUGIN_ROOT} or ${CLAUDE_PLUGIN_DATA}", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const pluginDataDir = "/tmp/pi-data/test-mp/acme";
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir,
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-    await commitPreparedCommands(prepared);
-
-    const deployBody = await readFile(
-      path.join(scope.loc.promptsTargetDir, "acme:deploy.md"),
-      "utf8",
-    );
-    const statusBody = await readFile(
-      path.join(scope.loc.promptsTargetDir, "acme:status.md"),
-      "utf8",
-    );
-
-    assert.ok(
-      !deployBody.includes("${CLAUDE_PLUGIN_ROOT}"),
-      "deploy body still has ${CLAUDE_PLUGIN_ROOT}",
-    );
-    assert.ok(
-      !deployBody.includes("${CLAUDE_PLUGIN_DATA}"),
-      "deploy body still has ${CLAUDE_PLUGIN_DATA}",
-    );
-    assert.ok(
-      !statusBody.includes("${CLAUDE_PLUGIN_ROOT}"),
-      "status body still has ${CLAUDE_PLUGIN_ROOT}",
-    );
-    assert.ok(
-      !statusBody.includes("${CLAUDE_PLUGIN_DATA}"),
-      "status body still has ${CLAUDE_PLUGIN_DATA}",
-    );
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("CM-3 substituted body contains the resolved pluginDataDir", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const pluginDataDir = "/tmp/pi-data/test-mp/acme";
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir,
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-    await commitPreparedCommands(prepared);
-
-    // status.md fixture body: "Show status. Data dir: ${CLAUDE_PLUGIN_DATA}."
-    const statusBody = await readFile(
-      path.join(scope.loc.promptsTargetDir, "acme:status.md"),
-      "utf8",
-    );
-    assert.ok(statusBody.includes(pluginDataDir), `status body missing ${pluginDataDir}`);
-
-    // acme-deploy.md fixture body: "Deploy command for ${CLAUDE_PLUGIN_ROOT}."
-    const deployBody = await readFile(
-      path.join(scope.loc.promptsTargetDir, "acme:deploy.md"),
-      "utf8",
-    );
-    assert.ok(
-      deployBody.includes(FIXTURE_PLUGIN_ROOT),
-      `deploy body missing ${FIXTURE_PLUGIN_ROOT}`,
-    );
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// Noop branch -----------------------------------------------------------
-
-test('prepareStageCommands returns kind:"noop" when no commands AND no previousCommandNames (empty-mcp fixture)', async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "noop-plugin",
-      pluginRoot: FIXTURE_EMPTY_MCP_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/noop-plugin",
-      // empty-mcp fixture has no commands directory at all -- componentPaths
-      // is empty, modeling the resolver's behavior for a plugin without
-      // commands.
-      resolved: makeResolved(FIXTURE_EMPTY_MCP_ROOT, undefined),
-    });
-
-    assert.equal(prepared.kind, "noop");
-    assert.deepEqual(prepared.result.stagedNames, []);
-    assert.deepEqual(prepared.result.recorded, []);
-
-    // commit and abort must both be no-ops on the noop branch.
-    const leak = await commitPreparedCommands(prepared);
-    assert.equal(leak, undefined);
-    await abortPreparedCommands(prepared); // should not throw
-
-    // No staging dir was ever created.
-    assert.equal(await pathExists(scope.loc.commandsStagingDir), false);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("commitPreparedCommands removes previous-named files (re-stage path)", async () => {
-  const scope = await tmpScope();
-
-  try {
-    // Pre-create a previously-staged file at the target.
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const stale = path.join(scope.loc.promptsTargetDir, "acme:old.md");
-    await writeFile(stale, "STALE BODY");
-    assert.equal(await pathExists(stale), true);
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      previousCommandNames: ["acme:old"],
-    });
-    assert.equal(prepared.kind, "staged");
-
-    await commitPreparedCommands(prepared);
-
-    // The stale file is gone.
-    assert.equal(await pathExists(stale), false);
-    // New files are present.
-    assert.equal(await pathExists(path.join(scope.loc.promptsTargetDir, "acme:deploy.md")), true);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("PRL-10 replacePreparedCommands can rollback to previous prompt bytes", async () => {
-  const scope = await tmpScope();
-
-  try {
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const oldFile = path.join(scope.loc.promptsTargetDir, "acme:deploy.md");
-    await writeFile(oldFile, "old prompt bytes");
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      previousCommandNames: ["acme:deploy"],
-    });
-
-    const replacement = await replacePreparedCommands(prepared);
-    const replaced = await readFile(oldFile, "utf8");
-    assert.notEqual(replaced, "old prompt bytes");
-    assert.ok(replaced.includes(FIXTURE_PLUGIN_ROOT));
-
-    const leaks = await rollbackCommandsReplacement(replacement);
-    assert.deepEqual([...leaks], []);
-    assert.equal(await readFile(oldFile, "utf8"), "old prompt bytes");
-    assert.equal(await pathExists(path.join(scope.loc.promptsTargetDir, "acme:status.md")), false);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("PRL-10 finalizeCommandsReplacement removes backups and keeps staged content", async () => {
-  const scope = await tmpScope();
-
-  try {
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const oldFile = path.join(scope.loc.promptsTargetDir, "acme:deploy.md");
-    await writeFile(oldFile, "old prompt bytes");
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      previousCommandNames: ["acme:deploy"],
-    });
-    assert.equal(prepared.kind, "staged");
-
-    const replacement = await replacePreparedCommands(prepared);
-    const leaks = await finalizeCommandsReplacement(replacement);
-    assert.deepEqual([...leaks], []);
-    assert.equal(await pathExists(prepared.stagingRoot), false);
-
-    const current = await readFile(oldFile, "utf8");
-    assert.notEqual(current, "old prompt bytes");
-    assert.equal(await pathExists(path.join(scope.loc.promptsTargetDir, "acme:status.md")), true);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("PRL-10 replacePreparedCommands restores backups if unrelated prompt blocks rename", async () => {
-  const scope = await tmpScope();
-
-  try {
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const oldFile = path.join(scope.loc.promptsTargetDir, "acme:deploy.md");
-    const unrelatedFile = path.join(scope.loc.promptsTargetDir, "acme:status.md");
-    await writeFile(oldFile, "old prompt bytes");
-    await writeFile(unrelatedFile, "manual status bytes");
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      previousCommandNames: ["acme:deploy"],
-    });
-
-    await assert.rejects(() => replacePreparedCommands(prepared), /non-previous content/);
-    assert.equal(await readFile(oldFile, "utf8"), "old prompt bytes");
-    assert.equal(await readFile(unrelatedFile, "utf8"), "manual status bytes");
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("PRL-10 noop command replacements rollback and finalize without leaks", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "noop-plugin",
-      pluginRoot: FIXTURE_EMPTY_MCP_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/noop-plugin",
-      resolved: makeResolved(FIXTURE_EMPTY_MCP_ROOT, undefined),
-    });
-
-    const replacement = await replacePreparedCommands(prepared);
-    assert.equal(replacement.kind, "noop");
-    assert.deepEqual([...(await rollbackCommandsReplacement(replacement))], []);
-    assert.deepEqual([...(await finalizeCommandsReplacement(replacement))], []);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("commitPreparedCommands tolerates missing previous-named file (ENOENT silenced)", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      // The previously-named file was never created on disk -- previous
-      // install succeeded then failed mid-cleanup, or this is a fresh
-      // re-install. Commit must not throw.
-      previousCommandNames: ["acme:never-existed"],
-    });
-
-    const leak = await commitPreparedCommands(prepared);
-    assert.equal(leak, undefined);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// abort -----------------------------------------------------------------
-
-test("abortPreparedCommands cleans up staging dir", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-
-    assert.equal(prepared.kind, "staged");
-    if (prepared.kind === "staged") {
-      const stagingRoot = prepared.stagingRoot;
-      assert.equal(await pathExists(stagingRoot), true, "staging root exists pre-abort");
-
-      await abortPreparedCommands(prepared);
-
-      assert.equal(await pathExists(stagingRoot), false, "staging root removed by abort");
-      // Target dir was not populated.
-      assert.equal(
-        await pathExists(path.join(scope.loc.promptsTargetDir, "acme:deploy.md")),
-        false,
-        "abort must not commit",
-      );
-    }
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// Read-failure -> appendLeakToError ------------------------------------
-
-test("prepareStageCommands surfaces appendLeakToError when readFile fails (POSIX-only)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("POSIX-only chmod 0 unreadable file path");
-    return;
-  }
-
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    t.skip("running as root -- chmod 0 does not block read");
-    return;
-  }
-
-  const scope = await tmpScope();
-  // Build a synthetic plugin with a single .md command file we can chmod 0.
-  const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "pi-cmds-unread-"));
-  const cmdsDir = path.join(pluginRoot, "commands");
-  await mkdir(cmdsDir, { recursive: true });
-  const unreadable = path.join(cmdsDir, "blocked.md");
-  await writeFile(unreadable, "body that cannot be read");
-
-  try {
-    await chmod(unreadable, 0o000);
-
-    await assert.rejects(
-      prepareStageCommands({
-        locations: scope.loc,
-        cwd: scope.loc.scopeRoot,
-        marketplaceName: "test-mp",
-        pluginName: "acme",
-        pluginRoot,
-        pluginDataDir: "/tmp/pi-data/test-mp/acme",
-        resolved: makeResolved(pluginRoot, "commands"),
-      }),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        // Either EACCES surfaces (most common) or the leak-augmented form.
-        return true;
-      },
-    );
-
-    // Staging dir must be cleaned up even on prepare failure.
-    // We can only assert the parent commands-staging dir is empty (the
-    // <uuid> child was best-effort removed).
-    let leftovers: string[] = [];
-    try {
-      const { readdir } = await import("node:fs/promises");
-      leftovers = await readdir(scope.loc.commandsStagingDir);
-    } catch {
-      // commandsStagingDir might not exist at all -- also fine.
-    }
-
-    assert.equal(leftovers.length, 0, "staging dir should be empty after failed prepare");
-  } finally {
-    await chmod(unreadable, 0o644);
-    await rm(pluginRoot, { recursive: true, force: true });
-    await scope.cleanup();
-  }
-});
-
-// Filename / colon ------------------------------------------------------
-
-test("staged file basenames contain literal colon character (POSIX-only)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("Windows does not allow `:` in filenames; the bridges target POSIX");
-    return;
-  }
-
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-    await commitPreparedCommands(prepared);
-
-    // Both target file basenames carry the literal colon.
-    assert.ok(path.basename(path.join(scope.loc.promptsTargetDir, "acme:deploy.md")).includes(":"));
-    assert.ok(path.basename(path.join(scope.loc.promptsTargetDir, "acme:status.md")).includes(":"));
-    // The actual on-disk file MUST be readable -- proves POSIX accepts it.
-    assert.equal(await pathExists(path.join(scope.loc.promptsTargetDir, "acme:deploy.md")), true);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// recorded[] (W-05) -----------------------------------------------------
-
-test("StageCommandsCommitResult.recorded captures sourcePath + targetPath per command (W-05)", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-
-    assert.equal(prepared.result.recorded.length, 2);
-
-    const byName = new Map(prepared.result.recorded.map((r) => [r.generatedName, r]));
-    const deploy = byName.get("acme:deploy");
-    const status = byName.get("acme:status");
-
-    assert.ok(deploy, "missing acme:deploy record");
-    assert.equal(deploy.sourcePath, path.join(FIXTURE_PLUGIN_ROOT, "commands", "acme-deploy.md"));
-    assert.equal(deploy.targetPath, path.join(scope.loc.promptsTargetDir, "acme:deploy.md"));
-
-    assert.ok(status, "missing acme:status record");
-    assert.equal(status.sourcePath, path.join(FIXTURE_PLUGIN_ROOT, "commands", "status.md"));
-    assert.equal(status.targetPath, path.join(scope.loc.promptsTargetDir, "acme:status.md"));
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("PRL-10 finalizeCommandsReplacement throws on unknown replacement handle (defensive)", async () => {
-  const bogus = { kind: "replaced" } as Parameters<typeof finalizeCommandsReplacement>[0];
-  await assert.rejects(
-    () => finalizeCommandsReplacement(bogus),
-    /Unknown commands replacement handle/,
+async function pathIsPresent(filePath: string): Promise<boolean> {
+  return access(filePath).then(
+    () => true,
+    () => false,
   );
-});
-
-test("PRL-10 replacePreparedCommands skips backup when previous command file vanished", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      previousCommandNames: ["acme:was-here-but-gone"], // never written to disk
-    });
-
-    const replacement = await replacePreparedCommands(prepared);
-    assert.equal(replacement.kind, "replaced");
-    const leaks = await rollbackCommandsReplacement(replacement);
-    assert.deepEqual([...leaks], []);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// TR-05 sequential commit rollback (commands) ---------------------------
-
-test("TR-05 commitPreparedCommands sequential commit rolls back completed renames on throw", async () => {
-  // 2 staged commands (acme:deploy sorts before acme:status). Pre-seed
-  // `acme:status.md` target as a non-empty directory so the second forward
-  // rename fails with ENOTEMPTY/EISDIR. The first rename succeeds; the
-  // catch reverse-walks completedRenames and restores `acme:deploy.md` to
-  // the staging root.
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-    assert.equal(prepared.kind, "staged");
-    if (prepared.kind !== "staged") {
-      throw new Error("prepared.kind must be 'staged' for this test");
-    }
-
-    // Pre-seed the promptsTargetDir + obstacle directory for pair #2.
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const obstacleDir = path.join(scope.loc.promptsTargetDir, "acme:status.md");
-    await mkdir(obstacleDir, { recursive: true });
-    await writeFile(path.join(obstacleDir, "blocker.txt"), "non-empty");
-
-    assert.equal(prepared._renamePairs.length, 2);
-    const deployPair = prepared._renamePairs.find((p) => p.to.endsWith("acme:deploy.md"));
-    assert.ok(deployPair, "expected an acme:deploy staged pair");
-
-    await assert.rejects(
-      () => commitPreparedCommands(prepared),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        return true;
-      },
-    );
-
-    // Key observable: after rollback + cleanup, the promptsTargetDir
-    // contains ONLY the pre-seeded obstacle directory -- no acme:deploy.md
-    // file landed (rolled back) and no acme:status.md file landed (forward
-    // #2 never succeeded). Without TR-05 rollback, the deploy file would
-    // have been left at the target as a partial-commit orphan.
-    assert.equal(
-      await pathExists(path.join(scope.loc.promptsTargetDir, "acme:deploy.md")),
-      false,
-      "rollback must have removed deploy from the target",
-    );
-    // Staging root is cleaned up by the catch's final cleanupStaging.
-    assert.equal(
-      await pathExists(prepared.stagingRoot),
-      false,
-      "staging root must be cleaned up after the failed commit",
-    );
-    // Sanity reference to deployPair to keep it tied to the test.
-    void deployPair;
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("TR-05 commitPreparedCommands rollback rename failure surfaces via appendLeaks", async () => {
-  // Same shape as the previous test (pair #2 target pre-seeded as non-empty
-  // dir to force ENOTEMPTY on forward rename #2). Additionally, mutate
-  // pair #1's `from` getter so the second access (rollback's
-  // `rename(pair.to, pair.from)`) reads a path that is itself a non-empty
-  // directory -- forcing the rollback rename to fail. The bridge catches
-  // the rollback failure into rollbackLeaks[] and surfaces it via
-  // appendLeaks, NOT ManualRecoveryError.
-  const scope = await tmpScope();
-
-  try {
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-    });
-    assert.equal(prepared.kind, "staged");
-    if (prepared.kind !== "staged") {
-      throw new Error("prepared.kind must be 'staged' for this test");
-    }
-
-    // Force rename #2 to throw ENOTEMPTY by pre-seeding its target as a
-    // non-empty directory.
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const obstacleDir = path.join(scope.loc.promptsTargetDir, "acme:status.md");
-    await mkdir(obstacleDir, { recursive: true });
-    await writeFile(path.join(obstacleDir, "blocker.txt"), "non-empty");
-
-    // Pre-create a non-empty directory at a fresh path that will be used as
-    // the rollback destination for pair #1 (acme:deploy.md).
-    const rollbackBlocker = path.join(prepared.stagingRoot, "rollback-blocker.md");
-    await mkdir(rollbackBlocker, { recursive: true });
-    await writeFile(path.join(rollbackBlocker, "child.txt"), "non-empty");
-
-    // Mutate pair #1 so `pair.from` returns the real staging path on first
-    // access (forward rename) and the non-empty blocker dir path on second
-    // access (rollback rename).
-    const deployPair = prepared._renamePairs.find((p) => p.to.endsWith("acme:deploy.md")) as
-      { from: string; to: string } | undefined;
-    assert.ok(deployPair, "expected an acme:deploy staged pair");
-
-    const realFrom = deployPair.from;
-    let fromAccessCount = 0;
-    const mutablePair = deployPair;
-    delete (mutablePair as Partial<typeof mutablePair>).from;
-    Object.defineProperty(mutablePair, "from", {
-      get() {
-        fromAccessCount += 1;
-        return fromAccessCount === 1 ? realFrom : rollbackBlocker;
-      },
-      configurable: true,
-      enumerable: true,
-    });
-
-    await assert.rejects(
-      () => commitPreparedCommands(prepared),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        assert.ok(
-          err.name !== "ManualRecoveryError",
-          "commit catch must NOT use ManualRecoveryError",
-        );
-        assert.match(
-          err.message,
-          /\(additionally: failed to roll back command rename/,
-          `expected appendLeaks rollback chain in message, got: ${err.message}`,
-        );
-        return true;
-      },
-    );
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// TR-06 orphan tolerance in replacePreparedCommands ---------------------
-
-test("TR-06 replacePreparedCommands tolerates owned orphan file from prior partial install", async () => {
-  // A previous partial install left an orphan command file at the target.
-  // Because the basename matches an owned previousCommandName, the 3-arm
-  // policy proceeds (either via the backup loop or via the helper at the
-  // rename loop). The new staged content lands; the orphan bytes are
-  // overwritten.
-  const scope = await tmpScope();
-
-  try {
-    // Pre-create an orphan file at one of the targets we will stage.
-    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
-    const orphanTarget = path.join(scope.loc.promptsTargetDir, "acme:deploy.md");
-    await writeFile(orphanTarget, "orphan-prompt\n", "utf8");
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: FIXTURE_PLUGIN_ROOT,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
-      // Mark this generatedName as owned (in the index) so the orphan is
-      // tolerated rather than rejected as foreign content.
-      previousCommandNames: ["acme:deploy"],
-    });
-
-    const replacement = await replacePreparedCommands(prepared);
-    assert.equal(replacement.kind, "replaced");
-
-    const replacedBody = await readFile(orphanTarget, "utf8");
-    assert.notEqual(replacedBody, "orphan-prompt\n");
-    assert.ok(
-      replacedBody.length > 0 && !replacedBody.includes("orphan-prompt"),
-      "replacement body must not contain the orphan bytes",
-    );
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-// CMD-01 / PARSE-01 / PARSE-02 neutralize arm --------------------------
-
-test("CMD-01 / PARSE-01 unparseable command source -> neutralized (whole frontmatter block stripped), degrade record", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const pluginRoot = FIXTURE_UNPARSEABLE_COMMAND_ROOT;
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(pluginRoot, "commands"),
-    });
-    assert.equal(prepared.kind, "staged");
-
-    // Degrade record: exactly one, carrying the generated name + a non-empty
-    // parse error (the actionable detail the install warning surfaces).
-    assert.equal(prepared.result.degraded.length, 1);
-    const record = prepared.result.degraded[0];
-    assert.ok(record, "expected one degrade record");
-    assert.equal(record.generatedName, "acme:bad-command");
-    assert.ok(record.parseError.length > 0, "parse error must be non-empty");
-
-    await commitPreparedCommands(prepared);
-
-    // name-from-filename: the target basename (minus .md) is what Pi's command
-    // loader uses as the command name.
-    const target = path.join(scope.loc.promptsTargetDir, "acme:bad-command.md");
-    assert.equal(await pathExists(target), true);
-    const staged = await readFile(target, "utf8");
-
-    // The entire malformed `---`...`---` block is gone -- no frontmatter, and
-    // none of the ex-frontmatter text survives as a poor first-body-line.
-    assert.ok(!staged.startsWith("---"), "staged output must not open a frontmatter block");
-    assert.ok(!staged.includes("title: Deploy"), "ex-frontmatter junk must not survive");
-    assert.ok(!staged.includes("never reached"), "ex-frontmatter junk must not survive");
-
-    // The real body is intact and is what Pi reads for its first-body-line
-    // description (name-from-filename + description-from-first-body-line).
-    const firstBodyLine = staged.split("\n").find((line) => line.trim());
-    assert.equal(firstBodyLine, `Run the deployment for ${pluginRoot}.`);
-
-    // No synthesized placeholder description and no disable flag -- that is the
-    // skills degrade shape, not the command one (Pi's command loader has no
-    // non-empty-description gate).
-    assert.ok(!/^description:/m.test(staged), "commands get no synthesized description");
-    assert.ok(!staged.includes("disable-model-invocation"), "commands get no disable flag");
-
-    // Substitution ran on the neutralized body.
-    assert.ok(!staged.includes("${CLAUDE_PLUGIN_ROOT}"), "substitution must run on the body");
-    assert.ok(staged.includes(pluginRoot), "substituted pluginRoot must appear in the body");
-
-    // PARSE-02 gate-2 parity: the neutralized staged bytes re-parse (do NOT
-    // throw) and return empty frontmatter -- Pi accepts them.
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-    assert.deepEqual(parseFrontmatter(staged).frontmatter, {});
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("NREG-01 valid command is staged byte-for-byte identical except variable substitution (gates mutate nothing)", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const pluginRoot = FIXTURE_PLUGIN_ROOT;
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(pluginRoot, "commands"),
-    });
-    // The all-valid path degrades nothing.
-    assert.equal(prepared.result.degraded.length, 0);
-
-    await commitPreparedCommands(prepared);
-
-    // Build the expected bytes with an INDEPENDENT literal string replacement
-    // -- NOT the production substitute helper -- so the assertion proves the
-    // read-only gates introduced no reformatting or re-quoting.
-    const source = await readFile(path.join(pluginRoot, "commands", "acme-deploy.md"), "utf8");
-    const expected = source.replaceAll("${CLAUDE_PLUGIN_ROOT}", pluginRoot);
-
-    const staged = await readFile(path.join(scope.loc.promptsTargetDir, "acme:deploy.md"), "utf8");
-    assert.equal(staged, expected);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("CMD-01 lone-CR (\\r-only) unparseable command source degrades instead of hard-failing (line-ending parity with parseFrontmatter)", async () => {
-  const scope = await tmpScope();
-  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmd-cr-src-"));
-
-  try {
-    // A classic-Mac (lone-CR) source whose closed `---` block holds malformed
-    // YAML. parseFrontmatter normalizes CR->LF, sees the closed block, and
-    // THROWS -- so neutralize must normalize CR too and find the SAME close,
-    // rather than missing it (raw `\n---` search) and leaving the malformed
-    // block intact for gate-2 to reject and hard-fail the whole install.
-    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
-    const loneCr =
-      "---\rtitle: Deploy: the whole thing\rdescription: never reached\r---\r\rRun it.\r";
-    await writeFile(path.join(srcRoot, "commands", "cr-command.md"), loneCr);
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: srcRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(srcRoot, "commands"),
-    });
-    // Degrade, not hard-fail: staging succeeds with exactly one degrade record.
-    assert.equal(prepared.kind, "staged");
-    assert.equal(prepared.result.degraded.length, 1);
-
-    await commitPreparedCommands(prepared);
-    const staged = await readFile(
-      path.join(scope.loc.promptsTargetDir, "acme:cr-command.md"),
-      "utf8",
-    );
-    // The malformed block is stripped and the neutralized bytes re-parse clean.
-    assert.ok(!staged.startsWith("---"), "frontmatter block must be stripped");
-    assert.ok(!staged.includes("never reached"), "ex-frontmatter junk must not survive");
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-    assert.deepEqual(parseFrontmatter(staged).frontmatter, {});
-  } finally {
-    await rm(srcRoot, { recursive: true, force: true });
-    await scope.cleanup();
-  }
-});
-
-test("CMD-01 command whose body opens with a SECOND malformed block degrades (loop strips both) instead of hard-failing", async () => {
-  const scope = await tmpScope();
-  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmd-stacked-src-"));
-
-  try {
-    // Two stacked malformed `---`...`---` blocks. Stripping only the first would
-    // leave the body opening with the second malformed block, which the PARSE-02
-    // backstop would reject -> a hard-fail. The neutralize loop must strip both.
-    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
-    const stacked = "---\nalpha: one: two\n---\n---\nbeta: three: four\n---\nReal body here.\n";
-    await writeFile(path.join(srcRoot, "commands", "two-blocks.md"), stacked);
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: srcRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(srcRoot, "commands"),
-    });
-    // Degrade, not hard-fail: ONE degrade record for the command (per-command,
-    // regardless of how many nested blocks were stripped).
-    assert.equal(prepared.kind, "staged");
-    assert.equal(prepared.result.degraded.length, 1);
-
-    await commitPreparedCommands(prepared);
-    const staged = await readFile(
-      path.join(scope.loc.promptsTargetDir, "acme:two-blocks.md"),
-      "utf8",
-    );
-    assert.ok(!staged.startsWith("---"), "both malformed blocks must be stripped");
-    assert.ok(!staged.includes("alpha:"), "first ex-frontmatter block must not survive");
-    assert.ok(!staged.includes("beta:"), "second ex-frontmatter block must not survive");
-    assert.ok(staged.includes("Real body here."), "the real body must survive");
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-    assert.deepEqual(parseFrontmatter(staged).frontmatter, {});
-  } finally {
-    await rm(srcRoot, { recursive: true, force: true });
-    await scope.cleanup();
-  }
-});
-
-test("CMD-01 frontmatter-only malformed command with no trailing newline neutralizes to empty (afterClose === -1 branch)", async () => {
-  const scope = await tmpScope();
-  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmd-fmonly-src-"));
-
-  try {
-    // A closed malformed block with NO body and NO trailing newline: the close
-    // `---` is the last line, so the "\n after the close" lookup returns -1 and
-    // neutralize yields "" (rather than slicing out of range).
-    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
-    const frontmatterOnly = "---\nbad: a: b\n---";
-    await writeFile(path.join(srcRoot, "commands", "fm-only.md"), frontmatterOnly);
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot: srcRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(srcRoot, "commands"),
-    });
-    assert.equal(prepared.kind, "staged");
-    assert.equal(prepared.result.degraded.length, 1);
-
-    await commitPreparedCommands(prepared);
-    const staged = await readFile(path.join(scope.loc.promptsTargetDir, "acme:fm-only.md"), "utf8");
-    assert.equal(staged, "");
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-  } finally {
-    await rm(srcRoot, { recursive: true, force: true });
-    await scope.cleanup();
-  }
-});
-
-// SUB-02 substitution ---------------------------------------------------
-
-// Builds a source plugin whose single command body carries all four
-// ${CLAUDE_*} tokens, proving scope-gated projectDir and the skill-scoped
-// ${CLAUDE_SKILL_DIR} pass-through (commands receive no skillDir).
-async function withFourTokenCommand<T>(fn: (ctx: { srcRoot: string }) => Promise<T>): Promise<T> {
-  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmds-fourtoken-src-"));
-  try {
-    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
-    await writeFile(
-      path.join(srcRoot, "commands", "vars.md"),
-      "Root: ${CLAUDE_PLUGIN_ROOT}\n" +
-        "Data: ${CLAUDE_PLUGIN_DATA}\n" +
-        "Skill: ${CLAUDE_SKILL_DIR}\n" +
-        "Project: ${CLAUDE_PROJECT_DIR}\n",
-    );
-    return await fn({ srcRoot });
-  } finally {
-    await rm(srcRoot, { recursive: true, force: true });
-  }
 }
 
-test("SUB-02 project-scope command substitutes ${CLAUDE_PROJECT_DIR} to cwd; keeps ${CLAUDE_SKILL_DIR} literal", async () => {
-  await withFourTokenCommand(async ({ srcRoot }) => {
-    const scope = await tmpScope();
-    try {
-      const pluginDataDir = "/tmp/pi-data/test-mp/acme";
-      const prepared = await prepareStageCommands({
-        locations: scope.loc,
-        marketplaceName: "test-mp",
-        pluginName: "acme",
-        pluginRoot: srcRoot,
-        pluginDataDir,
-        resolved: makeResolved(srcRoot, "commands"),
-        cwd: scope.loc.scopeRoot,
-      });
-      await commitPreparedCommands(prepared);
+test("stages recursive commands with exact names, records, substitutions, and prompt bytes", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-complete-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-complete-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const pluginDataDir = path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME);
+  const deploySource =
+    "---\ndescription: Deploy the service\n---\n" +
+    "Deploy from ${CLAUDE_PLUGIN_ROOT} in ${CLAUDE_PROJECT_DIR}.\n";
+  const statusSource =
+    "---\ndescription: Show status\n---\n" + "Read ${CLAUDE_PLUGIN_DATA}/status.json.\n";
+  const nestedSource = "---\ndescription: Build the web app\n---\nBuild web.\n";
+  const expectedDeploy =
+    "---\ndescription: Deploy the service\n---\n" +
+    `Deploy from ${pluginRoot} in ${locations.scopeRoot}.\n`;
+  const expectedStatus =
+    "---\ndescription: Show status\n---\n" + `Read ${pluginDataDir}/status.json.\n`;
+  await mkdir(path.join(commandsRoot, "build"), { recursive: true });
+  await writeFile(path.join(commandsRoot, "acme-deploy.md"), deploySource);
+  await writeFile(path.join(commandsRoot, "status.md"), statusSource);
+  await writeFile(path.join(commandsRoot, "build", "web.md"), nestedSource);
 
-      const staged = await readFile(path.join(scope.loc.promptsTargetDir, "acme:vars.md"), "utf8");
-      assert.ok(staged.includes(`Root: ${srcRoot}`), "pluginRoot substituted");
-      assert.ok(staged.includes(`Data: ${pluginDataDir}`), "pluginData substituted");
-      // SUB-02: projectDir resolves to the install cwd under project scope.
-      assert.ok(staged.includes(`Project: ${scope.loc.scopeRoot}`), "projectDir substituted");
-      // ${CLAUDE_SKILL_DIR} is skill-scoped; commands receive no skillDir.
-      assert.ok(
-        staged.includes("Skill: ${CLAUDE_SKILL_DIR}"),
-        "skillDir stays literal in commands",
-      );
-    } finally {
-      await scope.cleanup();
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved: resolvedFor(pluginRoot),
+  });
+  const commitLeak = await commitPreparedCommands(prepared);
+  const promptNames = (await readdir(locations.promptsTargetDir)).sort();
+  const deployBytes = await readFile(
+    path.join(locations.promptsTargetDir, "acme:deploy.md"),
+    "utf8",
+  );
+  const nestedBytes = await readFile(
+    path.join(locations.promptsTargetDir, "acme:build:web.md"),
+    "utf8",
+  );
+  const statusBytes = await readFile(
+    path.join(locations.promptsTargetDir, "acme:status.md"),
+    "utf8",
+  );
+
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result, {
+    stagedNames: ["acme:deploy", "acme:build:web", "acme:status"],
+    recorded: [
+      {
+        generatedName: "acme:deploy",
+        sourcePath: path.join(commandsRoot, "acme-deploy.md"),
+        targetPath: path.join(locations.promptsTargetDir, "acme:deploy.md"),
+      },
+      {
+        generatedName: "acme:build:web",
+        sourcePath: path.join(commandsRoot, "build", "web.md"),
+        targetPath: path.join(locations.promptsTargetDir, "acme:build:web.md"),
+      },
+      {
+        generatedName: "acme:status",
+        sourcePath: path.join(commandsRoot, "status.md"),
+        targetPath: path.join(locations.promptsTargetDir, "acme:status.md"),
+      },
+    ],
+    warnings: [],
+    degraded: [],
+  });
+  assert.strictEqual(commitLeak, undefined);
+  assert.deepStrictEqual(promptNames, ["acme:build:web.md", "acme:deploy.md", "acme:status.md"]);
+  assert.strictEqual(deployBytes, expectedDeploy);
+  assert.strictEqual(nestedBytes, nestedSource);
+  assert.strictEqual(statusBytes, expectedStatus);
+});
+
+test("returns a complete no-op and materializes no command directories", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-noop-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-noop-");
+
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot, []),
+  });
+  const commitLeak = await commitPreparedCommands(prepared);
+  const abortLeak = await abortPreparedCommands(prepared);
+  const replacement = await replacePreparedCommands(prepared);
+  const rollbackLeaks = await rollbackCommandsReplacement(replacement);
+  const finalizeLeaks = await finalizeCommandsReplacement(replacement);
+  const stagingExists = await pathIsPresent(locations.commandsStagingDir);
+  const promptsExist = await pathIsPresent(locations.promptsTargetDir);
+
+  // assert
+  assert.deepStrictEqual(prepared, {
+    kind: "noop",
+    result: { stagedNames: [], recorded: [], warnings: [], degraded: [] },
+  });
+  assert.strictEqual(commitLeak, undefined);
+  assert.strictEqual(abortLeak, undefined);
+  assert.deepStrictEqual(replacement, { kind: "noop", prepared });
+  assert.deepStrictEqual(rollbackLeaks, []);
+  assert.deepStrictEqual(finalizeLeaks, []);
+  assert.strictEqual(stagingExists, false);
+  assert.strictEqual(promptsExist, false);
+});
+
+test("aborts staged commands without creating target prompts", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-abort-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-abort-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const commandSource = "---\ndescription: Abort me\n---\nDo not commit.\n";
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(path.join(commandsRoot, "abort.md"), commandSource);
+
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  const stagedBytes = await readFile(path.join(prepared.stagingRoot, "acme:abort.md"), "utf8");
+  const abortLeak = await abortPreparedCommands(prepared);
+  const stagingExists = await pathIsPresent(prepared.stagingRoot);
+  const targetExists = await pathIsPresent(path.join(locations.promptsTargetDir, "acme:abort.md"));
+
+  // assert
+  assert.strictEqual(stagedBytes, commandSource);
+  assert.strictEqual(abortLeak, undefined);
+  assert.strictEqual(stagingExists, false);
+  assert.strictEqual(targetExists, false);
+});
+
+test("removes prior owned prompts and tolerates a missing prior prompt during commit", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-restage-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-restage-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const currentSource = "---\ndescription: Current\n---\nCurrent prompt.\n";
+  const priorTarget = path.join(locations.promptsTargetDir, "acme:old.md");
+  await mkdir(commandsRoot, { recursive: true });
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await writeFile(path.join(commandsRoot, "current.md"), currentSource);
+  await writeFile(priorTarget, "old prompt bytes\n");
+
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    previousCommandNames: ["acme:old", "acme:already-missing"],
+  });
+  const commitLeak = await commitPreparedCommands(prepared);
+  const priorExists = await pathIsPresent(priorTarget);
+  const currentBytes = await readFile(
+    path.join(locations.promptsTargetDir, "acme:current.md"),
+    "utf8",
+  );
+
+  // assert
+  assert.strictEqual(commitLeak, undefined);
+  assert.strictEqual(priorExists, false);
+  assert.strictEqual(currentBytes, currentSource);
+});
+
+test("neutralizes malformed frontmatter and preserves exact substituted body bytes", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-malformed-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-malformed-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const malformedSource =
+    "---\ntitle: Deploy: the whole thing\ndescription: never reached\n---\n\n" +
+    "Run the deployment for ${CLAUDE_PLUGIN_ROOT}.\n";
+  const expectedBytes = `\nRun the deployment for ${pluginRoot}.\n`;
+  const expectedParseError =
+    "Nested mappings are not allowed in compact mappings at line 1, column 8:\n\n" +
+    "title: Deploy: the whole thing\n       ^\n";
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(path.join(commandsRoot, "bad-command.md"), malformedSource);
+
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+  });
+  const commitLeak = await commitPreparedCommands(prepared);
+  const stagedBytes = await readFile(
+    path.join(locations.promptsTargetDir, "acme:bad-command.md"),
+    "utf8",
+  );
+
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result.degraded, [
+    { generatedName: "acme:bad-command", parseError: expectedParseError },
+  ]);
+  assert.strictEqual(commitLeak, undefined);
+  assert.strictEqual(stagedBytes, expectedBytes);
+});
+
+test("substitutes project variables and retains command-inapplicable skill variables", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-project-vars-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-project-vars-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const pluginDataDir = path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME);
+  const commandSource =
+    "Root: ${CLAUDE_PLUGIN_ROOT}\n" +
+    "Data: ${CLAUDE_PLUGIN_DATA}\n" +
+    "Project: ${CLAUDE_PROJECT_DIR}\n" +
+    "Skill: ${CLAUDE_SKILL_DIR}\n";
+  const expectedBytes =
+    `Root: ${pluginRoot}\n` +
+    `Data: ${pluginDataDir}\n` +
+    `Project: ${locations.scopeRoot}\n` +
+    "Skill: ${CLAUDE_SKILL_DIR}\n";
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(path.join(commandsRoot, "vars.md"), commandSource);
+
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved: resolvedFor(pluginRoot),
+  });
+  await commitPreparedCommands(prepared);
+  const stagedBytes = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
+
+  // assert
+  assert.strictEqual(stagedBytes, expectedBytes);
+});
+
+test("retains the project variable for user scope and restores the user directory", async (t) => {
+  // arrange
+  const scopeRoot = await mkdtemp(path.join(tmpdir(), "commands-stage-user-vars-"));
+  t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(() => {
+    if (previousAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
     }
   });
-});
+  process.env.PI_CODING_AGENT_DIR = scopeRoot;
+  const locations = locationsFor("user", scopeRoot);
+  const pluginRoot = await createPluginRoot(t, "commands-source-user-vars-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const pluginDataDir = path.join(scopeRoot, "plugin-data", PLUGIN_NAME);
+  const commandSource =
+    "Root: ${CLAUDE_PLUGIN_ROOT}\n" +
+    "Data: ${CLAUDE_PLUGIN_DATA}\n" +
+    "Project: ${CLAUDE_PROJECT_DIR}\n";
+  const expectedBytes =
+    `Root: ${pluginRoot}\n` + `Data: ${pluginDataDir}\n` + "Project: ${CLAUDE_PROJECT_DIR}\n";
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(path.join(commandsRoot, "vars.md"), commandSource);
 
-test("SUB-02 user-scope command keeps ${CLAUDE_PROJECT_DIR} literal; other two substitute", async () => {
-  await withFourTokenCommand(async ({ srcRoot }) => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), "cmds-user-scope-"));
-    const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
-    process.env.PI_CODING_AGENT_DIR = tmp;
-    try {
-      const locations = locationsFor("user", tmp);
-      await mkdir(locations.extensionRoot, { recursive: true });
-      const pluginDataDir = "/tmp/pi-data/test-mp/acme";
-      const prepared = await prepareStageCommands({
-        locations,
-        marketplaceName: "test-mp",
-        pluginName: "acme",
-        pluginRoot: srcRoot,
-        pluginDataDir,
-        resolved: makeResolved(srcRoot, "commands"),
-        // A user-scope caller may still supply cwd; the scope gate must ignore it.
-        cwd: tmp,
-      });
-      await commitPreparedCommands(prepared);
-
-      const staged = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
-      assert.ok(staged.includes(`Root: ${srcRoot}`), "pluginRoot substituted");
-      assert.ok(staged.includes(`Data: ${pluginDataDir}`), "pluginData substituted");
-      // SUB-02 divergence: user scope leaves the token literal.
-      assert.ok(
-        staged.includes("Project: ${CLAUDE_PROJECT_DIR}"),
-        "projectDir stays literal under user scope",
-      );
-      assert.ok(
-        staged.includes("Skill: ${CLAUDE_SKILL_DIR}"),
-        "skillDir stays literal in commands",
-      );
-    } finally {
-      if (prevAgentDir === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = prevAgentDir;
-      }
-
-      await rm(tmp, { recursive: true, force: true });
-    }
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved: resolvedFor(pluginRoot),
   });
+  await commitPreparedCommands(prepared);
+  const stagedBytes = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
+
+  // assert
+  assert.strictEqual(stagedBytes, expectedBytes);
 });
 
-// D-07 / D-141-03: the discovery warnings must survive the staging boundary.
+test("preserves first-wins discovery warnings on a staged result", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-warning-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-warning-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(path.join(commandsRoot, "acme-tools"), { recursive: true });
+  await mkdir(path.join(commandsRoot, "tools"), { recursive: true });
+  await writeFile(path.join(commandsRoot, "acme-tools", "lint.md"), "first prompt\n");
+  await writeFile(path.join(commandsRoot, "tools", "lint.md"), "second prompt\n");
 
-test("D-07 prepareStageCommands carries a discovery warning onto result.warnings", async () => {
-  const scope = await tmpScope();
-  const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "stage-cmds-dupwarn-"));
+  // act
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+  });
+  const abortLeak = await abortPreparedCommands(prepared);
 
-  try {
-    // Two sources, one generated name: `acme-tools/lint.md` elides its head
-    // (D-141-01) and lands on the same `acme:tools:lint` as `tools/lint.md`.
-    const commandsDir = path.join(pluginRoot, "commands");
-    await mkdir(path.join(commandsDir, "acme-tools"), { recursive: true });
-    await mkdir(path.join(commandsDir, "tools"), { recursive: true });
-    await writeFile(path.join(commandsDir, "acme-tools", "lint.md"), "first");
-    await writeFile(path.join(commandsDir, "tools", "lint.md"), "second");
-
-    const prepared = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(pluginRoot, "commands"),
-    });
-
-    assert.equal(prepared.result.warnings.length, 1, "the discovery warning must not be dropped");
-    assert.match(prepared.result.warnings[0]!, /"acme:tools:lint"/);
-    assert.match(prepared.result.warnings[0]!, /ignoring duplicate/);
-    await abortPreparedCommands(prepared);
-  } finally {
-    await rm(pluginRoot, { recursive: true, force: true });
-    await scope.cleanup();
-  }
-});
-
-// CM-4: a nested source makes the generated name as long as the whole
-// relative path, so ENAMETOOLONG became reachable. The failure has to say
-// which command of which plugin, not name a path under a staging UUID.
-
-test("CM-4 prepareStageCommands names the plugin and the command on a too-long name", async () => {
-  const scope = await tmpScope();
-  const pluginRoot = await mkdtemp(path.join(os.tmpdir(), "stage-cmds-longname-"));
-
-  try {
-    // 200 + 1 + 200 path segments -> a ~400-character generated name, past
-    // the 255-byte basename limit every mainstream filesystem enforces.
-    const outer = "d".repeat(200);
-    const inner = "c".repeat(200);
-    const commandsDir = path.join(pluginRoot, "commands");
-    await mkdir(path.join(commandsDir, outer), { recursive: true });
-    await writeFile(path.join(commandsDir, outer, `${inner}.md`), "body");
-
-    const err = await prepareStageCommands({
-      locations: scope.loc,
-      cwd: scope.loc.scopeRoot,
-      marketplaceName: "test-mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: "/tmp/pi-data/test-mp/acme",
-      resolved: makeResolved(pluginRoot, "commands"),
-    }).then(
-      () => undefined,
-      (e: unknown) => e,
-    );
-
-    assert.ok(err instanceof Error, "expected a staging failure");
-    assert.match(err.message, /plugin "acme"/, "the failure names the plugin");
-    assert.match(err.message, new RegExp(`command "acme:${outer}:${inner}"`));
-    assert.ok(err.cause instanceof Error, "the errno rides Error.cause");
-    assert.match(err.cause.message, /ENAMETOOLONG/);
-  } finally {
-    await rm(pluginRoot, { recursive: true, force: true });
-    await scope.cleanup();
-  }
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result.stagedNames, ["acme:tools:lint"]);
+  assert.deepStrictEqual(prepared.result.warnings, [
+    `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
+  ]);
+  assert.strictEqual(abortLeak, undefined);
 });
