@@ -40,7 +40,7 @@ import { errorMessage } from "../shared/errors.ts";
  * `mutated === true` to avoid pointless I/O on already-normalized files.
  */
 export interface MigrationResult {
-  readonly marketplaces: Record<string, unknown>;
+  readonly marketplaces: Record<string, Record<string, unknown>>;
   readonly mutated: boolean;
 }
 
@@ -232,7 +232,7 @@ export function migrateLegacyMarketplaceRecords(
   }
 
   let mutated = false;
-  const marketplaces: Record<string, unknown> = {};
+  const marketplaces: Record<string, Record<string, unknown>> = {};
 
   for (const [mpName, mpRaw] of Object.entries(rawMps as Record<string, unknown>)) {
     if (typeof mpRaw !== "object" || mpRaw === null || Array.isArray(mpRaw)) {
