@@ -34,7 +34,7 @@ secondary detail.
 - [x] **Phase 108: Domain and Platform** - Prove 23 foundational contracts and the resolver and adapter carriers.
 - [x] **Phase 109: Shared Contracts** - Prove 19 shared value, error, path, environment, and notification contracts. (completed 2026-08-29)
 - [x] **Phase 110: Persistence and Transaction** - Prove 12 durable-state, migration, ledger, rollback, and retry contracts. (completed 2026-08-30)
-- [ ] **Phase 111: Non-Hook Component Bridges** - Prove 31 agents, commands, MCP, and skills bridge contracts.
+- [x] **Phase 111: Non-Hook Component Bridges** - Prove 31 agents, commands, MCP, and skills bridge contracts. (completed 2026-08-30)
 - [ ] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts.
 - [ ] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts.
 - [ ] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows.
@@ -300,7 +300,7 @@ Plans:
 - [x] **111-28** (`111-28-PLAN.md`, `P111-28`) - `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts` → `tests/bridges/skills/rewrite-frontmatter.test.ts`
 - [x] **111-29** (`111-29-PLAN.md`, `P111-29`) - `extensions/pi-claude-marketplace/bridges/skills/stage.ts` → `tests/bridges/skills/stage.test.ts`
 - [x] **111-30** (`111-30-PLAN.md`, `P111-30`) - `extensions/pi-claude-marketplace/bridges/skills/types.ts` → `tests/bridges/skills/types.test.ts`
-- [ ] **111-31** (`111-31-PLAN.md`, `P111-31`) - `extensions/pi-claude-marketplace/bridges/skills/unstage.ts` → `tests/bridges/skills/unstage.test.ts`
+- [x] **111-31** (`111-31-PLAN.md`, `P111-31`) - `extensions/pi-claude-marketplace/bridges/skills/unstage.ts` → `tests/bridges/skills/unstage.test.ts`
 
 **Cross-cutting constraints:**
 
@@ -580,7 +580,7 @@ and commit still owns one pair.
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
-| 111. Non-Hook Component Bridges          | 31/31 | In Progress|  |
+| 111. Non-Hook Component Bridges          | 31/31 | Complete    | 2026-08-30 |
 | 112. Hook Runtime                        |           0/31 | Not started     | -          |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
