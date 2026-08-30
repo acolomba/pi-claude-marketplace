@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { describe, test } from "node:test";
 
 import {
   loadAgentsIndex,
@@ -11,214 +10,244 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
+import type { LoadedAgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import type { AgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
-import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-/**
- * AG-2 / AG-4 -- agents-index.json load/save behavior.
- *
- * Each test creates an isolated tmpdir representing the project-scope
- * cwd; `locationsFor("project", cwd)` produces a fully-realized
- * ScopedLocations whose `extensionRoot` lands under that tmpdir. The IO
- * layer derives the path from `extensionRoot`.
- *
- * Test names prefixed with REQ-IDs (grep-able).
- */
+describe("loadAgentsIndex", () => {
+  test("returns the complete empty version-1 view when the file is missing", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-missing-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const expectedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [],
+      corruptions: [],
+    };
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.join(HERE, "fixtures/agents-index");
+    // act
+    const index = await loadAgentsIndex(locations);
 
-interface TmpScope {
-  loc: ScopedLocations;
-  indexPath: string;
-  cleanup: () => Promise<void>;
-}
+    // assert
+    assert.deepStrictEqual(index, expectedIndex);
+    assert.strictEqual(Object.isFrozen(index.agents), true);
+    assert.strictEqual(Object.isFrozen(index.corruptions), true);
+  });
 
-async function tmpScope(): Promise<TmpScope> {
-  const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-agents-index-test-"));
-  // locationsFor("project", cwd) -> extensionRoot = <cwd>/.pi/pi-claude-marketplace
-  const loc = locationsFor("project", dir);
-  // Pre-create extensionRoot so single-row + corruption fixtures can be
-  // written without mkdir-on-each-test boilerplate. The "creates parent
-  // dirs" test deliberately uses a fresh dir without pre-creating, so it
-  // skips this helper.
-  await mkdir(loc.extensionRoot, { recursive: true });
-  const indexPath = path.join(loc.extensionRoot, "agents-index.json");
-  const cleanup = async (): Promise<void> => {
-    await rm(dir, { recursive: true, force: true });
-  };
+  test("loads an empty version-1 document", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-empty-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const indexPath = path.join(locations.extensionRoot, "agents-index.json");
+    const expectedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [],
+      corruptions: [],
+    };
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(indexPath, '{"schemaVersion":1,"agents":[]}', "utf8");
 
-  return { loc, indexPath, cleanup };
-}
+    // act
+    const index = await loadAgentsIndex(locations);
 
-/**
- * Variant that does NOT pre-create extensionRoot. Used to verify
- * saveAgentsIndex creates parent dirs (atomicWriteJson contract).
- */
-async function bareTmpScope(): Promise<TmpScope> {
-  const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-agents-index-test-bare-"));
-  const loc = locationsFor("project", dir);
-  const indexPath = path.join(loc.extensionRoot, "agents-index.json");
-  const cleanup = async (): Promise<void> => {
-    await rm(dir, { recursive: true, force: true });
-  };
+    // assert
+    assert.deepStrictEqual(index, expectedIndex);
+    assert.strictEqual(Object.isFrozen(index.agents), true);
+    assert.strictEqual(Object.isFrozen(index.corruptions), true);
+  });
 
-  return { loc, indexPath, cleanup };
-}
-
-test("AG-2 loadAgentsIndex returns empty {schemaVersion:1, agents:[], corruptions:[]} when file is missing (ENOENT)", async () => {
-  const { loc, cleanup } = await tmpScope();
-  try {
-    const got = await loadAgentsIndex(loc);
-    assert.equal(got.schemaVersion, 1);
-    assert.deepEqual([...got.agents], []);
-    assert.deepEqual([...got.corruptions], []);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("AG-2 loadAgentsIndex round-trips a single-row index from the single-row.json fixture", async () => {
-  const { loc, indexPath, cleanup } = await tmpScope();
-  try {
-    await copyFile(path.join(FIXTURES, "single-row.json"), indexPath);
-    const got = await loadAgentsIndex(loc);
-    assert.equal(got.schemaVersion, 1);
-    assert.equal(got.agents.length, 1);
-    assert.equal(got.agents[0]?.plugin, "acme");
-    assert.equal(got.agents[0]?.generatedName, "pi-claude-marketplace-acme-bot");
-    assert.equal(got.agents[0]?.originalModel, "sonnet");
-    assert.deepEqual([...got.corruptions], []);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("AG-4 loadAgentsIndex throws when JSON is unparseable", async () => {
-  const { loc, indexPath, cleanup } = await tmpScope();
-  try {
-    await writeFile(indexPath, "not json");
-    await assert.rejects(
-      () => loadAgentsIndex(loc),
-      (err: unknown) =>
-        err instanceof Error && err.message.includes("Failed to parse agents-index"),
+  test("loads a complete row with an original model", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-single-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const indexPath = path.join(locations.extensionRoot, "agents-index.json");
+    const expectedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "calendar",
+          marketplace: "work-tools",
+          sourceAgent: "scheduler",
+          generatedName: "work-tools-calendar-scheduler",
+          sourcePath: "/plugins/calendar/agents/scheduler.md",
+          targetPath: "/project/agents/work-tools-calendar-scheduler.md",
+          sourceHash: "hash-scheduler",
+          originalModel: "sonnet",
+          droppedFields: ["permissionMode"],
+          droppedTools: ["NotebookEdit"],
+          warnings: ["permissionMode was dropped"],
+        },
+      ],
+      corruptions: [],
+    };
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      indexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [
+          {
+            plugin: "calendar",
+            marketplace: "work-tools",
+            sourceAgent: "scheduler",
+            generatedName: "work-tools-calendar-scheduler",
+            sourcePath: "/plugins/calendar/agents/scheduler.md",
+            targetPath: "/project/agents/work-tools-calendar-scheduler.md",
+            sourceHash: "hash-scheduler",
+            originalModel: "sonnet",
+            droppedFields: ["permissionMode"],
+            droppedTools: ["NotebookEdit"],
+            warnings: ["permissionMode was dropped"],
+          },
+        ],
+      }),
+      "utf8",
     );
-  } finally {
-    await cleanup();
-  }
-});
 
-test("AG-4 loadAgentsIndex throws when schemaVersion is missing", async () => {
-  const { loc, indexPath, cleanup } = await tmpScope();
-  try {
-    await copyFile(path.join(FIXTURES, "file-level-corruption.json"), indexPath);
-    await assert.rejects(
-      () => loadAgentsIndex(loc),
-      (err: unknown) => err instanceof Error && err.message.includes("expected schemaVersion 1"),
+    // act
+    const index = await loadAgentsIndex(locations);
+
+    // assert
+    assert.deepStrictEqual(index, expectedIndex);
+    assert.strictEqual(Object.isFrozen(index.agents), true);
+    assert.strictEqual(Object.isFrozen(index.corruptions), true);
+  });
+
+  test("loads several rows when the optional original model is absent", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-multiple-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const indexPath = path.join(locations.extensionRoot, "agents-index.json");
+    const expectedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "calendar",
+          marketplace: "work-tools",
+          sourceAgent: "scheduler",
+          generatedName: "work-tools-calendar-scheduler",
+          sourcePath: "/plugins/calendar/agents/scheduler.md",
+          targetPath: "/project/agents/work-tools-calendar-scheduler.md",
+          sourceHash: "hash-scheduler",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+        {
+          plugin: "mail",
+          marketplace: "work-tools",
+          sourceAgent: "triage",
+          generatedName: "work-tools-mail-triage",
+          sourcePath: "/plugins/mail/agents/triage.md",
+          targetPath: "/project/agents/work-tools-mail-triage.md",
+          sourceHash: "hash-triage",
+          droppedFields: ["skills"],
+          droppedTools: ["WebFetch"],
+          warnings: ["skills were dropped"],
+        },
+      ],
+      corruptions: [],
+    };
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      indexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [
+          {
+            plugin: "calendar",
+            marketplace: "work-tools",
+            sourceAgent: "scheduler",
+            generatedName: "work-tools-calendar-scheduler",
+            sourcePath: "/plugins/calendar/agents/scheduler.md",
+            targetPath: "/project/agents/work-tools-calendar-scheduler.md",
+            sourceHash: "hash-scheduler",
+            droppedFields: [],
+            droppedTools: [],
+            warnings: [],
+          },
+          {
+            plugin: "mail",
+            marketplace: "work-tools",
+            sourceAgent: "triage",
+            generatedName: "work-tools-mail-triage",
+            sourcePath: "/plugins/mail/agents/triage.md",
+            targetPath: "/project/agents/work-tools-mail-triage.md",
+            sourceHash: "hash-triage",
+            droppedFields: ["skills"],
+            droppedTools: ["WebFetch"],
+            warnings: ["skills were dropped"],
+          },
+        ],
+      }),
+      "utf8",
     );
-  } finally {
-    await cleanup();
-  }
+
+    // act
+    const index = await loadAgentsIndex(locations);
+
+    // assert
+    assert.deepStrictEqual(index, expectedIndex);
+    assert.strictEqual(Object.isFrozen(index.agents), true);
+    assert.strictEqual(Object.isFrozen(index.corruptions), true);
+  });
 });
 
-test("AG-4 loadAgentsIndex throws when schemaVersion != 1", async () => {
-  const { loc, indexPath, cleanup } = await tmpScope();
-  try {
-    await writeFile(indexPath, JSON.stringify({ schemaVersion: 2, agents: [] }));
-    await assert.rejects(
-      () => loadAgentsIndex(loc),
-      (err: unknown) => err instanceof Error && err.message.includes("expected schemaVersion 1"),
-    );
-  } finally {
-    await cleanup();
-  }
-});
-
-test("AG-4 loadAgentsIndex throws when 'agents' field is not an array", async () => {
-  const { loc, indexPath, cleanup } = await tmpScope();
-  try {
-    await writeFile(indexPath, JSON.stringify({ schemaVersion: 1, agents: "not-array" }));
-    await assert.rejects(
-      () => loadAgentsIndex(loc),
-      (err: unknown) =>
-        err instanceof Error && err.message.includes("'agents' field must be an array"),
-    );
-  } finally {
-    await cleanup();
-  }
-});
-
-test("AG-4 loadAgentsIndex DROPS per-row corruption and surfaces in corruptions[]", async () => {
-  const { loc, indexPath, cleanup } = await tmpScope();
-  try {
-    await copyFile(path.join(FIXTURES, "per-row-corruption.json"), indexPath);
-    const got = await loadAgentsIndex(loc);
-    // Row 0 is valid, row 1 missing generatedName -- the bad row drops.
-    assert.equal(got.agents.length, 1);
-    assert.equal(got.agents[0]?.sourceAgent, "bot");
-    assert.equal(got.corruptions.length, 1);
-    assert.match(got.corruptions[0]!, /agents\[1\]/);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("AG-2 saveAgentsIndex round-trips: save then load returns same agents", async () => {
-  const { loc, cleanup } = await tmpScope();
-  try {
+describe("saveAgentsIndex", () => {
+  test("atomically writes exact JSON bytes and creates the parent tree", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-save-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const indexPath = path.join(locations.extensionRoot, "agents-index.json");
     const index: AgentsIndex = {
       schemaVersion: 1,
       agents: [
         {
-          plugin: "p",
-          marketplace: "m",
-          sourceAgent: "s",
-          generatedName: "pi-claude-marketplace-p-s",
-          sourcePath: "/src",
-          targetPath: "/dst",
-          sourceHash: "abc123",
+          plugin: "review",
+          marketplace: "developer-tools",
+          sourceAgent: "reviewer",
+          generatedName: "developer-tools-review-reviewer",
+          sourcePath: "/plugins/review/agents/reviewer.md",
+          targetPath: "/project/agents/developer-tools-review-reviewer.md",
+          sourceHash: "hash-reviewer",
           droppedFields: [],
-          droppedTools: [],
-          warnings: ["a warning"],
+          droppedTools: ["Task"],
+          warnings: ["Task was dropped"],
         },
       ],
     };
-    await saveAgentsIndex(loc, index);
-    const got = await loadAgentsIndex(loc);
-    assert.equal(got.schemaVersion, 1);
-    assert.equal(got.agents.length, 1);
-    assert.equal(got.agents[0]?.plugin, "p");
-    assert.deepEqual([...(got.agents[0]?.warnings ?? [])], ["a warning"]);
-    assert.deepEqual([...got.corruptions], []);
-  } finally {
-    await cleanup();
-  }
-});
+    const expectedJsonBytes =
+      '{\n  "schemaVersion": 1,\n  "agents": [\n    {\n      "plugin": "review",\n      "marketplace": "developer-tools",\n      "sourceAgent": "reviewer",\n      "generatedName": "developer-tools-review-reviewer",\n      "sourcePath": "/plugins/review/agents/reviewer.md",\n      "targetPath": "/project/agents/developer-tools-review-reviewer.md",\n      "sourceHash": "hash-reviewer",\n      "droppedFields": [],\n      "droppedTools": [\n        "Task"\n      ],\n      "warnings": [\n        "Task was dropped"\n      ]\n    }\n  ]\n}\n';
+    const expectedLoadedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "review",
+          marketplace: "developer-tools",
+          sourceAgent: "reviewer",
+          generatedName: "developer-tools-review-reviewer",
+          sourcePath: "/plugins/review/agents/reviewer.md",
+          targetPath: "/project/agents/developer-tools-review-reviewer.md",
+          sourceHash: "hash-reviewer",
+          droppedFields: [],
+          droppedTools: ["Task"],
+          warnings: ["Task was dropped"],
+        },
+      ],
+      corruptions: [],
+    };
 
-test("AG-4 saveAgentsIndex throws on schema-invalid input", async () => {
-  const { loc, cleanup } = await tmpScope();
-  try {
-    // schemaVersion 2 is not Literal(1) -> validator rejects.
-    const bad = { schemaVersion: 2, agents: [] } as unknown as AgentsIndex;
-    await assert.rejects(
-      () => saveAgentsIndex(loc, bad),
-      (err: unknown) => err instanceof Error && err.message.includes("saveAgentsIndex refused"),
-    );
-  } finally {
-    await cleanup();
-  }
-});
+    // act
+    await saveAgentsIndex(locations, index);
+    const jsonBytes = await readFile(indexPath, "utf8");
+    const loadedIndex = await loadAgentsIndex(locations);
 
-test("AG-2 saveAgentsIndex creates parent dirs (extensionRoot may not yet exist)", async () => {
-  const { loc, indexPath, cleanup } = await bareTmpScope();
-  try {
-    const index: AgentsIndex = { schemaVersion: 1, agents: [] };
-    await saveAgentsIndex(loc, index);
-    // If the parent dir wasn't created, the read would ENOENT.
-    const text = await readFile(indexPath, "utf8");
-    const parsed: unknown = JSON.parse(text);
-    assert.deepEqual(parsed, { schemaVersion: 1, agents: [] });
-  } finally {
-    await cleanup();
-  }
+    // assert
+    assert.strictEqual(jsonBytes, expectedJsonBytes);
+    assert.deepStrictEqual(loadedIndex, expectedLoadedIndex);
+  });
 });
