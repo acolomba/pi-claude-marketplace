@@ -234,7 +234,7 @@ Plans:
 3. Staging and unstage cases preserve atomic replacement, rollback, containment, and foreign-content behavior in case-owned temporary trees.
 4. Barrel and type-only bridge modules have direct binding or compile-time owner tests without runtime exemptions.
 
-**Plans**: 27/31 plans executed
+**Plans**: 29/31 plans executed
 
 Plans:
 
@@ -243,7 +243,7 @@ Plans:
 - [x] 111-03-PLAN.md
 - [x] 111-04-PLAN.md
 - [x] 111-05-PLAN.md
-- [ ] 111-06-PLAN.md
+- [x] 111-06-PLAN.md
 - [x] 111-07-PLAN.md
 - [x] 111-08-PLAN.md
 - [x] 111-09-PLAN.md
@@ -257,7 +257,7 @@ Plans:
 - [x] 111-17-PLAN.md
 - [x] 111-18-PLAN.md
 - [x] 111-19-PLAN.md
-- [ ] 111-20-PLAN.md
+- [x] 111-20-PLAN.md
 - [x] 111-21-PLAN.md
 - [x] 111-22-PLAN.md
 - [x] 111-23-PLAN.md
@@ -275,7 +275,7 @@ Plans:
 - [x] **111-03** (`111-03-PLAN.md`, `P111-03`) - `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts` → `tests/bridges/agents/frontmatter.test.ts`
 - [x] **111-04** (`111-04-PLAN.md`, `P111-04`) - `extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts` → `tests/bridges/agents/index-mutation.test.ts`
 - [x] **111-05** (`111-05-PLAN.md`, `P111-05`) - `extensions/pi-claude-marketplace/bridges/agents/index.ts` → `tests/bridges/agents/index.test.ts`
-- [ ] **111-06** (`111-06-PLAN.md`, `P111-06`) - `extensions/pi-claude-marketplace/bridges/agents/marker.ts` → `tests/bridges/agents/marker.test.ts`
+- [x] **111-06** (`111-06-PLAN.md`, `P111-06`) - `extensions/pi-claude-marketplace/bridges/agents/marker.ts` → `tests/bridges/agents/marker.test.ts`
 - [x] **111-07** (`111-07-PLAN.md`, `P111-07`) - `extensions/pi-claude-marketplace/bridges/agents/stage.ts` → `tests/bridges/agents/stage.test.ts`
 - [x] **111-08** (`111-08-PLAN.md`, `P111-08`) - `extensions/pi-claude-marketplace/bridges/agents/types.ts` → `tests/bridges/agents/types.test.ts`
 - [x] **111-09** (`111-09-PLAN.md`, `P111-09`) - `extensions/pi-claude-marketplace/bridges/agents/unstage.ts` → `tests/bridges/agents/unstage.test.ts`
@@ -289,7 +289,7 @@ Plans:
 - [x] **111-17** (`111-17-PLAN.md`, `P111-17`) - `extensions/pi-claude-marketplace/bridges/mcp/marker.ts` → `tests/bridges/mcp/marker.test.ts`
 - [x] **111-18** (`111-18-PLAN.md`, `P111-18`) - `extensions/pi-claude-marketplace/bridges/mcp/parse.ts` → `tests/bridges/mcp/parse.test.ts`
 - [x] **111-19** (`111-19-PLAN.md`, `P111-19`) - `extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts` → `tests/bridges/mcp/safe-set.test.ts`
-- [ ] **111-20** (`111-20-PLAN.md`, `P111-20`) - `extensions/pi-claude-marketplace/bridges/mcp/stage.ts` → `tests/bridges/mcp/stage.test.ts`
+- [x] **111-20** (`111-20-PLAN.md`, `P111-20`) - `extensions/pi-claude-marketplace/bridges/mcp/stage.ts` → `tests/bridges/mcp/stage.test.ts`
 - [x] **111-21** (`111-21-PLAN.md`, `P111-21`) - `extensions/pi-claude-marketplace/bridges/mcp/substitute.ts` → `tests/bridges/mcp/substitute.test.ts`
 - [x] **111-22** (`111-22-PLAN.md`, `P111-22`) - `extensions/pi-claude-marketplace/bridges/mcp/types.ts` → `tests/bridges/mcp/types.test.ts`
 - [x] **111-23** (`111-23-PLAN.md`, `P111-23`) - `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts` → `tests/bridges/mcp/unstage.test.ts`
@@ -580,7 +580,7 @@ and commit still owns one pair.
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
-| 111. Non-Hook Component Bridges          | 27/31 | In Progress|  |
+| 111. Non-Hook Component Bridges          | 29/31 | In Progress|  |
 | 112. Hook Runtime                        |           0/31 | Not started     | -          |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
