@@ -270,6 +270,25 @@ describe("prepareStageSkills", () => {
       "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
       "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+    const expectedResult = {
+      stagedNames: ["acme-broken"],
+      recorded: [
+        {
+          generatedName: "acme-broken",
+          sourcePath: skillDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
+        },
+      ],
+      warnings: [],
+      degraded: [
+        {
+          generatedName: "acme-broken",
+          parseError:
+            "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
+            "name: [unterminated\ndescription: discarded\n^\n",
+        },
+      ],
+    };
 
     // act
     const prepared = await prepareStageSkills({
@@ -288,18 +307,7 @@ describe("prepareStageSkills", () => {
     );
 
     // assert
-    assert.deepStrictEqual(prepared.result.stagedNames, ["acme-broken"]);
-    assert.deepStrictEqual(prepared.result.recorded, [
-      {
-        generatedName: "acme-broken",
-        sourcePath: skillDirectory,
-        targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
-      },
-    ]);
-    assert.deepStrictEqual(prepared.result.warnings, []);
-    assert.strictEqual(prepared.result.degraded.length, 1);
-    assert.strictEqual(prepared.result.degraded[0]?.generatedName, "acme-broken");
-    assert.match(prepared.result.degraded[0]?.parseError ?? "", /unterminated|flow sequence/i);
+    assert.deepStrictEqual(prepared.result, expectedResult);
     assert.strictEqual(stagedBytes, expectedBytes);
   });
 
@@ -532,6 +540,13 @@ describe("prepareStageSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
+    const expectedPrepareError = {
+      name: "YAMLParseError",
+      message:
+        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 3, column 23:\n\n" +
+        "license: [unterminated\n                      ^\n",
+      cause: undefined,
+    };
 
     // act
     let prepareError: unknown;
@@ -551,7 +566,14 @@ describe("prepareStageSkills", () => {
 
     // assert
     assert.ok(prepareError instanceof Error);
-    assert.match(prepareError.message, /unterminated|flow sequence/i);
+    assert.deepStrictEqual(
+      {
+        name: prepareError.name,
+        message: prepareError.message,
+        cause: prepareError.cause,
+      },
+      expectedPrepareError,
+    );
     assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
   });
 
