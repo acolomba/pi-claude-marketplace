@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { discoverPluginCommands as definingDiscoverPluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
 import {
   abortPreparedCommands,
   commitPreparedCommands,
@@ -11,7 +12,6 @@ import {
   rollbackCommandsReplacement,
   unstagePluginCommands,
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/index.ts";
-import { discoverPluginCommands as definingDiscoverPluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
 import {
   abortPreparedCommands as definingAbortPreparedCommands,
   commitPreparedCommands as definingCommitPreparedCommands,
