@@ -675,12 +675,12 @@ test("propagates a filesystem error whose errno disappears between observations"
   const readdir = t.mock.method(
     filesystemPromises,
     "readdir",
-    async (directoryPath: Parameters<typeof originalReaddir>[0]) => {
+    (directoryPath: Parameters<typeof originalReaddir>[0]) => {
       if (directoryPath === commandsDirectory) {
-        return commandEntries;
+        return Promise.resolve(commandEntries);
       }
 
-      throw filesystemError;
+      return Promise.reject(filesystemError);
     },
   );
   t.after(() => {
