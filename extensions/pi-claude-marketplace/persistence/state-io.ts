@@ -429,12 +429,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   //   1. raw string -> classify via parsePluginSource
   //   2. ParsedSource object -> revalidate via pathSource/githubSource
   //   3. unknown-kind object (forward-compat / NFR-12) -> accept verbatim
-  for (const [mpName, mpRaw] of Object.entries(marketplaces)) {
-    if (typeof mpRaw !== "object" || mpRaw === null) {
-      throw new Error(`state.json marketplace "${mpName}" is not an object`);
-    }
-
-    const mp = mpRaw as Record<string, unknown>;
+  for (const [mpName, mp] of Object.entries(marketplaces)) {
     normalizeStoredSource(mpName, mp);
   }
 
