@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 110
 current_phase_name: Persistence and Transaction
 status: executing
-stopped_at: Completed 110-06-PLAN.md
-last_updated: "2026-08-30T01:25:16.113Z"
+stopped_at: Completed 110-11-PLAN.md
+last_updated: "2026-08-30T01:35:31.069Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 110 execution started
-state_head: 1a6e2b33054c58689267bb7bfb0610d65b6b307d
+state_head: f177bd39c46f4498125414ac7e34421510dacb20
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 55
-  completed_plans: 45
+  completed_plans: 46
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 110 (Persistence and Transaction) — EXECUTING
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 110 execution started
 
@@ -105,6 +105,7 @@ evidence.
 | Phase 109 P19 | 7 min | 2 tasks | 1 files |
 | Phase 110 P02 | 11 min | 2 tasks | 1 files |
 | Phase 110 P06 | 7 min | 2 tasks | 1 files |
+| Phase 110 P11 | 7 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Agents-index schema evidence uses independent literals plus module-scope satisfies and targeted @ts-expect-error checks.
 - [Phase 110]: Kept locations.ts byte-identical because its public seams expose the complete contract.
 - [Phase 110]: Locations evidence uses complete bundles and adjacent safe-path probes with platform-aware separators.
+- [Phase 110]: Kept rollback.ts byte-identical because its public formatter exposes every bypass and wrapping branch.
+- [Phase 110]: Rollback evidence compares whole structured results before pinning original cause and raw partial identities.
 
 ### Pending Todos
 
@@ -139,6 +142,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T01:25:15.855Z
-Stopped at: Completed 110-06-PLAN.md
+Last session: 2026-08-30T01:35:30.796Z
+Stopped at: Completed 110-11-PLAN.md
 Resume file: None

@@ -189,7 +189,7 @@ Plans:
 3. Ledger, guard, and rollback cases prove atomic replacement, failure isolation, idempotency, and retry behavior through public effects.
 4. Each filesystem case owns and removes its temporary directory, including corrupt-input and partial-failure cases.
 
-**Plans**: 2/12 plans executed
+**Plans**: 3/12 plans executed
 
 Plans:
 
@@ -203,7 +203,7 @@ Plans:
 - [ ] 110-08-PLAN.md
 - [ ] 110-09-PLAN.md
 - [ ] 110-10-PLAN.md
-- [ ] 110-11-PLAN.md
+- [x] 110-11-PLAN.md
 - [ ] 110-12-PLAN.md
 
 - [ ] **110-01** (`110-01-PLAN.md`, `P110-01`) - `extensions/pi-claude-marketplace/persistence/agents-index-io.ts` → `tests/persistence/agents-index-io.test.ts`
@@ -211,12 +211,12 @@ Plans:
 - [ ] **110-03** (`110-03-PLAN.md`, `P110-03`) - `extensions/pi-claude-marketplace/persistence/config-io.ts` → `tests/persistence/config-io.test.ts`
 - [ ] **110-04** (`110-04-PLAN.md`, `P110-04`) - `extensions/pi-claude-marketplace/persistence/config-merge.ts` → `tests/persistence/config-merge.test.ts`
 - [ ] **110-05** (`110-05-PLAN.md`, `P110-05`) - `extensions/pi-claude-marketplace/persistence/config-write-back.ts` → `tests/persistence/config-write-back.test.ts`
-- [ ] **110-06** (`110-06-PLAN.md`, `P110-06`) - `extensions/pi-claude-marketplace/persistence/locations.ts` → `tests/persistence/locations.test.ts`
+- [x] **110-06** (`110-06-PLAN.md`, `P110-06`) - `extensions/pi-claude-marketplace/persistence/locations.ts` → `tests/persistence/locations.test.ts`
 - [ ] **110-07** (`110-07-PLAN.md`, `P110-07`) - `extensions/pi-claude-marketplace/persistence/migrate-config.ts` → `tests/persistence/migrate-config.test.ts`
 - [ ] **110-08** (`110-08-PLAN.md`, `P110-08`) - `extensions/pi-claude-marketplace/persistence/migrate.ts` → `tests/persistence/migrate.test.ts`
 - [ ] **110-09** (`110-09-PLAN.md`, `P110-09`) - `extensions/pi-claude-marketplace/persistence/state-io.ts` → `tests/persistence/state-io.test.ts`
 - [ ] **110-10** (`110-10-PLAN.md`, `P110-10`) - `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` → `tests/transaction/phase-ledger.test.ts`
-- [ ] **110-11** (`110-11-PLAN.md`, `P110-11`) - `extensions/pi-claude-marketplace/transaction/rollback.ts` → `tests/transaction/rollback.test.ts`
+- [x] **110-11** (`110-11-PLAN.md`, `P110-11`) - `extensions/pi-claude-marketplace/transaction/rollback.ts` → `tests/transaction/rollback.test.ts`
 - [ ] **110-12** (`110-12-PLAN.md`, `P110-12`) - `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` → `tests/transaction/with-state-guard.test.ts`
 
 ### Phase 111: Non-Hook Component Bridges
@@ -541,7 +541,7 @@ and commit still owns one pair.
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    | 19/19 | Complete    | 2026-08-29 |
-| 110. Persistence and Transaction         | 2/12 | In Progress|  |
+| 110. Persistence and Transaction         | 3/12 | In Progress|  |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -         |
