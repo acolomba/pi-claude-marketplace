@@ -270,6 +270,12 @@ Plans:
 - [ ] **111-30** (`111-30-PLAN.md`, `P111-30`) - `extensions/pi-claude-marketplace/bridges/skills/types.ts` → `tests/bridges/skills/types.test.ts`
 - [ ] **111-31** (`111-31-PLAN.md`, `P111-31`) - `extensions/pi-claude-marketplace/bridges/skills/unstage.ts` → `tests/bridges/skills/unstage.test.ts`
 
+**Cross-cutting constraints:**
+
+- Every runtime callback uses lowercase // arrange, blank line, // act, blank line, // assert. Use // act & assert only for one assert.throws or assert.rejects expression; data rows keep separate phases (D-06).
+- Production behavior and exports remain unchanged; no test-only export, reset hook, state reader, mode, private seam, or second production owner is introduced (D-08, D-09).
+- Keep all positive satisfies and targeted @ts-expect-error expressions at module scope. Add no runtime wrapper or phase comment (D-07).
+
 ### Phase 112: Hook Runtime
 
 **Goal**: Hook routing and execution keep their public event, process, timer, and lifecycle contracts under direct owner tests.
