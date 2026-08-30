@@ -11,10 +11,7 @@ import {
   rollbackMcpReplacement,
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
-import type {
-  McpReplacement,
-  PreparedMcpStaging,
-} from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
+import { resolvePluginMcpServers as peerResolvePluginMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
 import {
   abortPreparedMcp as peerAbortPreparedMcp,
   commitPreparedMcp as peerCommitPreparedMcp,
@@ -23,12 +20,16 @@ import {
   replacePreparedMcp as peerReplacePreparedMcp,
   rollbackMcpReplacement as peerRollbackMcpReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
-import { resolvePluginMcpServers as peerResolvePluginMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
+import { unstageMcpServers as peerUnstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
+
+import type {
+  McpReplacement,
+  PreparedMcpStaging,
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import type {
   McpReplacement as PeerMcpReplacement,
   PreparedMcpStaging as PeerPreparedMcpStaging,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
-import { unstageMcpServers as peerUnstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
 
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 type PreparedNoop = Extract<PreparedMcpStaging, { kind: "noop" }>;
