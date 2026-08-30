@@ -29,13 +29,22 @@ export function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
     return null;
   }
 
+  if (!Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
+    return null;
+  }
+
   const marker = (value as Record<string, unknown>)[CLAUDE_MARKETPLACE_MARKER_KEY];
   if (typeof marker !== "object" || marker === null || Array.isArray(marker)) {
     return null;
   }
 
   const obj = marker as Record<string, unknown>;
-  if (typeof obj.plugin !== "string" || typeof obj.marketplace !== "string") {
+  if (
+    !Object.hasOwn(obj, "plugin") ||
+    !Object.hasOwn(obj, "marketplace") ||
+    typeof obj.plugin !== "string" ||
+    typeof obj.marketplace !== "string"
+  ) {
     return null;
   }
 

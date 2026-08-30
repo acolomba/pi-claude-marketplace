@@ -1,134 +1,197 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "node:test";
 
 import { rewriteFrontmatterName } from "../../../extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts";
-import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-// SK-3: rewriteFrontmatterName.
+for (const { description, skillDocument, generatedName, expectedSkillDocument } of [
+  {
+    description: "replaces an existing scalar name and preserves every remaining byte",
+    skillDocument:
+      '---\nname: old-name\ndescription: "keep: punctuation"\nlicense: MIT\n---\n\n# Body\n\nBody text.\n',
+    generatedName: "new-name",
+    expectedSkillDocument:
+      '---\nname: new-name\ndescription: "keep: punctuation"\nlicense: MIT\n---\n\n# Body\n\nBody text.\n',
+  },
+  {
+    description: "inserts a missing name as the first frontmatter field",
+    skillDocument:
+      "---\ndescription: Skill without a name\nlicense: Apache-2.0\n---\n\nBody text.\n",
+    generatedName: "inserted-name",
+    expectedSkillDocument:
+      "---\nname: inserted-name\ndescription: Skill without a name\nlicense: Apache-2.0\n---\n\nBody text.\n",
+  },
+]) {
+  test(description, () => {
+    // arrange
+    const sourceSkillDocument = skillDocument;
+    const expectedRewrittenSkillDocument = expectedSkillDocument;
 
-test("SK-3 rewriteFrontmatterName replaces existing name field", () => {
-  const input = "---\nname: old-name\ndescription: foo\n---\n\nbody text";
-  const out = rewriteFrontmatterName(input, "new-name");
-  assert.match(out, /^---\nname: new-name\ndescription: foo\n---/);
-  assert.ok(out.includes("body text"));
-  assert.ok(!out.includes("old-name"));
+    // act
+    const rewrittenSkillDocument = rewriteFrontmatterName(sourceSkillDocument, generatedName);
+
+    // assert
+    assert.strictEqual(rewrittenSkillDocument, expectedRewrittenSkillDocument);
+  });
+}
+
+for (const { description, skillDocument, expectedSkillDocument } of [
+  {
+    description: "replaces a quoted scalar name",
+    skillDocument: '---\nname: "old name"\ndescription: Quoted scalar\n---\n\nQuoted body.\n',
+    expectedSkillDocument:
+      "---\nname: generated-name\ndescription: Quoted scalar\n---\n\nQuoted body.\n",
+  },
+  {
+    description: "removes the complete folded name node",
+    skillDocument:
+      "---\nname: >-\n  old\n  folded\n\ndescription: Folded scalar\n---\n\nFolded body.\n",
+    expectedSkillDocument:
+      "---\nname: generated-name\n\ndescription: Folded scalar\n---\n\nFolded body.\n",
+  },
+  {
+    description: "removes the complete literal name node",
+    skillDocument: "---\nname: |+\n  old\n  literal\nlicense: MIT\n---\n\nLiteral body.\n",
+    expectedSkillDocument: "---\nname: generated-name\nlicense: MIT\n---\n\nLiteral body.\n",
+  },
+  {
+    description: "removes every multiline plain-name continuation",
+    skillDocument:
+      "---\nname: old\n  plain\n  name\ndescription: Plain scalar\n---\n\nPlain body.\n",
+    expectedSkillDocument:
+      "---\nname: generated-name\ndescription: Plain scalar\n---\n\nPlain body.\n",
+  },
+  {
+    description: "removes every multiline double-quoted name continuation",
+    skillDocument:
+      '---\nname: "old\n  double quoted\n  name"\ndescription: Double quoted scalar\n---\n\nDouble quoted body.\n',
+    expectedSkillDocument:
+      "---\nname: generated-name\ndescription: Double quoted scalar\n---\n\nDouble quoted body.\n",
+  },
+  {
+    description: "removes every multiline single-quoted name continuation",
+    skillDocument:
+      "---\nname: 'old\n  single quoted\n  name'\ndescription: Single quoted scalar\n---\n\nSingle quoted body.\n",
+    expectedSkillDocument:
+      "---\nname: generated-name\ndescription: Single quoted scalar\n---\n\nSingle quoted body.\n",
+  },
+  {
+    description: "preserves untouched CRLF bytes around a replaced name node",
+    skillDocument:
+      "---\r\nname: old-name\r\ndescription: CRLF document\r\n---\r\n\r\nCRLF body.\r\n",
+    expectedSkillDocument:
+      "---\r\nname: generated-name\ndescription: CRLF document\r\n---\r\n\r\nCRLF body.\r\n",
+  },
+  {
+    description: "preserves a document without a terminal newline",
+    skillDocument: "---\nname: old-name\ndescription: No terminal newline\n---\n\nBody",
+    expectedSkillDocument:
+      "---\nname: generated-name\ndescription: No terminal newline\n---\n\nBody",
+  },
+  {
+    description: "prepends a canonical block when frontmatter is missing",
+    skillDocument: "# Skill\n\nBody without frontmatter.\n",
+    expectedSkillDocument:
+      "---\nname: generated-name\n---\n\n# Skill\n\nBody without frontmatter.\n",
+  },
+  {
+    description: "prepends a canonical block when frontmatter has no closing delimiter",
+    skillDocument: "---\nname: stuck-name\ndescription: Missing close\n\nUnclosed body.\n",
+    expectedSkillDocument:
+      "---\nname: generated-name\n---\n\n---\nname: stuck-name\ndescription: Missing close\n\nUnclosed body.\n",
+  },
+  {
+    description: "rewrites through a parser-accepted noncanonical closing delimiter",
+    skillDocument: "---\nname: old-name\n---x\nBody after exotic close.\n",
+    expectedSkillDocument: "---\nname: generated-name\n---x\nBody after exotic close.\n",
+  },
+]) {
+  test(description, () => {
+    // arrange
+    const sourceSkillDocument = skillDocument;
+    const expectedRewrittenSkillDocument = expectedSkillDocument;
+
+    // act
+    const rewrittenSkillDocument = rewriteFrontmatterName(sourceSkillDocument, "generated-name");
+
+    // assert
+    assert.strictEqual(rewrittenSkillDocument, expectedRewrittenSkillDocument);
+  });
+}
+
+test("treats a sparse frontmatter line as a missing name field", (t) => {
+  // arrange
+  const sourceSkillDocument = "---\ndescription: sparse\n---\nBody.";
+  const expectedRewrittenSkillDocument = "---\nname: generated-name\n\n---\nBody.";
+  t.mock.method(String.prototype, "split", function (this: string, separator?: string | RegExp) {
+    if (this === sourceSkillDocument && separator === "\n") {
+      const lines: string[] = [];
+      lines.length = 4;
+      lines[0] = "---";
+      lines[2] = "---";
+      lines[3] = "Body.";
+      return lines;
+    }
+
+    return [this];
+  });
+
+  // act
+  const rewrittenSkillDocument = rewriteFrontmatterName(sourceSkillDocument, "generated-name");
+
+  // assert
+  assert.strictEqual(rewrittenSkillDocument, expectedRewrittenSkillDocument);
 });
 
-test("SK-3 rewriteFrontmatterName preserves description, license, and other fields", () => {
-  const input =
-    "---\nname: old-name\ndescription: A skill\nlicense: MIT\nversion: 1.0.0\n---\n\nbody";
-  const out = rewriteFrontmatterName(input, "renamed");
-  assert.ok(out.includes("description: A skill"));
-  assert.ok(out.includes("license: MIT"));
-  assert.ok(out.includes("version: 1.0.0"));
-  assert.ok(out.includes("name: renamed"));
-});
+for (const { description, generatedName, expectedError } of [
+  {
+    description: "rejects a numeric name that the parser changes from a string",
+    generatedName: "42",
+    expectedError: {
+      constructorName: "Error",
+      name: "Error",
+      message: 'Skill name rewrite produced 42, expected the generated name "42".',
+    },
+  },
+  {
+    description: "rejects replacement text that injects a sibling field",
+    generatedName: "safe-name\nlicense: injected",
+    expectedError: {
+      constructorName: "Error",
+      name: "Error",
+      message:
+        'Skill name rewrite produced "safe-name", expected the generated name "safe-name\\nlicense: injected".',
+    },
+  },
+  {
+    description: "reports the parser failure for malformed replacement text",
+    generatedName: "[",
+    expectedError: {
+      constructorName: "YAMLParseError",
+      name: "YAMLParseError",
+      message:
+        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\nname: [\ndescription: kept\n^\n",
+    },
+  },
+]) {
+  test(description, () => {
+    // arrange
+    const sourceSkillDocument = "---\nname: old-name\ndescription: kept\n---\n\nBody text.\n";
 
-test("SK-3 rewriteFrontmatterName adds frontmatter to file with no leading ---", () => {
-  const input = "# Skill Document\n\nNo frontmatter here.";
-  const out = rewriteFrontmatterName(input, "added-name");
-  assert.match(out, /^---\nname: added-name\n---\n\n/);
-  assert.ok(out.includes("# Skill Document"));
-});
+    // act
+    const rewriteSkillDocument = () => rewriteFrontmatterName(sourceSkillDocument, generatedName);
 
-test("SK-3 rewriteFrontmatterName adds name field when frontmatter exists but lacks name", () => {
-  const input = "---\ndescription: no name field\nlicense: MIT\n---\n\nbody";
-  const out = rewriteFrontmatterName(input, "freshly-named");
-  assert.ok(out.includes("name: freshly-named"));
-  assert.ok(out.includes("description: no name field"));
-  assert.ok(out.includes("license: MIT"));
-  assert.ok(out.includes("body"));
-});
-
-test("SK-3 rewriteFrontmatterName preserves body text after frontmatter unchanged", () => {
-  const body = "\n\n# Heading\n\nParagraph 1\n\n```\ncode block\n```\n\nMore text.\n";
-  const input = "---\nname: original\n---" + body;
-  const out = rewriteFrontmatterName(input, "renamed");
-  assert.ok(out.endsWith(body), "body text should follow frontmatter unchanged");
-  assert.ok(out.includes("name: renamed"));
-});
-
-test("SK-3 rewriteFrontmatterName handles malformed frontmatter (--- with no closing ---)", () => {
-  const input = "---\nname: stuck\nno closing fence here\nstill no closing";
-  const out = rewriteFrontmatterName(input, "rescued");
-  // Behavior: treat as malformed and prepend a fresh frontmatter block.
-  assert.match(out, /^---\nname: rescued\n---\n\n/);
-});
-
-test("SKILL-03 folded multi-line source name is rewritten to the generated name (no orphaned continuation lines)", () => {
-  // A `>` folded `name:` scalar spanning several source lines. A blind
-  // `^name:` line replace would leave the continuation lines orphaned and
-  // corrupt the parsed name (e.g. `renamed folded name`).
-  const input = "---\nname: >\n  folded\n  name\ndescription: kept\nversion: 9\n---\n\nbody text";
-  const out = rewriteFrontmatterName(input, "acme-folded");
-
-  const { frontmatter } = parseFrontmatter<{
-    name: string;
-    description: string;
-    version: number;
-  }>(out);
-  // The re-parsed name is EXACTLY the generated name -- no `acme-folded folded name`.
-  assert.equal(frontmatter.name, "acme-folded");
-  // Sibling keys survive the full-node-span replacement.
-  assert.equal(frontmatter.description, "kept");
-  assert.equal(frontmatter.version, 9);
-  // The orphaned continuation prose is gone.
-  assert.ok(!out.includes("  folded"), "folded continuation line must be removed");
-  assert.ok(out.includes("body text"));
-});
-
-test("WR-01: multi-line PLAIN source name is rewritten to the generated name (no orphaned continuation lines)", () => {
-  // A valid multi-line PLAIN `name:` scalar (indented continuation). The inline
-  // value does not start with `>`/`|`, so a block-scalar-only span detector
-  // would orphan `  continued`, folding it into the parsed name and tripping the
-  // SKILL-03 verify -- hard-failing an otherwise-valid skill install.
-  const input = "---\nname: my\n  continued\ndescription: kept\nversion: 7\n---\n\nbody text";
-  const out = rewriteFrontmatterName(input, "acme-plain");
-
-  const { frontmatter } = parseFrontmatter<{
-    name: string;
-    description: string;
-    version: number;
-  }>(out);
-  assert.equal(frontmatter.name, "acme-plain");
-  assert.equal(frontmatter.description, "kept");
-  assert.equal(frontmatter.version, 7);
-  assert.ok(!out.includes("  continued"), "plain continuation line must be removed");
-  assert.ok(out.includes("body text"));
-});
-
-test("WR-01: multi-line DOUBLE-QUOTED source name is rewritten to the generated name", () => {
-  const input = '---\nname: "my\n  quoted name"\ndescription: kept\n---\n\nbody text';
-  const out = rewriteFrontmatterName(input, "acme-quoted");
-
-  const { frontmatter } = parseFrontmatter<{ name: string; description: string }>(out);
-  assert.equal(frontmatter.name, "acme-quoted");
-  assert.equal(frontmatter.description, "kept");
-  assert.ok(!out.includes("  quoted name"), "quoted continuation line must be removed");
-});
-
-test("SKILL-03 absent source name is inserted as the generated name", () => {
-  const input = "---\ndescription: only a description\nlicense: MIT\n---\n\nbody";
-  const out = rewriteFrontmatterName(input, "acme-added");
-
-  const { frontmatter } = parseFrontmatter<{
-    name: string;
-    description: string;
-    license: string;
-  }>(out);
-  assert.equal(frontmatter.name, "acme-added");
-  assert.equal(frontmatter.description, "only a description");
-  assert.equal(frontmatter.license, "MIT");
-});
-
-test("SK-3 rewriteFrontmatterName tolerates an exotic close delimiter (`---x`), rewriting the name across the full block", () => {
-  // The opening `---` is closed by a `\n---x` prefix (which Pi's parser accepts as
-  // the close) rather than a bare `---` line -- this exercises the block-end scan
-  // falling through to EOF instead of matching a `trim() === "---"` line.
-  const input = "---\nname: old\n---x\nbody text";
-  const out = rewriteFrontmatterName(input, "acme-gen");
-  const { frontmatter } = parseFrontmatter<{ name: string }>(out);
-  assert.equal(frontmatter.name, "acme-gen");
-  assert.ok(out.includes("body text"));
-  assert.ok(!out.includes("name: old"));
-});
+    // assert
+    assert.throws(rewriteSkillDocument, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          constructorName: error.constructor.name,
+          name: error.name,
+          message: error.message,
+        },
+        expectedError,
+      );
+      return true;
+    });
+  });
+}
