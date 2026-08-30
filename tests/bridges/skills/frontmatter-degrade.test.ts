@@ -104,6 +104,72 @@ describe("firstBodyParagraph", () => {
       assert.strictEqual(bodyParagraph, expectedBodyParagraph);
     });
   }
+
+  test("treats sparse split entries inside a fence as blank lines", (t) => {
+    // arrange
+    const body = "sparse fenced body";
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (String(this) === body) {
+        const lines = ["```", "temporary", "```", "Body prose."];
+        delete lines[1];
+        return lines;
+      }
+      return [String(this)];
+    });
+
+    // act
+    const bodyParagraph = firstBodyParagraph(body);
+
+    // assert
+    assert.strictEqual(bodyParagraph, "Body prose.");
+  });
+
+  test("treats a sparse leading split entry as a blank line", (t) => {
+    // arrange
+    const body = "sparse leading body";
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (String(this) === body) {
+        const lines = ["temporary", "Body prose."];
+        delete lines[0];
+        return lines;
+      }
+      return [String(this)];
+    });
+
+    // act
+    const bodyParagraph = firstBodyParagraph(body);
+
+    // assert
+    assert.strictEqual(bodyParagraph, "Body prose.");
+  });
+
+  test("treats a disappearing split entry as an empty paragraph line", (t) => {
+    // arrange
+    const body = "volatile split body";
+    let reads = 0;
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (String(this) === body) {
+        const lines = ["Body prose.", "temporary"];
+        delete lines[1];
+        return new Proxy(lines, {
+          get(target, property, receiver) {
+            if (property === "0") {
+              reads += 1;
+              return reads < 3 ? "Body prose." : undefined;
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        });
+      }
+      return [String(this)];
+    });
+
+    // act
+    const bodyParagraph = firstBodyParagraph(body);
+
+    // assert
+    assert.strictEqual(bodyParagraph, "");
+  });
 });
 
 describe("foldWhenToUse", () => {
@@ -240,6 +306,51 @@ describe("setDescriptionScalar", () => {
     assert.strictEqual(skillContent, expectedContent);
   });
 
+  for (const { description, sourceContent, expectedContent } of [
+    {
+      description: "an inline plain scalar",
+      sourceContent:
+        "---\nname: inline\ndescription: old inline value\nversion: 9.9.9\n---\n\nBody.\n",
+      expectedContent:
+        '---\nname: inline\ndescription: "new value"\nversion: 9.9.9\n---\n\nBody.\n',
+    },
+    {
+      description: "a literal block scalar",
+      sourceContent:
+        "---\nname: literal\ndescription: |\n  first source line\n  second source line\nversion: 2\n---\nBody.\n",
+      expectedContent: '---\nname: literal\ndescription: "new value"\nversion: 2\n---\nBody.\n',
+    },
+    {
+      description: "a multiline plain scalar with a blank continuation",
+      sourceContent:
+        "---\ndescription: old value\n\n  wrapped continuation\nname: plain\n---\nBody.\n",
+      expectedContent: '---\ndescription: "new value"\nname: plain\n---\nBody.\n',
+    },
+    {
+      description: "a multiline double-quoted scalar",
+      sourceContent:
+        '---\nname: quoted\ndescription: "first source line\n  second source line"\nversion: 3\n---\nBody.\n',
+      expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 3\n---\nBody.\n',
+    },
+    {
+      description: "a multiline single-quoted scalar",
+      sourceContent:
+        "---\nname: quoted\ndescription: 'first source line\n  second source line'\nversion: 4\n---\nBody.\n",
+      expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 4\n---\nBody.\n',
+    },
+  ]) {
+    test(`replaces ${description} across its complete node span`, () => {
+      // arrange
+      const expectedSkillContent = expectedContent;
+
+      // act
+      const skillContent = setDescriptionScalar(sourceContent, "new value");
+
+      // assert
+      assert.strictEqual(skillContent, expectedSkillContent);
+    });
+  }
+
   test("collapses newlines and escapes quotes and backslashes in hostile input", () => {
     // arrange
     const sourceContent = "---\nname: safe\ndescription: placeholder\nversion: 1\n---\n\nBody.\n";
@@ -269,6 +380,26 @@ describe("setDescriptionScalar", () => {
     // arrange
     const sourceContent = "---\ndescription: old value\nname: acme-skill";
     const expectedContent = '---\ndescription: "new value"\nname: acme-skill';
+
+    // act
+    const skillContent = setDescriptionScalar(sourceContent, "new value");
+
+    // assert
+    assert.strictEqual(skillContent, expectedContent);
+  });
+
+  test("treats a sparse frontmatter split entry as an absent description", (t) => {
+    // arrange
+    const sourceContent = "sparse frontmatter";
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (String(this) === sourceContent) {
+        const lines = ["---", "temporary", "---"];
+        delete lines[1];
+        return lines;
+      }
+      return [String(this)];
+    });
+    const expectedContent = '---\n\ndescription: "new value"\n---';
 
     // act
     const skillContent = setDescriptionScalar(sourceContent, "new value");
