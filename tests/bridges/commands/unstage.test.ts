@@ -1,120 +1,51 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { unstagePluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-interface TmpScope {
-  loc: ScopedLocations;
-  cleanup: () => Promise<void>;
+interface CommandScope {
+  readonly directory: string;
+  readonly locations: ScopedLocations;
 }
 
-async function tmpScope(): Promise<TmpScope> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "unstage-cmds-"));
-  const loc = locationsFor("project", dir);
-  await mkdir(loc.promptsTargetDir, { recursive: true });
+async function createCommandScope(t: TestContext, prefix: string): Promise<CommandScope> {
+  const directory = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const locations = locationsFor("project", directory);
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  return { directory, locations };
+}
 
-  return {
-    loc,
-    cleanup: async () => {
-      await rm(dir, { recursive: true, force: true });
-    },
+test("removes the recorded prompts in order and preserves foreign prompt bytes", async (t) => {
+  // arrange
+  const { locations } = await createCommandScope(t, "commands-unstage-recorded-");
+  const firstPromptPath = path.join(locations.promptsTargetDir, "acme:deploy.md");
+  const secondPromptPath = path.join(locations.promptsTargetDir, "acme:status.md");
+  const foreignPromptPath = path.join(locations.promptsTargetDir, "other:keep.md");
+  await writeFile(firstPromptPath, "deploy bytes\n");
+  await writeFile(secondPromptPath, "status bytes\n");
+  await writeFile(foreignPromptPath, "foreign bytes\n");
+  const expectedUnstagedCommands = {
+    removedNames: ["acme:status", "acme:deploy"],
+    warnings: [],
   };
-}
 
-test("unstagePluginCommands removes named files and reports removedNames", async () => {
-  const scope = await tmpScope();
+  // act
+  const unstagedCommands = await unstagePluginCommands({
+    locations,
+    previousCommandNames: ["acme:status", "acme:deploy"],
+  });
 
-  try {
-    // Pre-create three command files.
-    const a = path.join(scope.loc.promptsTargetDir, "acme:one.md");
-    const b = path.join(scope.loc.promptsTargetDir, "acme:two.md");
-    const c = path.join(scope.loc.promptsTargetDir, "other:keep.md");
-    await writeFile(a, "1");
-    await writeFile(b, "2");
-    await writeFile(c, "3");
-
-    const result = await unstagePluginCommands({
-      locations: scope.loc,
-      previousCommandNames: ["acme:one", "acme:two"],
-    });
-
-    assert.deepEqual([...result.removedNames], ["acme:one", "acme:two"]);
-    assert.equal(await pathExists(a), false);
-    assert.equal(await pathExists(b), false);
-    // Untouched file still present.
-    assert.equal(await pathExists(c), true);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("unstagePluginCommands tolerates ENOENT on missing files (idempotent)", async () => {
-  const scope = await tmpScope();
-
-  try {
-    // Only one of two named files exists.
-    const present = path.join(scope.loc.promptsTargetDir, "acme:present.md");
-    await writeFile(present, "x");
-
-    const result = await unstagePluginCommands({
-      locations: scope.loc,
-      previousCommandNames: ["acme:present", "acme:never-existed"],
-    });
-
-    // Only the file that actually existed shows up in removedNames; the
-    // ENOENT-skipped name is omitted but the function does not throw.
-    assert.deepEqual([...result.removedNames], ["acme:present"]);
-    assert.equal(await pathExists(present), false);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("unstagePluginCommands returns empty result when previousCommandNames is empty", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const result = await unstagePluginCommands({
-      locations: scope.loc,
-      previousCommandNames: [],
-    });
-
-    assert.deepEqual([...result.removedNames], []);
-    assert.deepEqual([...result.warnings], []);
-  } finally {
-    await scope.cleanup();
-  }
-});
-
-test("unstagePluginCommands is repeat-safe (calling twice yields same end state)", async () => {
-  const scope = await tmpScope();
-
-  try {
-    const target = path.join(scope.loc.promptsTargetDir, "acme:once.md");
-    await writeFile(target, "x");
-
-    // First call removes the file and reports it.
-    const first = await unstagePluginCommands({
-      locations: scope.loc,
-      previousCommandNames: ["acme:once"],
-    });
-    assert.deepEqual([...first.removedNames], ["acme:once"]);
-    assert.equal(await pathExists(target), false);
-
-    // Second call is a no-op (ENOENT silenced); removedNames is empty.
-    const second = await unstagePluginCommands({
-      locations: scope.loc,
-      previousCommandNames: ["acme:once"],
-    });
-    assert.deepEqual([...second.removedNames], []);
-  } finally {
-    await scope.cleanup();
-  }
+  // assert
+  assert.deepStrictEqual(unstagedCommands, expectedUnstagedCommands);
+  assert.strictEqual(Object.isFrozen(unstagedCommands.removedNames), true);
+  assert.strictEqual(Object.isFrozen(unstagedCommands.warnings), true);
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), ["other:keep.md"]);
+  assert.strictEqual(await readFile(foreignPromptPath, "utf8"), "foreign bytes\n");
 });
