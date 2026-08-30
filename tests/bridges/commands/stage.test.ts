@@ -1040,12 +1040,31 @@ test("reports manual recovery when a failed replacement cannot remove its new pr
   );
 });
 
-test("rejects unknown replacement handles through both public cleanup operations", async () => {
+test("rejects unknown replacement handles through both public cleanup operations", async (t) => {
   // arrange
+  const locations = await createProjectLocations(t, "commands-replace-unknown-");
+  const pluginRoot = await createPluginRoot(t, "commands-unknown-source-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(path.join(commandsRoot, "current.md"), "Current prompt.\n");
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+  });
+  const replacement = await replacePreparedCommands(prepared);
+  assert.strictEqual(replacement.kind, "replaced");
+  t.after(() => finalizeCommandsReplacement(replacement));
+  const { locations: replacementLocations, ...cloneablePrepared } = replacement.prepared;
+  const clonedReplacement = structuredClone({ ...replacement, prepared: cloneablePrepared });
   const unknownReplacement = {
-    kind: "replaced",
-    prepared: undefined,
-  } as unknown as Parameters<typeof rollbackCommandsReplacement>[0];
+    ...clonedReplacement,
+    prepared: { ...clonedReplacement.prepared, locations: replacementLocations },
+  } satisfies typeof replacement;
 
   // act
   const rollbackError = await rollbackCommandsReplacement(unknownReplacement).then(
@@ -1060,12 +1079,12 @@ test("rejects unknown replacement handles through both public cleanup operations
   // assert
   assert.ok(rollbackError instanceof Error);
   assert.deepStrictEqual(
-    { name: rollbackError.name, message: rollbackError.message },
-    { name: "Error", message: "Unknown commands replacement handle." },
+    { name: rollbackError.name, message: rollbackError.message, cause: rollbackError.cause },
+    { name: "Error", message: "Unknown commands replacement handle.", cause: undefined },
   );
   assert.ok(finalizeError instanceof Error);
   assert.deepStrictEqual(
-    { name: finalizeError.name, message: finalizeError.message },
-    { name: "Error", message: "Unknown commands replacement handle." },
+    { name: finalizeError.name, message: finalizeError.message, cause: finalizeError.cause },
+    { name: "Error", message: "Unknown commands replacement handle.", cause: undefined },
   );
 });

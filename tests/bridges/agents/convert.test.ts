@@ -502,7 +502,12 @@ Review files.
       description: "Reviews files",
       get tools(): string {
         toolsReadCount += 1;
-        return toolsReadCount === 1 ? "WebFetch" : (undefined as unknown as string);
+        if (toolsReadCount === 1) {
+          return "WebFetch";
+        }
+
+        // @ts-expect-error Intentionally exercise an invalid runtime getter result.
+        return undefined;
       },
     };
     const convertMalformedAgent = () =>

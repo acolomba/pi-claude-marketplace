@@ -896,12 +896,27 @@ describe("finalizeMcpReplacement", () => {
     assert.strictEqual(Object.isFrozen(replacementLeaks), true);
   });
 
-  test("rejects an unknown replacement handle", () => {
+  test("rejects an unknown replacement handle", async (t) => {
     // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-finalize-unknown-");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { command: "node" } },
+    });
+    const replacement = await replacePreparedMcp(prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    t.after(() => finalizeMcpReplacement(replacement));
+    const { locations: replacementLocations, ...cloneablePrepared } = replacement.prepared;
+    const clonedReplacement = structuredClone({ ...replacement, prepared: cloneablePrepared });
     const unknownReplacement = {
-      kind: "replaced",
-      prepared: {},
-    } as unknown as Parameters<typeof finalizeMcpReplacement>[0];
+      ...clonedReplacement,
+      prepared: { ...clonedReplacement.prepared, locations: replacementLocations },
+    } satisfies typeof replacement;
 
     // act & assert
     assert.throws(
