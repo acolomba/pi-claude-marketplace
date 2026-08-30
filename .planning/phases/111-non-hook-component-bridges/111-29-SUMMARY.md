@@ -15,9 +15,9 @@ provides:
 affects: [111-31, phase-111-verification, security-review, skills-bridge]
 
 actuals:
-  tokens: 30516
+  tokens: 30818
   tasks: 2
-  commits: 3
+  commits: 5
 
 tech-stack:
   added: []
@@ -29,6 +29,7 @@ tech-stack:
 key-files:
   created: []
   modified:
+    - extensions/pi-claude-marketplace/bridges/skills/stage.ts
     - tests/bridges/skills/stage.test.ts
     - tests/bridges/integration.test.ts (deleted)
     - tests/bridges/_fixtures/empty-mcp/.claude-plugin/plugin.json (deleted)
@@ -40,16 +41,16 @@ key-files:
     - tests/bridges/_fixtures/test-plugin/commands/status.md (deleted)
 
 key-decisions:
-  - "Kept skills/stage.ts byte-identical and added no test-only export or private seam."
+  - "Removed only the two private extractBodyAfterFrontmatter fallback arms proven unreachable through public exports and authorized by the user."
   - "Localized all meaningful trees, inputs, and expected bytes inside their owning cases."
-  - "Recorded the unreachable private fallback coverage ceiling as a blocker instead of claiming 100 percent coverage."
+  - "Preserved public behavior and exports without adding a test-only export, private seam, or coverage pragma."
   - "Deleted only the seven exact audited fixtures and retained all four skill fixtures assigned to P111-31."
 
 patterns-established:
   - "Public lifecycle failures are injected at Node filesystem boundaries and asserted through observable state."
   - "Runtime test cases use lowercase arrange, act, and assert phases; act & assert is reserved for one rejection expression."
 
-requirements-completed: []
+requirements-completed: [MOD-04]
 
 coverage:
   - id: D1
@@ -75,13 +76,13 @@ coverage:
         status: pass
     human_judgment: false
   - id: D3
-    description: "The direct owner reaches 100 percent functions, lines, and branches without a production change or private seam."
+    description: "The direct owner reaches 100 percent functions, lines, and branches after the authorized unreachable-code cleanup and without a private seam."
     requirement: MOD-04
     verification:
       - kind: other
         ref: "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts"
-        status: blocked
-        result: "100% functions; 99.25% lines (528/532); 97.26% branches (71/73); uncovered lines 83-84 and 88-89"
+        status: pass
+        result: "100% functions (11/11); 100% lines (523/523); 100% branches (71/71)"
     human_judgment: false
   - id: D4
     description: "The ordered fixture handoff removes only the assigned integration and non-skill files."
@@ -95,28 +96,29 @@ coverage:
         status: pass
     human_judgment: false
 
-duration: 45min
+duration: 50min
 completed: 2026-08-30
-status: blocked
+status: complete
 ---
 
 # Phase 111 Plan 29: Skills stage owner summary
 
-**The skills stage owner now proves every reachable public lifecycle path and completes the audited fixture handoff, but the plan remains blocked by two private fallback branches that public inputs cannot execute.**
+**The skills stage owner proves the complete public lifecycle at 100-percent direct coverage, with audited fixture cleanup and only the user-authorized removal of unreachable private code.**
 
 ## Performance
 
-- **Duration:** 45 min
-- **Completed:** 2026-08-30T20:35:00Z
+- **Duration:** 50 min
+- **Completed:** 2026-08-30T20:40:00Z
 - **Tasks executed:** 2
-- **Task commits:** 2
-- **Implementation files modified or deleted:** 9
+- **Task and resolution commits:** 3
+- **Implementation files modified or deleted:** 10
 
 ## Accomplishments
 
 - Replaced the fixture-driven owner with 29 case-local tests covering prepare, commit, abort, replacement, rollback, and finalization behavior.
 - Proved recursive resource bytes, exact authored skill documents, name and variable substitutions, description synthesis and caps, malformed degradation, collisions, symlink refusal, foreign-content refusal, rollback restoration, idempotence, and cleanup leak rows.
-- Passed the focused owner, retained materialization gate, TypeScript compiler, ESLint, formatting, production hash, and explicit-status fixture audits.
+- Passed the focused owner, retained materialization gate, TypeScript compiler, ESLint, formatting, explicit-status fixture audits, and 100-percent direct coverage.
+- Removed two private fallback arms that were proven unreachable through public exports after the user explicitly authorized that behavior-preserving cleanup.
 - Deleted `integration.test.ts` and exactly seven assigned non-skill fixtures after their exact consumer scans returned no-match status 1.
 - Retained the four skill fixture files assigned to dependent Plan 111-31.
 
@@ -124,9 +126,11 @@ status: blocked
 
 1. **Task 1: Establish the canonical skills/stage owner** - `c1f7b922` (`test`)
 2. **Task 2: Close edge and direct-coverage evidence** - `a7629c94` (`test`)
+3. **Authorized resolution: Remove unreachable private fallbacks** - `e67aae01` (`refactor`)
 
 ## Files created or modified
 
+- `extensions/pi-claude-marketplace/bridges/skills/stage.ts` - Removes only the no-opening and no-closing fallback arms that cannot be reached from the private helper's public call path.
 - `tests/bridges/skills/stage.test.ts` - Owns the complete reachable public skills staging lifecycle.
 - `tests/bridges/integration.test.ts` - Deleted after Plans 111-07, 111-12, and 111-20 supplied the other direct owners.
 - `tests/bridges/_fixtures/empty-mcp/.claude-plugin/plugin.json` - Deleted after its exact-path consumer scan returned status 1.
@@ -139,27 +143,28 @@ status: blocked
 
 ## Decisions made
 
-- Preserved `extensions/pi-claude-marketplace/bridges/skills/stage.ts` at SHA-256 `46310a827c8d38cb9ad1b8fe575669113b84c80273f099e873a3f805d7ad744f`.
+- Changed `extensions/pi-claude-marketplace/bridges/skills/stage.ts` only by removing the two authorized unreachable fallback arms; its final SHA-256 is `d82c4fbb5d7a08936872316d20063567c9da79ac9b571ca3e48c049570ce1c4e`.
 - Used current-test-context filesystem substitutions to exercise copy, inspect, rename, removal, rollback, and cleanup failures through public exports.
 - Kept all scenario trees and complete expected outputs inside their owning cases; the shared helper only allocates fresh paths.
-- Did not add a test-only export, reset hook, state reader, private seam, or second owner to force the remaining private branches.
+- Did not add a test-only export, reset hook, state reader, private seam, coverage pragma, or second owner.
 
 ## Deviations from plan
 
-### Unresolved acceptance conflict
+### User-authorized changes
 
-**1. [Blocking] The public direct owner cannot execute two private defensive fallbacks**
+**1. [User-authorized] Removed two proven-unreachable private fallback arms**
 
 - **Found during:** Task 2 direct-coverage verification.
-- **Issue:** Direct coverage reports 71/73 branches and 528/532 lines. The only uncovered statements are lines 83-84 and 88-89 in private `extractBodyAfterFrontmatter()`.
+- **Issue:** The original direct coverage reported 71/73 branches and 528/532 lines. The only uncovered statements were the no-opening and no-closing fallbacks in private `extractBodyAfterFrontmatter()`.
 - **Reachability evidence:** The helper is called only after `parseFrontmatter(content)` throws. The no-opening-delimiter and missing-closing-delimiter inputs guarded by those branches return normally from the public parser, so they cannot enter the catch arm that calls this helper. The production source also documents that a closed frontmatter block is present on the call path by construction.
-- **Constraint:** The plan requires production to remain byte-for-byte unchanged and forbids test-only exports, modes, reset hooks, state readers, and private seams.
-- **Result:** Public behavior, functions, and every reachable branch are covered, but the automated coverage command exits 1 at 99.25% lines and 97.26% branches.
-- **Resolution required:** A later plan-level decision must either remove the unreachable defensive branches from production or explicitly revise the 100-percent direct-coverage requirement. This plan did neither.
-- **Files modified:** None for this deviation; production remains unchanged.
+- **Authorization:** The user explicitly authorized removing only those two arms while preserving public behavior and exports and forbidding a seam or coverage pragma.
+- **Fix:** Removed the two impossible guards and updated only the conflicting plan language. Existing public-path regression cases required no adjustment.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/skills/stage.ts`, `.planning/phases/111-non-hook-component-bridges/111-29-PLAN.md`
+- **Verification:** Focused tests, retained integration gate, typecheck, ESLint, formatting, exact fixture scans, and direct coverage all pass. Direct coverage is 71/71 branches, 11/11 functions, and 523/523 lines.
+- **Committed in:** `e67aae01`
 
-**Total deviations:** 1 unresolved blocking acceptance conflict.
-**Impact on plan:** MOD-04 is not marked complete by this summary because the exact 100-percent line and branch acceptance criterion remains unmet.
+**Total deviations:** 1 resolved, user-authorized production cleanup.
+**Impact on plan:** Public behavior and exports are unchanged; the impossible private branches are gone, and MOD-04's exact direct-coverage criterion now passes.
 
 ## Verification
 
@@ -167,10 +172,11 @@ status: blocked
 - `node --test tests/bridges/integration-materialization-gate.test.ts` - passed.
 - `node --test tests/bridges/integration-materialization-gate.test.ts tests/bridges/skills/stage.test.ts` - passed, 2/2 files.
 - `npm run typecheck` - passed.
-- `npx eslint tests/bridges/skills/stage.test.ts` - passed.
-- `npx prettier --write tests/bridges/skills/stage.test.ts` - unchanged after formatting.
+- `npx eslint extensions/pi-claude-marketplace/bridges/skills/stage.ts tests/bridges/skills/stage.test.ts` - passed.
+- `npx prettier --check extensions/pi-claude-marketplace/bridges/skills/stage.ts tests/bridges/skills/stage.test.ts` - passed.
+- `npx prettier --check .planning/phases/111-non-hook-component-bridges/111-29-PLAN.md` - passed.
 - Task 2 exact-path and fixture-root audit - passed; every required no-match returned status 1.
-- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts` - blocked only by lines 83-84 and 88-89; functions 100%, lines 99.25%, branches 97.26%.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts` - passed at 71/71 branches, 11/11 functions, and 523/523 lines.
 
 ## Known stubs
 
@@ -186,11 +192,11 @@ None.
 
 ## Next phase readiness
 
-The fixture handoff is ready for Plan 111-31: the four assigned skill fixture files remain present and have no Phase 111 source consumer. Phase-level completion is blocked only by the direct-coverage requirement described above.
+Plan 111-29 is complete. The fixture handoff is ready for Plan 111-31: the four assigned skill fixture files remain present and have no Phase 111 source consumer.
 
 ## Self-check: PASSED
 
-The summary and owner test exist; both task commits are present; all eight intentional deletions are absent; all four P111-31 handoff fixtures remain; and the production source matches its recorded SHA-256. The blocked coverage result is recorded without claiming plan completion.
+The summary, production source, and owner test exist; both task commits and the authorized resolution commit are present; all eight intentional deletions are absent; all four P111-31 handoff fixtures remain; the production source matches its recorded final SHA-256; and direct coverage passes at 100 percent for functions, lines, and branches.
 
 ---
 
