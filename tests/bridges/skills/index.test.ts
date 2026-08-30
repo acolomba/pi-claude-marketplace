@@ -22,6 +22,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { unstagePluginSkills as definingUnstagePluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 
+import type * as SkillsBarrel from "../../../extensions/pi-claude-marketplace/bridges/skills/index.ts";
 import type {
   PreparedSkillsStaging as BarrelPreparedSkillsStaging,
   SkillsReplacement as BarrelSkillsReplacement,
@@ -32,9 +33,56 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
+type PreparedSkillsNoop = Extract<BarrelPreparedSkillsStaging, { kind: "noop" }>;
+type PreparedSkillsStaged = Extract<BarrelPreparedSkillsStaging, { kind: "staged" }>;
+type SkillsReplacementNoop = Extract<BarrelSkillsReplacement, { kind: "noop" }>;
+type SkillsReplacementReplaced = Extract<BarrelSkillsReplacement, { kind: "replaced" }>;
+type SkillsRuntimeExport =
+  keyof typeof import("../../../extensions/pi-claude-marketplace/bridges/skills/index.ts");
 
 void (true satisfies Same<BarrelPreparedSkillsStaging, DefiningPreparedSkillsStaging>);
 void (true satisfies Same<BarrelSkillsReplacement, DefiningSkillsReplacement>);
+void (true satisfies Same<PreparedSkillsNoop["kind"], "noop">);
+void (true satisfies Same<PreparedSkillsStaged["kind"], "staged">);
+void (true satisfies Same<SkillsReplacementNoop["kind"], "noop">);
+void (true satisfies Same<SkillsReplacementReplaced["kind"], "replaced">);
+void (true satisfies Same<SkillsReplacementNoop["prepared"], PreparedSkillsNoop>);
+void (true satisfies Same<SkillsReplacementReplaced["prepared"], PreparedSkillsStaged>);
+void (true satisfies Same<keyof SkillsReplacementNoop, "kind" | "prepared">);
+void (true satisfies Same<keyof SkillsReplacementReplaced, "kind" | "prepared">);
+void (true satisfies Same<
+  SkillsRuntimeExport,
+  | "abortPreparedSkills"
+  | "commitPreparedSkills"
+  | "discoverPluginSkills"
+  | "finalizeSkillsReplacement"
+  | "prepareStageSkills"
+  | "replacePreparedSkills"
+  | "rollbackSkillsReplacement"
+  | "unstagePluginSkills"
+>);
+void ({
+  kind: "noop",
+  result: { stagedNames: [], recorded: [], warnings: [], degraded: [] },
+} satisfies BarrelPreparedSkillsStaging);
+void ({
+  kind: "noop",
+  prepared: {
+    kind: "noop",
+    result: { stagedNames: [], recorded: [], warnings: [], degraded: [] },
+  },
+} satisfies BarrelSkillsReplacement);
+
+// @ts-expect-error staging internals require narrowing to the staged handle
+void ("/staging" satisfies BarrelPreparedSkillsStaging["stagingRoot"]);
+// @ts-expect-error a skill preparation handle has a closed discriminant set
+void ({ kind: "missing" } satisfies BarrelPreparedSkillsStaging);
+// @ts-expect-error a skill replacement handle has a closed discriminant set
+void ({ kind: "staged" } satisfies BarrelSkillsReplacement);
+// @ts-expect-error the barrel keeps the staged implementation type private
+void (true satisfies Same<SkillsBarrel.PreparedSkillsStaged, never>);
+// @ts-expect-error the barrel does not export the commit-result implementation type
+void (true satisfies Same<SkillsBarrel.StageSkillsCommitResult, never>);
 
 describe("abortPreparedSkills", () => {
   test("re-exports the defining binding", () => {
