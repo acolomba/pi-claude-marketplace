@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 110
 current_phase_name: Persistence and Transaction
 status: executing
-stopped_at: Completed 110-10-PLAN.md
-last_updated: "2026-08-30T02:47:56.688Z"
+stopped_at: Completed 110-04-PLAN.md
+last_updated: "2026-08-30T03:08:46.967Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 110 execution started
-state_head: da107ae770eae522c27a90afd29006dfcdf00e40
+state_head: b65e7b128548ed988e60e48747c47b5650360162
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 55
-  completed_plans: 51
+  completed_plans: 52
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 110 (Persistence and Transaction) — EXECUTING
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 110 execution started
 
@@ -111,6 +111,7 @@ evidence.
 | Phase 110 P05 | 10 min | 2 tasks | 1 files |
 | Phase 110 P08 | 10min | 2 tasks | 2 files |
 | Phase 110 P10 | 9 min | 2 tasks | 1 files |
+| Phase 110 P04 | 11 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Migration evidence uses complete independent results, exact fixed-point replay, and complete warning and filesystem effects.
 - [Phase 110]: Kept phase-ledger.ts byte-identical because runPhases exposes every compensation and error branch through its public contract.
 - [Phase 110]: Phase-ledger evidence uses the literal skills, commands, agents, hooks, mcp, state order with complete logs, results, causes, leaks, and final context.
+- [Phase 110]: Kept config-merge.ts byte-identical because its two public functions expose every real merge and load branch.
+- [Phase 110]: Used independent complete reducer values and all nine base/local status pairs to keep provenance and fallback behavior explicit.
 
 ### Pending Todos
 
@@ -158,6 +161,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T02:47:56.340Z
-Stopped at: Completed 110-10-PLAN.md
+Last session: 2026-08-30T03:08:46.632Z
+Stopped at: Completed 110-04-PLAN.md
 Resume file: None
