@@ -28,6 +28,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
 import { unstagePluginAgents as definingUnstagePluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/unstage.ts";
 
+import type * as AgentsBarrel from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import type {
   AgentsReplacement as BarrelAgentsReplacement,
   PreparedAgentsStaging as BarrelPreparedAgentsStaging,
@@ -42,9 +43,41 @@ type Same<Left, Right> = [Left] extends [Right]
     ? true
     : false
   : false;
+type PreparedAgentsNoop = Extract<BarrelPreparedAgentsStaging, { kind: "noop" }>;
+type PreparedAgentsStaged = Extract<BarrelPreparedAgentsStaging, { kind: "staged" }>;
+type AgentsReplacementNoop = Extract<BarrelAgentsReplacement, { kind: "noop" }>;
+type AgentsReplacementReplaced = Extract<BarrelAgentsReplacement, { kind: "replaced" }>;
 
 void (true satisfies Same<BarrelAgentsReplacement, DefiningAgentsReplacement>);
 void (true satisfies Same<BarrelPreparedAgentsStaging, DefiningPreparedAgentsStaging>);
+void (true satisfies Same<PreparedAgentsNoop["kind"], "noop">);
+void (true satisfies Same<PreparedAgentsStaged["kind"], "staged">);
+void (true satisfies Same<AgentsReplacementNoop["kind"], "noop">);
+void (true satisfies Same<AgentsReplacementReplaced["kind"], "replaced">);
+void (true satisfies Same<AgentsReplacementNoop["prepared"], PreparedAgentsNoop>);
+void (true satisfies Same<AgentsReplacementReplaced["prepared"], PreparedAgentsStaged>);
+void ({
+  kind: "noop",
+  result: { stagedNames: [], recorded: [], warnings: [], failed: [] },
+} satisfies BarrelPreparedAgentsStaging);
+void ({
+  kind: "noop",
+  prepared: {
+    kind: "noop",
+    result: { stagedNames: [], recorded: [], warnings: [], failed: [] },
+  },
+} satisfies BarrelAgentsReplacement);
+
+// @ts-expect-error staging internals require narrowing to the staged handle
+void ("/staging" satisfies BarrelPreparedAgentsStaging["stagingDir"]);
+// @ts-expect-error an agent preparation handle has a closed discriminant set
+void ({ kind: "missing" } satisfies BarrelPreparedAgentsStaging);
+// @ts-expect-error an agent replacement handle has a closed discriminant set
+void ({ kind: "staged" } satisfies BarrelAgentsReplacement);
+// @ts-expect-error the barrel keeps the staged implementation type private
+void (true satisfies Same<AgentsBarrel.PreparedAgentsStaged, never>);
+// @ts-expect-error the barrel does not export the internal marker prefix
+void (true satisfies Same<typeof AgentsBarrel.GENERATED_AGENT_PREFIX, never>);
 
 describe("abortPreparedAgents", () => {
   test("re-exports the defining binding", () => {
