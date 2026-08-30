@@ -258,6 +258,22 @@ test("rejects an unsupported stored schema version without replacing future byte
   assert.strictEqual(retainedBytes, storedBytes);
 });
 
+test("loads a null legacy root as empty state without replacing the stored bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-null-root-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedBytes = "null\n";
+  await writeFile(stateJsonPath, storedBytes);
+
+  // act
+  const state = await loadState(extensionRoot);
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(state, { schemaVersion: 2, marketplaces: {} });
+  assert.strictEqual(retainedBytes, storedBytes);
+});
+
 test("validates complete hook and resolved-sha plugin records", () => {
   // arrange
   const storedState = {

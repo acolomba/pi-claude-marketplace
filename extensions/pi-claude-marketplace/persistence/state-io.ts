@@ -451,12 +451,12 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   // marketplaces } and would otherwise SILENTLY DROP this top-level field,
   // leaving the backfill gate permanently open. Only a string is carried
   // through; a non-string or absent stamp is ignored (absent = scan-once).
-  const parsedRoot = parsed as { lastReconciledExtensionVersion?: unknown };
+  const reconciliationStamp = parsedRecord?.lastReconciledExtensionVersion;
   const normalized: unknown =
-    typeof parsedRoot.lastReconciledExtensionVersion === "string"
+    typeof reconciliationStamp === "string"
       ? {
           schemaVersion: 2,
-          lastReconciledExtensionVersion: parsedRoot.lastReconciledExtensionVersion,
+          lastReconciledExtensionVersion: reconciliationStamp,
           marketplaces,
         }
       : { schemaVersion: 2, marketplaces };
