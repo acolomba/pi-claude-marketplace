@@ -3,6 +3,9 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+import ts from "typescript";
 
 import {
   type BatchedConfigPatch,
@@ -14,6 +17,11 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/config-write-back.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+
+const CONFIG_WRITE_BACK_SOURCE_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../extensions/pi-claude-marketplace/persistence/config-write-back.ts",
+);
 
 describe("writeMarketplaceConfigEntry", () => {
   test("patches one marketplace and writes one complete validated document", async (t) => {
@@ -339,6 +347,69 @@ describe("deletePluginConfigEntry", () => {
 });
 
 describe("writeBatchedConfigEntries", () => {
+  test("contains one awaited saveConfig call after both patch loops", async () => {
+    // arrange
+    const sourceText = await readFile(CONFIG_WRITE_BACK_SOURCE_PATH, "utf8");
+    const sourceFile = ts.createSourceFile(
+      CONFIG_WRITE_BACK_SOURCE_PATH,
+      sourceText,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+
+    // act
+    const batchFunction = sourceFile.statements.find(
+      (statement): statement is ts.FunctionDeclaration =>
+        ts.isFunctionDeclaration(statement) && statement.name?.text === "writeBatchedConfigEntries",
+    );
+    const patchLoopEnds: number[] = [];
+    const saveCallFacts: Array<{
+      readonly awaited: boolean;
+      readonly loopDepth: number;
+      readonly position: number;
+    }> = [];
+    const visit = (node: ts.Node, loopDepth: number): void => {
+      const isLoop = ts.isForOfStatement(node);
+      const childLoopDepth = loopDepth + (isLoop ? 1 : 0);
+      if (isLoop) {
+        patchLoopEnds.push(node.end);
+      }
+
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "saveConfig"
+      ) {
+        saveCallFacts.push({
+          awaited: ts.isAwaitExpression(node.parent),
+          loopDepth: childLoopDepth,
+          position: node.getStart(sourceFile),
+        });
+      }
+
+      ts.forEachChild(node, (child) => {
+        visit(child, childLoopDepth);
+      });
+    };
+
+    if (batchFunction?.body !== undefined) {
+      visit(batchFunction.body, 0);
+    }
+
+    // assert
+    assert.ok(batchFunction?.body !== undefined, "writeBatchedConfigEntries must exist");
+    assert.strictEqual(patchLoopEnds.length, 2, "both patch collections must use one loop each");
+    assert.deepStrictEqual(
+      saveCallFacts.map(({ awaited, loopDepth }) => ({ awaited, loopDepth })),
+      [{ awaited: true, loopDepth: 0 }],
+    );
+    assert.ok(
+      saveCallFacts[0]!.position > Math.max(...patchLoopEnds),
+      "the single saveConfig call must follow both patch loops",
+    );
+  });
+
   test("applies a marketplace-only batch and performs one complete write", async (t) => {
     // arrange
     const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-market-batch-"));
