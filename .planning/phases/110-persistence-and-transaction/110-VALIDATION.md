@@ -1,10 +1,11 @@
 ---
 phase: 110
 slug: persistence-and-transaction
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-29
+validated: 2026-08-30
 ---
 
 # Phase 110 — Validation Strategy
@@ -36,20 +37,32 @@ created: 2026-08-29
 
 ## Per-Task Verification Map
 
-| Task ID   | Plan | Wave | Requirement | Threat Ref                                                                     | Secure Behavior                                                                    | Test Type                                                                                       | Automated Command                                                               | File Exists | Status     |
-| --------- | ---- | ---- | ----------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------- | ---------- |
-| 110-01-01 | 01   | 2    | MOD-03      | T110-01                                                                        | Rejects corrupt envelopes while isolating corrupt rows and preserving atomic bytes | unit + filesystem                                                                               | `npm run test:coverage:direct -- tests/persistence/agents-index-io.test.ts`     | ✅          | ⬜ pending |
-| 110-02-01 | 02   | 1    | MOD-03      | T110-02                                                                        | Accepts only the version-1 agents-index schema and complete row shape              | unit                                                                                            | `npm run test:coverage:direct -- tests/persistence/agents-index-schema.test.ts` | ✅          | ⬜ pending |
-| 110-03-01 | 03   | 2    | MOD-03      | T110-03                                                                        | Distinguishes absent and invalid input, validates saves, and enforces containment  | unit + filesystem                                                                               | `npm run test:coverage:direct -- tests/persistence/config-io.test.ts`           | ✅          | ⬜ pending |
-| 110-04-01 | 04   | 3    | MOD-03      | T110-04                                                                        | Preserves whole-entry replacement and exact provenance across both files           | unit + filesystem                                                                               | `npm run test:coverage:direct -- tests/persistence/config-merge.test.ts`        | ✅          | ⬜ pending |
-| 110-05-01 | 05   | 2    | MOD-03      | T110-05                                                                        | Applies cascade and batch updates to one validated physical document               | unit + filesystem                                                                               | `npm run test:coverage:direct -- tests/persistence/config-write-back.test.ts`   | ✅          | ⬜ pending |
-| 110-06-01 | 06   | 1    | MOD-03      | Rejects unsafe derived names and keeps every path inside its scope root        | unit + filesystem                                                                  | `npm run test:coverage:direct -- tests/persistence/locations.test.ts`                           | ✅                                                                              | ⬜ pending  |
-| 110-07-01 | 07   | 3    | MOD-03      | Writes only eligible first-run projections and makes replay an exact no-op     | unit + filesystem                                                                  | `npm run typecheck && npm run test:coverage:direct -- tests/persistence/migrate-config.test.ts` | ✅                                                                              | ⬜ pending  |
-| 110-08-01 | 08   | 2    | MOD-03      | Filters invalid legacy rows and preserves best-effort persistence warnings     | unit + filesystem                                                                  | `npm run typecheck && npm run test:coverage:direct -- tests/persistence/migrate.test.ts`        | ✅                                                                              | ⬜ pending  |
-| 110-09-01 | 09   | 3    | MOD-03      | Validates and normalizes stored state before atomic persistence                | unit + filesystem                                                                  | `npm run typecheck && npm run test:coverage:direct -- tests/persistence/state-io.test.ts`       | ✅                                                                              | ⬜ pending  |
-| 110-10-01 | 10   | 2    | MOD-03      | Compensates every failure position newest-first without losing causes or leaks | unit                                                                               | `npm run test:coverage:direct -- tests/transaction/phase-ledger.test.ts`                        | ✅                                                                              | ⬜ pending  |
-| 110-11-01 | 11   | 1    | MOD-03      | Preserves path-containment identity and structured rollback partials           | unit                                                                               | `npm run test:coverage:direct -- tests/transaction/rollback.test.ts`                            | ✅                                                                              | ⬜ pending  |
-| 110-12-01 | 12   | 3    | MOD-03      | Holds one case-local lock across load, mutation, save, release, and retry      | unit + filesystem                                                                  | `npm run test:coverage:direct -- tests/transaction/with-state-guard.test.ts`                    | ✅                                                                              | ⬜ pending  |
+| Task ID   | Plan | Wave | Requirement | Automated Behavior                                                         | Automated Command                                                               | File Exists | Status   |
+| --------- | ---- | ---- | ----------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------- | -------- |
+| 110-01-01 | 01   | 2    | MOD-03      | Public agents-index load/save path                                         | `node --test tests/persistence/agents-index-io.test.ts`                         | ✅          | ✅ green |
+| 110-01-02 | 01   | 2    | MOD-03      | File/row corruption and atomic refusal branches                            | `npm run test:coverage:direct -- tests/persistence/agents-index-io.test.ts`     | ✅          | ✅ green |
+| 110-02-01 | 02   | 1    | MOD-03      | Complete version-1 agents-index schema                                     | `node --test tests/persistence/agents-index-schema.test.ts`                     | ✅          | ✅ green |
+| 110-02-02 | 02   | 1    | MOD-03      | Adjacent versions and incomplete rows reject                               | `npm run test:coverage:direct -- tests/persistence/agents-index-schema.test.ts` | ✅          | ✅ green |
+| 110-03-01 | 03   | 2    | MOD-03      | Config load trichotomy and exact save                                      | `node --test tests/persistence/config-io.test.ts`                               | ✅          | ✅ green |
+| 110-03-02 | 03   | 2    | MOD-03      | Invalid input, fallback detail, and containment                            | `npm run test:coverage:direct -- tests/persistence/config-io.test.ts`           | ✅          | ✅ green |
+| 110-04-01 | 04   | 3    | MOD-03      | Complete base/local collision reduction                                    | `node --test tests/persistence/config-merge.test.ts`                            | ✅          | ✅ green |
+| 110-04-02 | 04   | 3    | MOD-03      | Empty, ordering, dangling, loader, and prototype-key outcomes              | `npm run test:coverage:direct -- tests/persistence/config-merge.test.ts`        | ✅          | ✅ green |
+| 110-05-01 | 05   | 2    | MOD-03      | Marketplace patch through validated atomic bytes                           | `node --test tests/persistence/config-write-back.test.ts`                       | ✅          | ✅ green |
+| 110-05-02 | 05   | 2    | MOD-03      | Cascade, batch, prototype-key, delete, creation, and single-write evidence | `npm run test:coverage:direct -- tests/persistence/config-write-back.test.ts`   | ✅          | ✅ green |
+| 110-06-01 | 06   | 1    | MOD-03      | Complete user/project location bundles                                     | `node --test tests/persistence/locations.test.ts`                               | ✅          | ✅ green |
+| 110-06-02 | 06   | 1    | MOD-03      | Staging, separator, empty, and containment boundaries                      | `npm run test:coverage:direct -- tests/persistence/locations.test.ts`           | ✅          | ✅ green |
+| 110-07-01 | 07   | 3    | MOD-03      | Complete state-to-config projection                                        | `npm run typecheck && node --test tests/persistence/migrate-config.test.ts`     | ✅          | ✅ green |
+| 110-07-02 | 07   | 3    | MOD-03      | Suppression, exact persistence, failure, and replay                        | `npm run test:coverage:direct -- tests/persistence/migrate-config.test.ts`      | ✅          | ✅ green |
+| 110-08-01 | 08   | 2    | MOD-03      | Complete legacy normalization path                                         | `npm run typecheck && node --test tests/persistence/migrate.test.ts`            | ✅          | ✅ green |
+| 110-08-02 | 08   | 2    | MOD-03      | Invalid rows, prototype keys, replay, and persistence warnings             | `npm run test:coverage:direct -- tests/persistence/migrate.test.ts`             | ✅          | ✅ green |
+| 110-09-01 | 09   | 3    | MOD-03      | Missing, valid, save, and migrated state paths                             | `npm run typecheck && node --test tests/persistence/state-io.test.ts`           | ✅          | ✅ green |
+| 110-09-02 | 09   | 3    | MOD-03      | Version, null, validation, source, I/O, and bounded replay branches        | `npm run test:coverage:direct -- tests/persistence/state-io.test.ts`            | ✅          | ✅ green |
+| 110-10-01 | 10   | 2    | MOD-03      | Production-shaped failure and complete compensation                        | `node --test tests/transaction/phase-ledger.test.ts`                            | ✅          | ✅ green |
+| 110-10-02 | 10   | 2    | MOD-03      | Every failure position and exceptional undo branch                         | `npm run test:coverage:direct -- tests/transaction/phase-ledger.test.ts`        | ✅          | ✅ green |
+| 110-11-01 | 11   | 1    | MOD-03      | Original-error and containment identity paths                              | `node --test tests/transaction/rollback.test.ts`                                | ✅          | ✅ green |
+| 110-11-02 | 11   | 1    | MOD-03      | One/several structured rollback partials                                   | `npm run test:coverage:direct -- tests/transaction/rollback.test.ts`            | ✅          | ✅ green |
+| 110-12-01 | 12   | 3    | MOD-03      | Complete real-lock state transaction                                       | `node --test tests/transaction/with-state-guard.test.ts`                        | ✅          | ✅ green |
+| 110-12-02 | 12   | 3    | MOD-03      | Bounded contention, acquisition, release, persistence, and retry failures  | `npm run test:coverage:direct -- tests/transaction/with-state-guard.test.ts`    | ✅          | ✅ green |
 
 _Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky_
 
@@ -67,6 +80,22 @@ All phase behaviors have automated verification.
 
 ---
 
+## Validation Audit 2026-08-30
+
+| Metric       | Count        |
+| ------------ | ------------ |
+| Plan tasks   | 24           |
+| Requirements | 1 (`MOD-03`) |
+| Gaps found   | 0            |
+| Resolved     | 0            |
+| Escalated    | 0            |
+
+- All 12 corresponding owner pairs pass their focused commands with 100% direct functions, lines, and branches.
+- The bounded post-review regression gate passes 4,203 tests with zero failures and one intentional platform skip.
+- Repository typecheck and lint pass after the code-review fixes.
+
+---
+
 ## Validation Sign-Off
 
 - [x] All tasks have an automated verification command.
@@ -74,6 +103,6 @@ All phase behaviors have automated verification.
 - [x] Wave 0 has no missing test references.
 - [x] Commands contain no watch-mode flags.
 - [x] Expected feedback latency is less than 90 seconds.
-- [ ] `nyquist_compliant: true` is set after execution evidence is complete.
+- [x] `nyquist_compliant: true` is set after execution evidence is complete.
 
-**Approval:** pending
+**Approval:** validated 2026-08-30
