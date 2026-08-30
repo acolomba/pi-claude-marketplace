@@ -125,13 +125,13 @@ describe("readMarker", () => {
       description: "plugin",
       marker: Object.assign(Object.create({ plugin: "search-tools" }), {
         marketplace: "official-marketplace",
-      }),
+      }) as unknown,
     },
     {
       description: "marketplace",
       marker: Object.assign(Object.create({ marketplace: "official-marketplace" }), {
         plugin: "search-tools",
-      }),
+      }) as unknown,
     },
   ] satisfies ReadonlyArray<{ description: string; marker: unknown }>) {
     test(`returns null when the marker ${description} field is inherited`, () => {
@@ -271,7 +271,7 @@ describe("isOwnedBy", () => {
 
   test("returns false when marker fields are inherited", () => {
     // arrange
-    const marker = Object.create({
+    const marker: unknown = Object.create({
       plugin: "search-tools",
       marketplace: "official-marketplace",
     });
