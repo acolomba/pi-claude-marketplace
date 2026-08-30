@@ -33,7 +33,7 @@ secondary detail.
 
 - [x] **Phase 108: Domain and Platform** - Prove 23 foundational contracts and the resolver and adapter carriers.
 - [x] **Phase 109: Shared Contracts** - Prove 19 shared value, error, path, environment, and notification contracts. (completed 2026-08-29)
-- [ ] **Phase 110: Persistence and Transaction** - Prove 12 durable-state, migration, ledger, rollback, and retry contracts.
+- [x] **Phase 110: Persistence and Transaction** - Prove 12 durable-state, migration, ledger, rollback, and retry contracts. (completed 2026-08-30)
 - [ ] **Phase 111: Non-Hook Component Bridges** - Prove 31 agents, commands, MCP, and skills bridge contracts.
 - [ ] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts.
 - [ ] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts.
@@ -541,7 +541,7 @@ and commit still owns one pair.
 | ---------------------------------------- | -------------: | --------------- | --------- |
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    | 19/19 | Complete    | 2026-08-29 |
-| 110. Persistence and Transaction         | 12/12 | In Progress|  |
+| 110. Persistence and Transaction         | 12/12 | Complete    | 2026-08-30 |
 | 111. Non-Hook Component Bridges          |           0/31 | Not started     | -         |
 | 112. Hook Runtime                        |           0/31 | Not started     | -         |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -         |
