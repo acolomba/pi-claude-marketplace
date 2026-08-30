@@ -761,19 +761,24 @@ test("passes through a non-filesystem staging error and cleans staging", async (
   const locations = await createProjectLocations(t, "commands-stage-name-error-");
   const pluginRoot = await createPluginRoot(t, "commands-name-error-source-");
   const commandsRoot = path.join(pluginRoot, "commands");
-  const originalIncludes = String.prototype.includes;
   let generatedNameSlashChecks = 0;
   t.mock.method(
     String.prototype,
     "includes",
     function (this: string, searchString: string, position?: number) {
-      const value = String(this);
-      if (value === "acme:current" && searchString === "/") {
+      if (this === "acme:current" && searchString === "/") {
         generatedNameSlashChecks += 1;
         return generatedNameSlashChecks >= 2;
       }
 
-      return originalIncludes.call(value, searchString, position);
+      const start = Math.max(position ?? 0, 0);
+      for (let index = start; index <= this.length - searchString.length; index += 1) {
+        if (this.slice(index, index + searchString.length) === searchString) {
+          return true;
+        }
+      }
+
+      return searchString === "" && start <= this.length;
     },
   );
   await mkdir(commandsRoot, { recursive: true });
@@ -861,21 +866,20 @@ test("cleans staging when a repeated malformed block reaches the no-opening safe
   const commandsRoot = path.join(pluginRoot, "commands");
   const repeatedRemainder = "---\nbeta: three: four\n---\nPlain body.\n";
   const commandSource = `---\nalpha: one: two\n---\n${repeatedRemainder}`;
-  const originalStartsWith = String.prototype.startsWith;
   let remainderOpeningChecks = 0;
   t.mock.method(
     String.prototype,
     "startsWith",
     function (this: string, searchString: string, position?: number) {
-      const value = String(this);
-      if (value === repeatedRemainder && searchString === "---") {
+      if (this === repeatedRemainder && searchString === "---") {
         remainderOpeningChecks += 1;
         if (remainderOpeningChecks === 2) {
           return false;
         }
       }
 
-      return originalStartsWith.call(value, searchString, position);
+      const start = position ?? 0;
+      return this.slice(start, start + searchString.length) === searchString;
     },
   );
   await mkdir(commandsRoot, { recursive: true });
@@ -910,21 +914,30 @@ test("cleans staging when a repeated malformed block reaches the no-close safegu
   const commandsRoot = path.join(pluginRoot, "commands");
   const repeatedRemainder = "---\nbeta: three: four\n---\nPlain body.\n";
   const commandSource = `---\nalpha: one: two\n---\n${repeatedRemainder}`;
-  const originalIndexOf = String.prototype.indexOf;
   let remainderCloseSearches = 0;
   t.mock.method(
     String.prototype,
     "indexOf",
     function (this: string, searchString: string, position?: number) {
-      const value = String(this);
-      if (value === repeatedRemainder && searchString === "\n---") {
+      if (this === repeatedRemainder && searchString === "\n---") {
         remainderCloseSearches += 1;
         if (remainderCloseSearches === 2) {
           return -1;
         }
       }
 
-      return originalIndexOf.call(value, searchString, position);
+      const start = Math.max(position ?? 0, 0);
+      if (searchString === "") {
+        return Math.min(start, this.length);
+      }
+
+      for (let index = start; index <= this.length - searchString.length; index += 1) {
+        if (this.slice(index, index + searchString.length) === searchString) {
+          return index;
+        }
+      }
+
+      return -1;
     },
   );
   await mkdir(commandsRoot, { recursive: true });
