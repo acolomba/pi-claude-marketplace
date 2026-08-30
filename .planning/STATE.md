@@ -5,7 +5,7 @@ current_phase: 112
 current_phase_name: Hook Runtime
 status: planning
 stopped_at: Phase 111 complete, ready to plan Phase 112
-last_updated: "2026-08-30T21:55:10.747Z"
+last_updated: "2026-08-30T22:00:44.000Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 111 complete, transitioned to Phase 112
 progress:
@@ -20,12 +20,12 @@ milestone_name: Unit Test Refactor
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-30 after Phase 110)
+See: `.planning/PROJECT.md` (updated 2026-08-30 after Phase 111)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 111 — Non-Hook Component Bridges
+**Current focus:** Phase 112 — Hook Runtime
 
 ## Current Position
 
@@ -34,9 +34,9 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-08-30 — Phase 111 complete, transitioned to Phase 112
 
-Progress: [███░░░░░░░] 26%
+Progress: [████░░░░░░] 40%
 
-Fifty-four of 204 source-test pairs are complete. The remaining 150 are open.
+Eighty-five of 204 source-test pairs are complete. The remaining 119 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -50,14 +50,14 @@ evidence.
 
 **By Phase:**
 
-| Phase                    | Plans | Total   | Avg/Plan |
-| ------------------------ | ----: | ------- | -------- |
-| 108. Domain and Platform |    23 | 10h 58m | 28.6 min |
-| 109. Shared Contracts    |    19 | 3h 19m  | 10.5 min |
-| 110                      |    12 | -       | -        |
-| 111 | 31 | - | - |
+| Phase                           | Plans | Total   | Avg/Plan |
+| ------------------------------- | ----: | ------- | -------- |
+| 108. Domain and Platform        |    23 | 10h 58m | 28.6 min |
+| 109. Shared Contracts           |    19 | 3h 19m  | 10.5 min |
+| 110                             |    12 | -       | -        |
+| 111. Non-Hook Component Bridges |    31 | -       | -        |
 
-**Recent Trend:** 19 Phase 109 plans completed at a 10.5-minute average.
+**Recent Trend:** 31 Phase 111 plans completed with all direct owner gates green.
 **Per-Plan Metrics:**
 
 | Plan          | Duration | Tasks   | Files   |
@@ -117,7 +117,7 @@ evidence.
 | Phase 110 P09 | 19 min   | 2 tasks | 3 files |
 | Phase 110 P12 | 17 min   | 2 tasks | 1 files |
 | Phase 111 P01 | 14 min   | 2 tasks | 2 files |
-| Phase 111 P02 | 10 min | 2 tasks | 1 files |
+| Phase 111 P02 | 10 min   | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -157,11 +157,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 110]: Kept with-state-guard.ts byte-identical because its public state operations and lockfile collaborator expose every real lifecycle branch.
 - [Phase 110]: Used entered and release promises to prove real lock contention without sleeps, polling, elapsed-time checks, or platform skips.
 - [Phase 110]: Used the existing loadState and saveState dependency seam for deterministic persistence failures and case-local proper-lockfile method restoration for acquisition and release failures.
-- [Phase 111]: Kept agents/convert.ts byte-identical because its public conversion and collision exports expose every real branch.
-- [Phase 111]: Moved all seven byte-identity cases into the canonical owner and removed the duplicate supplemental suite.
-- [Phase 111]: Kept agents/discover.ts byte-identical because its public discovery function exposes every real branch.
-- [Phase 111]: Agent discovery evidence uses case-owned trees with independently pinned complete records and raw-byte digests.
-- [Phase 111]: Pinned first-wins generated-name warnings separately from the hard empty-elision failure.
+- [Phase 111]: Every mirrored owner uses complete case-local inputs and independent expected outcomes; shared fixtures were removed after their last legitimate consumer.
+- [Phase 111]: Supplemental suites remain only for genuine cross-module behavior, and all 31 direct owner gates pass at complete line, branch, and function coverage.
+- [Phase 111]: MCP provenance markers require own outer and identity properties, rejecting inherited marker, plugin, and marketplace values.
+- [Phase 111]: Two provably unreachable private skills-stage fallbacks were removed without adding a test-only seam, export, pragma, or behavior change.
 
 ### Pending Todos
 
@@ -180,6 +179,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-30T13:57:05.095Z
+Last session: 2026-08-30T18:00:44-04:00
 Stopped at: Phase 111 complete, ready to plan Phase 112
 Resume file: None
