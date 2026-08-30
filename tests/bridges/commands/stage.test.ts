@@ -13,6 +13,7 @@ import {
   rollbackCommandsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1006,6 +1007,16 @@ test("reports manual recovery when a failed replacement cannot remove its new pr
       return targetReads <= 3 ? actualTarget : rollbackBlocker;
     },
   });
+  const expectedMessage = `Cannot replace command target with non-previous content at ${betaTarget}`;
+  const expectedLeaks = [
+    `failed to remove replacement command file at ${rollbackBlocker}: ` +
+      `Path is a directory: rm returned EISDIR (is a directory) ${rollbackBlocker}`,
+  ];
+  const expectedCause = {
+    name: "Error",
+    message: expectedMessage,
+    cause: undefined,
+  };
 
   // act
   const error = await replacePreparedCommands(prepared).then(
@@ -1014,15 +1025,19 @@ test("reports manual recovery when a failed replacement cannot remove its new pr
   );
 
   // assert
-  assert.ok(error instanceof Error);
+  assert.ok(error instanceof ManualRecoveryError);
   assert.strictEqual(error.name, "ManualRecoveryError");
-  assert.strictEqual(
-    error.message,
-    `Cannot replace command target with non-previous content at ${betaTarget}`,
+  assert.strictEqual(error.message, expectedMessage);
+  assert.deepStrictEqual(error.leaks, expectedLeaks);
+  assert.ok(error.cause instanceof Error);
+  assert.deepStrictEqual(
+    {
+      name: error.cause.name,
+      message: error.cause.message,
+      cause: error.cause.cause,
+    },
+    expectedCause,
   );
-  const manualError = error as Error & { readonly leaks: readonly string[] };
-  assert.strictEqual(manualError.leaks.length >= 1, true);
-  assert.match(manualError.leaks.join("\n"), /failed to remove replacement command file/);
 });
 
 test("rejects unknown replacement handles through both public cleanup operations", async () => {
