@@ -884,24 +884,24 @@ test("uses the no-detail fallback when an invalid save has no validator errors",
   t.mock.method(STATE_VALIDATOR, "Errors", () => []);
   await writeFile(stateJsonPath, existingBytes);
 
-  // act & assert
-  await assert.rejects(
-    () => saveState(extensionRoot, invalidState),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.deepStrictEqual(
-        { name: error.name, message: error.message, cause: error.cause },
-        {
-          name: "Error",
-          message:
-            "saveState refused: in-memory state failed schema validation: (no detail available)",
-          cause: undefined,
-        },
-      );
-      return true;
+  // act
+  const error = await saveState(extensionRoot, invalidState).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.ok(error instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.name, message: error.message, cause: error.cause },
+    {
+      name: "Error",
+      message: "saveState refused: in-memory state failed schema validation: (no detail available)",
+      cause: undefined,
     },
   );
-  assert.strictEqual(await readFile(stateJsonPath, "utf8"), existingBytes);
+  assert.strictEqual(retainedBytes, existingBytes);
 });
 
 test("rejects an invalid save before replacing existing bytes", async (t) => {
@@ -915,24 +915,25 @@ test("rejects an invalid save before replacing existing bytes", async (t) => {
   } as unknown as ExtensionState;
   await writeFile(stateJsonPath, existingBytes);
 
-  // act & assert
-  await assert.rejects(
-    () => saveState(extensionRoot, invalidState),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.deepStrictEqual(
-        { name: error.name, message: error.message, cause: error.cause },
-        {
-          name: "Error",
-          message:
-            "saveState refused: in-memory state failed schema validation: /marketplaces/catalog: must have required properties scope, source, addedFromCwd, manifestPath, marketplaceRoot, plugins",
-          cause: undefined,
-        },
-      );
-      return true;
+  // act
+  const error = await saveState(extensionRoot, invalidState).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.ok(error instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.name, message: error.message, cause: error.cause },
+    {
+      name: "Error",
+      message:
+        "saveState refused: in-memory state failed schema validation: /marketplaces/catalog: must have required properties scope, source, addedFromCwd, manifestPath, marketplaceRoot, plugins",
+      cause: undefined,
     },
   );
-  assert.strictEqual(await readFile(stateJsonPath, "utf8"), existingBytes);
+  assert.strictEqual(retainedBytes, existingBytes);
 });
 
 test("ignores a non-string reconciliation stamp", async (t) => {
