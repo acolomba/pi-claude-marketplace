@@ -7,7 +7,10 @@ import { describe, test, type TestContext } from "node:test";
 import {
   abortPreparedMcp,
   commitPreparedMcp,
+  finalizeMcpReplacement,
   prepareStageMcpServers,
+  replacePreparedMcp,
+  rollbackMcpReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -29,6 +32,7 @@ async function pathExists(filePath: string): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }
+
     throw error;
   }
 }
@@ -68,7 +72,7 @@ describe("prepareStageMcpServers", () => {
     await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
     await writeFile(
       locations.mcpJsonPath,
-      '{"foreignTopLevel":{"enabled":true},"mcpServers":{"foreign":{"command":"foreign-command","env":{"TOKEN":"foreign-token"},"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}},"previous":{"command":"old-command","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+      '{"foreignTopLevel":{"enabled":true},"mcpServers":{"foreign":{"command":"foreign-command","env":{"TOKEN":"foreign-token"},"_piClaudeMarketplace":{"plugin":"other","marketplace":"catalog"}},"current":{"command":"old-command","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
     const expectedDoc = {
       foreignTopLevel: { enabled: true },
@@ -115,6 +119,7 @@ describe("prepareStageMcpServers", () => {
     if (prepared.kind !== "staged") {
       return;
     }
+
     assert.deepStrictEqual(prepared._nextDoc, expectedDoc);
     assert.deepStrictEqual(prepared.result, {
       stagedNames: ["current"],
@@ -154,6 +159,7 @@ describe("prepareStageMcpServers", () => {
     if (prepared.kind !== "staged") {
       return;
     }
+
     assert.deepStrictEqual(prepared._nextDoc, { mcpServers: {} });
     assert.deepStrictEqual(prepared.result, { stagedNames: [], recorded: [], warnings: [] });
   });
@@ -180,6 +186,7 @@ describe("prepareStageMcpServers", () => {
     if (prepared.kind !== "staged") {
       return;
     }
+
     assert.deepStrictEqual(prepared.result.warnings, [
       `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,
     ]);
@@ -215,6 +222,7 @@ describe("prepareStageMcpServers", () => {
     if (prepared.kind !== "staged") {
       return;
     }
+
     assert.deepStrictEqual(prepared._nextDoc, {
       foreignTopLevel: "keep",
       mcpServers: {
@@ -242,7 +250,9 @@ describe("prepareStageMcpServers", () => {
       pluginData,
       servers: {
         malformedEnv: { command: "node", env: ["invalid"] },
+        urlWithScalarEnv: { url: "https://mcp.example.test", env: "opaque" },
         scalar: "invalid",
+        nil: null,
       },
     });
 
@@ -251,9 +261,11 @@ describe("prepareStageMcpServers", () => {
     if (prepared.kind !== "staged") {
       return;
     }
+
     assert.deepStrictEqual(prepared.result.warnings, [
       'mcp server "malformedEnv": declared env is not an object; it was ignored (injected defaults only)',
       'mcp server "scalar": entry is not an object; staged as an empty entry',
+      'mcp server "nil": entry is not an object; staged as an empty entry',
     ]);
     assert.deepStrictEqual(prepared._nextDoc, {
       mcpServers: {
@@ -266,11 +278,117 @@ describe("prepareStageMcpServers", () => {
           },
           _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
         },
+        urlWithScalarEnv: {
+          url: "https://mcp.example.test",
+          env: "opaque",
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+        },
         scalar: {
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+        },
+        nil: {
           _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
         },
       },
     });
+  });
+
+  test("treats a non-object stored document as malformed", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-non-object-");
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, "[]");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { url: "https://mcp.example.test" } },
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      return;
+    }
+
+    assert.deepStrictEqual(prepared.result.warnings, [
+      `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,
+    ]);
+    assert.deepStrictEqual(prepared._nextDoc, {
+      mcpServers: {
+        server: {
+          url: "https://mcp.example.test",
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+        },
+      },
+    });
+  });
+
+  test("treats a non-directory parent as an absent scoped document", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-not-directory-");
+    await writeFile(path.dirname(locations.mcpJsonPath), "not-a-directory");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "empty-plugin",
+      pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
+      pluginData: path.join(cwd, "data", "empty-plugin"),
+      servers: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: { stagedNames: [], recorded: [], warnings: [] },
+    });
+  });
+
+  test("propagates a non-missing scoped document read failure", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-read-failure-");
+    await mkdir(locations.mcpJsonPath, { recursive: true });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        prepareStageMcpServers({
+          locations,
+          cwd,
+          marketplaceName: "catalog",
+          pluginName: "acme",
+          pluginRoot: path.join(cwd, "plugins", "acme"),
+          pluginData: path.join(cwd, "data", "acme"),
+          servers: { server: { command: "node" } },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        const filesystemError = error as NodeJS.ErrnoException;
+        assert.deepStrictEqual(
+          {
+            name: filesystemError.name,
+            message: filesystemError.message,
+            code: filesystemError.code,
+            syscall: filesystemError.syscall,
+          },
+          {
+            name: "Error",
+            message: "EISDIR: illegal operation on a directory, read",
+            code: "EISDIR",
+            syscall: "read",
+          },
+        );
+        return true;
+      },
+    );
   });
 
   test("rejects a foreign server in the scoped document", async (t) => {
@@ -387,6 +505,7 @@ describe("prepareStageMcpServers", () => {
     if (prepared.kind !== "staged") {
       return;
     }
+
     assert.deepStrictEqual(prepared._nextDoc, {
       mcpServers: {
         server: {
@@ -496,11 +615,11 @@ describe("abortPreparedMcp", () => {
     });
 
     // act
-    const aborted = abortPreparedMcp(prepared);
+    abortPreparedMcp(prepared);
+    const materialized = await pathExists(locations.mcpJsonPath);
 
     // assert
-    assert.strictEqual(aborted, undefined);
-    assert.strictEqual(await pathExists(locations.mcpJsonPath), false);
+    assert.strictEqual(materialized, false);
   });
 
   test("accepts a no-op handle without materializing output", async (t) => {
@@ -517,10 +636,284 @@ describe("abortPreparedMcp", () => {
     });
 
     // act
-    const aborted = abortPreparedMcp(prepared);
+    abortPreparedMcp(prepared);
+    const materialized = await pathExists(locations.mcpJsonPath);
 
     // assert
-    assert.strictEqual(aborted, undefined);
+    assert.strictEqual(materialized, false);
+  });
+});
+
+describe("replacePreparedMcp", () => {
+  test("returns a no-op replacement without materializing output", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-replace-noop-");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "empty-plugin",
+      pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
+      pluginData: path.join(cwd, "data", "empty-plugin"),
+      servers: {},
+    });
+
+    // act
+    const replacement = await replacePreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(replacement, { kind: "noop", prepared });
     assert.strictEqual(await pathExists(locations.mcpJsonPath), false);
+  });
+
+  test("atomically replaces exact previous bytes", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-replace-existing-");
+    const pluginRoot = path.join(cwd, "plugins", "acme");
+    const pluginData = path.join(cwd, "data", "acme");
+    const previousBytes =
+      '{"foreignTopLevel":"keep","mcpServers":{"foreign":{"url":"https://foreign.example.test"}}}\n';
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, previousBytes);
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginData,
+      servers: { owned: { command: "node" } },
+    });
+    const expectedBytes = `{
+  "foreignTopLevel": "keep",
+  "mcpServers": {
+    "foreign": {
+      "url": "https://foreign.example.test"
+    },
+    "owned": {
+      "command": "node",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
+        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
+        "CLAUDE_PROJECT_DIR": ${JSON.stringify(cwd)}
+      },
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    const replacement = await replacePreparedMcp(prepared);
+    const storedBytes = await readFile(locations.mcpJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(replacement, { kind: "replaced", prepared });
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("propagates a replacement read failure before committing", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-replace-read-failure-");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { command: "node" } },
+    });
+    await mkdir(locations.mcpJsonPath, { recursive: true });
+
+    // act & assert
+    await assert.rejects(
+      () => replacePreparedMcp(prepared),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        const filesystemError = error as NodeJS.ErrnoException;
+        assert.deepStrictEqual(
+          {
+            name: filesystemError.name,
+            message: filesystemError.message,
+            code: filesystemError.code,
+            syscall: filesystemError.syscall,
+          },
+          {
+            name: "Error",
+            message: "EISDIR: illegal operation on a directory, read",
+            code: "EISDIR",
+            syscall: "read",
+          },
+        );
+        return true;
+      },
+    );
+  });
+});
+
+describe("rollbackMcpReplacement", () => {
+  test("returns a frozen empty leak list for a no-op replacement", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-rollback-noop-");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "empty-plugin",
+      pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
+      pluginData: path.join(cwd, "data", "empty-plugin"),
+      servers: {},
+    });
+    const replacement = await replacePreparedMcp(prepared);
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+  });
+
+  test("removes mcp.json when replacement created the document", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-rollback-created-");
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { command: "node" } },
+    });
+    const replacement = await replacePreparedMcp(prepared);
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(await pathExists(locations.mcpJsonPath), false);
+  });
+
+  test("restores exact previous bytes after replacement", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-rollback-existing-");
+    const previousBytes =
+      '{\n  "foreignTopLevel": "keep-shape",\n  "mcpServers": {\n    "foreign": {\n      "command": "foreign"\n    }\n  }\n}\n';
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, previousBytes);
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { owned: { command: "node" } },
+    });
+    const replacement = await replacePreparedMcp(prepared);
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+    const restoredBytes = await readFile(locations.mcpJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(restoredBytes, previousBytes);
+  });
+
+  test("records a complete leak when the previous bytes cannot be restored", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-rollback-leak-");
+    const parentDirectory = path.dirname(locations.mcpJsonPath);
+    await mkdir(parentDirectory, { recursive: true });
+    await writeFile(locations.mcpJsonPath, '{"mcpServers":{"foreign":{"command":"old"}}}\n');
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { owned: { command: "node" } },
+    });
+    const replacement = await replacePreparedMcp(prepared);
+    await rm(parentDirectory, { recursive: true, force: true });
+    await writeFile(parentDirectory, "blocks-directory-creation");
+
+    // act
+    const leaks = await rollbackMcpReplacement(replacement);
+
+    // assert
+    assert.deepStrictEqual(leaks, [
+      `failed to restore mcp.json at ${locations.mcpJsonPath}: EEXIST: file already exists, mkdir '${parentDirectory}'`,
+    ]);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(await readFile(parentDirectory, "utf8"), "blocks-directory-creation");
+  });
+});
+
+describe("finalizeMcpReplacement", () => {
+  test("returns a frozen empty leak list for no-op and replaced handles", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-finalize-");
+    const noopPrepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "empty-plugin",
+      pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
+      pluginData: path.join(cwd, "data", "empty-plugin"),
+      servers: {},
+    });
+    const noopReplacement = await replacePreparedMcp(noopPrepared);
+    const stagedPrepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { server: { command: "node" } },
+    });
+    const replaced = await replacePreparedMcp(stagedPrepared);
+
+    // act
+    const noopLeaks = finalizeMcpReplacement(noopReplacement);
+    const replacementLeaks = finalizeMcpReplacement(replaced);
+
+    // assert
+    assert.deepStrictEqual(noopLeaks, []);
+    assert.strictEqual(Object.isFrozen(noopLeaks), true);
+    assert.deepStrictEqual(replacementLeaks, []);
+    assert.strictEqual(Object.isFrozen(replacementLeaks), true);
+  });
+
+  test("rejects an unknown replacement handle", () => {
+    // arrange
+    const unknownReplacement = {
+      kind: "replaced",
+      prepared: {},
+    } as unknown as Parameters<typeof finalizeMcpReplacement>[0];
+
+    // act & assert
+    assert.throws(
+      () => finalizeMcpReplacement(unknownReplacement),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          { name: "Error", message: "Unknown MCP replacement handle.", cause: undefined },
+        );
+        return true;
+      },
+    );
   });
 });
