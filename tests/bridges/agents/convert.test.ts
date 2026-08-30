@@ -940,7 +940,9 @@ describe("assertNoAgentCollisions", () => {
     ];
 
     // act
-    const assertDistinctNames = () => assertNoAgentCollisions(agents);
+    const assertDistinctNames = () => {
+      assertNoAgentCollisions(agents);
+    };
 
     // assert
     assert.doesNotThrow(assertDistinctNames);
@@ -948,13 +950,14 @@ describe("assertNoAgentCollisions", () => {
 
   test("reports every colliding generated name with source order intact", () => {
     // arrange
-    const assertDistinctNames = () =>
+    const assertDistinctNames = () => {
       assertNoAgentCollisions([
         { sourceName: "reviewer", generatedName: "pi-claude-marketplace-acme-reviewer" },
         { sourceName: "acme-reviewer", generatedName: "pi-claude-marketplace-acme-reviewer" },
         { sourceName: "writer", generatedName: "pi-claude-marketplace-acme-writer" },
         { sourceName: "acme-writer", generatedName: "pi-claude-marketplace-acme-writer" },
       ]);
+    };
 
     // act & assert
     assert.throws(
