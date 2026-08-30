@@ -109,12 +109,16 @@ describe("firstBodyParagraph", () => {
     // arrange
     const body = "sparse fenced body";
     t.mock.method(String.prototype, "split", function (this: string) {
-      if (String(this) === body) {
-        const lines = ["```", "temporary", "```", "Body prose."];
-        delete lines[1];
+      if (this === body) {
+        const lines: string[] = [];
+        lines.length = 4;
+        lines[0] = "```";
+        lines[2] = "```";
+        lines[3] = "Body prose.";
         return lines;
       }
-      return [String(this)];
+
+      return [this];
     });
 
     // act
@@ -128,12 +132,14 @@ describe("firstBodyParagraph", () => {
     // arrange
     const body = "sparse leading body";
     t.mock.method(String.prototype, "split", function (this: string) {
-      if (String(this) === body) {
-        const lines = ["temporary", "Body prose."];
-        delete lines[0];
+      if (this === body) {
+        const lines: string[] = [];
+        lines.length = 2;
+        lines[1] = "Body prose.";
         return lines;
       }
-      return [String(this)];
+
+      return [this];
     });
 
     // act
@@ -148,20 +154,21 @@ describe("firstBodyParagraph", () => {
     const body = "volatile split body";
     let reads = 0;
     t.mock.method(String.prototype, "split", function (this: string) {
-      if (String(this) === body) {
-        const lines = ["Body prose.", "temporary"];
-        delete lines[1];
-        return new Proxy(lines, {
-          get(target, property, receiver) {
-            if (property === "0") {
-              reads += 1;
-              return reads < 3 ? "Body prose." : undefined;
-            }
-            return Reflect.get(target, property, receiver);
+      if (this === body) {
+        const lines: string[] = [];
+        lines.length = 2;
+        Object.defineProperty(lines, "0", {
+          configurable: true,
+          enumerable: true,
+          get() {
+            reads += 1;
+            return reads < 3 ? "Body prose." : undefined;
           },
         });
+        return lines;
       }
-      return [String(this)];
+
+      return [this];
     });
 
     // act
@@ -392,12 +399,15 @@ describe("setDescriptionScalar", () => {
     // arrange
     const sourceContent = "sparse frontmatter";
     t.mock.method(String.prototype, "split", function (this: string) {
-      if (String(this) === sourceContent) {
-        const lines = ["---", "temporary", "---"];
-        delete lines[1];
+      if (this === sourceContent) {
+        const lines: string[] = [];
+        lines.length = 3;
+        lines[0] = "---";
+        lines[2] = "---";
         return lines;
       }
-      return [String(this)];
+
+      return [this];
     });
     const expectedContent = '---\n\ndescription: "new value"\n---';
 
