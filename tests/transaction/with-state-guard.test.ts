@@ -348,6 +348,36 @@ test("normalizes a non-Error callback failure without saving and releases for re
   assert.strictEqual(lockHeldAfterRetry, false);
 });
 
+test("normalizes an undefined callback rejection without saving", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-callback-undefined-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  let saveAttempts = 0;
+  const dependencies = {
+    loadState: (): Promise<ExtensionState> =>
+      Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+    saveState: (): Promise<void> => {
+      saveAttempts += 1;
+      return Promise.resolve();
+    },
+  } satisfies LockedStateTransactionDeps;
+
+  // act
+  const callbackError = await captureThrown(() =>
+    withLockedStateTransaction(locations, () => rejectNonError(undefined), dependencies),
+  );
+  const lockHeld = await lockfile.check(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(callbackError, new Error("undefined"));
+  assert.strictEqual(saveAttempts, 0);
+  assert.strictEqual(lockHeld, false);
+});
+
 test("propagates an injected load failure by identity and releases for retry", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "state-guard-load-failure-"));
@@ -662,6 +692,33 @@ test("normalizes a non-Error release failure after a successful callback", async
     { callbackEntries, releaseAttempts },
     { callbackEntries: 1, releaseAttempts: 1 },
   );
+});
+
+test("normalizes an undefined release rejection after a successful callback", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-release-undefined-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  let releaseAttempts = 0;
+  t.mock.method(lockfile, "lock", () =>
+    Promise.resolve(() => {
+      releaseAttempts += 1;
+      return rejectNonError(undefined);
+    }),
+  );
+  const dependencies = {
+    loadState: (): Promise<ExtensionState> =>
+      Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+  } satisfies LockedStateTransactionDeps;
+
+  // act
+  const releaseError = await captureThrown(() =>
+    withLockedStateTransaction(locations, () => "callback complete" as const, dependencies),
+  );
+
+  // assert
+  assert.deepStrictEqual(releaseError, new Error("undefined"));
+  assert.strictEqual(releaseAttempts, 1);
 });
 
 test("chains a release Error behind the original callback Error", async (t) => {
