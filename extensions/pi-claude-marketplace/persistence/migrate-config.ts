@@ -102,7 +102,11 @@ export type MigrateFirstRunResult =
  *
  * Return shape includes `schemaVersion: 1` per D-11 (self-documenting).
  */
-export function buildConfigFromState(state: ExtensionState): ScopeConfig {
+export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
+  readonly schemaVersion: 1;
+  readonly marketplaces: NonNullable<ScopeConfig["marketplaces"]>;
+  readonly plugins: NonNullable<ScopeConfig["plugins"]>;
+} {
   const marketplaces: NonNullable<ScopeConfig["marketplaces"]> = {};
   const plugins: NonNullable<ScopeConfig["plugins"]> = {};
 
@@ -182,8 +186,7 @@ export async function migrateFirstRunConfig(
   }
 
   const config = buildConfigFromState(state);
-  const entryCount =
-    Object.keys(config.marketplaces ?? {}).length + Object.keys(config.plugins ?? {}).length;
+  const entryCount = Object.keys(config.marketplaces).length + Object.keys(config.plugins).length;
   if (entryCount === 0) {
     // UAT-01: nothing to capture -- an empty-but-present
     // state.json must NOT spawn an empty claude-plugins.json in every scope
