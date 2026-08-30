@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 import {
   abortPreparedAgents,
   commitPreparedAgents,
@@ -13,7 +14,6 @@ import {
   rollbackAgentsReplacement,
   unstagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
-import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 import {
   GENERATED_AGENT_MARKER as definingGeneratedAgentMarker,
   GENERATED_AGENT_MARKER_LEGACY as definingGeneratedAgentMarkerLegacy,
@@ -38,11 +38,7 @@ import type {
   PreparedAgentsStaging as DefiningPreparedAgentsStaging,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
-type Same<Left, Right> = [Left] extends [Right]
-  ? [Right] extends [Left]
-    ? true
-    : false
-  : false;
+type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 type PreparedAgentsNoop = Extract<BarrelPreparedAgentsStaging, { kind: "noop" }>;
 type PreparedAgentsStaged = Extract<BarrelPreparedAgentsStaging, { kind: "staged" }>;
 type AgentsReplacementNoop = Extract<BarrelAgentsReplacement, { kind: "noop" }>;
@@ -153,10 +149,7 @@ describe("GENERATED_AGENT_MARKER_LEGACY", () => {
     const agentsGeneratedAgentMarkerLegacy = GENERATED_AGENT_MARKER_LEGACY;
 
     // assert
-    assert.strictEqual(
-      agentsGeneratedAgentMarkerLegacy,
-      expectedGeneratedAgentMarkerLegacy,
-    );
+    assert.strictEqual(agentsGeneratedAgentMarkerLegacy, expectedGeneratedAgentMarkerLegacy);
   });
 });
 
