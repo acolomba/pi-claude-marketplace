@@ -234,72 +234,72 @@ Plans:
 3. Staging and unstage cases preserve atomic replacement, rollback, containment, and foreign-content behavior in case-owned temporary trees.
 4. Barrel and type-only bridge modules have direct binding or compile-time owner tests without runtime exemptions.
 
-**Plans**: 3/31 plans executed
+**Plans**: 27/31 plans executed
 
 Plans:
 
 - [x] 111-01-PLAN.md
 - [x] 111-02-PLAN.md
 - [x] 111-03-PLAN.md
-- [ ] 111-04-PLAN.md
-- [ ] 111-05-PLAN.md
+- [x] 111-04-PLAN.md
+- [x] 111-05-PLAN.md
 - [ ] 111-06-PLAN.md
-- [ ] 111-07-PLAN.md
-- [ ] 111-08-PLAN.md
-- [ ] 111-09-PLAN.md
-- [ ] 111-10-PLAN.md
-- [ ] 111-11-PLAN.md
-- [ ] 111-12-PLAN.md
-- [ ] 111-13-PLAN.md
-- [ ] 111-14-PLAN.md
-- [ ] 111-15-PLAN.md
-- [ ] 111-16-PLAN.md
-- [ ] 111-17-PLAN.md
-- [ ] 111-18-PLAN.md
-- [ ] 111-19-PLAN.md
+- [x] 111-07-PLAN.md
+- [x] 111-08-PLAN.md
+- [x] 111-09-PLAN.md
+- [x] 111-10-PLAN.md
+- [x] 111-11-PLAN.md
+- [x] 111-12-PLAN.md
+- [x] 111-13-PLAN.md
+- [x] 111-14-PLAN.md
+- [x] 111-15-PLAN.md
+- [x] 111-16-PLAN.md
+- [x] 111-17-PLAN.md
+- [x] 111-18-PLAN.md
+- [x] 111-19-PLAN.md
 - [ ] 111-20-PLAN.md
-- [ ] 111-21-PLAN.md
-- [ ] 111-22-PLAN.md
-- [ ] 111-23-PLAN.md
-- [ ] 111-24-PLAN.md
-- [ ] 111-25-PLAN.md
-- [ ] 111-26-PLAN.md
-- [ ] 111-27-PLAN.md
-- [ ] 111-28-PLAN.md
+- [x] 111-21-PLAN.md
+- [x] 111-22-PLAN.md
+- [x] 111-23-PLAN.md
+- [x] 111-24-PLAN.md
+- [x] 111-25-PLAN.md
+- [x] 111-26-PLAN.md
+- [x] 111-27-PLAN.md
+- [x] 111-28-PLAN.md
 - [ ] 111-29-PLAN.md
-- [ ] 111-30-PLAN.md
+- [x] 111-30-PLAN.md
 - [ ] 111-31-PLAN.md
 
 - [x] **111-01** (`111-01-PLAN.md`, `P111-01`) - `extensions/pi-claude-marketplace/bridges/agents/convert.ts` → `tests/bridges/agents/convert.test.ts`
 - [x] **111-02** (`111-02-PLAN.md`, `P111-02`) - `extensions/pi-claude-marketplace/bridges/agents/discover.ts` → `tests/bridges/agents/discover.test.ts`
-- [ ] **111-03** (`111-03-PLAN.md`, `P111-03`) - `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts` → `tests/bridges/agents/frontmatter.test.ts`
-- [ ] **111-04** (`111-04-PLAN.md`, `P111-04`) - `extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts` → `tests/bridges/agents/index-mutation.test.ts`
-- [ ] **111-05** (`111-05-PLAN.md`, `P111-05`) - `extensions/pi-claude-marketplace/bridges/agents/index.ts` → `tests/bridges/agents/index.test.ts`
+- [x] **111-03** (`111-03-PLAN.md`, `P111-03`) - `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts` → `tests/bridges/agents/frontmatter.test.ts`
+- [x] **111-04** (`111-04-PLAN.md`, `P111-04`) - `extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts` → `tests/bridges/agents/index-mutation.test.ts`
+- [x] **111-05** (`111-05-PLAN.md`, `P111-05`) - `extensions/pi-claude-marketplace/bridges/agents/index.ts` → `tests/bridges/agents/index.test.ts`
 - [ ] **111-06** (`111-06-PLAN.md`, `P111-06`) - `extensions/pi-claude-marketplace/bridges/agents/marker.ts` → `tests/bridges/agents/marker.test.ts`
-- [ ] **111-07** (`111-07-PLAN.md`, `P111-07`) - `extensions/pi-claude-marketplace/bridges/agents/stage.ts` → `tests/bridges/agents/stage.test.ts`
-- [ ] **111-08** (`111-08-PLAN.md`, `P111-08`) - `extensions/pi-claude-marketplace/bridges/agents/types.ts` → `tests/bridges/agents/types.test.ts`
-- [ ] **111-09** (`111-09-PLAN.md`, `P111-09`) - `extensions/pi-claude-marketplace/bridges/agents/unstage.ts` → `tests/bridges/agents/unstage.test.ts`
-- [ ] **111-10** (`111-10-PLAN.md`, `P111-10`) - `extensions/pi-claude-marketplace/bridges/commands/discover.ts` → `tests/bridges/commands/discover.test.ts`
-- [ ] **111-11** (`111-11-PLAN.md`, `P111-11`) - `extensions/pi-claude-marketplace/bridges/commands/index.ts` → `tests/bridges/commands/index.test.ts`
-- [ ] **111-12** (`111-12-PLAN.md`, `P111-12`) - `extensions/pi-claude-marketplace/bridges/commands/stage.ts` → `tests/bridges/commands/stage.test.ts`
-- [ ] **111-13** (`111-13-PLAN.md`, `P111-13`) - `extensions/pi-claude-marketplace/bridges/commands/types.ts` → `tests/bridges/commands/types.test.ts`
-- [ ] **111-14** (`111-14-PLAN.md`, `P111-14`) - `extensions/pi-claude-marketplace/bridges/commands/unstage.ts` → `tests/bridges/commands/unstage.test.ts`
-- [ ] **111-15** (`111-15-PLAN.md`, `P111-15`) - `extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts` → `tests/bridges/mcp/collision-slots.test.ts`
-- [ ] **111-16** (`111-16-PLAN.md`, `P111-16`) - `extensions/pi-claude-marketplace/bridges/mcp/index.ts` → `tests/bridges/mcp/index.test.ts`
-- [ ] **111-17** (`111-17-PLAN.md`, `P111-17`) - `extensions/pi-claude-marketplace/bridges/mcp/marker.ts` → `tests/bridges/mcp/marker.test.ts`
-- [ ] **111-18** (`111-18-PLAN.md`, `P111-18`) - `extensions/pi-claude-marketplace/bridges/mcp/parse.ts` → `tests/bridges/mcp/parse.test.ts`
-- [ ] **111-19** (`111-19-PLAN.md`, `P111-19`) - `extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts` → `tests/bridges/mcp/safe-set.test.ts`
+- [x] **111-07** (`111-07-PLAN.md`, `P111-07`) - `extensions/pi-claude-marketplace/bridges/agents/stage.ts` → `tests/bridges/agents/stage.test.ts`
+- [x] **111-08** (`111-08-PLAN.md`, `P111-08`) - `extensions/pi-claude-marketplace/bridges/agents/types.ts` → `tests/bridges/agents/types.test.ts`
+- [x] **111-09** (`111-09-PLAN.md`, `P111-09`) - `extensions/pi-claude-marketplace/bridges/agents/unstage.ts` → `tests/bridges/agents/unstage.test.ts`
+- [x] **111-10** (`111-10-PLAN.md`, `P111-10`) - `extensions/pi-claude-marketplace/bridges/commands/discover.ts` → `tests/bridges/commands/discover.test.ts`
+- [x] **111-11** (`111-11-PLAN.md`, `P111-11`) - `extensions/pi-claude-marketplace/bridges/commands/index.ts` → `tests/bridges/commands/index.test.ts`
+- [x] **111-12** (`111-12-PLAN.md`, `P111-12`) - `extensions/pi-claude-marketplace/bridges/commands/stage.ts` → `tests/bridges/commands/stage.test.ts`
+- [x] **111-13** (`111-13-PLAN.md`, `P111-13`) - `extensions/pi-claude-marketplace/bridges/commands/types.ts` → `tests/bridges/commands/types.test.ts`
+- [x] **111-14** (`111-14-PLAN.md`, `P111-14`) - `extensions/pi-claude-marketplace/bridges/commands/unstage.ts` → `tests/bridges/commands/unstage.test.ts`
+- [x] **111-15** (`111-15-PLAN.md`, `P111-15`) - `extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts` → `tests/bridges/mcp/collision-slots.test.ts`
+- [x] **111-16** (`111-16-PLAN.md`, `P111-16`) - `extensions/pi-claude-marketplace/bridges/mcp/index.ts` → `tests/bridges/mcp/index.test.ts`
+- [x] **111-17** (`111-17-PLAN.md`, `P111-17`) - `extensions/pi-claude-marketplace/bridges/mcp/marker.ts` → `tests/bridges/mcp/marker.test.ts`
+- [x] **111-18** (`111-18-PLAN.md`, `P111-18`) - `extensions/pi-claude-marketplace/bridges/mcp/parse.ts` → `tests/bridges/mcp/parse.test.ts`
+- [x] **111-19** (`111-19-PLAN.md`, `P111-19`) - `extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts` → `tests/bridges/mcp/safe-set.test.ts`
 - [ ] **111-20** (`111-20-PLAN.md`, `P111-20`) - `extensions/pi-claude-marketplace/bridges/mcp/stage.ts` → `tests/bridges/mcp/stage.test.ts`
-- [ ] **111-21** (`111-21-PLAN.md`, `P111-21`) - `extensions/pi-claude-marketplace/bridges/mcp/substitute.ts` → `tests/bridges/mcp/substitute.test.ts`
-- [ ] **111-22** (`111-22-PLAN.md`, `P111-22`) - `extensions/pi-claude-marketplace/bridges/mcp/types.ts` → `tests/bridges/mcp/types.test.ts`
-- [ ] **111-23** (`111-23-PLAN.md`, `P111-23`) - `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts` → `tests/bridges/mcp/unstage.test.ts`
-- [ ] **111-24** (`111-24-PLAN.md`, `P111-24`) - `extensions/pi-claude-marketplace/bridges/skills/discover.ts` → `tests/bridges/skills/discover.test.ts`
-- [ ] **111-25** (`111-25-PLAN.md`, `P111-25`) - `extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts` → `tests/bridges/skills/frontmatter-degrade.test.ts`
-- [ ] **111-26** (`111-26-PLAN.md`, `P111-26`) - `extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts` → `tests/bridges/skills/frontmatter-scan.test.ts`
-- [ ] **111-27** (`111-27-PLAN.md`, `P111-27`) - `extensions/pi-claude-marketplace/bridges/skills/index.ts` → `tests/bridges/skills/index.test.ts`
-- [ ] **111-28** (`111-28-PLAN.md`, `P111-28`) - `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts` → `tests/bridges/skills/rewrite-frontmatter.test.ts`
+- [x] **111-21** (`111-21-PLAN.md`, `P111-21`) - `extensions/pi-claude-marketplace/bridges/mcp/substitute.ts` → `tests/bridges/mcp/substitute.test.ts`
+- [x] **111-22** (`111-22-PLAN.md`, `P111-22`) - `extensions/pi-claude-marketplace/bridges/mcp/types.ts` → `tests/bridges/mcp/types.test.ts`
+- [x] **111-23** (`111-23-PLAN.md`, `P111-23`) - `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts` → `tests/bridges/mcp/unstage.test.ts`
+- [x] **111-24** (`111-24-PLAN.md`, `P111-24`) - `extensions/pi-claude-marketplace/bridges/skills/discover.ts` → `tests/bridges/skills/discover.test.ts`
+- [x] **111-25** (`111-25-PLAN.md`, `P111-25`) - `extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts` → `tests/bridges/skills/frontmatter-degrade.test.ts`
+- [x] **111-26** (`111-26-PLAN.md`, `P111-26`) - `extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts` → `tests/bridges/skills/frontmatter-scan.test.ts`
+- [x] **111-27** (`111-27-PLAN.md`, `P111-27`) - `extensions/pi-claude-marketplace/bridges/skills/index.ts` → `tests/bridges/skills/index.test.ts`
+- [x] **111-28** (`111-28-PLAN.md`, `P111-28`) - `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts` → `tests/bridges/skills/rewrite-frontmatter.test.ts`
 - [ ] **111-29** (`111-29-PLAN.md`, `P111-29`) - `extensions/pi-claude-marketplace/bridges/skills/stage.ts` → `tests/bridges/skills/stage.test.ts`
-- [ ] **111-30** (`111-30-PLAN.md`, `P111-30`) - `extensions/pi-claude-marketplace/bridges/skills/types.ts` → `tests/bridges/skills/types.test.ts`
+- [x] **111-30** (`111-30-PLAN.md`, `P111-30`) - `extensions/pi-claude-marketplace/bridges/skills/types.ts` → `tests/bridges/skills/types.test.ts`
 - [ ] **111-31** (`111-31-PLAN.md`, `P111-31`) - `extensions/pi-claude-marketplace/bridges/skills/unstage.ts` → `tests/bridges/skills/unstage.test.ts`
 
 **Cross-cutting constraints:**
@@ -580,7 +580,7 @@ and commit still owns one pair.
 | 108. Domain and Platform                 |          23/23 | Complete        | 2026-08-29 |
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
-| 111. Non-Hook Component Bridges          | 3/31 | In Progress|  |
+| 111. Non-Hook Component Bridges          | 27/31 | In Progress|  |
 | 112. Hook Runtime                        |           0/31 | Not started     | -          |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
