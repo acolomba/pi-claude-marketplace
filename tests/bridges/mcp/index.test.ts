@@ -11,6 +11,10 @@ import {
   rollbackMcpReplacement,
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
+import type {
+  McpReplacement,
+  PreparedMcpStaging,
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import {
   abortPreparedMcp as peerAbortPreparedMcp,
   commitPreparedMcp as peerCommitPreparedMcp,
@@ -20,7 +24,26 @@ import {
   rollbackMcpReplacement as peerRollbackMcpReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
 import { resolvePluginMcpServers as peerResolvePluginMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
+import type {
+  McpReplacement as PeerMcpReplacement,
+  PreparedMcpStaging as PeerPreparedMcpStaging,
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
 import { unstageMcpServers as peerUnstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
+
+type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
+type PreparedNoop = Extract<PreparedMcpStaging, { kind: "noop" }>;
+type PreparedStaged = Extract<PreparedMcpStaging, { kind: "staged" }>;
+type ReplacementNoop = Extract<McpReplacement, { kind: "noop" }>;
+type ReplacementReplaced = Extract<McpReplacement, { kind: "replaced" }>;
+
+void (true satisfies Same<PreparedMcpStaging, PeerPreparedMcpStaging>);
+void (true satisfies Same<McpReplacement, PeerMcpReplacement>);
+void (true satisfies Same<PreparedNoop["kind"], "noop">);
+void (true satisfies Same<PreparedStaged["kind"], "staged">);
+void (true satisfies Same<ReplacementNoop["prepared"], PreparedNoop>);
+void (true satisfies Same<ReplacementReplaced["prepared"], PreparedStaged>);
+void (true satisfies Same<keyof ReplacementNoop, "kind" | "prepared">);
+void (true satisfies Same<keyof ReplacementReplaced, "kind" | "prepared">);
 
 describe("MCP barrel runtime bindings", () => {
   test("re-exports abortPreparedMcp from the stage module", () => {
