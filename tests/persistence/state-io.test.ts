@@ -375,68 +375,71 @@ test("normalizes a complete version-2 document and preserves its stamp", async (
   assert.strictEqual(await readFile(stateJsonPath, "utf8"), JSON.stringify(storedState));
 });
 
-test("migrates legacy state, persists exact bytes, and replays as a fixed point", async (t) => {
-  // arrange
-  const extensionRoot = await createExtensionRoot(t, "state-io-legacy-");
-  const stateJsonPath = path.join(extensionRoot, "state.json");
-  const storedState = {
-    schemaVersion: 1,
-    marketplaces: {
-      legacy: {
-        name: "legacy",
-        scope: "user",
-        source: "./legacy",
-        addedFromCwd: "/work",
-        plugins: {
-          plugin: {
-            version: "1.0.0",
-            resolvedSource: "/legacy/plugin",
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: ["skill-a"], prompts: ["command-a"] },
-            installedAt: "2025-01-01T00:00:00.000Z",
-            updatedAt: "2025-01-01T00:00:00.000Z",
-          },
-        },
-      },
-    },
-  };
-  const expectedState: ExtensionState = {
-    schemaVersion: 2,
-    marketplaces: {
-      legacy: {
-        name: "legacy",
-        scope: "user",
-        source: { kind: "path", raw: "./legacy", logical: "./legacy" },
-        addedFromCwd: "/work",
-        manifestPath: path.join(
-          extensionRoot,
-          "sources",
-          "legacy",
-          ".claude-plugin",
-          "marketplace.json",
-        ),
-        marketplaceRoot: path.join(extensionRoot, "sources", "legacy"),
-        plugins: {
-          plugin: {
-            version: "1.0.0",
-            resolvedSource: "/legacy/plugin",
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: {
-              skills: ["skill-a"],
-              prompts: ["command-a"],
-              agents: [],
-              mcpServers: [],
-              hooks: [],
+test(
+  "migrates legacy state, persists exact bytes, and replays as a fixed point",
+  { timeout: 5_000 },
+  async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-legacy-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 1,
+      marketplaces: {
+        legacy: {
+          name: "legacy",
+          scope: "user",
+          source: "./legacy",
+          addedFromCwd: "/work",
+          plugins: {
+            plugin: {
+              version: "1.0.0",
+              resolvedSource: "/legacy/plugin",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: ["skill-a"], prompts: ["command-a"] },
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
             },
-            enabled: true,
-            installedAt: "2025-01-01T00:00:00.000Z",
-            updatedAt: "2025-01-01T00:00:00.000Z",
           },
         },
       },
-    },
-  };
-  const expectedBytes = `{
+    };
+    const expectedState: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        legacy: {
+          name: "legacy",
+          scope: "user",
+          source: { kind: "path", raw: "./legacy", logical: "./legacy" },
+          addedFromCwd: "/work",
+          manifestPath: path.join(
+            extensionRoot,
+            "sources",
+            "legacy",
+            ".claude-plugin",
+            "marketplace.json",
+          ),
+          marketplaceRoot: path.join(extensionRoot, "sources", "legacy"),
+          plugins: {
+            plugin: {
+              version: "1.0.0",
+              resolvedSource: "/legacy/plugin",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: ["skill-a"],
+                prompts: ["command-a"],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
+              enabled: true,
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    };
+    const expectedBytes = `{
   "schemaVersion": 2,
   "marketplaces": {
     "legacy": {
@@ -480,56 +483,57 @@ test("migrates legacy state, persists exact bytes, and replays as a fixed point"
   }
 }
 `;
-  await writeFile(stateJsonPath, JSON.stringify(storedState));
-  const controller = new AbortController();
-  t.after(() => {
-    controller.abort();
-  });
-  const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-  const stateJsonChanged = (async () => {
-    while (true) {
-      const change = await changes.next();
-      if (change.done) {
-        throw new Error("state.json watcher ended before persistence");
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+    const controller = new AbortController();
+    t.after(() => {
+      controller.abort();
+    });
+    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
+    const stateJsonChanged = (async () => {
+      while (true) {
+        const change = await changes.next();
+        if (change.done) {
+          throw new Error("state.json watcher ended before persistence");
+        }
+
+        if (change.value.filename === "state.json") {
+          return change.value;
+        }
       }
+    })();
 
-      if (change.value.filename === "state.json") {
-        return change.value;
-      }
-    }
-  })();
+    // act
+    const state = await loadState(extensionRoot);
+    const change = await stateJsonChanged;
+    await changes.return?.();
+    const persistedBytes = await readFile(stateJsonPath, "utf8");
+    const persistedMetadata = await stat(stateJsonPath, { bigint: true });
+    const replayedState = await loadState(extensionRoot);
+    const replayedBytes = await readFile(stateJsonPath, "utf8");
+    const replayedMetadata = await stat(stateJsonPath, { bigint: true });
 
-  // act
-  const state = await loadState(extensionRoot);
-  const change = await stateJsonChanged;
-  await changes.return?.();
-  const persistedBytes = await readFile(stateJsonPath, "utf8");
-  const persistedMetadata = await stat(stateJsonPath, { bigint: true });
-  const replayedState = await loadState(extensionRoot);
-  const replayedBytes = await readFile(stateJsonPath, "utf8");
-  const replayedMetadata = await stat(stateJsonPath, { bigint: true });
-
-  // assert
-  assert.deepStrictEqual({ ...change }, { eventType: "rename", filename: "state.json" });
-  assert.deepStrictEqual(state, expectedState);
-  assert.strictEqual(persistedBytes, expectedBytes);
-  assert.deepStrictEqual(replayedState, expectedState);
-  assert.strictEqual(replayedBytes, expectedBytes);
-  assert.deepStrictEqual(
-    {
-      ino: replayedMetadata.ino,
-      size: replayedMetadata.size,
-      mtimeNs: replayedMetadata.mtimeNs,
-      ctimeNs: replayedMetadata.ctimeNs,
-    },
-    {
-      ino: persistedMetadata.ino,
-      size: persistedMetadata.size,
-      mtimeNs: persistedMetadata.mtimeNs,
-      ctimeNs: persistedMetadata.ctimeNs,
-    },
-  );
-});
+    // assert
+    assert.deepStrictEqual({ ...change }, { eventType: "rename", filename: "state.json" });
+    assert.deepStrictEqual(state, expectedState);
+    assert.strictEqual(persistedBytes, expectedBytes);
+    assert.deepStrictEqual(replayedState, expectedState);
+    assert.strictEqual(replayedBytes, expectedBytes);
+    assert.deepStrictEqual(
+      {
+        ino: replayedMetadata.ino,
+        size: replayedMetadata.size,
+        mtimeNs: replayedMetadata.mtimeNs,
+        ctimeNs: replayedMetadata.ctimeNs,
+      },
+      {
+        ino: persistedMetadata.ino,
+        size: persistedMetadata.size,
+        mtimeNs: persistedMetadata.mtimeNs,
+        ctimeNs: persistedMetadata.ctimeNs,
+      },
+    );
+  },
+);
 
 test("saves exact version-2 bytes and loads the complete state", async (t) => {
   // arrange
@@ -975,41 +979,44 @@ test("preserves legacy autoupdate while the config migration gate is closed", as
   assert.deepStrictEqual(state, storedState);
 });
 
-test("scrubs and persists legacy autoupdate when the config migration gate is open", async (t) => {
-  // arrange
-  const extensionRoot = await createExtensionRoot(t, "state-io-gate-open-");
-  const scopeRoot = path.dirname(extensionRoot);
-  const stateJsonPath = path.join(extensionRoot, "state.json");
-  const storedState = {
-    schemaVersion: 2,
-    marketplaces: {
-      catalog: {
-        name: "catalog",
-        scope: "user",
-        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
-        addedFromCwd: "/work",
-        manifestPath: "/catalog/.claude-plugin/marketplace.json",
-        marketplaceRoot: "/catalog",
-        autoupdate: true,
-        plugins: {},
+test(
+  "scrubs and persists legacy autoupdate when the config migration gate is open",
+  { timeout: 5_000 },
+  async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-gate-open-");
+    const scopeRoot = path.dirname(extensionRoot);
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          autoupdate: true,
+          plugins: {},
+        },
       },
-    },
-  };
-  const expectedState = {
-    schemaVersion: 2,
-    marketplaces: {
-      catalog: {
-        name: "catalog",
-        scope: "user",
-        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
-        addedFromCwd: "/work",
-        manifestPath: "/catalog/.claude-plugin/marketplace.json",
-        marketplaceRoot: "/catalog",
-        plugins: {},
+    };
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
       },
-    },
-  };
-  const expectedBytes = `{
+    };
+    const expectedBytes = `{
   "schemaVersion": 2,
   "marketplaces": {
     "catalog": {
@@ -1028,36 +1035,37 @@ test("scrubs and persists legacy autoupdate when the config migration gate is op
   }
 }
 `;
-  await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}");
-  await writeFile(stateJsonPath, JSON.stringify(storedState));
-  const controller = new AbortController();
-  t.after(() => {
-    controller.abort();
-  });
-  const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-  const stateJsonChanged = (async () => {
-    while (true) {
-      const change = await changes.next();
-      if (change.done) {
-        throw new Error("state.json watcher ended before persistence");
+    await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}");
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+    const controller = new AbortController();
+    t.after(() => {
+      controller.abort();
+    });
+    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
+    const stateJsonChanged = (async () => {
+      while (true) {
+        const change = await changes.next();
+        if (change.done) {
+          throw new Error("state.json watcher ended before persistence");
+        }
+
+        if (change.value.filename === "state.json") {
+          return;
+        }
       }
+    })();
 
-      if (change.value.filename === "state.json") {
-        return;
-      }
-    }
-  })();
+    // act
+    const state = await loadState(extensionRoot);
+    await stateJsonChanged;
+    await changes.return?.();
+    const persistedBytes = await readFile(stateJsonPath, "utf8");
 
-  // act
-  const state = await loadState(extensionRoot);
-  await stateJsonChanged;
-  await changes.return?.();
-  const persistedBytes = await readFile(stateJsonPath, "utf8");
-
-  // assert
-  assert.deepStrictEqual(state, expectedState);
-  assert.strictEqual(persistedBytes, expectedBytes);
-});
+    // assert
+    assert.deepStrictEqual(state, expectedState);
+    assert.strictEqual(persistedBytes, expectedBytes);
+  },
+);
 
 for (const { name, plugin } of [
   {
