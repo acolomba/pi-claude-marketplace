@@ -547,6 +547,615 @@ test("accepts and stores a version-1 empty state", async (t) => {
   assert.strictEqual(storedBytes, '{\n  "schemaVersion": 1,\n  "marketplaces": {}\n}\n');
 });
 
+for (const { name, source, expectedSource } of [
+  {
+    name: "a stored GitHub source",
+    source: { kind: "github", raw: "acme/catalog", owner: "stale", repo: "stale" },
+    expectedSource: { kind: "github", raw: "acme/catalog", owner: "acme", repo: "catalog" },
+  },
+  {
+    name: "a stored URL source",
+    source: {
+      kind: "url",
+      raw: "https://git.example.com/acme/catalog.git#release",
+      url: "stale",
+    },
+    expectedSource: {
+      kind: "url",
+      raw: "https://git.example.com/acme/catalog.git#release",
+      url: "https://git.example.com/acme/catalog",
+      ref: "release",
+    },
+  },
+  {
+    name: "a forward-compatible unknown source",
+    source: { kind: "unknown", raw: "future:catalog", reason: "future source" },
+    expectedSource: { kind: "unknown", raw: "future:catalog", reason: "future source" },
+  },
+]) {
+  test(`normalizes ${name} through the public load path`, async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-source-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source,
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: expectedSource,
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+    // act
+    const state = await loadState(extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(state, expectedState);
+  });
+}
+
+for (const { name, source, expectedMessage } of [
+  {
+    name: "an unclassifiable raw string",
+    source: "catalog",
+    expectedMessage:
+      'state.json marketplace "catalog" has unclassifiable source: non-relative string source catalog cannot be classified',
+  },
+  {
+    name: "a null source",
+    source: null,
+    expectedMessage: 'state.json marketplace "catalog" has missing or invalid source',
+  },
+  {
+    name: "a primitive source",
+    source: 17,
+    expectedMessage: 'state.json marketplace "catalog" has missing or invalid source',
+  },
+  {
+    name: "a URL record whose raw value classifies as GitHub",
+    source: { kind: "url", raw: "acme/catalog" },
+    expectedMessage: 'state.json marketplace "catalog" has an invalid url source: acme/catalog',
+  },
+  {
+    name: "a path record without a raw string",
+    source: { kind: "path" },
+    expectedMessage:
+      'state.json marketplace "catalog" has malformed source object (missing kind/raw)',
+  },
+]) {
+  test(`rejects ${name} with the complete public error`, async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-source-error-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source,
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+    // act & assert
+    await assert.rejects(
+      () => loadState(extensionRoot),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          { name: "Error", message: expectedMessage, cause: undefined },
+        );
+        return true;
+      },
+    );
+  });
+}
+
+test("rejects malformed JSON with its complete structured cause", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-json-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  await writeFile(stateJsonPath, "{");
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.ok(error.cause instanceof SyntaxError);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          cause: { name: error.cause.name, message: error.cause.message },
+        },
+        {
+          name: "Error",
+          message: `state.json at ${stateJsonPath} is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)`,
+          cause: {
+            name: "SyntaxError",
+            message: "Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          },
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("wraps a non-missing read failure with its filesystem cause", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-read-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  await mkdir(stateJsonPath);
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.ok(error.cause instanceof Error);
+      const cause = error.cause as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          cause: {
+            name: cause.name,
+            message: cause.message,
+            code: cause.code,
+            errno: cause.errno,
+            syscall: cause.syscall,
+          },
+        },
+        {
+          name: "Error",
+          message: `Failed to read ${stateJsonPath}: EISDIR: illegal operation on a directory, read`,
+          cause: {
+            name: "Error",
+            message: "EISDIR: illegal operation on a directory, read",
+            code: "EISDIR",
+            errno: -21,
+            syscall: "read",
+          },
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("reports the exact post-normalization schema failure", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-schema-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "1.0.0",
+            resolvedSource: "/catalog/plugin",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            enabled: null,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `state.json at ${stateJsonPath} failed schema validation: /marketplaces/catalog/plugins/plugin/enabled: must be boolean`,
+          cause: undefined,
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("formats a root validator failure through the public loader", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-root-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const rootErrors = STATE_VALIDATOR.Errors(null);
+  t.mock.method(STATE_VALIDATOR, "Check", () => false);
+  t.mock.method(STATE_VALIDATOR, "Errors", () => rootErrors);
+  await writeFile(stateJsonPath, "{}");
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `state.json at ${stateJsonPath} failed schema validation: <root>: must be object`,
+          cause: undefined,
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("uses the no-detail fallback when an invalid save has no validator errors", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-empty-errors-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const existingBytes = '{"keep":true}\n';
+  const invalidState = { schemaVersion: 3, marketplaces: {} } as unknown as ExtensionState;
+  t.mock.method(STATE_VALIDATOR, "Errors", () => []);
+  await writeFile(stateJsonPath, existingBytes);
+
+  // act & assert
+  await assert.rejects(
+    () => saveState(extensionRoot, invalidState),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message:
+            "saveState refused: in-memory state failed schema validation: (no detail available)",
+          cause: undefined,
+        },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(stateJsonPath, "utf8"), existingBytes);
+});
+
+test("rejects an invalid save before replacing existing bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-save-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const existingBytes = '{"keep":true}\n';
+  const invalidState = {
+    schemaVersion: 2,
+    marketplaces: { catalog: { name: "catalog" } },
+  } as unknown as ExtensionState;
+  await writeFile(stateJsonPath, existingBytes);
+
+  // act & assert
+  await assert.rejects(
+    () => saveState(extensionRoot, invalidState),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message:
+            "saveState refused: in-memory state failed schema validation: /marketplaces/catalog: must have required properties scope, source, addedFromCwd, manifestPath, marketplaceRoot, plugins",
+          cause: undefined,
+        },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(stateJsonPath, "utf8"), existingBytes);
+});
+
+test("ignores a non-string reconciliation stamp", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-stamp-");
+  const storedState = {
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: 17,
+    marketplaces: {},
+  };
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const state = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(state, { schemaVersion: 2, marketplaces: {} });
+});
+
+test("preserves legacy autoupdate while the config migration gate is closed", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-gate-closed-");
+  const storedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        autoupdate: true,
+        plugins: {},
+      },
+    },
+  };
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const state = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(state, storedState);
+});
+
+test("scrubs and persists legacy autoupdate when the config migration gate is open", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-gate-open-");
+  const scopeRoot = path.dirname(extensionRoot);
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        autoupdate: true,
+        plugins: {},
+      },
+    },
+  };
+  const expectedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {},
+      },
+    },
+  };
+  const expectedBytes = `{
+  "schemaVersion": 2,
+  "marketplaces": {
+    "catalog": {
+      "name": "catalog",
+      "scope": "user",
+      "source": {
+        "kind": "path",
+        "raw": "./catalog",
+        "logical": "./catalog"
+      },
+      "addedFromCwd": "/work",
+      "manifestPath": "/catalog/.claude-plugin/marketplace.json",
+      "marketplaceRoot": "/catalog",
+      "plugins": {}
+    }
+  }
+}
+`;
+  await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}");
+  await writeFile(stateJsonPath, JSON.stringify(storedState));
+  const controller = new AbortController();
+  t.after(() => {
+    controller.abort();
+  });
+  const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
+  const stateJsonChanged = (async () => {
+    while (true) {
+      const change = await changes.next();
+      if (change.done) {
+        throw new Error("state.json watcher ended before persistence");
+      }
+
+      if (change.value.filename === "state.json") {
+        return;
+      }
+    }
+  })();
+
+  // act
+  const state = await loadState(extensionRoot);
+  await stateJsonChanged;
+  await changes.return?.();
+  const persistedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(state, expectedState);
+  assert.strictEqual(persistedBytes, expectedBytes);
+});
+
+for (const { name, plugin } of [
+  {
+    name: "a plugin without hooks",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      enabled: true,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  {
+    name: "a plugin with non-array hooks",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: "hooks" },
+      enabled: true,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  {
+    name: "a plugin without enabled",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+]) {
+  test(`rejects ${name} at the published validator`, () => {
+    // arrange
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: { plugin },
+        },
+      },
+    };
+
+    // act
+    const valid = STATE_VALIDATOR.Check(storedState);
+
+    // assert
+    assert.strictEqual(valid, false);
+  });
+}
+
+test("round-trips resolved sha and hook entries through exact state bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-plugin-roundtrip-");
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "sha-a1b2c3d4e5f6",
+            resolvedSource: "https://github.com/acme/plugin",
+            resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            hookEntries: [{ event: "SessionStart" }],
+            compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hooks-a"] },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  const expectedState: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "sha-a1b2c3d4e5f6",
+            resolvedSource: "https://github.com/acme/plugin",
+            resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            hookEntries: [{ event: "SessionStart" }],
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["hooks"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["hooks-a"],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  const expectedBytes = `${JSON.stringify(expectedState, null, 2)}\n`;
+
+  // act
+  await saveState(extensionRoot, state);
+  const storedBytes = await readFile(path.join(extensionRoot, "state.json"), "utf8");
+  const loadedState = await loadState(extensionRoot);
+
+  // assert
+  assert.strictEqual(storedBytes, expectedBytes);
+  assert.deepStrictEqual(loadedState, expectedState);
+});
+
 test("derives the config migration gate path from the public locations contract", () => {
   // arrange
   const locations = locationsFor("project", path.join(tmpdir(), "state-io-drift-guard"));
