@@ -66,6 +66,28 @@ function createControlledPromise(): ControlledPromise {
   };
 }
 
+function waitForControlledPromise(
+  controlled: ControlledPromise,
+  signal: AbortSignal,
+  timeoutMessage: string,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const rejectOnAbort = (): void => {
+      reject(new Error(timeoutMessage, { cause: signal.reason }));
+    };
+    if (signal.aborted) {
+      rejectOnAbort();
+      return;
+    }
+
+    signal.addEventListener("abort", rejectOnAbort, { once: true });
+    void controlled.promise.then(() => {
+      signal.removeEventListener("abort", rejectOnAbort);
+      resolve();
+    });
+  });
+}
+
 test("saves one explicit transaction while the real scope lock is held and permits a retry", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "state-guard-save-"));
@@ -472,77 +494,95 @@ test("propagates an injected save failure by identity with the complete attempte
   assert.strictEqual(lockHeldAfterRetry, false);
 });
 
-test("prevents a real contender from entering and accepts it after controlled release", async (t) => {
-  // arrange
-  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-contention-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  const locations = locationsFor("project", directory);
-  const entered = createControlledPromise();
-  const release = createControlledPromise();
-  let holderEntries = 0;
-  let contenderEntries = 0;
-  let retryEntries = 0;
-  const expectedState = {
-    schemaVersion: 2,
-    marketplaces: {},
-    lastReconciledExtensionVersion: "retry-committed",
-  } satisfies ExtensionState;
-  const expectedStateBytes =
-    '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
+test(
+  "prevents a real contender from entering and accepts it after controlled release",
+  { timeout: 5_000 },
+  async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "state-guard-contention-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const entered = createControlledPromise();
+    const release = createControlledPromise();
+    let holderTransaction: Promise<"holder released"> | undefined;
+    let holderEntries = 0;
+    let contenderEntries = 0;
+    let retryEntries = 0;
+    const releaseHolder = (): void => {
+      release.resolve();
+      void holderTransaction?.catch(() => undefined);
+    };
+    t.signal.addEventListener("abort", releaseHolder, { once: true });
+    t.after(() => {
+      t.signal.removeEventListener("abort", releaseHolder);
+      releaseHolder();
+    });
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {},
+      lastReconciledExtensionVersion: "retry-committed",
+    } satisfies ExtensionState;
+    const expectedStateBytes =
+      '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
 
-  // act
-  const holderTransaction = withLockedStateTransaction(locations, async () => {
-    holderEntries += 1;
-    entered.resolve();
-    await release.promise;
-    return "holder released" as const;
-  });
-  await entered.promise;
-  const contenderError = await captureThrown(() =>
-    withStateGuard(locations, () => {
-      contenderEntries += 1;
-    }),
-  );
-  release.resolve();
-  const holderOutcome = await holderTransaction;
-  const retryOutcome = await withStateGuard(locations, (state) => {
-    retryEntries += 1;
-    state.lastReconciledExtensionVersion = "retry-committed";
-    return structuredClone(state);
-  });
-  const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-  const lockHeldAfterRetry = await lockfile.check(locations.extensionRoot, {
-    lockfilePath: locations.stateLockFile,
-    realpath: false,
-  });
+    // act
+    holderTransaction = withLockedStateTransaction(locations, async () => {
+      holderEntries += 1;
+      entered.resolve();
+      await release.promise;
+      return "holder released" as const;
+    });
+    await waitForControlledPromise(
+      entered,
+      t.signal,
+      "holder transaction did not enter before the contention test timed out",
+    );
+    const contenderError = await captureThrown(() =>
+      withStateGuard(locations, () => {
+        contenderEntries += 1;
+      }),
+    );
+    release.resolve();
+    const holderOutcome = await holderTransaction;
+    const retryOutcome = await withStateGuard(locations, (state) => {
+      retryEntries += 1;
+      state.lastReconciledExtensionVersion = "retry-committed";
+      return structuredClone(state);
+    });
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const lockHeldAfterRetry = await lockfile.check(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
 
-  // assert
-  assert.ok(contenderError instanceof StateLockHeldError);
-  assert.deepStrictEqual(
-    {
-      name: contenderError.name,
-      message: contenderError.message,
-      scope: contenderError.scope,
-      lockPath: contenderError.lockPath,
-    },
-    {
-      name: "StateLockHeldError",
-      message: `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
-      scope: "project",
-      lockPath: locations.stateLockFile,
-    },
-  );
-  assert.ok(contenderError.cause instanceof Error);
-  assert.strictEqual((contenderError.cause as NodeJS.ErrnoException).code, "ELOCKED");
-  assert.strictEqual(holderOutcome, "holder released");
-  assert.deepStrictEqual(retryOutcome, expectedState);
-  assert.strictEqual(stateBytes, expectedStateBytes);
-  assert.deepStrictEqual(
-    { holderEntries, contenderEntries, retryEntries },
-    { holderEntries: 1, contenderEntries: 0, retryEntries: 1 },
-  );
-  assert.strictEqual(lockHeldAfterRetry, false);
-});
+    // assert
+    assert.ok(contenderError instanceof StateLockHeldError);
+    assert.deepStrictEqual(
+      {
+        name: contenderError.name,
+        message: contenderError.message,
+        scope: contenderError.scope,
+        lockPath: contenderError.lockPath,
+      },
+      {
+        name: "StateLockHeldError",
+        message: `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
+        scope: "project",
+        lockPath: locations.stateLockFile,
+      },
+    );
+    assert.ok(contenderError.cause instanceof Error);
+    assert.strictEqual((contenderError.cause as NodeJS.ErrnoException).code, "ELOCKED");
+    assert.strictEqual(holderOutcome, "holder released");
+    assert.deepStrictEqual(retryOutcome, expectedState);
+    assert.strictEqual(stateBytes, expectedStateBytes);
+    assert.deepStrictEqual(
+      { holderEntries, contenderEntries, retryEntries },
+      { holderEntries: 1, contenderEntries: 0, retryEntries: 1 },
+    );
+    assert.strictEqual(lockHeldAfterRetry, false);
+  },
+);
 
 test("propagates an ordinary acquisition Error without loading state or entering the callback", async (t) => {
   // arrange
