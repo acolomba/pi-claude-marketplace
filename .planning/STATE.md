@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-25-PLAN.md
-last_updated: "2026-08-31T09:25:15.159Z"
+stopped_at: Completed 112-02-PLAN.md
+last_updated: "2026-08-31T10:12:32.573Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 25 routing-state lifecycle owner
-state_head: 74550618221dee7a4fd27fb52300800a00914ee4
+last_activity_desc: Completed Phase 112 Plan 02 async registry lifecycle owner
+state_head: 2a826635c8a386036d7594fa8bd1a7ad18cafc7f
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 110
+  completed_plans: 111
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 25 of 31
+Plan: 26 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 25 routing-state lifecycle owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 02 async registry lifecycle owner
 
 Progress: [████░░░░░░] 40%
 
-Ninety-eight of 204 source-test pairs are complete. The remaining 106 are open.
+Ninety-nine of 204 source-test pairs are complete. The remaining 105 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -143,6 +143,7 @@ evidence.
 | Phase 112 P11 | 14 min   | 2 tasks | 2 files |
 | Phase 112 P13 | 20 min   | 2 tasks | 2 files |
 | Phase 112 P25 | 12 min | 2 tasks | 1 files |
+| Phase 112 P02 | 45 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -253,6 +254,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept routing-state.ts byte-for-byte unchanged because its public operations expose every required state transition and reset effect.
 - [Phase 112]: Used only public lifecycle operations for routing-state setup, observation, and cleanup, without a private-state reader or test-only reset export.
 - [Phase 112]: Left the additional-context supplemental unchanged because Plan 112-07 is its sole deletion carrier and Plan 112-13 owns the unique parser chain.
+- [Phase 112]: Removed the two CodeGraph-confirmed registry test readers and obsolete promise-tracking cell without adding another observer or test seam.
+- [Phase 112]: Retained fire-and-forget PID persistence on async child exit and error, observing rewrites through public filesystem and shutdown effects.
+- [Phase 112]: Restricted the async-rewake supplemental to two cross-lane environment-parity cases and one routing-epoch reload case.
+- [Phase 112]: Proved default orphan probes behind a mocked process.kill signal-0 boundary and used injected probes for all orphan safety partitions.
 
 ### Pending Todos
 
@@ -271,6 +276,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T09:25:14.401Z
-Stopped at: Completed 112-25-PLAN.md
+Last session: 2026-08-31T10:12:31.955Z
+Stopped at: Completed 112-02-PLAN.md
 Resume file: None
