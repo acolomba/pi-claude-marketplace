@@ -121,7 +121,7 @@ evidence.
 | Phase 111 P02 | 10 min   | 2 tasks | 1 files |
 | Phase 112 P01 | 14 min | 2 tasks | 1 files |
 | Phase 112 P03 | 9 min | 2 tasks | 1 files |
-| Phase 112 P08 | 5 min | 2 tasks | 1 files |
+| Phase 112 P08 | 8 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 

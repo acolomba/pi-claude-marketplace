@@ -56,7 +56,7 @@ coverage:
         ref: npm run test:coverage:direct -- tests/bridges/hooks/exec-result.test.ts
         status: pass
     human_judgment: false
-duration: 5 min
+duration: 8 min
 completed: 2026-08-31
 status: complete
 ---
@@ -67,9 +67,9 @@ status: complete
 
 ## Performance
 
-- **Duration:** 5 min
+- **Duration:** 8 min
 - **Started:** 2026-08-31T03:41:58Z
-- **Completed:** 2026-08-31T03:47:08Z
+- **Completed:** 2026-08-31T03:50:17Z
 - **Tasks:** 2
 - **Files modified:** 1 new implementation test file
 
