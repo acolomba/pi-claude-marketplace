@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-04-PLAN.md
-last_updated: "2026-08-31T11:34:58.738Z"
+stopped_at: Completed 112-05-PLAN.md
+last_updated: "2026-08-31T12:07:02.857Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 04 dispatch execution owner
-state_head: 93dca4d11db7f5f9e0d0cd419876db6b0cedaea4
+last_activity_desc: Completed Phase 112 Plan 05 dispatch reducer owner
+state_head: 9703e7e60c2cc30a11ac0da2fd26ff5ab946ce42
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 113
+  completed_plans: 114
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 28 of 31
+Plan: 29 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 04 dispatch execution owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 05 dispatch reducer owner
 
 Progress: [████░░░░░░] 40%
 
@@ -146,6 +146,7 @@ evidence.
 | Phase 112 P02 | 45 min | 2 tasks | 3 files |
 | Phase 112 P06 | 26 min | 2 tasks | 3 files |
 | Phase 112 P04 | 33 min | 2 tasks | 3 files |
+| Phase 112 P05 | 18 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -268,6 +269,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Consolidated all single-module execution evidence in the dispatch-exec owner and deleted hooks-exec.test.ts.
 - [Phase 112]: Retained only translator-module completeness and shared built-in/custom tool-name mapping in hooks-translators.test.ts.
 - [Phase 112]: Used a live failing diagnostic sink to prove the outer async delegation catch while preserving never-throw noop behavior.
+- [Phase 112]: Kept dispatch.ts byte-for-byte unchanged because its public collection and composite-handler exports expose every reducer and adaptation partition through an injected executor.
+- [Phase 112]: Consolidated all single-module reducer evidence in the mirrored dispatch owner, then deleted hooks-reducer.test.ts.
+- [Phase 112]: Kept hooks-dispatch.test.ts byte-for-byte unchanged as the locked repository-wide static carrier for Plan 112-07.
+- [Phase 112]: Used only public routing lifecycle operations for case-local state setup and cleanup, without a private state reader, reset seam, or shared oracle.
 
 ### Pending Todos
 
@@ -286,6 +291,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T11:34:57.988Z
-Stopped at: Completed 112-04-PLAN.md
+Last session: 2026-08-31T12:07:02.083Z
+Stopped at: Completed 112-05-PLAN.md
 Resume file: None
