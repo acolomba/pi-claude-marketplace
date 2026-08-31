@@ -1,1592 +1,416 @@
-// tests/architecture/hooks-async-rewake.test.ts
-//
-// Architecture-level invariant pins for the async-rewake bridge
-// (HOOK-06 + EXEC-05 + D-62-01..05 + the IL-2 EXEMPTION for
-// rewakeSummary + the D-59-03 captured-epoch zombie defense).
-//
-//   Block A -- spawn options pinned: { detached: false,
-//       stdio: ["pipe","pipe","pipe"] } + the
-//       PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId> env marker;
-//       also pins EXEC-02's `timeout` as SECONDS at this lane's call site.
-//   Block B -- exit code 2 -> pi.sendMessage({ customType:
-//       "claude-hook-rewake", display: false, content, details },
-//       { deliverAs: ctx.isIdle() ? "nextTurn" : "followUp" }); any other
-//       code -> silent.
-//   Block C -- ring buffer overflow drops oldest bytes; truncated latch
-//       surfaces as "[…truncated]\n" prefix in injected body.
-//   Block D -- D-62-05 PID table atomic write on spawnAndRegister + exit;
-//       ENOENT read returns []; marker mismatch on Linux skips SIGKILL with
-//       debug-log; non-Linux platforms soft-skip with debug-log.
-//   Block E -- D-59-03 captured-epoch -- stale child no-ops on exit when
-//       currentEpoch() bumped during child's life.
-//   Block F -- IL-2 EXEMPTION: rewakeSummary routes through
-//       notifyAsyncRewakeSummary independent of exit code; spawnAndRegister
-//       is fire-and-forget.
-//   Block G -- dispatch-exec delegation: asyncRewake:true -> spawnAndRegister
-//       + return {kind:"noop"}; non-`true` values flow to sync path.
-//   Block H -- multi-hook fan-in: distinct dispatchIds via randomUUID;
-//       independent exit handlers; registry size reflects live children.
-
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { watch, type FSWatcher } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Readable, Writable } from "node:stream";
-import { afterEach, beforeEach, describe, test } from "node:test";
+import { PassThrough } from "node:stream";
+import { test } from "node:test";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+
+import { pidTablePath } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
-  pidTablePath,
-  readPidTable,
-  unlinkPidTable,
-  writePidTable,
-  type PidTableEntry,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
-import {
-  awaitPidTablePersist,
-  asyncRewakeEntries,
   MARKER_ENV,
-  reapOrphans,
   shutdownInMemoryChildren,
   spawnAndRegister,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
-import {
-  RingBuffer,
-  STDERR_CAP_BYTES,
-  STDOUT_CAP_BYTES,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
 import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
-import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
   bumpEpoch,
-  resetRoutingState as _resetEventRouterForTest,
+  resetRoutingState,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { OrphanProbes } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
+import type { SpawnDeps } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
-import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 
-// ──────────────────────────────────────────────────────────────────────────
-// Mock spawn + ChildProcess
-// ──────────────────────────────────────────────────────────────────────────
-
 interface SpawnCall {
   readonly command: string;
   readonly args: readonly string[];
   readonly options: SpawnOptions;
-  readonly stdinChunks: string[];
 }
 
-interface MockChild {
-  readonly call: SpawnCall;
+interface ChildHarness {
   readonly child: ChildProcess;
-  emitStdout(chunk: string | Buffer): void;
-  emitStderr(chunk: string | Buffer): void;
+  readonly stdin: PassThrough;
+  readonly stdout: PassThrough;
+  readonly stderr: PassThrough;
+  readonly signals: NodeJS.Signals[];
   emitExit(code: number | null, signal?: NodeJS.Signals | null): void;
-  emitError(err: Error): void;
-  killCalls(): readonly NodeJS.Signals[];
 }
 
-function makeMockChild(call: SpawnCall, pid = 99_991): MockChild {
-  const emitter = new EventEmitter();
-  const noopRead = (): void => undefined;
-  const stdout = new Readable({ read: noopRead });
-  const stderr = new Readable({ read: noopRead });
-  const stdin = new Writable({
-    write(chunk, _enc, cb): void {
-      call.stdinChunks.push(typeof chunk === "string" ? chunk : (chunk as Buffer).toString("utf8"));
-      cb();
-    },
-  });
+interface SpawnHarness {
+  readonly calls: SpawnCall[];
+  readonly children: ChildHarness[];
+  readonly spawnImpl: NonNullable<SpawnDeps["spawnImpl"]>;
+}
 
-  const killCalls: NodeJS.Signals[] = [];
-  let killed = false;
-
-  const child = Object.assign(emitter, {
+function createChild(pid: number): ChildHarness {
+  const events = new EventEmitter();
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const signals: NodeJS.Signals[] = [];
+  let exitCode: number | null = null;
+  let signalCode: NodeJS.Signals | null = null;
+  const child = Object.assign(events, {
+    stdin,
     stdout,
     stderr,
-    stdin,
-    get killed(): boolean {
-      return killed;
+    stdio: [stdin, stdout, stderr, undefined, undefined] satisfies ChildProcess["stdio"],
+    connected: false,
+    pid,
+    get exitCode(): number | null {
+      return exitCode;
     },
+    get signalCode(): NodeJS.Signals | null {
+      return signalCode;
+    },
+    killed: false,
+    spawnargs: [],
+    spawnfile: "",
     kill(signal?: NodeJS.Signals): boolean {
-      killCalls.push(signal ?? "SIGTERM");
-      killed = true;
+      signals.push(signal ?? "SIGTERM");
       return true;
     },
-    pid,
-  }) as unknown as ChildProcess;
+    disconnect(): void {
+      return;
+    },
+    send(): boolean {
+      return false;
+    },
+    ref(): void {
+      return;
+    },
+    unref(): void {
+      return;
+    },
+    [Symbol.dispose](): void {
+      return;
+    },
+  }) satisfies ChildProcess;
 
   return {
-    call,
     child,
-    emitStdout(chunk): void {
-      stdout.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-    },
-    emitStderr(chunk): void {
-      stderr.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-    },
-    emitExit(code, signal): void {
-      stdout.push(null);
-      stderr.push(null);
-      emitter.emit("exit", code, signal ?? null);
-    },
-    emitError(err): void {
-      emitter.emit("error", err);
-    },
-    killCalls(): readonly NodeJS.Signals[] {
-      return killCalls;
+    stdin,
+    stdout,
+    stderr,
+    signals,
+    emitExit(code, signal = null): void {
+      exitCode = code;
+      signalCode = signal;
+      events.emit("exit", code, signal);
     },
   };
 }
 
-interface SpawnSpy {
-  /** Pass to `spawnAndRegister` / `dispatchHookExec`; both take it as a dependency. */
-  readonly spawnImpl: typeof import("node:child_process").spawn;
-  readonly calls: SpawnCall[];
-  readonly children: MockChild[];
-  setPid(pid: number): void;
-}
-
-function installSpawnSpy(configure?: (handle: MockChild) => void): SpawnSpy {
+function createSpawnHarness(autoClose: boolean): SpawnHarness {
   const calls: SpawnCall[] = [];
-  const children: MockChild[] = [];
-  let nextPid = 99_991;
-  const fakeSpawn = ((
-    command: string,
-    args: readonly string[],
-    options: SpawnOptions,
-  ): ChildProcess => {
-    const call: SpawnCall = { command, args: [...args], options, stdinChunks: [] };
-    calls.push(call);
-    const handle = makeMockChild(call, nextPid);
-    nextPid += 1;
-    children.push(handle);
-    if (configure !== undefined) {
+  const children: ChildHarness[] = [];
+  const spawnImpl = ((command: string, args: readonly string[], options: SpawnOptions) => {
+    const child = createChild(41_000 + children.length);
+    calls.push({ command, args: [...args], options });
+    children.push(child);
+    if (autoClose) {
       queueMicrotask(() => {
-        configure(handle);
+        child.stdout.end();
+        child.stderr.end();
+        child.child.emit("close", 0, null);
       });
     }
 
-    return handle.child;
-  }) as unknown as typeof import("node:child_process").spawn;
-  return {
-    spawnImpl: fakeSpawn,
-    calls,
-    children,
-    setPid(pid): void {
-      nextPid = pid;
-    },
-  };
+    return child.child;
+  }) as NonNullable<SpawnDeps["spawnImpl"]>;
+
+  return { calls, children, spawnImpl };
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Mock ExtensionContext + ExtensionAPI
-// ──────────────────────────────────────────────────────────────────────────
-
-interface SendMessageCall {
-  readonly message: {
-    customType: string;
-    content: string;
-    display: boolean;
-    details?: unknown;
-  };
-  readonly options: { triggerTurn?: boolean; deliverAs?: string } | undefined;
-}
-
-interface NotifyCall {
-  readonly text: string;
-  readonly severity: "info" | "warning" | "error" | undefined;
-}
-
-interface MockCtx {
-  readonly ctx: ExtensionContext;
-  readonly notifyCalls: NotifyCall[];
-  setIdle(b: boolean): void;
-}
-
-function makeMockCtx(cwd: string): MockCtx {
-  const notifyCalls: NotifyCall[] = [];
-  let idle = true;
-  const ctx = {
-    cwd,
-    isIdle: () => idle,
-    sessionManager: {
-      getSessionId: () => "session-rewake",
-      getSessionFile: () => undefined,
-    },
+function createContext(
+  root: string,
+  sessionId: string,
+): {
+  readonly context: ExtensionContext;
+  readonly notifications: Array<{
+    readonly text: string;
+    readonly severity: "info" | "warning" | "error" | undefined;
+  }>;
+} {
+  const notifications: Array<{
+    readonly text: string;
+    readonly severity: "info" | "warning" | "error" | undefined;
+  }> = [];
+  const context = {
     ui: {
-      notify: (text: string, severity?: "info" | "warning" | "error") => {
-        notifyCalls.push({ text, severity });
+      notify(text: string, severity?: "info" | "warning" | "error"): void {
+        notifications.push({ text, severity });
       },
+    } as ExtensionContext["ui"],
+    mode: "print",
+    hasUI: false,
+    cwd: root,
+    sessionManager: SessionManager.inMemory(root, { id: sessionId }),
+    get modelRegistry(): ExtensionContext["modelRegistry"] {
+      throw new Error("async architecture contract must not read modelRegistry");
     },
-  } as unknown as ExtensionContext;
-  return {
-    ctx,
-    notifyCalls,
-    setIdle(b): void {
-      idle = b;
+    model: undefined,
+    scopedModels: [],
+    isIdle: () => true,
+    isProjectTrusted: () => true,
+    signal: undefined,
+    abort(): never {
+      throw new Error("async architecture contract must not abort");
     },
-  };
+    hasPendingMessages: () => false,
+    shutdown(): never {
+      throw new Error("async architecture contract must not shut down Pi");
+    },
+    getContextUsage(): never {
+      throw new Error("async architecture contract must not inspect context usage");
+    },
+    compact(): never {
+      throw new Error("async architecture contract must not compact");
+    },
+    getSystemPrompt(): never {
+      throw new Error("async architecture contract must not read the system prompt");
+    },
+  } satisfies ExtensionContext;
+
+  return { context, notifications };
 }
 
-interface MockPi {
+function createPi(): {
   readonly pi: ExtensionAPI;
-  readonly sendMessageCalls: SendMessageCall[];
-  setSendMessageThrow(err: Error | undefined): void;
-}
-
-function makeMockPi(): MockPi {
-  const sendMessageCalls: SendMessageCall[] = [];
-  let throwOnSend: Error | undefined;
+  readonly messages: Array<{ readonly message: unknown; readonly options: unknown }>;
+} {
+  const messages: Array<{ readonly message: unknown; readonly options: unknown }> = [];
   const pi = {
-    sendMessage: (message: unknown, options?: unknown) => {
-      if (throwOnSend !== undefined) {
-        throw throwOnSend;
-      }
+    sendMessage(message: unknown, options: unknown): void {
+      messages.push({ message, options });
+    },
+  } as ExtensionAPI;
 
-      sendMessageCalls.push({
-        message: message as SendMessageCall["message"],
-        options: options as SendMessageCall["options"],
-      });
-    },
-    on: () => {
-      /* no-op */
-    },
-  } as unknown as ExtensionAPI;
-  return {
-    pi,
-    sendMessageCalls,
-    setSendMessageThrow(err): void {
-      throwOnSend = err;
-    },
-  };
+  return { pi, messages };
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Routing entry + temp scope helpers
-// ──────────────────────────────────────────────────────────────────────────
-
-function makeEntry(overrides: {
-  asyncRewake?: unknown;
-  rewakeMessage?: string;
-  rewakeSummary?: string;
-  pluginId?: string;
-  claudeEvent?: BucketAEvent;
-  timeout?: unknown;
-}): RoutingEntry {
-  const handlerDecl: Record<string, unknown> = {
-    type: "command",
-    command: "/bin/true",
-  };
-  if (overrides.asyncRewake !== undefined) {
-    handlerDecl.asyncRewake = overrides.asyncRewake;
-  }
-
-  if (overrides.timeout !== undefined) {
-    handlerDecl.timeout = overrides.timeout;
-  }
-
-  if (overrides.rewakeMessage !== undefined) {
-    handlerDecl.rewakeMessage = overrides.rewakeMessage;
-  }
-
-  if (overrides.rewakeSummary !== undefined) {
-    handlerDecl.rewakeSummary = overrides.rewakeSummary;
-  }
-
+function createEntry(
+  root: string,
+  event: "PreToolUse" | "SessionStart",
+  asyncRewake: boolean,
+): RoutingEntry {
   return {
-    scope: "user",
-    marketplace: "mp",
-    pluginId: overrides.pluginId ?? "rewake-plug",
-    resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
-    claudeEvent: overrides.claudeEvent ?? "PreToolUse",
+    scope: "project",
+    marketplace: "catalog-parity",
+    pluginId: "plugin-parity",
+    resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin-source")),
+    claudeEvent: event,
     matcher: { kind: "match-all" },
     rawMatcher: "",
-    handlerDecl: handlerDecl as RoutingEntry["handlerDecl"],
+    handlerDecl: asyncRewake
+      ? {
+          type: "command",
+          command: "/opt/hooks/parity",
+          args: ["--exact"],
+          timeout: 600,
+          asyncRewake: true,
+        }
+      : {
+          type: "command",
+          command: "/opt/hooks/parity",
+          args: ["--exact"],
+          timeout: 600,
+        },
     declarationIndex: 0,
-    ifPredicate: MATCH_ALL_IF,
-  };
+    ifPredicate: { kind: "match-all" },
+  } satisfies RoutingEntry;
 }
 
-async function makeTempLocations(): Promise<{
-  loc: ScopedLocations;
-  cleanup: () => Promise<void>;
-}> {
-  const root = await mkdtemp(path.join(tmpdir(), "async-rewake-test-"));
-  // Lay out a synthetic user-scope agent dir so locationsFor's path
-  // composition produces a ScopedLocations whose dataRoot already exists
-  // (needed for assertPathInside to succeed against the constructed
-  // CLAUDE_PLUGIN_DATA path).
-  const agentRoot = path.join(root, "agent");
-  await mkdir(path.join(agentRoot, "pi-claude-marketplace", "data", "_shared"), {
-    recursive: true,
-  });
-  await mkdir(path.join(agentRoot, "pi-claude-marketplace", "plugins"), { recursive: true });
-  const prev = process.env.PI_CODING_AGENT_DIR;
-  process.env.PI_CODING_AGENT_DIR = agentRoot;
-  const loc = locationsFor("user", agentRoot);
-  return {
-    loc,
-    cleanup: async () => {
-      // Drain any in-flight pid-table atomic write before removing the
-      // temp directory.  write-file-atomic holds a temp file open in
-      // _shared/ until the rename+fsync completes; removing the directory
-      // concurrently produces ENOTEMPTY on macOS.
-      await awaitPidTablePersist();
-      if (prev === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = prev;
-      }
+function destroyChildren(children: readonly ChildHarness[]): void {
+  for (const child of children) {
+    child.child.removeAllListeners();
+    child.stdin.destroy();
+    child.stdout.destroy();
+    child.stderr.destroy();
+  }
+}
 
-      // `maxRetries` backstops the drain above: under parallel CPU load a
-      // late off-band persist (or its write-file-atomic temp file in
-      // _shared/) can still race the recursive walk and surface a transient
-      // ENOTEMPTY. Retrying the unlink converges deterministically once the
-      // last temp file is renamed away.
-      await rm(root, { recursive: true, force: true, maxRetries: 10 });
+function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEnv): void {
+  const syncKeys = Object.keys(syncEnv).sort();
+  const asyncKeysWithoutMarker = Object.keys(asyncEnv)
+    .filter((key) => key !== MARKER_ENV)
+    .sort();
+  assert.deepStrictEqual(asyncKeysWithoutMarker, syncKeys);
+  for (const key of syncKeys) {
+    assert.strictEqual(asyncEnv[key], syncEnv[key]);
+  }
+}
+
+function observeTableRewrite(tablePath: string): {
+  readonly completion: Promise<void>;
+  close(): void;
+} {
+  let watcher: FSWatcher | undefined;
+  const completion = new Promise<void>((resolve, reject) => {
+    watcher = watch(path.dirname(tablePath), (_event, filename) => {
+      if (filename?.toString() === path.basename(tablePath)) {
+        resolve();
+      }
+    });
+    watcher.once("error", reject);
+  });
+
+  return {
+    completion,
+    close(): void {
+      watcher?.close();
     },
   };
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Lifecycle hygiene -- every describe resets the seams + registry
-// ──────────────────────────────────────────────────────────────────────────
-
-beforeEach(() => {
-  _resetEventRouterForTest();
+test("keeps PreToolUse hook environments equal across sync and async lanes except the marker", async () => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-architecture-pretool-parity-"));
+  resetRoutingState();
   shutdownInMemoryChildren();
-});
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-pretool-parity");
+  const pi = createPi();
+  const syncEntry = createEntry(root, "PreToolUse", false);
+  const asyncEntry = createEntry(root, "PreToolUse", true);
+  const processes = createSpawnHarness(true);
 
-afterEach(() => {
-  shutdownInMemoryChildren();
-  _resetEventRouterForTest();
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: spawn-and-register
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("spawn-and-register", () => {
-  test("EXEC-05: spawn options pinned to detached:false + stdio pipe-pipe-pipe", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "fixed-uuid-1";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      assert.equal(spy.calls.length, 1);
-      const call = spy.calls[0];
-      assert.ok(call !== undefined);
-      assert.equal(call.options.detached, false);
-      assert.deepEqual(call.options.stdio, ["pipe", "pipe", "pipe"]);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("EXEC-05: PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH env marker equals dispatchId byte-for-byte", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "fixed-uuid-marker";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      const env = spy.calls[0]?.options.env ?? {};
-      assert.equal(MARKER_ENV, "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH");
-      assert.equal(env[MARKER_ENV], "fixed-uuid-marker");
-      // HENV-02: async lane mirrors dispatch-exec.ts::prepareEnv session env;
-      // CLAUDE_SESSION_ID is the pi-only alias (D-91-02), all from sessionId.
-      assert.equal(env.CLAUDECODE, "1");
-      assert.equal(env.CLAUDE_CODE_SESSION_ID, "session-rewake");
-      assert.equal(env.CLAUDE_SESSION_ID, "session-rewake");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("EXEC-02: `timeout` reaches the async ladder as SECONDS", async (t) => {
-    const tmp = await makeTempLocations();
-    try {
-      t.mock.timers.enable({ apis: ["setTimeout"] });
-      const spy = installSpawnSpy();
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ asyncRewake: true, timeout: 2 }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-timeout-units" },
-      );
-      const child = spy.children[0];
-      assert.ok(child !== undefined, "spawn spy captured no child");
-
-      t.mock.timers.tick(1_999);
-      assert.deepEqual(
-        child.killCalls(),
-        [],
-        "`timeout: 2` read as milliseconds would SIGTERM the child at 2 ms",
-      );
-
-      t.mock.timers.tick(1);
-      assert.deepEqual(
-        child.killCalls(),
-        ["SIGTERM"],
-        "`timeout: 2` is 2 seconds (Claude Code parity), so SIGTERM lands at 2000 ms",
-      );
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("EXEC-02: the background lane keeps 600 s where the blocking lane lowers", async (t) => {
-    const tmp = await makeTempLocations();
-    try {
-      t.mock.timers.enable({ apis: ["setTimeout"] });
-      const spy = installSpawnSpy();
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      // No `timeout` declared, on the event Claude Code lowers to 30 s for a
-      // turn-blocking handler. An asyncRewake handler blocks nothing -- it is
-      // registered and left to run -- so that reduction has no rationale here
-      // and would silently truncate long-running background work.
-      await spawnAndRegister(
-        makeEntry({ asyncRewake: true, claudeEvent: "UserPromptSubmit" }),
-        { text: "hello" },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-lane" },
-      );
-      const child = spy.children[0];
-      assert.ok(child !== undefined, "spawn spy captured no child");
-
-      t.mock.timers.tick(30_000);
-      assert.deepEqual(
-        child.killCalls(),
-        [],
-        "the blocking lane's 30 s UserPromptSubmit budget must not reach this lane",
-      );
-
-      t.mock.timers.tick(570_000);
-      assert.deepEqual(child.killCalls(), ["SIGTERM"], "background keeps the 600 s default");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("EXEC-02: an unusable timeout is attributed to this lane's own plugin and event", async () => {
-    const tmp = await makeTempLocations();
-    const prevDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-    const originalError = console.error;
-    const lines: string[] = [];
-    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-    console.error = (...args: unknown[]): void => {
-      lines.push(args.join(" "));
-    };
-
-    try {
-      const spy = installSpawnSpy();
-      // The blocking lane has the same gate. Without one here, this lane could
-      // pass a hardcoded plugin id or the wrong event and the whole suite would
-      // stay green -- measured.
-      await spawnAndRegister(
-        makeEntry({ asyncRewake: true, claudeEvent: "PreToolUse", timeout: "30" }),
-        { toolName: "bash", input: {} },
-        makeMockCtx("/tmp/proj").ctx,
-        makeMockPi().pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId: () => "fixed-uuid-attribution" },
-      );
-    } finally {
-      console.error = originalError;
-      if (prevDebug === undefined) {
-        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-      } else {
-        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prevDebug;
-      }
-
-      await tmp.cleanup();
-    }
-
-    const attribution = lines.find((line) => line.includes("unusable timeout"));
-    assert.ok(attribution !== undefined, "a declared-but-unusable timeout must be reported");
-    assert.match(
-      attribution,
-      /rewake-plug\/PreToolUse \(background\)/,
-      "the line must carry this entry's own plugin, event and lane",
+  try {
+    // act
+    await dispatchHookExec(syncEntry, { toolName: "bash", input: {} }, context.context, pi.pi, {
+      spawnImpl: processes.spawnImpl,
+    });
+    await spawnAndRegister(
+      asyncEntry,
+      { toolName: "bash", input: {} },
+      context.context,
+      pi.pi,
+      locations,
+      {
+        spawnImpl: processes.spawnImpl,
+        dispatchId: () => "dispatch-pretool-parity",
+      },
     );
-  });
+    const syncEnvironment = processes.calls[0]?.options.env ?? {};
+    const asyncEnvironment = processes.calls[1]?.options.env ?? {};
 
-  test("EXEC-05: registry add happens before resolve", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "fixed-uuid-2";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      const reg = asyncRewakeEntries();
-      assert.equal(reg.has("fixed-uuid-2"), true);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-87-04: a non-dispatchable claudeEvent skips the spawn and registers nothing", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      // Every current bucket-A admission is dispatchable, so the guard is a
-      // defensive belt against a future admission outrunning its translator;
-      // the cast stands in for such an event (a real upstream Claude event
-      // outside the dispatchable tuple).
-      await spawnAndRegister(
-        makeEntry({ asyncRewake: true, claudeEvent: "SubagentStop" as unknown as BucketAEvent }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl },
-      );
-      assert.equal(spy.calls.length, 0, "the guard must return before any child-process spawn");
-      assert.equal(asyncRewakeEntries().size, 0, "no registry entry may be recorded");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: PID table persists the registered entry after spawnAndRegister", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "fixed-uuid-3";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      const table = await readPidTable(tmp.loc);
-      assert.equal(table.length, 1);
-      assert.equal(table[0]?.dispatchId, "fixed-uuid-3");
-      assert.equal(table[0]?.plugin, "rewake-plug");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: spawnAndRegister resolves without awaiting child exit", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "fixed-uuid-4";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      const promise = spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      await promise;
-      // Child still alive after the await -- exit handler has not fired
-      const reg = asyncRewakeEntries();
-      assert.equal(reg.has("fixed-uuid-4"), true);
-      // Now emit exit; the handler runs out-of-band
-      spy.children[0]?.emitExit(0);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(reg.has("fixed-uuid-4"), false);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("onChildError removes the registered entry and persists the pid table", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "fixed-uuid-onerror";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      const reg = asyncRewakeEntries();
-      assert.equal(reg.has("fixed-uuid-onerror"), true);
-      // A spawn-level failure (e.g. ENOENT) surfaces as a child "error" event,
-      // routed to onChildError out-of-band: it cancels the ladder, drops the
-      // entry, and persists the shrunken pid table.
-      spy.children[0]?.emitError(new Error("spawn failed"));
-      await new Promise((r) => setImmediate(r));
-      assert.equal(reg.has("fixed-uuid-onerror"), false);
-      await awaitPidTablePersist();
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: on-exit
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("on-exit", () => {
-  test("HOOK-06: exit code 2 -> pi.sendMessage with display:false + customType:claude-hook-rewake", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-exit-2";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ rewakeMessage: "Security finding:" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("blocking violation");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls.length, 1);
-      const call = pi.sendMessageCalls[0];
-      assert.ok(call !== undefined);
-      assert.equal(call.message.customType, "claude-hook-rewake");
-      assert.equal(call.message.display, false);
-      assert.equal(call.message.content, "Security finding:\n\nblocking violation");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: exit code 2 with empty rewakeMessage uses raw body as content", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-raw-body";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("finding-only");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls.length, 1);
-      assert.equal(pi.sendMessageCalls[0]?.message.content, "finding-only");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: exit code 2 with empty stderr falls back to stdout body", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-stdout";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStdout("from-stdout");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls[0]?.message.content, "from-stdout");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: exit code 0 -> pi.sendMessage NOT called", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-zero";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ rewakeMessage: "noise" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("ignored");
-      spy.children[0]?.emitExit(0);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls.length, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: exit code 2 with empty body skips injection (no zero-content sendMessage)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-empty-body";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls.length, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: deliverAs === nextTurn when ctx.isIdle() is true", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-idle";
-      const ctx = makeMockCtx("/tmp/proj");
-      ctx.setIdle(true);
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("body");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls[0]?.options?.deliverAs, "nextTurn");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: deliverAs === followUp when ctx.isIdle() is false", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-busy";
-      const ctx = makeMockCtx("/tmp/proj");
-      ctx.setIdle(false);
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("body");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls[0]?.options?.deliverAs, "followUp");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: pi.sendMessage throw is trapped (handler does not escape)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-throw";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      pi.setSendMessageThrow(new Error("sendMessage bombed"));
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("body");
-      // Must not throw out of the exit-handler microtask.
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      // sendMessage was attempted (and threw) -- no call recorded because
-      // the spy throws BEFORE recording.
-      assert.equal(pi.sendMessageCalls.length, 0);
-      // Registry still cleaned up.
-      assert.equal(asyncRewakeEntries().has("uuid-throw"), false);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-59-03: captured-epoch mismatch -> exit handler no-ops (no sendMessage, no notify)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-stale";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ rewakeSummary: "should not fire" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      // Simulate a /reload between spawn and exit.
-      bumpEpoch();
-      spy.children[0]?.emitStderr("late body");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(pi.sendMessageCalls.length, 0);
-      assert.equal(ctx.notifyCalls.length, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: ring-buffer
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("ring-buffer", () => {
-  test("EXEC-05: STDERR_CAP_BYTES === 64 KiB", () => {
-    assert.equal(STDERR_CAP_BYTES, 65_536);
-  });
-
-  test("EXEC-05: STDOUT_CAP_BYTES === 1 MiB", () => {
-    assert.equal(STDOUT_CAP_BYTES, 1_048_576);
-  });
-
-  test("D-62-04: write more than capacity drops oldest bytes and latches truncated", () => {
-    const rb = new RingBuffer(8);
-    rb.write(Buffer.from("0123456789"));
-    const got = rb.read();
-    assert.equal(got.truncated, true);
-    // Tail kept: last 8 bytes of "0123456789" are "23456789".
-    assert.equal(got.text, "23456789");
-  });
-
-  test("D-62-04: read returns chronological order after wrap", () => {
-    const rb = new RingBuffer(4);
-    rb.write(Buffer.from("ab"));
-    rb.write(Buffer.from("cd"));
-    rb.write(Buffer.from("ef"));
-    const got = rb.read();
-    assert.equal(got.truncated, true);
-    assert.equal(got.text, "cdef");
-  });
-
-  test("D-62-04: empty buffer read returns {text:'', truncated:false}", () => {
-    const rb = new RingBuffer(8);
-    assert.deepEqual(rb.read(), { text: "", truncated: false });
-  });
-
-  test("HOOK-06: injection content prepends '[…truncated]\\n' when ring buffer truncated", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-truncated";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      // Emit > 64 KiB of stderr so the ring buffer truncates.
-      spy.children[0]?.emitStderr(Buffer.alloc(STDERR_CAP_BYTES + 16, 0x41));
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      const content = pi.sendMessageCalls[0]?.message.content ?? "";
-      assert.ok(
-        content.startsWith("[…truncated]\n"),
-        `expected truncated prefix, got first 32 chars: ${JSON.stringify(content.slice(0, 32))}`,
-      );
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: orphan-reap
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("orphan-reap", () => {
-  test("D-62-05: pidTablePath(loc) ends with /pi-claude-marketplace/data/_shared/async-rewake-pids.json", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const p = pidTablePath(tmp.loc);
-      assert.match(p, /pi-claude-marketplace[/\\]data[/\\]_shared[/\\]async-rewake-pids\.json$/);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: writePidTable + readPidTable round-trips entries", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const entries: readonly PidTableEntry[] = [
-        {
-          pid: 1111,
-          dispatchId: "uuid-A",
-          scope: "user",
-          marketplace: "mp",
-          plugin: "p1",
-          spawnedAt: "2026-06-15T00:00:00.000Z",
-        },
-        {
-          pid: 2222,
-          dispatchId: "uuid-B",
-          scope: "user",
-          marketplace: "mp",
-          plugin: "p2",
-          spawnedAt: "2026-06-15T00:00:01.000Z",
-        },
-      ];
-      await writePidTable(tmp.loc, entries);
-      const round = await readPidTable(tmp.loc);
-      assert.equal(round.length, 2);
-      assert.equal(round[0]?.dispatchId, "uuid-A");
-      assert.equal(round[1]?.dispatchId, "uuid-B");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("NFR-3: readPidTable on missing file returns []", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      // No write performed; readPidTable must return [] on ENOENT.
-      const round = await readPidTable(tmp.loc);
-      assert.deepEqual([...round], []);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: reapOrphans on Linux with matching marker -> killProbe receives SIGKILL", async (t) => {
-    if (process.platform !== "linux") {
-      t.skip("Linux-only marker path");
-      return;
-    }
-
-    const tmp = await makeTempLocations();
-    try {
-      const killCalls: Array<{ pid: number; sig: number | NodeJS.Signals }> = [];
-      const probes: OrphanProbes = {
-        killProbe: (pid, sig) => {
-          killCalls.push({ pid, sig });
-        },
-        environReader: () => Promise.resolve(`${MARKER_ENV}=uuid-owned\0OTHER=x`),
-      };
-      await writePidTable(tmp.loc, [
-        {
-          pid: 12_345,
-          dispatchId: "uuid-owned",
-          scope: "user",
-          marketplace: "mp",
-          plugin: "p",
-          spawnedAt: "2026-06-15T00:00:00.000Z",
-        },
-      ]);
-      await reapOrphans(tmp.loc, probes);
-      // First call is kill 0 (liveness probe); second call is SIGKILL.
-      const sigKillCalls = killCalls.filter((c) => c.sig === "SIGKILL");
-      assert.equal(sigKillCalls.length, 1);
-      assert.equal(sigKillCalls[0]?.pid, 12_345);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: reapOrphans on Linux with mismatched marker -> killProbe SIGKILL NOT issued", async (t) => {
-    if (process.platform !== "linux") {
-      t.skip("Linux-only marker path");
-      return;
-    }
-
-    const tmp = await makeTempLocations();
-    try {
-      const killCalls: Array<{ pid: number; sig: number | NodeJS.Signals }> = [];
-      const probes: OrphanProbes = {
-        killProbe: (pid, sig) => {
-          killCalls.push({ pid, sig });
-        },
-        environReader: () => Promise.resolve(`${MARKER_ENV}=different-uuid\0OTHER=x`),
-      };
-      await writePidTable(tmp.loc, [
-        {
-          pid: 54_321,
-          dispatchId: "uuid-expected",
-          scope: "user",
-          marketplace: "mp",
-          plugin: "p",
-          spawnedAt: "2026-06-15T00:00:00.000Z",
-        },
-      ]);
-      await reapOrphans(tmp.loc, probes);
-      const sigKillCalls = killCalls.filter((c) => c.sig === "SIGKILL");
-      assert.equal(sigKillCalls.length, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: reapOrphans on non-Linux platform soft-skips SIGKILL (conservative path)", async (t) => {
-    if (process.platform === "linux") {
-      t.skip("non-Linux soft-skip arm; this host is Linux");
-      return;
-    }
-
-    const tmp = await makeTempLocations();
-    try {
-      const killCalls: Array<{ pid: number; sig: number | NodeJS.Signals }> = [];
-      const probes: OrphanProbes = {
-        killProbe: (pid, sig) => {
-          killCalls.push({ pid, sig });
-        },
-        environReader: () => Promise.resolve(""),
-      };
-      await writePidTable(tmp.loc, [
-        {
-          pid: 11_111,
-          dispatchId: "uuid-x",
-          scope: "user",
-          marketplace: "mp",
-          plugin: "p",
-          spawnedAt: "2026-06-15T00:00:00.000Z",
-        },
-      ]);
-      await reapOrphans(tmp.loc, probes);
-      const sigKillCalls = killCalls.filter((c) => c.sig === "SIGKILL");
-      assert.equal(sigKillCalls.length, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: reapOrphans unlinks the PID table after the kill pass", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const probes: OrphanProbes = {
-        killProbe: () => {
-          // ESRCH -> dead pid; nothing to kill.
-          const err = new Error("no such process") as NodeJS.ErrnoException;
-          err.code = "ESRCH";
-          throw err;
-        },
-        environReader: () => Promise.resolve(""),
-      };
-      await writePidTable(tmp.loc, [
-        {
-          pid: 99_999,
-          dispatchId: "uuid-dead",
-          scope: "user",
-          marketplace: "mp",
-          plugin: "p",
-          spawnedAt: "2026-06-15T00:00:00.000Z",
-        },
-      ]);
-      // Sanity check: file exists pre-reap.
-      const statPre = await stat(pidTablePath(tmp.loc));
-      assert.ok(statPre.isFile());
-      await reapOrphans(tmp.loc, probes);
-      await assert.rejects(() => stat(pidTablePath(tmp.loc)), /ENOENT/);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: unlinkPidTable on missing file is a no-op", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      await assert.doesNotReject(() => unlinkPidTable(tmp.loc));
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: dispatch-exec delegation
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("dispatch-exec delegation", () => {
-  test("D-62-01: asyncRewake:true -> dispatchHookExec returns {kind:'noop'} AND spawnAndRegister was called", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-disp-async";
-      const ctx = makeMockCtx(tmp.loc.scopeRoot);
-      const pi = makeMockPi();
-      const result = await dispatchHookExec(
-        makeEntry({ asyncRewake: true }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      assert.deepEqual(result, { kind: "noop" });
-      assert.equal(spy.calls.length, 1);
-      assert.equal(asyncRewakeEntries().has("uuid-disp-async"), true);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-01: asyncRewake:undefined -> sync EXEC body fires (single spawn, no async registry entry)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy((h) => {
-        // The sync EXEC body uses `close`, not `exit`, to settle. Push
-        // EOF on both streams then emit `close` on the EventEmitter
-        // backing the mock child.
-        h.child.stdout?.emit("end");
-        h.child.stderr?.emit("end");
-        (h.child as unknown as EventEmitter).emit("close", 0);
-      });
-      const dispatchId = () => "uuid-should-not-be-used";
-      const ctx = makeMockCtx(tmp.loc.scopeRoot);
-      const pi = makeMockPi();
-      await dispatchHookExec(makeEntry({}), { toolName: "bash", input: {} }, ctx.ctx, pi.pi, {
-        spawnImpl: spy.spawnImpl,
-        dispatchId,
-      });
-      assert.equal(spy.calls.length, 1);
-      // No async registry entry -- the spy uuid was never consumed.
-      assert.equal(asyncRewakeEntries().has("uuid-should-not-be-used"), false);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-03 lenient: asyncRewake:'yes' (non-boolean truthy) routes to sync path", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy((h) => {
-        h.child.stdout?.emit("end");
-        h.child.stderr?.emit("end");
-        (h.child as unknown as EventEmitter).emit("close", 0);
-      });
-      const dispatchId = () => "uuid-yes-route";
-      const ctx = makeMockCtx(tmp.loc.scopeRoot);
-      const pi = makeMockPi();
-      await dispatchHookExec(
-        makeEntry({ asyncRewake: "yes" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      // Strict === true discriminator: non-boolean routes to sync.
-      // Async registry is empty.
-      assert.equal(asyncRewakeEntries().has("uuid-yes-route"), false);
-      assert.equal(spy.calls.length, 1);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-01: asyncRewake:true returns {kind:'noop'} even when spawnAndRegister rejects internally", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      // No spawn spy installed deliberately: the production `spawn` will
-      // be invoked for "/bin/true" via shell -- harmless but takes a real
-      // process slot. To avoid touching the OS, install a spawn fake
-      // that throws synchronously so the registry's internal `try/catch`
-      // arm exercises (the dispatch-exec outer try/catch is the
-      // backstop the test pins).
-      const spawnImpl = ((): ChildProcess => {
-        throw new Error("synthetic spawn failure");
-      }) as unknown as typeof import("node:child_process").spawn;
-      const ctx = makeMockCtx(tmp.loc.scopeRoot);
-      const pi = makeMockPi();
-      const result = await dispatchHookExec(
-        makeEntry({ asyncRewake: true }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        { spawnImpl },
-      );
-      assert.deepEqual(result, { kind: "noop" });
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: multi-hook fan-in
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("multi-hook fan-in", () => {
-  test("HOOK-06: two concurrent spawnAndRegister calls produce distinct dispatchIds", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const ids = ["uuid-fan-A", "uuid-fan-B"];
-      let i = 0;
-      const dispatchId = () => {
-        const id = ids[i] ?? "uuid-overflow";
-        i += 1;
-        return id;
-      };
-
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await Promise.all([
-        spawnAndRegister(
-          makeEntry({ pluginId: "p-a" }),
-          { toolName: "bash", input: {} },
-          ctx.ctx,
-          pi.pi,
-          tmp.loc,
-          { spawnImpl: spy.spawnImpl, dispatchId },
-        ),
-        spawnAndRegister(
-          makeEntry({ pluginId: "p-b" }),
-          { toolName: "bash", input: {} },
-          ctx.ctx,
-          pi.pi,
-          tmp.loc,
-          { spawnImpl: spy.spawnImpl, dispatchId },
-        ),
-      ]);
-      const reg = asyncRewakeEntries();
-      assert.equal(reg.size, 2);
-      assert.equal(reg.has("uuid-fan-A"), true);
-      assert.equal(reg.has("uuid-fan-B"), true);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: each child's exit independently removes its own entry", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const ids = ["uuid-indep-A", "uuid-indep-B"];
-      let i = 0;
-      const dispatchId = () => {
-        const id = ids[i] ?? "uuid-overflow";
-        i += 1;
-        return id;
-      };
-
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ pluginId: "p-a" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      await spawnAndRegister(
-        makeEntry({ pluginId: "p-b" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      assert.equal(asyncRewakeEntries().size, 2);
-      spy.children[0]?.emitExit(0);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(asyncRewakeEntries().size, 1);
-      assert.equal(asyncRewakeEntries().has("uuid-indep-B"), true);
-      spy.children[1]?.emitExit(0);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(asyncRewakeEntries().size, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("D-62-05: PID table reflects both entries until each exit fires", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const ids = ["uuid-pid-A", "uuid-pid-B"];
-      let i = 0;
-      const dispatchId = () => {
-        const id = ids[i] ?? "uuid-overflow";
-        i += 1;
-        return id;
-      };
-
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ pluginId: "p-a" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      await spawnAndRegister(
-        makeEntry({ pluginId: "p-b" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      const table2 = await readPidTable(tmp.loc);
-      assert.equal(table2.length, 2);
-      spy.children[0]?.emitExit(0);
-      // onChildExit runs synchronously on the `exit` emit and reassigns the
-      // module-level _lastPidTablePersist handle, so draining that exact
-      // promise is deterministic -- a fixed sleep is a race under parallel
-      // CPU load (the off-band write may not finish in time).
-      await awaitPidTablePersist();
-      const table1 = await readPidTable(tmp.loc);
-      assert.equal(table1.length, 1);
-      assert.equal(table1[0]?.dispatchId, "uuid-pid-B");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: IL-2 exemption (rewakeSummary independent of exit code)
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("rewakeSummary IL-2 exemption", () => {
-  test("HOOK-06: rewakeSummary fires through ctx.ui.notify on exit code 0", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-summary-0";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ rewakeSummary: "all clear" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitExit(0);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(ctx.notifyCalls.length, 1);
-      assert.equal(ctx.notifyCalls[0]?.text, "all clear");
-      assert.equal(ctx.notifyCalls[0]?.severity, "info");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: rewakeSummary fires through ctx.ui.notify on exit code 2 (independent of inject)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-summary-2";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({ rewakeSummary: "found violation" }),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitStderr("body");
-      spy.children[0]?.emitExit(2);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(ctx.notifyCalls.length, 1);
-      assert.equal(ctx.notifyCalls[0]?.severity, "info");
-      // The inject arm STILL fires alongside the summary.
-      assert.equal(pi.sendMessageCalls.length, 1);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-
-  test("HOOK-06: handler without rewakeSummary -> ctx.ui.notify NOT called", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy();
-      const dispatchId = () => "uuid-no-summary";
-      const ctx = makeMockCtx("/tmp/proj");
-      const pi = makeMockPi();
-      await spawnAndRegister(
-        makeEntry({}),
-        { toolName: "bash", input: {} },
-        ctx.ctx,
-        pi.pi,
-        tmp.loc,
-        { spawnImpl: spy.spawnImpl, dispatchId },
-      );
-      spy.children[0]?.emitExit(0);
-      await new Promise((r) => setImmediate(r));
-      assert.equal(ctx.notifyCalls.length, 0);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// describe: hook env parity (HENV-02)
-// ──────────────────────────────────────────────────────────────────────────
-
-describe("hook env parity (HENV-02)", () => {
-  // D-91-01 behavioral drift guard: drive both public entry points through the
-  // dual spawn spy and compare the captured child envs. The async lane's ONLY
-  // permitted extra key is MARKER_ENV; every shared key must carry an equal
-  // value. Comparison is by key SET (symmetric difference) + per-key equality,
-  // so it is order-independent and survives refactors -- no source-text lock.
-  function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEnv): void {
-    const syncKeys = new Set(Object.keys(syncEnv));
-    const asyncKeys = new Set(Object.keys(asyncEnv));
-    const onlyAsync = [...asyncKeys].filter((k) => !syncKeys.has(k));
-    const onlySync = [...syncKeys].filter((k) => !asyncKeys.has(k));
-    assert.deepEqual(onlyAsync, [MARKER_ENV], "MARKER_ENV is the sole async-only key");
-    assert.deepEqual(onlySync, [], "sync must not carry keys the async lane lacks");
-    for (const k of syncKeys) {
-      assert.equal(asyncEnv[k], syncEnv[k], `shared key ${k} must match across lanes`);
-    }
+    // assert
+    assert.strictEqual(processes.calls.length, 2);
+    assertLaneParity(syncEnvironment, asyncEnvironment);
+    assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-pretool-parity");
+    assert.strictEqual(Object.hasOwn(syncEnvironment, "CLAUDE_ENV_FILE"), false);
+    assert.strictEqual(Object.hasOwn(asyncEnvironment, "CLAUDE_ENV_FILE"), false);
+  } finally {
+    shutdownInMemoryChildren();
+    resetRoutingState();
+    destroyChildren(processes.children);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
+});
 
-  // Settle the sync EXEC collector (it uses `close`, not `exit`); harmless on
-  // the fire-and-forget async child. Fires on every spawn.
-  const settleSyncChild = (h: MockChild): void => {
-    h.child.stdout?.emit("end");
-    h.child.stderr?.emit("end");
-    (h.child as unknown as EventEmitter).emit("close", 0);
-  };
+test("keeps SessionStart env-file identity equal across sync and async lanes", async () => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-architecture-session-parity-"));
+  resetRoutingState();
+  shutdownInMemoryChildren();
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-start-parity");
+  const pi = createPi();
+  const syncEntry = createEntry(root, "SessionStart", false);
+  const asyncEntry = createEntry(root, "SessionStart", true);
+  const processes = createSpawnHarness(true);
 
-  test("HENV-02 / D-91-01: sync and async lanes agree modulo MARKER_ENV (PreToolUse, CLAUDE_ENV_FILE absent)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy(settleSyncChild);
-      const dispatchId = () => "fixed-marker";
-      const ctx = makeMockCtx(tmp.loc.scopeRoot);
-      const pi = makeMockPi();
-      const entry = makeEntry({ claudeEvent: "PreToolUse" });
+  try {
+    // act
+    await dispatchHookExec(syncEntry, { reason: "startup" }, context.context, pi.pi, {
+      spawnImpl: processes.spawnImpl,
+    });
+    await spawnAndRegister(asyncEntry, { reason: "startup" }, context.context, pi.pi, locations, {
+      spawnImpl: processes.spawnImpl,
+      dispatchId: () => "dispatch-session-parity",
+    });
+    const syncEnvironment = processes.calls[0]?.options.env ?? {};
+    const asyncEnvironment = processes.calls[1]?.options.env ?? {};
 
-      await dispatchHookExec(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi, {
-        spawnImpl: spy.spawnImpl,
-      });
-      await spawnAndRegister(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi, tmp.loc, {
-        spawnImpl: spy.spawnImpl,
-        dispatchId,
-      });
+    // assert
+    assert.strictEqual(processes.calls.length, 2);
+    assertLaneParity(syncEnvironment, asyncEnvironment);
+    assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-session-parity");
+    assert.strictEqual(
+      syncEnvironment.CLAUDE_ENV_FILE,
+      path.join(
+        root,
+        ".pi",
+        "pi-claude-marketplace",
+        "data",
+        "_shared",
+        "claude-env-session-start-parity.env",
+      ),
+    );
+    assert.strictEqual(asyncEnvironment.CLAUDE_ENV_FILE, syncEnvironment.CLAUDE_ENV_FILE);
+  } finally {
+    shutdownInMemoryChildren();
+    resetRoutingState();
+    destroyChildren(processes.children);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
 
-      const syncEnv = spy.calls[0]?.options.env ?? {};
-      const asyncEnv = spy.calls[1]?.options.env ?? {};
-      assertLaneParity(syncEnv, asyncEnv);
-      assert.equal(syncEnv.CLAUDE_ENV_FILE, undefined, "sync: no CLAUDE_ENV_FILE for PreToolUse");
-      assert.equal(asyncEnv.CLAUDE_ENV_FILE, undefined, "async: no CLAUDE_ENV_FILE for PreToolUse");
-    } finally {
-      await tmp.cleanup();
-    }
-  });
+test("prevents a pre-reload async child from affecting the advanced routing epoch", async () => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-architecture-reload-"));
+  resetRoutingState();
+  shutdownInMemoryChildren();
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-reload");
+  const pi = createPi();
+  const entry = createEntry(root, "PreToolUse", true);
+  const processes = createSpawnHarness(false);
+  const tablePath = pidTablePath(locations);
+  let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
-  test("HENV-02 / D-91-01: sync and async lanes agree modulo MARKER_ENV (SessionStart, CLAUDE_ENV_FILE present + equal)", async () => {
-    const tmp = await makeTempLocations();
-    try {
-      const spy = installSpawnSpy(settleSyncChild);
-      const dispatchId = () => "fixed-marker";
-      const ctx = makeMockCtx(tmp.loc.scopeRoot);
-      const pi = makeMockPi();
-      const entry = makeEntry({ claudeEvent: "SessionStart" });
+  try {
+    await spawnAndRegister(
+      entry,
+      { toolName: "bash", input: {} },
+      context.context,
+      pi.pi,
+      locations,
+      {
+        spawnImpl: processes.spawnImpl,
+        dispatchId: () => "dispatch-before-reload",
+      },
+    );
+    const child = processes.children[0];
+    child?.stderr.write("stale body");
+    bumpEpoch();
+    tableRewrite = observeTableRewrite(tablePath);
 
-      await dispatchHookExec(entry, { reason: "startup" }, ctx.ctx, pi.pi, {
-        spawnImpl: spy.spawnImpl,
-      });
-      await spawnAndRegister(entry, { reason: "startup" }, ctx.ctx, pi.pi, tmp.loc, {
-        spawnImpl: spy.spawnImpl,
-        dispatchId,
-      });
+    // act
+    child?.emitExit(2);
+    await tableRewrite.completion;
+    tableRewrite.close();
+    shutdownInMemoryChildren();
 
-      const syncEnv = spy.calls[0]?.options.env ?? {};
-      const asyncEnv = spy.calls[1]?.options.env ?? {};
-      assertLaneParity(syncEnv, asyncEnv);
-      const envFile = syncEnv.CLAUDE_ENV_FILE ?? "";
-      assert.ok(envFile !== "", "sync: CLAUDE_ENV_FILE present for SessionStart");
-      assert.equal(asyncEnv.CLAUDE_ENV_FILE, envFile, "async CLAUDE_ENV_FILE must equal sync");
-      assert.match(envFile, /[/\\]data[/\\]_shared[/\\]claude-env-session-rewake\.env$/);
-    } finally {
-      await tmp.cleanup();
-    }
-  });
+    // assert
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+    assert.deepStrictEqual(child?.signals, []);
+  } finally {
+    tableRewrite?.close();
+    shutdownInMemoryChildren();
+    resetRoutingState();
+    destroyChildren(processes.children);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
 });

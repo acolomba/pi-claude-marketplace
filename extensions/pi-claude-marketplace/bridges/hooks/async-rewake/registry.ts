@@ -43,7 +43,7 @@ import { readFile } from "node:fs/promises";
 
 import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
-import { assertNever, errorMessage } from "../../../shared/errors.ts";
+import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
@@ -143,10 +143,7 @@ export interface AsyncRewakeEntry {
 // cells left here. The `spawn` implementation and the dispatchId generator
 // used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
 // both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
-// `dispatch-exec.ts` threads through from its own `deps` argument. The two
-// surviving observer exports are read-only, not seams: they let a
-// test assert on the Map and drain the in-flight pid-table persist without
-// reaching into module scope.
+// `dispatch-exec.ts` threads through from its own `deps` argument.
 // ──────────────────────────────────────────────────────────────────────────
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
@@ -174,33 +171,6 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
   },
   environReader: (pid) => readFile(`/proc/${pid}/environ`, "utf8"),
 };
-
-/**
- * Read-only view of the in-memory registry. The `asyncRewakeRegistry` cell is
- * module-private, so this is the one way to observe it, mirroring the read
- * accessors `routing-state.ts` exposes over its own cells. Its only caller
- * today is test assertion, which is what a read surface is for.
- */
-export function asyncRewakeEntries(): ReadonlyMap<string, AsyncRewakeEntry> {
-  return asyncRewakeRegistry;
-}
-
-// Tracks the most recent fire-and-forget pid-table persist so tests can
-// drain it in cleanup before removing the temp directory, avoiding ENOTEMPTY
-// races with write-file-atomic's in-flight atomic rename on macOS.
-let _lastPidTablePersist: Promise<void> = Promise.resolve();
-
-/**
- * Await the most recent fire-and-forget pid-table persist.
- *
- * The persist is deliberately not awaited on the spawn path, so a caller that
- * needs the write settled -- a teardown removing the directory underneath it --
- * has no other way to know. Without it, write-file-atomic's in-flight rename
- * races the removal and surfaces as ENOTEMPTY on macOS.
- */
-export function awaitPidTablePersist(): Promise<void> {
-  return _lastPidTablePersist;
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Public surface: spawnAndRegister
@@ -373,13 +343,6 @@ export async function spawnAndRegister(
 // Per-child exit / error handlers
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * NFR-7 exhaustiveness gate for the three exit outcomes. Even though
- * only the `inject` arm calls `pi.sendMessage`, encoding the union
- * makes the silent / noop arms explicit at the type level.
- */
-type OutcomeKind = "inject" | "silent" | "noop";
-
 function onChildExit(
   dispatchId: string,
   code: number | null,
@@ -396,8 +359,7 @@ function onChildExit(
 
   entry.ladder.cancel();
   asyncRewakeRegistry.delete(dispatchId);
-  _lastPidTablePersist = persistPidTableForLoc(entry.loc);
-  void _lastPidTablePersist;
+  void persistPidTableForLoc(entry.loc);
 
   // D-62-03 / D-59-03 captured-epoch zombie defense. A slow child from
   // a prior `/reload` cycle must not inject into the freshly-hydrated
@@ -407,8 +369,6 @@ function onChildExit(
       `async-rewake: stale exit from prior load -- dispatchId=${dispatchId} ` +
         `capturedEpoch=${entry.capturedEpoch} currentEpoch=${currentEpoch()}`,
     );
-    const outcome: OutcomeKind = "noop";
-    assertOutcome(outcome);
     return;
   }
 
@@ -430,8 +390,6 @@ function onChildExit(
       `async-rewake: silent completion code=${code ?? "null"} signal=${signal ?? "null"} ` +
         `dispatchId=${dispatchId} plugin=${entry.pluginId}`,
     );
-    const outcome: OutcomeKind = "silent";
-    assertOutcome(outcome);
     return;
   }
 
@@ -440,8 +398,6 @@ function onChildExit(
   const body = stderrText.length > 0 ? stderrText : stdoutText;
   if (body.length === 0) {
     hookDebugLog(`async-rewake: exit 2 with empty body -- no injection (${entry.pluginId})`);
-    const outcome: OutcomeKind = "silent";
-    assertOutcome(outcome);
     return;
   }
 
@@ -465,9 +421,6 @@ function onChildExit(
   } catch (err) {
     hookDebugLog(`async-rewake: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
   }
-
-  const outcome: OutcomeKind = "inject";
-  assertOutcome(outcome);
 }
 
 function onChildError(dispatchId: string, err: unknown): void {
@@ -479,8 +432,7 @@ function onChildError(dispatchId: string, err: unknown): void {
 
   entry.ladder.cancel();
   asyncRewakeRegistry.delete(dispatchId);
-  _lastPidTablePersist = persistPidTableForLoc(entry.loc);
-  void _lastPidTablePersist;
+  void persistPidTableForLoc(entry.loc);
 }
 
 /**
@@ -500,22 +452,6 @@ function buildInjectionContent(
   }
 
   return bodyWithMarker;
-}
-
-/**
- * NFR-7 exhaustiveness pin. The three OutcomeKind arms drive every
- * branch in `onChildExit`; adding a fourth requires updating this
- * switch and gets a `tsc` error at the `assertNever` arm.
- */
-function assertOutcome(outcome: OutcomeKind): void {
-  switch (outcome) {
-    case "inject":
-    case "silent":
-    case "noop":
-      return;
-    default:
-      assertNever(outcome);
-  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -693,10 +629,6 @@ async function readProcEnvironMarker(
   pid: number,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<string | undefined> {
-  if (process.platform !== "linux") {
-    return undefined;
-  }
-
   try {
     const raw = await probes.environReader(pid);
     for (const pair of raw.split("\0")) {
