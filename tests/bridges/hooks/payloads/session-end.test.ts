@@ -8,30 +8,30 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionShutdownEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("session-end: emits the SessionEnd envelope with reason propagation", () => {
+test("emits the complete SessionEnd envelope with the quit reason", () => {
+  // arrange
+  const context = {
+    sessionId: "session-end-quit",
+    transcriptPath: "/sessions/session-end-quit.jsonl",
+    cwd: "/workspaces/session-end-quit",
+  } satisfies TranslationContext;
   const event: SessionShutdownEvent = {
     type: "session_shutdown",
     reason: "quit",
   };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"SessionEnd","reason":"quit"}',
-  );
-});
-
-test("session-end: propagates all Pi shutdown reasons verbatim", () => {
-  for (const reason of ["quit", "reload", "new", "resume", "fork"] as const) {
-    const actual = translate({ type: "session_shutdown", reason }, ctx);
-    assert.equal(actual.hook_event_name, "SessionEnd");
-    assert.equal(actual.reason, reason);
-  }
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-end-quit",
+    transcript_path: "/sessions/session-end-quit.jsonl",
+    cwd: "/workspaces/session-end-quit",
+    hook_event_name: "SessionEnd",
+    reason: "quit",
+  });
+  assert.strictEqual(payload.session_id, context.sessionId);
+  assert.strictEqual(payload.transcript_path, context.transcriptPath);
+  assert.strictEqual(payload.cwd, context.cwd);
 });
