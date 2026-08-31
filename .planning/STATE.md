@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-12-PLAN.md
-last_updated: "2026-08-31T04:33:57.102Z"
+stopped_at: Completed 112-15-PLAN.md
+last_updated: "2026-08-31T04:42:48.313Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 12 glob compiler owner
-state_head: 66dc9c215a508bdbf6e9d70588ba9dea9d26e22f
+last_activity_desc: Completed Phase 112 Plan 15 PostCompact payload owner
+state_head: 4fc278a9ac4d35cd43b15750433c28f37dfe628e
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 92
+  completed_plans: 93
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 7 of 31
+Plan: 8 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 12 glob compiler owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 15 PostCompact payload owner
 
 Progress: [████░░░░░░] 40%
 
@@ -125,6 +125,7 @@ evidence.
 | Phase 112 P09 | 9 min | 2 tasks | 1 files |
 | Phase 112 P10 | 14 min | 2 tasks | 1 files |
 | Phase 112 P12 | 12 min | 2 tasks | 1 files |
+| Phase 112 P15 | 6 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -182,6 +183,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept glob.ts byte-for-byte unchanged because its public compiled Bash and path objects expose every matching and defensive branch.
 - [Phase 112]: Glob owner evidence uses complete independent metadata and named outcome maps for command boundaries, six anchors, normalization, containment, and globstar behavior.
 - [Phase 112]: Covered defensive sparse and unknown compiled metadata through exported objects with Reflect, without casts, test seams, or production surface changes.
+- [Phase 112]: Kept post-compact.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
+- [Phase 112]: Replaced the incomplete double assertion with complete SessionCompactEvent values checked by satisfies.
+- [Phase 112]: Treated empty strings as valid context values and did not fabricate an out-of-contract null case.
 
 ### Pending Todos
 
@@ -200,6 +204,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T04:33:56.363Z
-Stopped at: Completed 112-12-PLAN.md
+Last session: 2026-08-31T04:42:47.600Z
+Stopped at: Completed 112-15-PLAN.md
 Resume file: None

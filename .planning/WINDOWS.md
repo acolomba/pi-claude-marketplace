@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 3
 waived_count: 0
-fixed_count: 1
-total_count: 4
-last_updated: 2026-08-29T18:04:45.703Z
+fixed_count: 2
+total_count: 5
+last_updated: 2026-08-31T04:43:40.050Z
 ---
 
 # Broken Windows Ledger
@@ -19,6 +19,7 @@ last_updated: 2026-08-29T18:04:45.703Z
 | 2 | 88 | stub | extensions/pi-claude-marketplace/bridges/hooks/settle.ts |  | stop_hook_active hardcoded false in synthetic Stop event; loop-protection flag + 8-block cap land in plan 03 (STOP-07) | open |  | 2026-07-30T12:26:37.974Z |  |
 | 3 | 88 | stub | extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts |  | thin StopFailure translator; errorMessage classifier lands in plan 04 (SFAIL-03) | open |  | 2026-07-30T12:26:38.396Z |  |
 | 4 | 109 | deviation | tests/shared/atomic-json.test.ts | 55 | TypeScript inferred a literal-only expected-document set before the Task 2 type check widened it to Set<string>. | fixed |  | 2026-08-29T18:04:33.606Z | 2026-08-29T18:04:45.703Z |
+| 5 | 112 | deviation | .planning/ROADMAP.md |  | Closed the canonical P112-15 row and current activity after the generic progress update left them stale. | fixed |  | 2026-08-31T04:43:18.412Z | 2026-08-31T04:43:40.050Z |
 
 ````json
 [
@@ -69,6 +70,18 @@ last_updated: 2026-08-29T18:04:45.703Z
     "reason": "",
     "recorded_at": "2026-08-29T18:04:33.606Z",
     "resolved_at": "2026-08-29T18:04:45.703Z"
+  },
+  {
+    "id": 5,
+    "kind": "deviation",
+    "phase": "112",
+    "file": ".planning/ROADMAP.md",
+    "line": null,
+    "description": "Closed the canonical P112-15 row and current activity after the generic progress update left them stale.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-31T04:43:18.412Z",
+    "resolved_at": "2026-08-31T04:43:40.050Z"
   }
 ]
 ````
