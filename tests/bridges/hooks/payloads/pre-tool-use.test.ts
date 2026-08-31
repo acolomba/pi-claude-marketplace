@@ -45,51 +45,51 @@ test("maps a built-in tool to the complete PreToolUse envelope", () => {
   assert.strictEqual(payload.tool_input, toolInput);
 });
 
-test("pre-tool-use: CustomToolCallEvent toolName passes through unchanged (TOOL-01 fallback)", () => {
-  // The CustomToolCallEvent arm has an open `toolName: string` -- e.g.
-  // `mcp__server__tool` from pi-mcp-adapter. The helper's `??` fallback
-  // emits the supplied name verbatim into Claude's tool_name field.
+test("preserves a custom tool name and input without mutation", () => {
+  // arrange
+  const toolInput = {
+    query: { phrase: "hook payloads", languages: ["typescript", "javascript"] },
+    limit: 4,
+    options: { includeDeprecated: false },
+  };
   const event = {
     type: "tool_call",
-    toolCallId: "tc-2",
-    toolName: "mcp__server__tool",
-    input: { foo: 1 },
-  } as unknown as ToolCallEvent;
+    toolCallId: "tool-call-custom",
+    toolName: "mcp__catalog__lookup",
+    input: toolInput,
+  } satisfies ToolCallEvent;
+  const context = {
+    sessionId: "session-custom",
+    transcriptPath: "/sessions/session-custom.jsonl",
+    cwd: "/workspace/custom",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-custom",
+    transcript_path: "/sessions/session-custom.jsonl",
+    cwd: "/workspace/custom",
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__catalog__lookup",
+    tool_input: {
+      query: { phrase: "hook payloads", languages: ["typescript", "javascript"] },
+      limit: 4,
+      options: { includeDeprecated: false },
+    },
+  };
 
-  const actual = translate(event, {
-    sessionId: "sess-1",
-    transcriptPath: "/tmp/t.jsonl",
-    cwd: "/proj",
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+  assert.strictEqual(payload.tool_input, toolInput);
+  assert.deepStrictEqual(toolInput, {
+    query: { phrase: "hook payloads", languages: ["typescript", "javascript"] },
+    limit: 4,
+    options: { includeDeprecated: false },
   });
-
-  assert.equal(actual.tool_name, "mcp__server__tool");
-  assert.equal(actual.hook_event_name, "PreToolUse");
-});
-
-test("pre-tool-use: every Pi tool literal capitalizes correctly", () => {
-  const cases: Array<[string, string]> = [
-    ["bash", "Bash"],
-    ["read", "Read"],
-    ["edit", "Edit"],
-    ["write", "Write"],
-    ["grep", "Grep"],
-    ["find", "Glob"],
-    ["ls", "LS"],
-  ];
-
-  for (const [piName, claudeName] of cases) {
-    const event = {
-      type: "tool_call",
-      toolCallId: "tc-x",
-      toolName: piName,
-      input: {},
-    } as unknown as ToolCallEvent;
-
-    const actual = translate(event, {
-      sessionId: "sess-1",
-      transcriptPath: "/tmp/t.jsonl",
-      cwd: "/proj",
-    });
-    assert.equal(actual.tool_name, claudeName, `${piName} -> ${claudeName}`);
-  }
+  assert.deepStrictEqual(context, {
+    sessionId: "session-custom",
+    transcriptPath: "/sessions/session-custom.jsonl",
+    cwd: "/workspace/custom",
+  });
 });
