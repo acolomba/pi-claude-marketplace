@@ -13,6 +13,7 @@ import {
   pidTablePath,
   readPidTable,
   writePidTable,
+  type PidTableEntry,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
   MARKER_ENV,
@@ -75,6 +76,20 @@ interface PiHarness {
 interface TimerObservation {
   readonly clearHandles: Array<ReturnType<typeof setTimeout>>;
   readonly handles: Array<ReturnType<typeof setTimeout>>;
+}
+
+interface ControlledPidTableWrite {
+  readonly completion: Promise<void>;
+  readonly entries: readonly PidTableEntry[];
+  release(): void;
+}
+
+interface ControlledPidTableWriter {
+  readonly maxActiveWrites: number;
+  readonly writesStarted: number;
+  readonly writer: NonNullable<SpawnDeps["pidTableWriter"]>;
+  releaseAll(): void;
+  waitForWrite(index: number): Promise<ControlledPidTableWrite>;
 }
 
 interface ChildOptions {
@@ -279,6 +294,72 @@ function createSpawn(child: ChildProcess, calls: SpawnCall[]): NonNullable<Spawn
     calls.push({ command, args: [...args], options });
     return child;
   }) as NonNullable<SpawnDeps["spawnImpl"]>;
+}
+
+function createControlledPidTableWriter(): ControlledPidTableWriter {
+  const records: ControlledPidTableWrite[] = [];
+  const waiters = new Map<number, (record: ControlledPidTableWrite) => void>();
+  let activeWrites = 0;
+  let maxActiveWrites = 0;
+  let releaseFutureWrites = false;
+
+  const writer: NonNullable<SpawnDeps["pidTableWriter"]> = async (loc, entries) => {
+    activeWrites += 1;
+    maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let complete!: () => void;
+    const completion = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    const record: ControlledPidTableWrite = {
+      completion,
+      entries: entries.map((entry) => ({ ...entry })),
+      release,
+    };
+    const index = records.push(record) - 1;
+    waiters.get(index)?.(record);
+    waiters.delete(index);
+    if (releaseFutureWrites) {
+      record.release();
+    }
+
+    try {
+      await released;
+      await writePidTable(loc, entries);
+    } finally {
+      activeWrites -= 1;
+      complete();
+    }
+  };
+
+  return {
+    get maxActiveWrites(): number {
+      return maxActiveWrites;
+    },
+    get writesStarted(): number {
+      return records.length;
+    },
+    writer,
+    releaseAll(): void {
+      releaseFutureWrites = true;
+      for (const record of records) {
+        record.release();
+      }
+    },
+    waitForWrite(index): Promise<ControlledPidTableWrite> {
+      const record = records[index];
+      if (record !== undefined) {
+        return Promise.resolve(record);
+      }
+
+      return new Promise((resolve) => {
+        waiters.set(index, resolve);
+      });
+    },
+  };
 }
 
 function observeTimers(t: TestContext, now: number): TimerObservation {
@@ -1519,6 +1600,136 @@ test(
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
+      await reapOrphans(locations, deadOrphanProbes());
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  },
+);
+
+test(
+  "serializes overlapping same-table lifecycle persistence in registry order",
+  { concurrency: false, timeout: 10_000 },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-persist-order-"));
+    const timers = observeTimers(t, Date.parse("2026-08-31T11:20:00.000Z"));
+    resetRoutingState();
+    shutdownInMemoryChildren();
+    const locations = locationsFor("project", root);
+    const context = createContext(root, "session-persist-order", true);
+    const pi = createPi();
+    const firstChild = createChild(24_697);
+    const secondChild = createChild(24_698);
+    const persistence = createControlledPidTableWriter();
+    let firstSpawn: Promise<void> | undefined;
+    let secondSpawn: Promise<void> | undefined;
+
+    try {
+      firstSpawn = spawnAndRegister(
+        createEntry(root, {
+          pluginId: "plugin-first",
+          handlerDecl: { type: "command", command: "/opt/hooks/first", timeout: 600 },
+        }),
+        {},
+        context.context,
+        pi.pi,
+        locations,
+        {
+          spawnImpl: createSpawn(firstChild.child, []),
+          dispatchId: () => "dispatch-first",
+          pidTableWriter: persistence.writer,
+        },
+      );
+      const firstWrite = await persistence.waitForWrite(0);
+      let reportSecondSpawn!: () => void;
+      const secondSpawned = new Promise<void>((resolve) => {
+        reportSecondSpawn = resolve;
+      });
+      const baseSecondSpawn = createSpawn(secondChild.child, []);
+      const secondSpawnImpl = ((
+        command: string,
+        args: readonly string[],
+        options: SpawnOptions,
+      ) => {
+        const child = baseSecondSpawn(command, args, options);
+        reportSecondSpawn();
+        return child;
+      }) as NonNullable<SpawnDeps["spawnImpl"]>;
+      secondSpawn = spawnAndRegister(
+        createEntry(root, {
+          pluginId: "plugin-second",
+          handlerDecl: { type: "command", command: "/opt/hooks/second", timeout: 600 },
+        }),
+        {},
+        context.context,
+        pi.pi,
+        locations,
+        {
+          spawnImpl: secondSpawnImpl,
+          dispatchId: () => "dispatch-second",
+          pidTableWriter: persistence.writer,
+        },
+      );
+      await secondSpawned;
+
+      // act
+      firstChild.emitExit(0);
+      firstChild.emitClose();
+      assert.strictEqual(persistence.writesStarted, 1);
+      firstWrite.release();
+      const secondWrite = await persistence.waitForWrite(1);
+      secondWrite.release();
+      const firstRemovalWrite = await persistence.waitForWrite(2);
+      firstRemovalWrite.release();
+      await Promise.all([firstSpawn, secondSpawn, firstRemovalWrite.completion]);
+      const entriesAfterOverlap = await readPidTable(locations);
+      secondChild.emitError(new Error("case-owned cleanup"));
+      const finalRemovalWrite = await persistence.waitForWrite(3);
+      finalRemovalWrite.release();
+      await finalRemovalWrite.completion;
+      const finalEntries = await readPidTable(locations);
+      t.mock.timers.tick(605_000);
+
+      // assert
+      assert.deepStrictEqual(firstWrite.entries, [
+        {
+          pid: 24_697,
+          dispatchId: "dispatch-first",
+          scope: "project",
+          marketplace: "catalog-lifecycle",
+          plugin: "plugin-first",
+          spawnedAt: "2026-08-31T11:20:00.000Z",
+        },
+      ]);
+      assert.deepStrictEqual(secondWrite.entries, [
+        {
+          pid: 24_698,
+          dispatchId: "dispatch-second",
+          scope: "project",
+          marketplace: "catalog-lifecycle",
+          plugin: "plugin-second",
+          spawnedAt: "2026-08-31T11:20:00.000Z",
+        },
+      ]);
+      assert.deepStrictEqual(firstRemovalWrite.entries, secondWrite.entries);
+      assert.deepStrictEqual(entriesAfterOverlap, secondWrite.entries);
+      assert.deepStrictEqual(finalRemovalWrite.entries, []);
+      assert.deepStrictEqual(finalEntries, []);
+      assert.strictEqual(persistence.maxActiveWrites, 1);
+      assert.deepStrictEqual(timers.clearHandles, timers.handles);
+      assert.deepStrictEqual(pi.messages, []);
+      assert.deepStrictEqual(context.notifications, []);
+    } finally {
+      persistence.releaseAll();
+      await Promise.allSettled(
+        [firstSpawn, secondSpawn].filter(
+          (value): value is Promise<void> => value !== undefined,
+        ),
+      );
+      shutdownInMemoryChildren();
+      resetRoutingState();
+      destroyChild(firstChild);
+      destroyChild(secondChild);
       await reapOrphans(locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }

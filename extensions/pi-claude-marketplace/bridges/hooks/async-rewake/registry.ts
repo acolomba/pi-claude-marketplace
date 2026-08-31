@@ -62,7 +62,13 @@ import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
-import { readPidTable, writePidTable, unlinkPidTable, type PidTableEntry } from "./pid-table.ts";
+import {
+  pidTablePath,
+  readPidTable,
+  unlinkPidTable,
+  writePidTable,
+  type PidTableEntry,
+} from "./pid-table.ts";
 import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts";
 
 import type { BucketAEvent, DispatchableEvent } from "../../../domain/components/hook-events.ts";
@@ -139,14 +145,15 @@ export interface AsyncRewakeEntry {
 // ──────────────────────────────────────────────────────────────────────────
 // Module state
 //
-// The registry Map and the default orphan probes are the only module-level
-// cells left here. The `spawn` implementation and the dispatchId generator
+// The registry Map, per-table persistence chains, and default orphan probes are
+// the only module-level cells left here. The `spawn` implementation and dispatchId generator
 // used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
 // both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
 // `dispatch-exec.ts` threads through from its own `deps` argument.
 // ──────────────────────────────────────────────────────────────────────────
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
+const pidTableOperations = new Map<string, Promise<void>>();
 
 /**
  * The two process probes the orphan reap needs: a liveness/kill signal and a
@@ -184,6 +191,7 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
 export interface SpawnDeps {
   readonly spawnImpl?: typeof spawn;
   readonly dispatchId?: () => string;
+  readonly pidTableWriter?: typeof writePidTable;
 }
 
 /**
@@ -210,6 +218,7 @@ export async function spawnAndRegister(
 ): Promise<void> {
   const spawnImpl = deps.spawnImpl ?? spawn;
   const makeDispatchId = deps.dispatchId ?? (() => randomUUID());
+  const pidTableWriter = deps.pidTableWriter ?? writePidTable;
   // D-87-04: narrow the admitted event to the dispatchable subset before
   // indexing the translator table. `Stop` / `StopFailure` never reach this
   // path -- no Pi event routes them to an async-rewake spawn (their entries in
@@ -310,23 +319,20 @@ export async function spawnAndRegister(
     asyncRewakeRegistry.set(dispatchId, asyncEntry);
 
     let exitOutcome:
-      | { readonly code: number | null; readonly signal: NodeJS.Signals | null }
-      | undefined;
+      { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined;
     let finalized = false;
     let stderrEnded = child.stderr === null || child.stderr.readableEnded;
     let stdoutEnded = child.stdout === null || child.stdout.readableEnded;
 
     const finalizeOnce = (
-      outcome:
-        | { readonly code: number | null; readonly signal: NodeJS.Signals | null }
-        | undefined,
+      outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
     ): void => {
       if (finalized) {
         return;
       }
 
       finalized = true;
-      finalizeChild(dispatchId, outcome, ctx, pi);
+      finalizeChild(dispatchId, outcome, ctx, pi, pidTableWriter);
     };
     const finalizeAfterOwnedStreams = (): void => {
       if (exitOutcome !== undefined && stdoutEnded && stderrEnded) {
@@ -371,7 +377,7 @@ export async function spawnAndRegister(
     // a recoverable record. Fire-and-forget at the body's tail -- the
     // sync spawn + register has already completed; awaiting here only
     // bounds the resolve latency on the I/O.
-    await persistPidTableForLoc(loc);
+    await persistPidTableForLoc(loc, pidTableWriter);
   } catch (err) {
     hookDebugLog(
       `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
@@ -385,11 +391,10 @@ export async function spawnAndRegister(
 
 function finalizeChild(
   dispatchId: string,
-  outcome:
-    | { readonly code: number | null; readonly signal: NodeJS.Signals | null }
-    | undefined,
+  outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  pidTableWriter: typeof writePidTable,
 ): void {
   const entry = asyncRewakeRegistry.get(dispatchId);
   if (entry === undefined) {
@@ -399,7 +404,7 @@ function finalizeChild(
   }
 
   asyncRewakeRegistry.delete(dispatchId);
-  void persistPidTableForLoc(entry.loc);
+  void persistPidTableForLoc(entry.loc, pidTableWriter);
 
   if (outcome === undefined) {
     return;
@@ -530,36 +535,38 @@ export async function reapOrphans(
   loc: ScopedLocations,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<void> {
-  const entries = await readPidTable(loc);
-  for (const tableEntry of entries) {
-    if (!isPidAlive(tableEntry.pid, probes)) {
-      continue;
-    }
+  await enqueuePidTableOperation(loc, async () => {
+    const entries = await readPidTable(loc);
+    for (const tableEntry of entries) {
+      if (!isPidAlive(tableEntry.pid, probes)) {
+        continue;
+      }
 
-    if (process.platform === "linux") {
-      const marker = await readProcEnvironMarker(tableEntry.pid, probes);
-      if (marker !== tableEntry.dispatchId) {
+      if (process.platform === "linux") {
+        const marker = await readProcEnvironMarker(tableEntry.pid, probes);
+        if (marker !== tableEntry.dispatchId) {
+          hookDebugLog(
+            `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
+              `(got=${marker ?? "(none)"} want=${tableEntry.dispatchId})`,
+          );
+          continue;
+        }
+      } else {
         hookDebugLog(
-          `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
-            `(got=${marker ?? "(none)"} want=${tableEntry.dispatchId})`,
+          `async-rewake: orphan ${tableEntry.pid} marker-check skipped (platform=${process.platform})`,
         );
         continue;
       }
-    } else {
-      hookDebugLog(
-        `async-rewake: orphan ${tableEntry.pid} marker-check skipped (platform=${process.platform})`,
-      );
-      continue;
+
+      try {
+        probes.killProbe(tableEntry.pid, "SIGKILL");
+      } catch (err) {
+        hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
+      }
     }
 
-    try {
-      probes.killProbe(tableEntry.pid, "SIGKILL");
-    } catch (err) {
-      hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
-    }
-  }
-
-  await unlinkPidTable(loc);
+    await unlinkPidTable(loc);
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -608,22 +615,51 @@ async function prepareAsyncEnv(
  * directory does not yet exist is handled without an explicit
  * `ensureSharedDataDir` call here.
  */
-async function persistPidTableForLoc(loc: ScopedLocations): Promise<void> {
-  const snapshot: PidTableEntry[] = [];
-  for (const entry of asyncRewakeRegistry.values()) {
-    if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
-      snapshot.push({
-        pid: entry.pid,
-        dispatchId: entry.dispatchId,
-        scope: entry.scope,
-        marketplace: entry.marketplace,
-        plugin: entry.pluginId,
-        spawnedAt: entry.spawnedAt,
-      });
+function enqueuePidTableOperation(
+  loc: ScopedLocations,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const key = pidTablePath(loc);
+  const previous = pidTableOperations.get(key) ?? Promise.resolve();
+  const operationPromise = previous
+    .catch((err: unknown) => {
+      hookDebugLog(`async-rewake: prior pid-table operation failed: ${errorMessage(err)}`);
+    })
+    .then(operation)
+    .catch((err: unknown) => {
+      hookDebugLog(`async-rewake: pid-table operation failed: ${errorMessage(err)}`);
+    });
+  const trackedPromise = operationPromise.finally(() => {
+    if (pidTableOperations.get(key) === trackedPromise) {
+      pidTableOperations.delete(key);
     }
-  }
+  });
 
-  await writePidTable(loc, snapshot);
+  pidTableOperations.set(key, trackedPromise);
+  return trackedPromise;
+}
+
+async function persistPidTableForLoc(
+  loc: ScopedLocations,
+  pidTableWriter: typeof writePidTable = writePidTable,
+): Promise<void> {
+  await enqueuePidTableOperation(loc, async () => {
+    const snapshot: PidTableEntry[] = [];
+    for (const entry of asyncRewakeRegistry.values()) {
+      if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
+        snapshot.push({
+          pid: entry.pid,
+          dispatchId: entry.dispatchId,
+          scope: entry.scope,
+          marketplace: entry.marketplace,
+          plugin: entry.pluginId,
+          spawnedAt: entry.spawnedAt,
+        });
+      }
+    }
+
+    await pidTableWriter(loc, snapshot);
+  });
 }
 
 /**
