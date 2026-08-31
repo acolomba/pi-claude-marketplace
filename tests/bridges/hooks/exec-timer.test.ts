@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import {
   installTimerLadder,
@@ -31,6 +31,64 @@ interface SpyChild extends ChildLike {
   readonly killCalls: NodeJS.Signals[];
 }
 
+interface TimerObservation {
+  readonly callbacks: Array<() => void>;
+  readonly clearHandles: Array<ReturnType<typeof setTimeout>>;
+  readonly delays: number[];
+  readonly handles: Array<ReturnType<typeof setTimeout>>;
+  readonly pendingHandles: Set<ReturnType<typeof setTimeout>>;
+  readonly unrefHandles: Array<ReturnType<typeof setTimeout>>;
+}
+
+function observeTimers(t: TestContext): TimerObservation {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fakeSetTimeout = globalThis.setTimeout;
+  const fakeClearTimeout = globalThis.clearTimeout;
+  const callbacks: Array<() => void> = [];
+  const clearHandles: Array<ReturnType<typeof setTimeout>> = [];
+  const delays: number[] = [];
+  const handles: Array<ReturnType<typeof setTimeout>> = [];
+  const pendingHandles = new Set<ReturnType<typeof setTimeout>>();
+  const unrefHandles: Array<ReturnType<typeof setTimeout>> = [];
+
+  function observedSetTimeout<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
+    delay = 0,
+    ...args: TArgs
+  ): ReturnType<typeof setTimeout> {
+    const observedCallback = (): void => {
+      pendingHandles.delete(handle);
+      callback(...args);
+    };
+
+    const handle = fakeSetTimeout(observedCallback, delay);
+    callbacks.push(observedCallback);
+    delays.push(delay);
+    handles.push(handle);
+    pendingHandles.add(handle);
+    const originalUnref = handle.unref.bind(handle);
+    t.mock.method(handle, "unref", () => {
+      unrefHandles.push(handle);
+      return originalUnref();
+    });
+    return handle;
+  }
+
+  function observedClearTimeout(handle: Parameters<typeof clearTimeout>[0]): void {
+    if (typeof handle === "object" && handle !== null) {
+      clearHandles.push(handle);
+      pendingHandles.delete(handle);
+    }
+
+    fakeClearTimeout(handle);
+  }
+
+  t.mock.method(globalThis, "setTimeout", observedSetTimeout);
+  t.mock.method(globalThis, "clearTimeout", observedClearTimeout);
+
+  return { callbacks, clearHandles, delays, handles, pendingHandles, unrefHandles };
+}
+
 /**
  * Faithful to `ChildProcess` in the field the ladder branches on: `kill()`
  * sets `killed = true` because Node does, and it does NOT set `exitCode` --
@@ -54,34 +112,36 @@ function makeSpyChild(): SpyChild {
   return spy;
 }
 
-test("installTimerLadder: SIGTERM fires at timeoutSeconds (no kill before then)", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+test("sends each escalation signal exactly at its deadline", (t) => {
+  // arrange
+  const timers = observeTimers(t);
   const child = makeSpyChild();
+  const ladder = installTimerLadder(child, 1, "acme/PreToolUse");
+  t.after(() => {
+    ladder.cancel();
+  });
 
-  installTimerLadder(child, 1, "acme/PreToolUse");
-
-  // Just before SIGTERM -- no kill yet.
+  // act
   t.mock.timers.tick(999);
-  assert.deepEqual(child.killCalls, []);
-
-  // Exactly at SIGTERM -- one SIGTERM kill.
+  const callsBeforeSigterm = [...child.killCalls];
   t.mock.timers.tick(1);
-  assert.deepEqual(child.killCalls, ["SIGTERM"]);
-});
+  const callsAtSigterm = [...child.killCalls];
+  t.mock.timers.tick(4_999);
+  const callsBeforeSigkill = [...child.killCalls];
+  t.mock.timers.tick(1);
+  const callsAtSigkill = [...child.killCalls];
+  ladder.cancel();
 
-test("installTimerLadder: SIGKILL fires 5s after SIGTERM", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const child = makeSpyChild();
-
-  installTimerLadder(child, 1, "acme/PreToolUse");
-
-  // Advance past SIGTERM.
-  t.mock.timers.tick(1_000);
-  assert.deepEqual(child.killCalls, ["SIGTERM"]);
-
-  // Advance the 5s grace. SIGKILL fires.
-  t.mock.timers.tick(5_000);
-  assert.deepEqual(child.killCalls, ["SIGTERM", "SIGKILL"]);
+  // assert
+  assert.deepStrictEqual(callsBeforeSigterm, []);
+  assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+  assert.deepStrictEqual(callsBeforeSigkill, ["SIGTERM"]);
+  assert.deepStrictEqual(callsAtSigkill, ["SIGTERM", "SIGKILL"]);
+  assert.deepStrictEqual(timers.delays, [1_000, 6_000]);
+  assert.equal(timers.handles.length, 2);
+  assert.deepStrictEqual(timers.unrefHandles, timers.handles);
+  assert.deepStrictEqual(timers.clearHandles, timers.handles);
+  assert.equal(timers.pendingHandles.size, 0);
 });
 
 test("installTimerLadder: cancel() before any timer fires -> zero kill calls", (t) => {
