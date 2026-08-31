@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-30-PLAN.md
-last_updated: "2026-08-31T07:56:25.415Z"
+stopped_at: Completed 112-31-PLAN.md
+last_updated: "2026-08-31T08:16:44.688Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 30 translation context owner
-state_head: dc23509c1343b085b35afdc6edb1c20dd12ee23c
+last_activity_desc: Completed Phase 112 Plan 31 wire protocol owner
+state_head: 59cb6429e7e878f7059233eb74ce86e08c16cb95
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 106
+  completed_plans: 107
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 21 of 31
+Plan: 22 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 30 translation context owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 31 wire protocol owner
 
 Progress: [████░░░░░░] 40%
 
-Ninety-seven of 204 source-test pairs are complete. The remaining 107 are open.
+Ninety-eight of 204 source-test pairs are complete. The remaining 106 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -139,6 +139,7 @@ evidence.
 | Phase 112 P28 | 28 min | 2 tasks | 3 files |
 | Phase 112 P29 | 13 min | 2 tasks | 1 files |
 | Phase 112 P30 | 17 min | 2 tasks | 1 files |
+| Phase 112 P31 | 17 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -237,6 +238,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept translation-context.ts byte-for-byte unchanged because buildTranslationContext exposes the complete snapshot and fallback contract through its public result.
 - [Phase 112]: Used real case-owned file-backed and in-memory SessionManager instances with independently authored whole-context expectations.
 - [Phase 112]: Kept translation-context readonly evidence at module scope and preserved its internal-only barrel scope.
+- [Phase 112]: Kept wire-protocol.ts byte-for-byte unchanged because parseHookStdout exposes every live exit, JSON-shape, precedence, mutation, and no-op branch through its public result.
+- [Phase 112]: Proved semantic diagnostics by category, hook destination, relevant detail, and outcome while separately asserting that reporting never throws.
+- [Phase 112]: Kept every wire case independent and explicit instead of generalizing the mutation contract through a table or shared oracle.
 
 ### Pending Todos
 
@@ -255,6 +259,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T07:56:24.664Z
-Stopped at: Completed 112-30-PLAN.md
+Last session: 2026-08-31T08:16:43.982Z
+Stopped at: Completed 112-31-PLAN.md
 Resume file: None
