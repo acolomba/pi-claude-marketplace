@@ -35,7 +35,7 @@ secondary detail.
 - [x] **Phase 109: Shared Contracts** - Prove 19 shared value, error, path, environment, and notification contracts. (completed 2026-08-29)
 - [x] **Phase 110: Persistence and Transaction** - Prove 12 durable-state, migration, ledger, rollback, and retry contracts. (completed 2026-08-30)
 - [x] **Phase 111: Non-Hook Component Bridges** - Prove 31 agents, commands, MCP, and skills bridge contracts. (completed 2026-08-30)
-- [ ] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts.
+- [x] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts. (completed 2026-08-31)
 - [ ] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts.
 - [ ] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows.
 - [ ] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions.
@@ -234,7 +234,7 @@ Plans:
 3. Staging and unstage cases preserve atomic replacement, rollback, containment, and foreign-content behavior in case-owned temporary trees.
 4. Barrel and type-only bridge modules have direct binding or compile-time owner tests without runtime exemptions.
 
-**Plans**: 31/31 plans executed
+**Plans**: 31/31 plans complete
 
 Plans:
 
@@ -613,10 +613,10 @@ and commit still owns one pair.
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
 | 111. Non-Hook Component Bridges          |          31/31 | Complete        | 2026-08-30 |
-| 112. Hook Runtime                        |          30/31 | In Progress     |            |
+| 112. Hook Runtime                        |          31/31 | Complete        | 2026-08-31 |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
 | 115. Composition Orchestrators           |            0/8 | Not started     | -          |
 | 116. Edge Surface                        |           0/30 | Not started     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
-| **Total**                                |     **54/204** | **In Progress** | **-**      |
+| **Total**                                |    **116/204** | **In Progress** | **-**      |

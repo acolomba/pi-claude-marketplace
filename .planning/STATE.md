@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.19
-current_phase: 112
-current_phase_name: Hook Runtime
-status: executing
-stopped_at: Completed 112-14-PLAN.md
-last_updated: "2026-08-31T13:31:19.000Z"
+current_phase: 113
+current_phase_name: Orchestrator Support and Presenters
+status: ready_to_discuss
+stopped_at: Phase 112 complete; ready to discuss Phase 113
+last_updated: "2026-08-31T15:34:12.000Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 14 hook barrel owner
-state_head: 52d4df08cc2df1a0c5b1fe3fc2617428439e7708
+last_activity_desc: Completed and verified Phase 112 Hook Runtime
+state_head: c1cb1108
 progress:
   total_phases: 10
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 117
   completed_plans: 117
 milestone_name: Unit Test Refactor
@@ -21,23 +21,23 @@ milestone_name: Unit Test Refactor
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-30 after Phase 111)
+See: `.planning/PROJECT.md` (updated 2026-08-31 after Phase 112)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 112 — Hook Runtime
+**Current focus:** Phase 113 — Orchestrator Support and Presenters
 
 ## Current Position
 
-Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 31 of 31
-Status: Execution complete; phase gates pending
-Last activity: 2026-08-31 — Completed Phase 112 Plan 14 hook barrel owner
+Phase: 113 (Orchestrator Support and Presenters) — READY TO DISCUSS
+Plan: Not started
+Status: Phase 112 complete; ready for Phase 113 discussion
+Last activity: 2026-08-31 — Completed and verified Phase 112 Hook Runtime
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
-One hundred of 204 source-test pairs are complete. The remaining 104 are open.
+One hundred sixteen of 204 source-test pairs are complete. The remaining 88 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -45,9 +45,9 @@ evidence.
 
 **Velocity:**
 
-- Total plans completed: 85
-- Average duration: 20.4 min
-- Total execution time: 14 hr 17 min
+- Total plans completed: 116
+- Average duration: 11.5 min
+- Total execution time: 22 hr 15 min
 
 **By Phase:**
 
@@ -57,8 +57,9 @@ evidence.
 | 109. Shared Contracts           |    19 | 3h 19m  | 10.5 min |
 | 110                             |    12 | -       | -        |
 | 111. Non-Hook Component Bridges |    31 | -       | -        |
+| 112. Hook Runtime               |    31 | 7h 58m  | 15.4 min |
 
-**Recent Trend:** 31 Phase 111 plans completed with all direct owner gates green.
+**Recent Trend:** 31 Phase 112 plans completed with all direct owner, review, validation, verification, and security gates green.
 **Per-Plan Metrics:**
 
 | Plan          | Duration | Tasks   | Files   |
@@ -236,9 +237,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept user-prompt-submit.ts byte-for-byte unchanged because its public translator exposes the complete contract.
 - [Phase 112]: UserPromptSubmit evidence uses separate case-local values and whole five-key expectations for ordinary, multi-line, empty, and multi-byte prompts.
 - [Phase 112]: Kept malformed process-output behavior in Plan 112-04 instead of widening the direct payload owner.
-- [Phase 112]: Kept spawn-helpers.ts byte-for-byte unchanged because its public helpers expose the complete execution-form and serialization contracts.
+- [Phase 112]: Preserved spawn planning while the security gate strengthened oversized serialization to a strict final 256 KiB UTF-8 bound.
 - [Phase 112]: Treated defined args, including an empty array, as exec form with shell disabled; absent args retain shell-form behavior.
-- [Phase 112]: Made the truncation marker authoritative without mutating object, primitive, or array inputs and accepted the documented envelope overshoot.
+- [Phase 112]: Made the truncation marker authoritative without mutating object, primitive, or array inputs and bounded the final UTF-8 output, including metadata, to 256 KiB.
 - [Phase 112]: Removed only the private stage stack-pop undefined guard after live CodeGraph proof established that its guarded state is unreachable.
 - [Phase 112]: Retained readSymlinkTargetSafe as a reachable TOCTOU defense and proved it through restored Node filesystem bindings without a production seam.
 - [Phase 112]: Absorbed the symlink supplemental's unique containment evidence into the stage owner before deleting the duplicate carrier.
@@ -301,6 +302,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T13:31:19.000Z
-Stopped at: Completed 112-14-PLAN.md
+Last session: 2026-08-31T15:34:12.000Z
+Stopped at: Phase 112 complete; ready to discuss Phase 113
 Resume file: None
