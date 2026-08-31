@@ -514,16 +514,16 @@ Do not absorb these cross-module contracts into one owner:
 
 | File or family                                                     | Distinct retained contract                                                                                                                         |
 | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tests/architecture/hooks-translators.test.ts`                     | Cross-module translator-table completeness and shared tool-name mapping only. Remove byte-equal translator duplicates only under one late carrier. |
+| `tests/architecture/hooks-translators.test.ts`                     | Cross-module translator-table completeness and shared tool-name mapping only. Plan 112-04 removes the byte-equal round-trip block and its `EVENT_FIXTURES`/`EXPECTED_JSON` after owners 112-15 through 112-24. |
 | `tests/architecture/hooks-lifecycle.test.ts`                       | Orchestrator cache and rebuild lockstep.                                                                                                           |
 | `tests/architecture/hooks-foundation.test.ts`                      | Resolver and schema foundations across modules.                                                                                                    |
 | `tests/architecture/hooks-cap-notify.test.ts`                      | Code-to-documentation notification bytes.                                                                                                          |
 | `tests/architecture/no-hooks-strict-additional-properties.test.ts` | Repository-wide schema policy.                                                                                                                     |
 | Four `tests/integration/hooks-*.test.ts` suites                    | Install/register/real-spawn, lazy project hydration, cross-scope reconcile, and additional-context end-to-end chains.                              |
 
-The validation map does not assign a pair carrier for pruning
-`hooks-translators.test.ts`. The planner must either leave it unchanged or assign one
-late carrier after pairs 112-15 through 112-24. Parallel payload plans must not edit it.
+Plan 112-04 is the sole late carrier for pruning `hooks-translators.test.ts` after pairs
+112-15 through 112-24. Parallel payload plans must not edit it; 112-04 retains only the
+translator-module completeness and shared tool-name mapping contracts.
 
 ## Shared patterns
 
