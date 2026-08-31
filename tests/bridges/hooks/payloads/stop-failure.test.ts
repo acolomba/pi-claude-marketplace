@@ -16,11 +16,32 @@ import type {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
+void ({
+  error: "rate_limit",
+  error_details: "429 from provider",
+  last_assistant_message: "Request failed",
+} satisfies StopFailureEvent);
+void ({
+  session_id: "session-type",
+  transcript_path: "/tmp/session-type.jsonl",
+  cwd: "/project-type",
+  hook_event_name: "StopFailure",
+  error: "unknown",
+  last_assistant_message: "Unclassified failure",
+} satisfies StopFailureStdin);
+
+// @ts-expect-error a StopFailure event has a closed error vocabulary
+void ({ error: "network_error", last_assistant_message: "Request failed" } satisfies StopFailureEvent);
+void ({
+  session_id: "session-type",
+  transcript_path: "/tmp/session-type.jsonl",
+  cwd: "/project-type",
+  hook_event_name: "StopFailure",
+  error: "rate_limit",
+  // @ts-expect-error error_details is text when it is present
+  error_details: 429,
+  last_assistant_message: "Request failed",
+} satisfies StopFailureStdin);
 
 const stopFailureVocab = NON_TOOL_EVENT_CLOSED_SETS.StopFailure;
 if (stopFailureVocab === undefined) {
@@ -33,37 +54,90 @@ const CLOSED_VOCAB = stopFailureVocab;
 // SFAIL-02: envelope shape
 // ---------------------------------------------------------------------------
 
-test("stop-failure: emits the StopFailure envelope with error + details + message", () => {
-  const event: StopFailureEvent = {
+test("emits the complete StopFailure envelope with error details", () => {
+  // arrange
+  const event = {
     error: "rate_limit",
     error_details: "429 from provider",
-    last_assistant_message: "boom",
-  };
+    last_assistant_message: "Request failed",
+  } satisfies StopFailureEvent;
+  const context = {
+    sessionId: "session-present",
+    transcriptPath: "/tmp/session-present.jsonl",
+    cwd: "/project-present",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-present",
+    transcript_path: "/tmp/session-present.jsonl",
+    cwd: "/project-present",
+    hook_event_name: "StopFailure",
+    error: "rate_limit",
+    error_details: "429 from provider",
+    last_assistant_message: "Request failed",
+  } satisfies StopFailureStdin;
 
-  const actual = translate(event, ctx);
+  // act
+  const stopFailurePayload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj",' +
-      '"hook_event_name":"StopFailure","error":"rate_limit",' +
-      '"error_details":"429 from provider","last_assistant_message":"boom"}',
-  );
+  // assert
+  assert.deepStrictEqual(stopFailurePayload, expectedPayload);
+  assert.strictEqual(Object.hasOwn(stopFailurePayload, "error_details"), true);
 });
 
-test("stop-failure: error_details is omitted (not just falsy) when absent", () => {
-  const actual: StopFailureStdin = translate({ error: "unknown", last_assistant_message: "" }, ctx);
-  const out = actual as unknown as Record<string, unknown>;
+test("omits error_details from the complete envelope when the event omits it", () => {
+  // arrange
+  const event = {
+    error: "unknown",
+    last_assistant_message: "",
+  } satisfies StopFailureEvent;
+  const context = {
+    sessionId: "session-absent",
+    transcriptPath: "/tmp/session-absent.jsonl",
+    cwd: "/project-absent",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-absent",
+    transcript_path: "/tmp/session-absent.jsonl",
+    cwd: "/project-absent",
+    hook_event_name: "StopFailure",
+    error: "unknown",
+    last_assistant_message: "",
+  } satisfies StopFailureStdin;
 
-  assert.ok(!("error_details" in out), "error_details must be absent when not supplied");
-  assert.equal(actual.last_assistant_message, "", "empty errorMessage yields empty message");
+  // act
+  const stopFailurePayload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(stopFailurePayload, expectedPayload);
+  assert.strictEqual(Object.hasOwn(stopFailurePayload, "error_details"), false);
 });
 
-test("stop-failure: transcript_path is empty when the session file is lazy", () => {
-  const lazyCtx: TranslationContext = { sessionId: "sess-2", transcriptPath: "", cwd: "/proj" };
+test("preserves an empty transcript path in the complete envelope", () => {
+  // arrange
+  const event = {
+    error: "server_error",
+    last_assistant_message: "Service unavailable",
+  } satisfies StopFailureEvent;
+  const context = {
+    sessionId: "session-lazy",
+    transcriptPath: "",
+    cwd: "/project-lazy",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-lazy",
+    transcript_path: "",
+    cwd: "/project-lazy",
+    hook_event_name: "StopFailure",
+    error: "server_error",
+    last_assistant_message: "Service unavailable",
+  } satisfies StopFailureStdin;
 
-  const actual = translate({ error: "unknown", last_assistant_message: "x" }, lazyCtx);
+  // act
+  const stopFailurePayload = translate(event, context);
 
-  assert.equal(actual.transcript_path, "");
+  // assert
+  assert.deepStrictEqual(stopFailurePayload, expectedPayload);
+  assert.strictEqual(Object.hasOwn(stopFailurePayload, "error_details"), false);
 });
 
 // ---------------------------------------------------------------------------
