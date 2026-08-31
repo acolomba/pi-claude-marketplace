@@ -622,14 +622,7 @@ function enqueuePidTableOperation(
 ): Promise<void> {
   const key = pidTablePath(loc);
   const previous = pidTableOperations.get(key) ?? Promise.resolve();
-  const operationPromise = previous
-    .catch((err: unknown) => {
-      hookDebugLog(`async-rewake: prior pid-table operation failed: ${errorMessage(err)}`);
-    })
-    .then(operation)
-    .catch((err: unknown) => {
-      hookDebugLog(`async-rewake: pid-table operation failed: ${errorMessage(err)}`);
-    });
+  const operationPromise = previous.then(operation);
   const trackedPromise = operationPromise.finally(() => {
     if (pidTableOperations.get(key) === trackedPromise) {
       pidTableOperations.delete(key);
