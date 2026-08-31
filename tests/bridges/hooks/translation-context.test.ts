@@ -10,7 +10,12 @@
 //     Pi creates the session file).
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 
 import { buildTranslationContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 
@@ -38,18 +43,76 @@ function makeCtx(args: {
 // Block 1: PAYL-01 happy path -- all three fields populated
 // ──────────────────────────────────────────────────────────────────────────
 
-test("buildTranslationContext: snapshots sessionId / transcriptPath / cwd from ExtensionContext", () => {
-  const ctx = makeCtx({
-    sessionId: "sess-abc-123",
-    sessionFile: "/home/user/.pi/agent/sessions/2026-06-14/sess-abc-123.jsonl",
-    cwd: "/home/user/project",
-  });
+test("snapshots the complete session identity and working directory", async () => {
+  // arrange
+  const sessionRoot = await mkdtemp(join(tmpdir(), "translation-context-"));
+  const transcriptPath = join(sessionRoot, "session-owned.jsonl");
+  const cwd = "/workspace/translation-context";
+  await writeFile(
+    transcriptPath,
+    `${JSON.stringify({
+      type: "session",
+      version: 3,
+      id: "session-owned",
+      timestamp: "2026-08-31T12:00:00.000Z",
+      cwd,
+    })}\n`,
+  );
 
-  const tc = buildTranslationContext(ctx);
+  try {
+    const sessionManager = SessionManager.open(transcriptPath, sessionRoot);
+    const extensionContext = {
+      get ui(): ExtensionContext["ui"] {
+        throw new Error("buildTranslationContext must not read ui");
+      },
+      mode: "print",
+      hasUI: false,
+      cwd,
+      sessionManager,
+      get modelRegistry(): ExtensionContext["modelRegistry"] {
+        throw new Error("buildTranslationContext must not read modelRegistry");
+      },
+      model: undefined,
+      scopedModels: [],
+      isIdle(): never {
+        throw new Error("buildTranslationContext must not call isIdle");
+      },
+      isProjectTrusted(): never {
+        throw new Error("buildTranslationContext must not call isProjectTrusted");
+      },
+      signal: undefined,
+      abort(): never {
+        throw new Error("buildTranslationContext must not call abort");
+      },
+      hasPendingMessages(): never {
+        throw new Error("buildTranslationContext must not call hasPendingMessages");
+      },
+      shutdown(): never {
+        throw new Error("buildTranslationContext must not call shutdown");
+      },
+      getContextUsage(): never {
+        throw new Error("buildTranslationContext must not call getContextUsage");
+      },
+      compact(): never {
+        throw new Error("buildTranslationContext must not call compact");
+      },
+      getSystemPrompt(): never {
+        throw new Error("buildTranslationContext must not call getSystemPrompt");
+      },
+    } satisfies ExtensionContext;
 
-  assert.equal(tc.sessionId, "sess-abc-123");
-  assert.equal(tc.transcriptPath, "/home/user/.pi/agent/sessions/2026-06-14/sess-abc-123.jsonl");
-  assert.equal(tc.cwd, "/home/user/project");
+    // act
+    const translationContext = buildTranslationContext(extensionContext);
+
+    // assert
+    assert.deepStrictEqual(translationContext, {
+      sessionId: "session-owned",
+      transcriptPath,
+      cwd: "/workspace/translation-context",
+    });
+  } finally {
+    await rm(sessionRoot, { recursive: true, force: true });
+  }
 });
 
 // ──────────────────────────────────────────────────────────────────────────
