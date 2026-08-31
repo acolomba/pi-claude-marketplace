@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-09-PLAN.md
-last_updated: "2026-08-31T04:03:17.554Z"
+stopped_at: Completed 112-10-PLAN.md
+last_updated: "2026-08-31T04:19:39.228Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 112 execution started
-state_head: f470921553cb42ec60abe887a81335a3523eae86
+state_head: 178214f013aa285365fad2a187ed1643881ec896
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 90
+  completed_plans: 91
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 5 of 31
+Plan: 6 of 31
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 112 execution started
 
@@ -123,6 +123,7 @@ evidence.
 | Phase 112 P03 | 9 min | 2 tasks | 1 files |
 | Phase 112 P08 | 8 min | 2 tasks | 1 files |
 | Phase 112 P09 | 9 min | 2 tasks | 1 files |
+| Phase 112 P10 | 14 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -175,6 +176,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Proved allow, deny, and ask inline without introducing a new permission type export.
 - [Phase 112]: Kept exec-timer.ts byte-for-byte unchanged because its public timer ladder exposes every scheduling branch.
 - [Phase 112]: Observed exact handles, unref calls, clears, and pending state through the current TestContext fake timers only.
+- [Phase 112]: Kept hook-env.ts byte-for-byte unchanged because prepareHookEnv exposes every environment branch through its public contract.
+- [Phase 112]: Hook environment evidence preserves inherited-key non-interference while proving case-local remote-key absence and exact process restoration.
 
 ### Pending Todos
 
@@ -193,6 +196,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T04:03:16.874Z
-Stopped at: Completed 112-09-PLAN.md
+Last session: 2026-08-31T04:19:38.558Z
+Stopped at: Completed 112-10-PLAN.md
 Resume file: None
