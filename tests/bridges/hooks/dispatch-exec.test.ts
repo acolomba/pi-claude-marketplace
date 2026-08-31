@@ -1,19 +1,27 @@
 import assert from "node:assert/strict";
+import { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+
 import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
+import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
-import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ChildProcess, SpawnOptions } from "node:child_process";
+import type {
+  ExtensionContext,
+  ToolCallEvent,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { SpawnOptions } from "node:child_process";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Test fixtures
@@ -198,6 +206,299 @@ function makeCtx(cwd: string): ExtensionContext {
     },
   } as unknown as ExtensionContext;
 }
+
+test("executes a blocking hook through the portable process boundary", async (t) => {
+  // arrange
+  const caseRoot = await mkdtemp(path.join(tmpdir(), "dispatch-exec-portable-"));
+  const agentDir = path.join(caseRoot, "agent");
+  const cwd = path.join(caseRoot, "workspace");
+  const pluginRoot = path.join(caseRoot, "plugin");
+  const stdoutCapturePath = path.join(caseRoot, "stdout.txt");
+  const stderrCapturePath = path.join(caseRoot, "stderr.txt");
+  await Promise.all([
+    mkdir(agentDir, { recursive: true }),
+    mkdir(cwd, { recursive: true }),
+    mkdir(pluginRoot, { recursive: true }),
+  ]);
+  t.after(() => rm(caseRoot, { recursive: true, force: true }));
+
+  const ownedEnvironmentKeys = [
+    "PI_CODING_AGENT_DIR",
+    "PI_CLAUDE_MARKETPLACE_DEBUG",
+    "PORTABLE_HOOK_PROBE",
+    "CLAUDE_CODE_REMOTE",
+    "CLAUDE_ENV_FILE",
+  ] as const;
+  const previousEnvironment = ownedEnvironmentKeys.map((key) => ({
+    key,
+    existed: Object.hasOwn(process.env, key),
+    value: process.env[key],
+  }));
+  t.after(() => {
+    for (const previous of previousEnvironment) {
+      if (previous.existed && previous.value !== undefined) {
+        process.env[previous.key] = previous.value;
+      } else {
+        Reflect.deleteProperty(process.env, previous.key);
+      }
+    }
+  });
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  process.env.PORTABLE_HOOK_PROBE = "case-owned";
+  delete process.env.CLAUDE_CODE_REMOTE;
+  delete process.env.CLAUDE_ENV_FILE;
+
+  const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+  const childOnceSpy = t.mock.method(ChildProcess.prototype, "once");
+  const scheduledSetTimeout = globalThis.setTimeout;
+  const scheduledClearTimeout = globalThis.clearTimeout;
+  const timerCallbacks: Array<() => void> = [];
+  const timerClearHandles: Array<ReturnType<typeof setTimeout>> = [];
+  const timerDelays: number[] = [];
+  const timerHandles: Array<ReturnType<typeof setTimeout>> = [];
+  const pendingTimerHandles = new Set<ReturnType<typeof setTimeout>>();
+  const timerUnrefHandles: Array<ReturnType<typeof setTimeout>> = [];
+
+  function observedSetTimeout<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
+    delay = 0,
+    ...args: TArgs
+  ): ReturnType<typeof setTimeout> {
+    const observedCallback = (): void => {
+      pendingTimerHandles.delete(handle);
+      callback(...args);
+    };
+
+    const handle = scheduledSetTimeout(observedCallback, delay);
+    timerCallbacks.push(observedCallback);
+    timerDelays.push(delay);
+    timerHandles.push(handle);
+    pendingTimerHandles.add(handle);
+    const originalUnref = handle.unref.bind(handle);
+    t.mock.method(handle, "unref", () => {
+      timerUnrefHandles.push(handle);
+      return originalUnref();
+    });
+    return handle;
+  }
+
+  function observedClearTimeout(handle: Parameters<typeof clearTimeout>[0]): void {
+    if (typeof handle === "object" && handle !== null) {
+      timerClearHandles.push(handle);
+      pendingTimerHandles.delete(handle);
+    }
+
+    scheduledClearTimeout(handle);
+  }
+
+  t.mock.method(globalThis, "setTimeout", observedSetTimeout);
+  t.mock.method(globalThis, "clearTimeout", observedClearTimeout);
+
+  const literalArgument = "literal;$(echo unsafe)&%PORTABLE_HOOK_PROBE%";
+  const childProgram = String.raw`
+    const { readFileSync, writeFileSync, writeSync } = require("node:fs");
+    const [literalArgument, stdoutCapturePath, stderrCapturePath] = process.argv.slice(1);
+    const stdin = readFileSync(0, "utf8");
+    const observation = {
+      argv: process.argv.slice(1),
+      cwd: process.cwd(),
+      environment: process.env,
+      execPath: process.execPath,
+      literalArgument,
+      stdin,
+    };
+    const stdout = JSON.stringify({
+      hookSpecificOutput: {
+        additionalContext: JSON.stringify(observation),
+        permissionDecision: "allow",
+      },
+    });
+    const stderr = "portable child stderr\n";
+    writeFileSync(stdoutCapturePath, stdout);
+    writeFileSync(stderrCapturePath, stderr);
+    writeSync(2, stderr);
+    writeSync(1, stdout);
+  `;
+  const commandArguments = [
+    "-e",
+    childProgram,
+    literalArgument,
+    stdoutCapturePath,
+    stderrCapturePath,
+  ];
+  const entry = {
+    scope: "user",
+    marketplace: "portable-marketplace",
+    pluginId: "portable-plugin",
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    claudeEvent: "PreToolUse",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: {
+      type: "command",
+      command: process.execPath,
+      args: commandArguments,
+      shell: path.join(caseRoot, "must-not-run-shell"),
+      timeout: 37,
+      asyncRewake: false,
+    },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  } satisfies RoutingEntry;
+  const event = {
+    type: "tool_call",
+    toolCallId: "portable-call",
+    toolName: "bash",
+    input: { command: "printf portable" },
+  } satisfies ToolCallEvent;
+  const sessionManager = SessionManager.inMemory(cwd, { id: "portable-session" });
+  const extensionContext = {
+    get ui(): ExtensionContext["ui"] {
+      throw new Error("dispatchHookExec must not read ui");
+    },
+    mode: "print",
+    hasUI: false,
+    cwd,
+    sessionManager,
+    get modelRegistry(): ExtensionContext["modelRegistry"] {
+      throw new Error("dispatchHookExec must not read modelRegistry");
+    },
+    model: undefined,
+    scopedModels: [],
+    isIdle(): never {
+      throw new Error("dispatchHookExec must not call isIdle");
+    },
+    isProjectTrusted(): never {
+      throw new Error("dispatchHookExec must not call isProjectTrusted");
+    },
+    signal: undefined,
+    abort(): never {
+      throw new Error("dispatchHookExec must not call abort");
+    },
+    hasPendingMessages(): never {
+      throw new Error("dispatchHookExec must not call hasPendingMessages");
+    },
+    shutdown(): never {
+      throw new Error("dispatchHookExec must not call shutdown");
+    },
+    getContextUsage(): never {
+      throw new Error("dispatchHookExec must not call getContextUsage");
+    },
+    compact(): never {
+      throw new Error("dispatchHookExec must not call compact");
+    },
+    getSystemPrompt(): never {
+      throw new Error("dispatchHookExec must not call getSystemPrompt");
+    },
+  } satisfies ExtensionContext;
+  const expectedStdin = JSON.stringify({
+    session_id: "portable-session",
+    transcript_path: "",
+    cwd,
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command: "printf portable" },
+  });
+  const expectedEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
+  Object.assign(expectedEnvironment, {
+    CLAUDE_PROJECT_DIR: cwd,
+    CLAUDE_PLUGIN_ROOT: pluginRoot,
+    CLAUDE_PLUGIN_DATA: path.join(agentDir, "pi-claude-marketplace", "data", "portable-plugin"),
+    CLAUDECODE: "1",
+    CLAUDE_CODE_SESSION_ID: "portable-session",
+    CLAUDE_SESSION_ID: "portable-session",
+  });
+  const expectedObservation = {
+    argv: [literalArgument, stdoutCapturePath, stderrCapturePath],
+    cwd,
+    environment: expectedEnvironment,
+    execPath: process.execPath,
+    literalArgument,
+    stdin: expectedStdin,
+  };
+  const expectedAdditionalContext = JSON.stringify(expectedObservation);
+  const expectedStdout = JSON.stringify({
+    hookSpecificOutput: {
+      additionalContext: expectedAdditionalContext,
+      permissionDecision: "allow",
+    },
+  });
+  const expectedHookOutcome = {
+    kind: "mutate",
+    additionalContext: expectedAdditionalContext,
+    permissionDecision: "allow",
+  } satisfies HookExecResult;
+
+  // act
+  const hookOutcome = await dispatchHookExec(entry, event, extensionContext);
+  const stdout = await readFile(stdoutCapturePath, "utf8");
+  const stderr = await readFile(stderrCapturePath, "utf8");
+  const childObservation =
+    hookOutcome.kind === "mutate" && hookOutcome.additionalContext !== undefined
+      ? (JSON.parse(hookOutcome.additionalContext) as unknown)
+      : null;
+  const closeListenerCalls = childOnceSpy.mock.calls.filter(
+    ({ arguments: listenerArguments }) => listenerArguments[0] === "close",
+  );
+  const child = closeListenerCalls[0]?.this;
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, expectedHookOutcome);
+  assert.strictEqual(stdout, expectedStdout);
+  assert.strictEqual(stderr, "portable child stderr\n");
+  assert.deepStrictEqual(childObservation, expectedObservation);
+  const stderrDiagnostic = consoleErrorSpy.mock.calls
+    .map(({ arguments: diagnosticArguments }) => diagnosticArguments.map(String).join(" "))
+    .find((line) => line.includes("portable child stderr"));
+  assert.deepStrictEqual(
+    {
+      category: stderrDiagnostic?.includes("exec: stderr") ?? false,
+      context: stderrDiagnostic?.includes("portable-plugin/PreToolUse") ?? false,
+      text: stderrDiagnostic?.includes("portable child stderr") ?? false,
+    },
+    { category: true, context: true, text: true },
+  );
+  assert.deepStrictEqual(timerDelays, [37_000, 42_000]);
+  assert.strictEqual(timerCallbacks.length, 2);
+  assert.strictEqual(timerHandles.length, 2);
+  assert.deepStrictEqual(timerUnrefHandles, timerHandles);
+  assert.deepStrictEqual(timerClearHandles, timerHandles);
+  assert.strictEqual(pendingTimerHandles.size, 0);
+  assert.ok(child instanceof ChildProcess);
+  assert.deepStrictEqual(
+    {
+      closeListenerRegistrations: closeListenerCalls.length,
+      closeListenersRemaining: child.listenerCount("close"),
+      exitCode: child.exitCode,
+      killed: child.killed,
+      signalCode: child.signalCode,
+      spawnargs: child.spawnargs,
+      spawnfile: child.spawnfile,
+      stderrEnded: child.stderr?.readableEnded,
+      stdinEnded: child.stdin?.writableEnded,
+      stdinFinished: child.stdin?.writableFinished,
+      stdoutEnded: child.stdout?.readableEnded,
+    },
+    {
+      closeListenerRegistrations: 1,
+      closeListenersRemaining: 0,
+      exitCode: 0,
+      killed: false,
+      signalCode: null,
+      spawnargs: [process.execPath, ...commandArguments],
+      spawnfile: process.execPath,
+      stderrEnded: true,
+      stdinEnded: true,
+      stdinFinished: true,
+      stdoutEnded: true,
+    },
+  );
+});
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block: never-throws baseline (carried forward from the original stub)
