@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-02-PLAN.md
-last_updated: "2026-08-31T10:12:32.573Z"
+stopped_at: Completed 112-06-PLAN.md
+last_updated: "2026-08-31T10:39:54.805Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 02 async registry lifecycle owner
-state_head: 2a826635c8a386036d7594fa8bd1a7ad18cafc7f
+last_activity_desc: Completed Phase 112 Plan 06 event adapter owner
+state_head: 8a11635b60b632e722e97193cbcd99e9ad478f1f
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 111
+  completed_plans: 112
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 26 of 31
+Plan: 27 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 02 async registry lifecycle owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 06 event adapter owner
 
 Progress: [████░░░░░░] 40%
 
@@ -144,6 +144,7 @@ evidence.
 | Phase 112 P13 | 20 min   | 2 tasks | 2 files |
 | Phase 112 P25 | 12 min | 2 tasks | 1 files |
 | Phase 112 P02 | 45 min | 2 tasks | 3 files |
+| Phase 112 P06 | 26 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Retained fire-and-forget PID persistence on async child exit and error, observing rewrites through public filesystem and shutdown effects.
 - [Phase 112]: Restricted the async-rewake supplemental to two cross-lane environment-parity cases and one routing-epoch reload case.
 - [Phase 112]: Proved default orphan probes behind a mocked process.kill signal-0 boundary and used injected probes for all orphan safety partitions.
+- [Phase 112]: Removed the legacy adaptObservationResult export after CodeGraph and historical call-site proof found no production caller.
+- [Phase 112]: Consolidated every direct adapter contract and the duplicate architecture suite into the mirrored event-adapters owner.
+- [Phase 112]: Left the mixed SessionStart additional-context supplemental unchanged for Plan 112-07 to remove after dependent evidence is absorbed.
 
 ### Pending Todos
 
@@ -276,6 +280,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T10:12:31.955Z
-Stopped at: Completed 112-02-PLAN.md
+Last session: 2026-08-31T10:39:54.066Z
+Stopped at: Completed 112-06-PLAN.md
 Resume file: None
