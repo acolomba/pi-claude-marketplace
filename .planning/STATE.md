@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-31-PLAN.md
-last_updated: "2026-08-31T08:16:44.688Z"
+stopped_at: Completed 112-11-PLAN.md
+last_updated: "2026-08-31T08:34:03.403Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 31 wire protocol owner
-state_head: 59cb6429e7e878f7059233eb74ce86e08c16cb95
+last_activity_desc: Completed Phase 112 Plan 11 Bash if-field owner
+state_head: 78feb49c7046566f5c367c8ba826fcc6e17fb622
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 107
+  completed_plans: 108
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 22 of 31
+Plan: 23 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 31 wire protocol owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 11 Bash if-field owner
 
 Progress: [████░░░░░░] 40%
 
@@ -131,15 +131,16 @@ evidence.
 | Phase 112 P18 | 3 min    | 2 tasks | 1 files |
 | Phase 112 P19 | 5 min    | 2 tasks | 1 files |
 | Phase 112 P20 | 5 min    | 2 tasks | 1 files |
-| Phase 112 P21 | 8 min     | 2 tasks | 1 files |
-| Phase 112 P22 | 20 min | 2 tasks | 1 files |
-| Phase 112 P23 | 10 min | 2 tasks | 1 files |
-| Phase 112 P24 | 10 min | 2 tasks | 1 files |
-| Phase 112 P27 | 19 min | 2 tasks | 1 files |
-| Phase 112 P28 | 28 min | 2 tasks | 3 files |
-| Phase 112 P29 | 13 min | 2 tasks | 1 files |
-| Phase 112 P30 | 17 min | 2 tasks | 1 files |
-| Phase 112 P31 | 17 min | 2 tasks | 1 files |
+| Phase 112 P21 | 8 min    | 2 tasks | 1 files |
+| Phase 112 P22 | 20 min   | 2 tasks | 1 files |
+| Phase 112 P23 | 10 min   | 2 tasks | 1 files |
+| Phase 112 P24 | 10 min   | 2 tasks | 1 files |
+| Phase 112 P27 | 19 min   | 2 tasks | 1 files |
+| Phase 112 P28 | 28 min   | 2 tasks | 3 files |
+| Phase 112 P29 | 13 min   | 2 tasks | 1 files |
+| Phase 112 P30 | 17 min   | 2 tasks | 1 files |
+| Phase 112 P31 | 17 min   | 2 tasks | 1 files |
+| Phase 112 P11 | 14 min   | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept wire-protocol.ts byte-for-byte unchanged because parseHookStdout exposes every live exit, JSON-shape, precedence, mutation, and no-op branch through its public result.
 - [Phase 112]: Proved semantic diagnostics by category, hook destination, relevant detail, and outcome while separately asserting that reporting never throws.
 - [Phase 112]: Kept every wire case independent and explicit instead of generalizing the mutation contract through a table or shared oracle.
+- [Phase 112]: Restored documented stable first-seen Bash candidate deduplication with only a Set spread after direct evidence exposed the missing behavior. — The Rule 1 fix satisfies the public contract without adding an export, symbol, seam, helper, or parser restructuring.
+- [Phase 112]: Bash if-field evidence uses complete literal commands and independently authored ordered results without invoking a shell. — Direct parser and matcher calls prove syntax, wrapper, recursion, fail-open, and specificity behavior without executing untrusted command text.
+- [Phase 112]: Left the hooks-if-field supplemental file unchanged so Plan 112-13 remains its only final carrier. — The Bash owner absorbs the unique leaf evidence while avoiding a competing shared-file edit.
 
 ### Pending Todos
 
@@ -259,6 +263,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T08:16:43.982Z
-Stopped at: Completed 112-31-PLAN.md
+Last session: 2026-08-31T08:34:02.679Z
+Stopped at: Completed 112-11-PLAN.md
 Resume file: None

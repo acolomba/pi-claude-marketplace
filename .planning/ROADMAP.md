@@ -323,7 +323,7 @@ Plans:
 3. Each case owns its router, process, session, environment, and timer state. Scheduling cases use test-context timers.
 4. Hook metadata tables and internal types stay private unless current production callers use them.
 
-**Plans**: 21/31 plans executed
+**Plans**: 22/31 plans executed
 
 Plans:
 
@@ -337,7 +337,7 @@ Plans:
 - [x] 112-08-PLAN.md
 - [x] 112-09-PLAN.md
 - [x] 112-10-PLAN.md
-- [ ] 112-11-PLAN.md
+- [x] 112-11-PLAN.md
 - [x] 112-12-PLAN.md
 - [ ] 112-13-PLAN.md
 - [ ] 112-14-PLAN.md
@@ -369,7 +369,7 @@ Plans:
 - [x] **112-08** (`112-08-PLAN.md`, `P112-08`) - `extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts` → `tests/bridges/hooks/exec-result.test.ts`
 - [x] **112-09** (`112-09-PLAN.md`, `P112-09`) - `extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts` → `tests/bridges/hooks/exec-timer.test.ts`
 - [x] **112-10** (`112-10-PLAN.md`, `P112-10`) - `extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts` → `tests/bridges/hooks/hook-env.test.ts`
-- [ ] **112-11** (`112-11-PLAN.md`, `P112-11`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts` → `tests/bridges/hooks/if-field/bash.test.ts`
+- [x] **112-11** (`112-11-PLAN.md`, `P112-11`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts` → `tests/bridges/hooks/if-field/bash.test.ts`
 - [x] **112-12** (`112-12-PLAN.md`, `P112-12`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts` → `tests/bridges/hooks/if-field/glob.test.ts`
 - [ ] **112-13** (`112-13-PLAN.md`, `P112-13`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts` → `tests/bridges/hooks/if-field/index.test.ts`
 - [ ] **112-14** (`112-14-PLAN.md`, `P112-14`) - `extensions/pi-claude-marketplace/bridges/hooks/index.ts` → `tests/bridges/hooks/index.test.ts`
@@ -613,7 +613,7 @@ and commit still owns one pair.
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
 | 111. Non-Hook Component Bridges          |          31/31 | Complete        | 2026-08-30 |
-| 112. Hook Runtime                        | 21/31 | In Progress|  |
+| 112. Hook Runtime                        |          22/31 | In Progress     |            |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
 | 115. Composition Orchestrators           |            0/8 | Not started     | -          |
