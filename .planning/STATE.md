@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-08-PLAN.md
-last_updated: "2026-08-31T03:48:26.994Z"
+stopped_at: Completed 112-09-PLAN.md
+last_updated: "2026-08-31T04:03:17.554Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 112 execution started
-state_head: 66c95d945f4d019a36348379d473420d5c2b288b
+state_head: f470921553cb42ec60abe887a81335a3523eae86
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 89
+  completed_plans: 90
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 4 of 31
+Plan: 5 of 31
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 112 execution started
 
@@ -122,6 +122,7 @@ evidence.
 | Phase 112 P01 | 14 min | 2 tasks | 1 files |
 | Phase 112 P03 | 9 min | 2 tasks | 1 files |
 | Phase 112 P08 | 8 min | 2 tasks | 1 files |
+| Phase 112 P09 | 9 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept exec-result.ts byte-for-byte unchanged because its exported type and assertNever function expose the complete contract.
 - [Phase 112]: Kept all HookExecResult positive and negative type evidence at module scope, with runtime execution only for assertNever.
 - [Phase 112]: Proved allow, deny, and ask inline without introducing a new permission type export.
+- [Phase 112]: Kept exec-timer.ts byte-for-byte unchanged because its public timer ladder exposes every scheduling branch.
+- [Phase 112]: Observed exact handles, unref calls, clears, and pending state through the current TestContext fake timers only.
 
 ### Pending Todos
 
@@ -190,6 +193,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T03:48:26.270Z
-Stopped at: Completed 112-08-PLAN.md
+Last session: 2026-08-31T04:03:16.874Z
+Stopped at: Completed 112-09-PLAN.md
 Resume file: None
