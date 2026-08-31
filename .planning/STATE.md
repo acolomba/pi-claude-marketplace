@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-15-PLAN.md
-last_updated: "2026-08-31T04:42:48.313Z"
+stopped_at: Completed 112-16-PLAN.md
+last_updated: "2026-08-31T04:53:02.141Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 15 PostCompact payload owner
-state_head: 4fc278a9ac4d35cd43b15750433c28f37dfe628e
+last_activity_desc: Completed Phase 112 Plan 16 PostToolUseFailure payload owner
+state_head: 8ec1c1704ed93e8b1a165977d7369794d3a03d6d
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 93
+  completed_plans: 94
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 8 of 31
+Plan: 9 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 15 PostCompact payload owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 16 PostToolUseFailure payload owner
 
 Progress: [████░░░░░░] 40%
 
-Eighty-five of 204 source-test pairs are complete. The remaining 119 are open.
+Ninety-three of 204 source-test pairs are complete. The remaining 111 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -119,13 +119,14 @@ evidence.
 | Phase 110 P12 | 17 min   | 2 tasks | 1 files |
 | Phase 111 P01 | 14 min   | 2 tasks | 2 files |
 | Phase 111 P02 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P01 | 14 min | 2 tasks | 1 files |
-| Phase 112 P03 | 9 min | 2 tasks | 1 files |
-| Phase 112 P08 | 8 min | 2 tasks | 1 files |
-| Phase 112 P09 | 9 min | 2 tasks | 1 files |
-| Phase 112 P10 | 14 min | 2 tasks | 1 files |
-| Phase 112 P12 | 12 min | 2 tasks | 1 files |
-| Phase 112 P15 | 6 min | 2 tasks | 1 files |
+| Phase 112 P01 | 14 min   | 2 tasks | 1 files |
+| Phase 112 P03 | 9 min    | 2 tasks | 1 files |
+| Phase 112 P08 | 8 min    | 2 tasks | 1 files |
+| Phase 112 P09 | 9 min    | 2 tasks | 1 files |
+| Phase 112 P10 | 14 min   | 2 tasks | 1 files |
+| Phase 112 P12 | 12 min   | 2 tasks | 1 files |
+| Phase 112 P15 | 6 min    | 2 tasks | 1 files |
+| Phase 112 P16 | 7 min    | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept post-compact.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
 - [Phase 112]: Replaced the incomplete double assertion with complete SessionCompactEvent values checked by satisfies.
 - [Phase 112]: Treated empty strings as valid context values and did not fabricate an out-of-contract null case.
+- [Phase 112]: Kept post-tool-use-failure.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
+- [Phase 112]: PostToolUseFailure owner evidence uses complete ToolResultEvent values, independent whole envelopes, and nested identity and non-mutation assertions.
+- [Phase 112]: Kept malformed process output in Plan 112-04 and left the translator supplemental suite unchanged.
 
 ### Pending Todos
 
@@ -204,6 +208,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T04:42:47.600Z
-Stopped at: Completed 112-15-PLAN.md
+Last session: 2026-08-31T04:53:01.419Z
+Stopped at: Completed 112-16-PLAN.md
 Resume file: None
