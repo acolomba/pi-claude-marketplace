@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-06-PLAN.md
-last_updated: "2026-08-31T10:39:54.805Z"
+stopped_at: Completed 112-04-PLAN.md
+last_updated: "2026-08-31T11:34:58.738Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 06 event adapter owner
-state_head: 8a11635b60b632e722e97193cbcd99e9ad478f1f
+last_activity_desc: Completed Phase 112 Plan 04 dispatch execution owner
+state_head: 93dca4d11db7f5f9e0d0cd419876db6b0cedaea4
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 112
+  completed_plans: 113
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 27 of 31
+Plan: 28 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 06 event adapter owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 04 dispatch execution owner
 
 Progress: [████░░░░░░] 40%
 
@@ -145,6 +145,7 @@ evidence.
 | Phase 112 P25 | 12 min | 2 tasks | 1 files |
 | Phase 112 P02 | 45 min | 2 tasks | 3 files |
 | Phase 112 P06 | 26 min | 2 tasks | 3 files |
+| Phase 112 P04 | 33 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,11 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Removed the legacy adaptObservationResult export after CodeGraph and historical call-site proof found no production caller.
 - [Phase 112]: Consolidated every direct adapter contract and the duplicate architecture suite into the mirrored event-adapters owner.
 - [Phase 112]: Left the mixed SessionStart additional-context supplemental unchanged for Plan 112-07 to remove after dependent evidence is absorbed.
+- [Phase 112]: Kept dispatch-exec.ts byte-for-byte unchanged because dispatchHookExec exposes the complete process, stream, stdin, timer, parse, and delegation contract.
+- [Phase 112]: Used synchronous child stdin and direct stdout/stderr descriptor writes to remove the portable fixture fast-exit race without sleeps or production changes.
+- [Phase 112]: Consolidated all single-module execution evidence in the dispatch-exec owner and deleted hooks-exec.test.ts.
+- [Phase 112]: Retained only translator-module completeness and shared built-in/custom tool-name mapping in hooks-translators.test.ts.
+- [Phase 112]: Used a live failing diagnostic sink to prove the outer async delegation catch while preserving never-throw noop behavior.
 
 ### Pending Todos
 
@@ -280,6 +286,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T10:39:54.066Z
-Stopped at: Completed 112-06-PLAN.md
+Last session: 2026-08-31T11:34:57.988Z
+Stopped at: Completed 112-04-PLAN.md
 Resume file: None
