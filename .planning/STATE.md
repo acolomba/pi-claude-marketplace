@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-18-PLAN.md
-last_updated: "2026-08-31T05:12:11.175Z"
+stopped_at: Completed 112-19-PLAN.md
+last_updated: "2026-08-31T05:20:34.540Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 18 PreCompact payload owner
-state_head: 38e25f55f31c723b3c186aef015e155328edff22
+last_activity_desc: Completed Phase 112 Plan 19 PreToolUse payload owner
+state_head: 13b8d949d176b52b6043d5f805cf62603a5f8ddb
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 96
+  completed_plans: 97
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 11 of 31
+Plan: 12 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 18 PreCompact payload owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 19 PreToolUse payload owner
 
 Progress: [████░░░░░░] 40%
 
@@ -129,6 +129,7 @@ evidence.
 | Phase 112 P16 | 7 min    | 2 tasks | 1 files |
 | Phase 112 P17 | 7 min    | 2 tasks | 1 files |
 | Phase 112 P18 | 3 min    | 2 tasks | 1 files |
+| Phase 112 P19 | 5 min    | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept pre-compact.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
 - [Phase 112]: Replaced the PreCompact double assertion and shared context with complete case-local values checked by satisfies.
 - [Phase 112]: Treated empty strings as valid PreCompact context values and did not add an unsupported null context case.
+- [Phase 112]: Kept pre-tool-use.ts byte-for-byte unchanged because translate exposes the complete payload contract.
+- [Phase 112]: PreToolUse evidence uses independent built-in and custom six-key envelopes with nested identity and non-mutation checks.
+- [Phase 112]: Kept malformed PreToolUse input in Plan 112-04 and left the translator supplemental suite unchanged.
 
 ### Pending Todos
 
@@ -216,6 +220,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T05:12:10.514Z
-Stopped at: Completed 112-18-PLAN.md
+Last session: 2026-08-31T05:20:33.852Z
+Stopped at: Completed 112-19-PLAN.md
 Resume file: None
