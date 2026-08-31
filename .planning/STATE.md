@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-11-PLAN.md
-last_updated: "2026-08-31T08:34:03.403Z"
+stopped_at: Completed 112-13-PLAN.md
+last_updated: "2026-08-31T09:05:15.646Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 11 Bash if-field owner
-state_head: 78feb49c7046566f5c367c8ba826fcc6e17fb622
+last_activity_desc: Completed Phase 112 Plan 13 if-field composition owner
+state_head: d1765358c165e054b8830fbe05dbc295a09cfd0f
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 108
+  completed_plans: 109
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 23 of 31
+Plan: 24 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 11 Bash if-field owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 13 if-field composition owner
 
 Progress: [████░░░░░░] 40%
 
@@ -141,6 +141,7 @@ evidence.
 | Phase 112 P30 | 17 min   | 2 tasks | 1 files |
 | Phase 112 P31 | 17 min   | 2 tasks | 1 files |
 | Phase 112 P11 | 14 min   | 2 tasks | 2 files |
+| Phase 112 P13 | 20 min   | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -245,6 +246,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Restored documented stable first-seen Bash candidate deduplication with only a Set spread after direct evidence exposed the missing behavior. — The Rule 1 fix satisfies the public contract without adding an export, symbol, seam, helper, or parser restructuring.
 - [Phase 112]: Bash if-field evidence uses complete literal commands and independently authored ordered results without invoking a shell. — Direct parser and matcher calls prove syntax, wrapper, recursion, fail-open, and specificity behavior without executing untrusted command text.
 - [Phase 112]: Left the hooks-if-field supplemental file unchanged so Plan 112-13 remains its only final carrier. — The Bash owner absorbs the unique leaf evidence while avoiding a competing shared-file edit.
+- [Phase 112]: Kept if-field/index.ts byte-for-byte unchanged because its public composition exports expose every required compile and evaluation partition.
+- [Phase 112]: Retained only the unique parseHooksConfig side-map-to-RoutingEntry chain, including exact predicate object identity and declaration order.
+- [Phase 112]: Kept the exact five predicate arms and all re-export evidence module-scoped without widening production metadata or adding a test seam.
 
 ### Pending Todos
 
@@ -263,6 +267,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T08:34:02.679Z
-Stopped at: Completed 112-11-PLAN.md
+Last session: 2026-08-31T09:05:14.901Z
+Stopped at: Completed 112-13-PLAN.md
 Resume file: None
