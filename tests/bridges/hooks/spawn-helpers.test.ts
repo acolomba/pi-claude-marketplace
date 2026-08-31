@@ -228,140 +228,180 @@ describe("serializeWithTruncation", () => {
     });
   });
 
-  test("marks an object serialized one byte over the cap with the permitted overshoot", () => {
+  test("bounds and marks an object serialized one byte over the stdin cap", () => {
     // arrange
     const stdinCapBytes = 256 * 1024;
     const payload = { text: "o".repeat(stdinCapBytes - 10) };
     const inputJson = JSON.stringify(payload);
-    const expectedSerialized = `{"text":"${"o".repeat(stdinCapBytes - 10)}","_truncated":true}`;
 
     // act
     const serialized = serializeWithTruncation(payload);
+    const decoded = JSON.parse(serialized) as { text: string; _truncated: boolean };
 
     // assert
     assert.strictEqual(Buffer.byteLength(inputJson, "utf8"), stdinCapBytes + 1);
-    assert.strictEqual(serialized, expectedSerialized);
-    assert.strictEqual(Buffer.byteLength(serialized, "utf8"), stdinCapBytes + 19);
-    assert.deepStrictEqual(JSON.parse(serialized), {
-      text: "o".repeat(stdinCapBytes - 10),
-      _truncated: true,
-    });
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.strictEqual(decoded._truncated, true);
+    assert.ok(decoded.text.length < payload.text.length);
+    assert.ok(payload.text.startsWith(decoded.text));
   });
 
-  test("counts multibyte text by UTF-8 bytes before marking it truncated", () => {
+  test("bounds substantially oversized multibyte text by UTF-8 bytes", () => {
     // arrange
     const stdinCapBytes = 256 * 1024;
-    const payload = { text: `${"漢".repeat(87_377)}aaa` };
+    const payload = { text: "漢".repeat(stdinCapBytes) };
     const inputJson = JSON.stringify(payload);
-    const expectedSerialized = `{"text":"${"漢".repeat(87_377)}aaa","_truncated":true}`;
 
     // act
     const serialized = serializeWithTruncation(payload);
+    const decoded = JSON.parse(serialized) as { text: string; _truncated: boolean };
 
     // assert
-    assert.strictEqual(inputJson.length, 87_391);
-    assert.strictEqual(Buffer.byteLength(inputJson, "utf8"), stdinCapBytes + 1);
-    assert.strictEqual(serialized, expectedSerialized);
-    assert.strictEqual(Buffer.byteLength(serialized, "utf8"), stdinCapBytes + 19);
-    assert.deepStrictEqual(JSON.parse(serialized), {
-      text: `${"漢".repeat(87_377)}aaa`,
-      _truncated: true,
-    });
+    assert.ok(Buffer.byteLength(inputJson, "utf8") > stdinCapBytes * 3);
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.strictEqual(decoded._truncated, true);
+    assert.ok(decoded.text.length < payload.text.length);
+    assert.ok(payload.text.startsWith(decoded.text));
   });
 
   test("overwrites a conflicting truncation marker without mutating the source", () => {
     // arrange
     const stdinCapBytes = 256 * 1024;
     const payload = {
-      text: "m".repeat(stdinCapBytes - 29),
+      text: "m".repeat(stdinCapBytes * 4),
       _truncated: false,
     };
     const inputJson = JSON.stringify(payload);
-    const expectedSerialized = `{"text":"${"m".repeat(stdinCapBytes - 29)}","_truncated":true}`;
 
     // act
     const serialized = serializeWithTruncation(payload);
+    const decoded = JSON.parse(serialized) as { text: string; _truncated: boolean };
 
     // assert
-    assert.strictEqual(Buffer.byteLength(inputJson, "utf8"), stdinCapBytes + 1);
-    assert.strictEqual(serialized, expectedSerialized);
-    assert.strictEqual(Buffer.byteLength(serialized, "utf8"), stdinCapBytes);
-    assert.deepStrictEqual(JSON.parse(serialized), {
-      text: "m".repeat(stdinCapBytes - 29),
-      _truncated: true,
-    });
+    assert.ok(Buffer.byteLength(inputJson, "utf8") > stdinCapBytes * 4);
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.strictEqual(decoded._truncated, true);
+    assert.ok(decoded.text.length < payload.text.length);
+    assert.ok(payload.text.startsWith(decoded.text));
     assert.deepStrictEqual(payload, {
-      text: "m".repeat(stdinCapBytes - 29),
+      text: "m".repeat(stdinCapBytes * 4),
       _truncated: false,
     });
   });
 
-  test("does not mutate an oversized ordinary object when adding the marker", () => {
+  test("retains complete object fields before filling the remaining bounded space", () => {
     // arrange
     const stdinCapBytes = 256 * 1024;
     const payload = {
-      message: "n".repeat(stdinCapBytes),
       nested: { status: "kept" },
+      message: "n".repeat(stdinCapBytes * 4),
     };
     const inputJson = JSON.stringify(payload);
-    const expectedSerialized = `{"message":"${"n".repeat(stdinCapBytes)}","nested":{"status":"kept"},"_truncated":true}`;
 
     // act
     const serialized = serializeWithTruncation(payload);
+    const decoded = JSON.parse(serialized) as {
+      message: string;
+      nested: { status: string };
+      _truncated: boolean;
+    };
 
     // assert
-    assert.strictEqual(Buffer.byteLength(inputJson, "utf8"), stdinCapBytes + 41);
-    assert.strictEqual(serialized, expectedSerialized);
-    assert.strictEqual(Buffer.byteLength(serialized, "utf8"), stdinCapBytes + 59);
-    assert.deepStrictEqual(JSON.parse(serialized), {
-      message: "n".repeat(stdinCapBytes),
-      nested: { status: "kept" },
-      _truncated: true,
-    });
+    assert.ok(Buffer.byteLength(inputJson, "utf8") > stdinCapBytes * 4);
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.strictEqual(decoded._truncated, true);
+    assert.ok(decoded.message.length < payload.message.length);
+    assert.ok(payload.message.startsWith(decoded.message));
+    assert.deepStrictEqual(decoded.nested, { status: "kept" });
     assert.deepStrictEqual(payload, {
-      message: "n".repeat(stdinCapBytes),
       nested: { status: "kept" },
+      message: "n".repeat(stdinCapBytes * 4),
     });
   });
 
-  test("wraps an oversized primitive under a marked payload envelope", () => {
+  test("omits an oversized non-string object field while retaining the marker", () => {
     // arrange
     const stdinCapBytes = 256 * 1024;
-    const payload = "p".repeat(stdinCapBytes - 1);
-    const inputJson = JSON.stringify(payload);
-    const expectedSerialized = `{"payload":"${"p".repeat(stdinCapBytes - 1)}","_truncated":true}`;
+    const payload = { nested: { text: "n".repeat(stdinCapBytes * 4) } };
 
     // act
     const serialized = serializeWithTruncation(payload);
 
     // assert
-    assert.strictEqual(Buffer.byteLength(inputJson, "utf8"), stdinCapBytes + 1);
-    assert.strictEqual(serialized, expectedSerialized);
-    assert.strictEqual(Buffer.byteLength(serialized, "utf8"), stdinCapBytes + 31);
-    assert.deepStrictEqual(JSON.parse(serialized), {
-      payload: "p".repeat(stdinCapBytes - 1),
-      _truncated: true,
-    });
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.deepStrictEqual(JSON.parse(serialized), { _truncated: true });
+    assert.deepStrictEqual(payload, { nested: { text: "n".repeat(stdinCapBytes * 4) } });
   });
 
-  test("wraps an oversized array under a marked payload envelope", () => {
+  test("emits only the marker when an oversized object field cannot fit", () => {
     // arrange
     const stdinCapBytes = 256 * 1024;
-    const payload = ["a".repeat(stdinCapBytes - 3)];
-    const inputJson = JSON.stringify(payload);
-    const expectedSerialized = `{"payload":["${"a".repeat(stdinCapBytes - 3)}"],"_truncated":true}`;
+    const oversizedKey = "k".repeat(stdinCapBytes);
+    const payload = { [oversizedKey]: "v" };
 
     // act
     const serialized = serializeWithTruncation(payload);
 
     // assert
-    assert.strictEqual(Buffer.byteLength(inputJson, "utf8"), stdinCapBytes + 1);
-    assert.strictEqual(serialized, expectedSerialized);
-    assert.strictEqual(Buffer.byteLength(serialized, "utf8"), stdinCapBytes + 31);
+    assert.ok(Buffer.byteLength(JSON.stringify(payload), "utf8") > stdinCapBytes);
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.deepStrictEqual(JSON.parse(serialized), { _truncated: true });
+  });
+
+  test("bounds an oversized primitive under a marked payload envelope", () => {
+    // arrange
+    const stdinCapBytes = 256 * 1024;
+    const payload = "p".repeat(stdinCapBytes * 4);
+    const inputJson = JSON.stringify(payload);
+
+    // act
+    const serialized = serializeWithTruncation(payload);
+    const decoded = JSON.parse(serialized) as { payload: string; _truncated: boolean };
+
+    // assert
+    assert.ok(Buffer.byteLength(inputJson, "utf8") > stdinCapBytes * 4);
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.strictEqual(decoded._truncated, true);
+    assert.ok(decoded.payload.length < payload.length);
+    assert.ok(payload.startsWith(decoded.payload));
+  });
+
+  test("bounds an oversized array prefix under a marked payload envelope", () => {
+    // arrange
+    const stdinCapBytes = 256 * 1024;
+    const payload = ["kept", "a".repeat(stdinCapBytes * 4)];
+    const inputJson = JSON.stringify(payload);
+
+    // act
+    const serialized = serializeWithTruncation(payload);
+    const decoded = JSON.parse(serialized) as { payload: string[]; _truncated: boolean };
+    const boundedValue = decoded.payload.at(1);
+
+    // assert
+    assert.ok(Buffer.byteLength(inputJson, "utf8") > stdinCapBytes * 4);
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
+    assert.strictEqual(decoded._truncated, true);
+    assert.strictEqual(decoded.payload[0], "kept");
+    assert.ok(boundedValue !== undefined);
+    assert.ok(boundedValue.length < payload[1]!.length);
+    assert.ok(payload[1]!.startsWith(boundedValue));
+    assert.deepStrictEqual(payload, ["kept", "a".repeat(stdinCapBytes * 4)]);
+  });
+
+  test("stops an oversized array before a non-string item that cannot fit", () => {
+    // arrange
+    const stdinCapBytes = 256 * 1024;
+    const payload = [{ text: "a".repeat(stdinCapBytes * 4) }, "not-reached"];
+
+    // act
+    const serialized = serializeWithTruncation(payload);
+
+    // assert
+    assert.ok(Buffer.byteLength(serialized, "utf8") <= stdinCapBytes);
     assert.deepStrictEqual(JSON.parse(serialized), {
-      payload: ["a".repeat(stdinCapBytes - 3)],
+      payload: [],
       _truncated: true,
     });
-    assert.deepStrictEqual(payload, ["a".repeat(stdinCapBytes - 3)]);
+    assert.deepStrictEqual(payload, [{ text: "a".repeat(stdinCapBytes * 4) }, "not-reached"]);
   });
 });
