@@ -34,10 +34,11 @@ test("applies every SessionStart environment precedence layer", async (t) => {
       if (prior.existed) {
         process.env[prior.key] = prior.value;
       } else {
-        delete process.env[prior.key];
+        Reflect.deleteProperty(process.env, prior.key);
       }
     }
   };
+
   t.after(restoreEnvironment);
 
   process.env.CLAUDE_PROJECT_DIR = "process-project";
@@ -144,10 +145,11 @@ test("omits event-specific keys while preserving a user-scope inherited key", as
       if (prior.existed) {
         process.env[prior.key] = prior.value;
       } else {
-        delete process.env[prior.key];
+        Reflect.deleteProperty(process.env, prior.key);
       }
     }
   };
+
   t.after(restoreEnvironment);
 
   process.env.PI_CODING_AGENT_DIR = "/scope/user-agent";
@@ -215,10 +217,7 @@ test("omits event-specific keys while preserving a user-scope inherited key", as
 
 test("restores exact process properties after containment failure", async (t) => {
   // arrange
-  const mutatedKeys = [
-    "CLAUDE_CODE_REMOTE",
-    "P112_HOOK_ENV_FAILURE",
-  ] as const;
+  const mutatedKeys = ["CLAUDE_CODE_REMOTE", "P112_HOOK_ENV_FAILURE"] as const;
   const priorEnvironment = mutatedKeys.map((key) => ({
     key,
     existed: Object.hasOwn(process.env, key),
@@ -229,10 +228,11 @@ test("restores exact process properties after containment failure", async (t) =>
       if (prior.existed) {
         process.env[prior.key] = prior.value;
       } else {
-        delete process.env[prior.key];
+        Reflect.deleteProperty(process.env, prior.key);
       }
     }
   };
+
   t.after(restoreEnvironment);
 
   delete process.env.CLAUDE_CODE_REMOTE;
@@ -277,6 +277,7 @@ test("restores exact process properties after containment failure", async (t) =>
   } catch (error) {
     environmentError = error;
   }
+
   restoreEnvironment();
 
   // assert
