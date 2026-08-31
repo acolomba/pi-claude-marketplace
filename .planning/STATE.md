@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-17-PLAN.md
-last_updated: "2026-08-31T05:03:10.923Z"
+stopped_at: Completed 112-18-PLAN.md
+last_updated: "2026-08-31T05:12:11.175Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 17 PostToolUse payload owner
-state_head: 6ed312e2bd7ec22f0ff89015d3bbf224f454990c
+last_activity_desc: Completed Phase 112 Plan 18 PreCompact payload owner
+state_head: 38e25f55f31c723b3c186aef015e155328edff22
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 95
+  completed_plans: 96
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 10 of 31
+Plan: 11 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 17 PostToolUse payload owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 18 PreCompact payload owner
 
 Progress: [████░░░░░░] 40%
 
-Ninety-four of 204 source-test pairs are complete. The remaining 110 are open.
+Ninety-five of 204 source-test pairs are complete. The remaining 109 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -128,6 +128,7 @@ evidence.
 | Phase 112 P15 | 6 min    | 2 tasks | 1 files |
 | Phase 112 P16 | 7 min    | 2 tasks | 1 files |
 | Phase 112 P17 | 7 min    | 2 tasks | 1 files |
+| Phase 112 P18 | 3 min    | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept post-tool-use.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
 - [Phase 112]: Replaced PostToolUse double assertions and shared context with complete case-local values checked by satisfies.
 - [Phase 112]: Kept malformed PostToolUse process output in Plan 112-04 and left the translator supplemental suite unchanged.
+- [Phase 112]: Kept pre-compact.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
+- [Phase 112]: Replaced the PreCompact double assertion and shared context with complete case-local values checked by satisfies.
+- [Phase 112]: Treated empty strings as valid PreCompact context values and did not add an unsupported null context case.
 
 ### Pending Todos
 
@@ -212,6 +216,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T05:03:10.148Z
-Stopped at: Completed 112-17-PLAN.md
+Last session: 2026-08-31T05:12:10.514Z
+Stopped at: Completed 112-18-PLAN.md
 Resume file: None
