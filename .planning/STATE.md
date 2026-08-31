@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-26-PLAN.md
-last_updated: "2026-08-31T12:37:28.881Z"
+stopped_at: Completed 112-07-PLAN.md
+last_updated: "2026-08-31T13:15:00.000Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 26 settle runtime owner
-state_head: 06423301caa5891e2a20a9bb2f39d413fff5ba1f
+last_activity_desc: Completed Phase 112 Plan 07 event router lifecycle owner
+state_head: e054584f27591569660c3957a900345c23fd96fa
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 115
+  completed_plans: 116
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 30 of 31
+Plan: 31 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 26 settle runtime owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 07 event router lifecycle owner
 
 Progress: [████░░░░░░] 40%
 
@@ -148,6 +148,7 @@ evidence.
 | Phase 112 P04 | 33 min | 2 tasks | 3 files |
 | Phase 112 P05 | 18 min | 2 tasks | 2 files |
 | Phase 112 P26 | 19 min | 2 tasks | 2 files |
+| Phase 112 P07 | 34 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -277,6 +278,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Removed settleCacheSnapshot and loopProtectionState after live CodeGraph proof showed no production callers, without adding a replacement introspection seam.
 - [Phase 112]: Proved settle state only through public lifecycle handlers, executor events, sent messages, notifications, and fresh follow-up calls.
 - [Phase 112]: Kept StopFailure observation-only: matching noop, block, mutate, and stop results run in declaration order and are all discarded.
+- [Phase 112]: Alphabetized inventories and presentation expectations while preserving exact production declaration and registration order where order is contractual.
+- [Phase 112]: Kept event-router.ts byte-for-byte unchanged because its public cache, hydration, rebuild, handler, and registration operations expose the complete lifecycle contract.
+- [Phase 112]: Split in-memory and persisted child fixtures across user and project cleanup surfaces so exit persistence cannot race the orphan tracer.
 
 ### Pending Todos
 
@@ -295,6 +299,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T12:37:28.127Z
-Stopped at: Completed 112-26-PLAN.md
+Last session: 2026-08-31T13:15:00.000Z
+Stopped at: Completed 112-07-PLAN.md
 Resume file: None
