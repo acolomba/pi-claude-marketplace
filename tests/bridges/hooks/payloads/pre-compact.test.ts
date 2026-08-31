@@ -63,3 +63,49 @@ test("emits the complete PreCompact envelope with an automatic trigger", () => {
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
 });
+
+test("preserves empty context strings in the complete PreCompact envelope", () => {
+  // arrange
+  const event = {
+    type: "session_before_compact",
+    preparation: {
+      firstKeptEntryId: "message-empty-context",
+      messagesToSummarize: [],
+      turnPrefixMessages: [],
+      isSplitTurn: false,
+      tokensBefore: 0,
+      fileOps: {
+        read: new Set<string>(),
+        written: new Set<string>(),
+        edited: new Set<string>(),
+      },
+      settings: {
+        enabled: true,
+        reserveTokens: 8_192,
+        keepRecentTokens: 2_048,
+      },
+    },
+    branchEntries: [],
+    reason: "manual",
+    willRetry: true,
+    signal: new AbortController().signal,
+  } satisfies SessionBeforeCompactEvent;
+  const context = {
+    sessionId: "",
+    transcriptPath: "",
+    cwd: "",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "",
+    transcript_path: "",
+    cwd: "",
+    hook_event_name: "PreCompact",
+    trigger: "auto",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+});
