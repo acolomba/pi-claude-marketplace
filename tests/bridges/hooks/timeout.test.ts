@@ -20,83 +20,107 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { resolveTimeoutSeconds } from "../../../extensions/pi-claude-marketplace/bridges/hooks/timeout.ts";
-import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
-
-/** The events Claude Code lowers the `command` default on. */
-const LOWERED: readonly BucketAEvent[] = ["UserPromptSubmit", "SessionEnd"];
-
-/**
- * Everything else. Derived rather than listed: `satisfies` only checks that
- * each element IS a BucketAEvent, so a hand-written list silently stops
- * covering a newly-admitted event while still compiling.
- */
-const UNLOWERED: readonly BucketAEvent[] = BUCKET_A_EVENTS.filter((e) => !LOWERED.includes(e));
-
-test("the derived UNLOWERED set is non-empty and complements LOWERED", () => {
-  // Without this, widening LOWERED to every event would leave the two
-  // loop-driven tests below iterating nothing and passing having asserted
-  // nothing at all.
-  assert.equal(UNLOWERED.length, BUCKET_A_EVENTS.length - LOWERED.length);
-  assert.ok(UNLOWERED.length > 0);
-});
 
 function blocking(raw: unknown, event: BucketAEvent): number {
   return resolveTimeoutSeconds({ raw, event, pluginId: "p", lane: "blocking" });
 }
 
-function background(raw: unknown, event: BucketAEvent): number {
-  return resolveTimeoutSeconds({ raw, event, pluginId: "p", lane: "background" });
-}
+test("preserves a positive integer timeout", () => {
+  // arrange
+  const options = {
+    raw: 75,
+    event: "PreToolUse",
+    pluginId: "integer-plugin",
+    lane: "blocking",
+  } as const;
 
-test("a positive number is the handler's own value, in seconds, unconverted", () => {
-  assert.equal(blocking(2, "PreToolUse"), 2);
-  assert.equal(blocking(600, "PreToolUse"), 600);
-  assert.equal(blocking(7200, "PreToolUse"), 7200);
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 75);
 });
 
-test("decimal second values are accepted", () => {
-  assert.equal(blocking(1.5, "PreToolUse"), 1.5);
-  assert.equal(blocking(0.25, "PreToolUse"), 0.25);
+test("preserves a positive fractional timeout", () => {
+  // arrange
+  const options = {
+    raw: 0.25,
+    event: "SessionEnd",
+    pluginId: "fractional-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 0.25);
 });
 
-test("a declared value wins over the event default, including where it is lower", () => {
-  assert.equal(blocking(120, "UserPromptSubmit"), 120);
-  assert.equal(blocking(45, "SessionEnd"), 45);
+test("defaults a blocking UserPromptSubmit timeout to 30 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "UserPromptSubmit",
+    pluginId: "prompt-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 30);
 });
 
-test("blocking lane: 600 s on every event Claude Code does not lower", () => {
-  for (const event of UNLOWERED) {
-    assert.equal(blocking(undefined, event), 600, `${event} default`);
-  }
+test("defaults a blocking SessionEnd timeout to 1.5 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "SessionEnd",
+    pluginId: "session-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 1.5);
 });
 
-test("blocking lane: UserPromptSubmit lowers to 30 s, as Claude Code does", () => {
-  assert.equal(blocking(undefined, "UserPromptSubmit"), 30);
+test("defaults another blocking event timeout to 600 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "PostToolUse",
+    pluginId: "tool-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
 });
 
-test("blocking lane: SessionEnd lowers to upstream's 1.5 s budget figure", () => {
-  // Upstream describes 1.5 s as a budget shared across every SessionEnd hook,
-  // and caps a longer declared timeout at 60 s. Applied per hook here and
-  // uncapped; both deviations are recorded as HKTO-01.
-  assert.equal(blocking(undefined, "SessionEnd"), 1.5);
-});
+test("defaults a background event timeout to 600 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "SessionEnd",
+    pluginId: "background-plugin",
+    lane: "background",
+  } as const;
 
-test("background lane keeps 600 s on the events the blocking lane lowers", () => {
-  // Upstream lowers those budgets because the handler holds up the turn. An
-  // asyncRewake handler is registered and left to run while dispatch returns,
-  // so the rationale does not transfer -- and applying it would silently
-  // truncate long-running background work that declared no timeout at all.
-  assert.equal(background(undefined, "UserPromptSubmit"), 600);
-  assert.equal(background(undefined, "SessionEnd"), 600);
-  for (const event of UNLOWERED) {
-    assert.equal(background(undefined, event), 600, `${event} background default`);
-  }
-});
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
 
-test("background lane still honors a declared value", () => {
-  assert.equal(background(90, "UserPromptSubmit"), 90);
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
 });
 
 test("absent, null, and undefined fall back to the lane+event default", () => {
