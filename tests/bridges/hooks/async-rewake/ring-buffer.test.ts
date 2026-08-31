@@ -46,16 +46,34 @@ test("RingBuffer: simple write under capacity reads back unchanged", () => {
   assert.deepEqual(b.read(), { text: "abc", truncated: false });
 });
 
-test("RingBuffer: exact-fill no overflow", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("12345678"));
-  assert.deepEqual(b.read(), { text: "12345678", truncated: false });
+test("retains every byte when one chunk exactly fills the buffer", () => {
+  // arrange
+  const buffer = new RingBuffer(4);
+  const input = Buffer.from([0x31, 0x32, 0x33, 0x34]);
+  const expectedRead = { text: "1234", truncated: false };
+
+  // act
+  buffer.write(input);
+  const read = buffer.read();
+
+  // assert
+  assert.deepStrictEqual(read, expectedRead);
 });
 
-test("RingBuffer: single-write one-byte overflow drops oldest byte", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("123456789"));
-  assert.deepEqual(b.read(), { text: "23456789", truncated: true });
+test("drops only the oldest byte when chronological input exceeds capacity by one", () => {
+  // arrange
+  const buffer = new RingBuffer(4);
+  const initialInput = Buffer.from([0x31, 0x32, 0x33, 0x34]);
+  const newestInput = Buffer.from([0x35]);
+  const expectedRead = { text: "2345", truncated: true };
+
+  // act
+  buffer.write(initialInput);
+  buffer.write(newestInput);
+  const read = buffer.read();
+
+  // assert
+  assert.deepStrictEqual(read, expectedRead);
 });
 
 test("RingBuffer: two-write overflow drops the very oldest byte", () => {
