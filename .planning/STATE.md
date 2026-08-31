@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-21-PLAN.md
-last_updated: "2026-08-31T05:39:59.531Z"
+stopped_at: Completed 112-22-PLAN.md
+last_updated: "2026-08-31T05:58:41.155Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 21 SessionStart payload owner
-state_head: f11ef410acc4974e9e96882fcd9e6cd364440367
+last_activity_desc: Completed Phase 112 Plan 22 StopFailure payload owner
+state_head: ad232a4db15d12a51896af65cccde9774cb38841
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 99
+  completed_plans: 100
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 14 of 31
+Plan: 15 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 21 SessionStart payload owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 22 StopFailure payload owner
 
 Progress: [████░░░░░░] 40%
 
@@ -132,6 +132,7 @@ evidence.
 | Phase 112 P19 | 5 min    | 2 tasks | 1 files |
 | Phase 112 P20 | 5 min    | 2 tasks | 1 files |
 | Phase 112 P21 | 8 min     | 2 tasks | 1 files |
+| Phase 112 P22 | 20 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -209,6 +210,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept malformed SessionEnd input in Plan 112-04 and left the supplemental translator suite unchanged.
 - [Phase 112]: Kept session-start.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
 - [Phase 112]: SessionStart evidence uses independent whole envelopes for every source branch and accepted empty context values.
+- [Phase 112]: Kept stop-failure.ts byte-for-byte unchanged because its public translator and classifier expose the complete contract.
+- [Phase 112]: Used explicit sibling cases for classifier precedence and status partitions instead of a shared table or test seam.
+- [Phase 112]: Kept object and cause wrapping in Plan 112-27 instead of expanding the StopFailure owner scope.
 
 ### Pending Todos
 
@@ -227,6 +231,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T05:39:58.801Z
-Stopped at: Completed 112-21-PLAN.md
+Last session: 2026-08-31T05:58:40.400Z
+Stopped at: Completed 112-22-PLAN.md
 Resume file: None
