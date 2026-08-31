@@ -8,26 +8,41 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ToolCallEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("pre-tool-use: emits the PreToolUse envelope with bash -> Bash capitalization via TOOL-01", () => {
+test("maps a built-in tool to the complete PreToolUse envelope", () => {
+  // arrange
+  const toolInput = {
+    command: "printf 'ready\\n'",
+    timeout: 15,
+  };
   const event = {
     type: "tool_call",
-    toolCallId: "tc-1",
+    toolCallId: "tool-call-built-in",
     toolName: "bash",
-    input: { command: "echo hi" },
-  } as unknown as ToolCallEvent;
+    input: toolInput,
+  } satisfies ToolCallEvent;
+  const context = {
+    sessionId: "session-built-in",
+    transcriptPath: "/sessions/session-built-in.jsonl",
+    cwd: "/workspace/built-in",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-built-in",
+    transcript_path: "/sessions/session-built-in.jsonl",
+    cwd: "/workspace/built-in",
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: {
+      command: "printf 'ready\\n'",
+      timeout: 15,
+    },
+  };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}',
-  );
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+  assert.strictEqual(payload.tool_input, toolInput);
 });
 
 test("pre-tool-use: CustomToolCallEvent toolName passes through unchanged (TOOL-01 fallback)", () => {
@@ -41,7 +56,11 @@ test("pre-tool-use: CustomToolCallEvent toolName passes through unchanged (TOOL-
     input: { foo: 1 },
   } as unknown as ToolCallEvent;
 
-  const actual = translate(event, ctx);
+  const actual = translate(event, {
+    sessionId: "sess-1",
+    transcriptPath: "/tmp/t.jsonl",
+    cwd: "/proj",
+  });
 
   assert.equal(actual.tool_name, "mcp__server__tool");
   assert.equal(actual.hook_event_name, "PreToolUse");
@@ -66,7 +85,11 @@ test("pre-tool-use: every Pi tool literal capitalizes correctly", () => {
       input: {},
     } as unknown as ToolCallEvent;
 
-    const actual = translate(event, ctx);
+    const actual = translate(event, {
+      sessionId: "sess-1",
+      transcriptPath: "/tmp/t.jsonl",
+      cwd: "/proj",
+    });
     assert.equal(actual.tool_name, claudeName, `${piName} -> ${claudeName}`);
   }
 });
