@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-27-PLAN.md
-last_updated: "2026-08-31T06:52:54.012Z"
+stopped_at: Completed 112-28-PLAN.md
+last_updated: "2026-08-31T07:24:30.499Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 27 spawn helper owner
-state_head: 3223a68a182763273a58f8a72164f40ccc5f790a
+last_activity_desc: Completed Phase 112 Plan 28 stage lifecycle owner
+state_head: 50c59c7871a29fe43707c5fd2db6d0449ca1cb85
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 103
+  completed_plans: 104
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 18 of 31
+Plan: 19 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 27 spawn helper owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 28 stage lifecycle owner
 
 Progress: [████░░░░░░] 40%
 
@@ -136,6 +136,7 @@ evidence.
 | Phase 112 P23 | 10 min | 2 tasks | 1 files |
 | Phase 112 P24 | 10 min | 2 tasks | 1 files |
 | Phase 112 P27 | 19 min | 2 tasks | 1 files |
+| Phase 112 P28 | 28 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept spawn-helpers.ts byte-for-byte unchanged because its public helpers expose the complete execution-form and serialization contracts.
 - [Phase 112]: Treated defined args, including an empty array, as exec form with shell disabled; absent args retain shell-form behavior.
 - [Phase 112]: Made the truncation marker authoritative without mutating object, primitive, or array inputs and accepted the documented envelope overshoot.
+- [Phase 112]: Removed only the private stage stack-pop undefined guard after live CodeGraph proof established that its guarded state is unreachable.
+- [Phase 112]: Retained readSymlinkTargetSafe as a reachable TOCTOU defense and proved it through restored Node filesystem bindings without a production seam.
+- [Phase 112]: Absorbed the symlink supplemental's unique containment evidence into the stage owner before deleting the duplicate carrier.
 
 ### Pending Todos
 
@@ -243,6 +247,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T06:52:53.336Z
-Stopped at: Completed 112-27-PLAN.md
+Last session: 2026-08-31T07:24:29.795Z
+Stopped at: Completed 112-28-PLAN.md
 Resume file: None
