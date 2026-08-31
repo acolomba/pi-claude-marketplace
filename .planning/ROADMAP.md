@@ -323,7 +323,7 @@ Plans:
 3. Each case owns its router, process, session, environment, and timer state. Scheduling cases use test-context timers.
 4. Hook metadata tables and internal types stay private unless current production callers use them.
 
-**Plans**: 23/31 plans executed
+**Plans**: 24/31 plans executed
 
 Plans:
 
@@ -351,7 +351,7 @@ Plans:
 - [x] 112-22-PLAN.md
 - [x] 112-23-PLAN.md
 - [x] 112-24-PLAN.md
-- [ ] 112-25-PLAN.md
+- [x] 112-25-PLAN.md
 - [ ] 112-26-PLAN.md
 - [x] 112-27-PLAN.md
 - [x] 112-28-PLAN.md
@@ -371,7 +371,7 @@ Plans:
 - [x] **112-10** (`112-10-PLAN.md`, `P112-10`) - `extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts` → `tests/bridges/hooks/hook-env.test.ts`
 - [x] **112-11** (`112-11-PLAN.md`, `P112-11`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts` → `tests/bridges/hooks/if-field/bash.test.ts`
 - [x] **112-12** (`112-12-PLAN.md`, `P112-12`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts` → `tests/bridges/hooks/if-field/glob.test.ts`
-- [ ] **112-13** (`112-13-PLAN.md`, `P112-13`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts` → `tests/bridges/hooks/if-field/index.test.ts`
+- [x] **112-13** (`112-13-PLAN.md`, `P112-13`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts` → `tests/bridges/hooks/if-field/index.test.ts`
 - [ ] **112-14** (`112-14-PLAN.md`, `P112-14`) - `extensions/pi-claude-marketplace/bridges/hooks/index.ts` → `tests/bridges/hooks/index.test.ts`
 - [x] **112-15** (`112-15-PLAN.md`, `P112-15`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts` → `tests/bridges/hooks/payloads/post-compact.test.ts`
 - [x] **112-16** (`112-16-PLAN.md`, `P112-16`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts` → `tests/bridges/hooks/payloads/post-tool-use-failure.test.ts`
@@ -383,7 +383,7 @@ Plans:
 - [x] **112-22** (`112-22-PLAN.md`, `P112-22`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts` → `tests/bridges/hooks/payloads/stop-failure.test.ts`
 - [x] **112-23** (`112-23-PLAN.md`, `P112-23`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts` → `tests/bridges/hooks/payloads/stop.test.ts`
 - [x] **112-24** (`112-24-PLAN.md`, `P112-24`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts` → `tests/bridges/hooks/payloads/user-prompt-submit.test.ts`
-- [ ] **112-25** (`112-25-PLAN.md`, `P112-25`) - `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` → `tests/bridges/hooks/routing-state.test.ts`
+- [x] **112-25** (`112-25-PLAN.md`, `P112-25`) - `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` → `tests/bridges/hooks/routing-state.test.ts`
 - [ ] **112-26** (`112-26-PLAN.md`, `P112-26`) - `extensions/pi-claude-marketplace/bridges/hooks/settle.ts` → `tests/bridges/hooks/settle.test.ts`
 - [x] **112-27** (`112-27-PLAN.md`, `P112-27`) - `extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts` → `tests/bridges/hooks/spawn-helpers.test.ts`
 - [x] **112-28** (`112-28-PLAN.md`, `P112-28`) - `extensions/pi-claude-marketplace/bridges/hooks/stage.ts` → `tests/bridges/hooks/stage.test.ts`
@@ -613,7 +613,7 @@ and commit still owns one pair.
 | 109. Shared Contracts                    |          19/19 | Complete        | 2026-08-29 |
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
 | 111. Non-Hook Component Bridges          |          31/31 | Complete        | 2026-08-30 |
-| 112. Hook Runtime                        |          23/31 | In Progress     |            |
+| 112. Hook Runtime                        |          24/31 | In Progress     |            |
 | 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
 | 115. Composition Orchestrators           |            0/8 | Not started     | -          |
