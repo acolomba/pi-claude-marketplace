@@ -38,13 +38,7 @@ test("emits the complete UserPromptSubmit envelope with the prompt text", () => 
     hook_event_name: "UserPromptSubmit",
     prompt: "hello world",
   } satisfies UserPromptSubmitStdin;
-  const expectedKeys = [
-    "session_id",
-    "transcript_path",
-    "cwd",
-    "hook_event_name",
-    "prompt",
-  ];
+  const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
 
   // act
   const promptPayload = translate(event, context);
@@ -68,6 +62,16 @@ test("preserves a multi-line prompt in the complete UserPromptSubmit envelope", 
     transcriptPath: "/sessions/session-multi-line.jsonl",
     cwd: "/workspace/multi-line",
   } satisfies TranslationContext;
+  const expectedEvent = {
+    type: "input",
+    text: "line 1\nline 2\nline 3",
+    source: "interactive",
+  } satisfies InputEvent;
+  const expectedContext = {
+    sessionId: "session-multi-line",
+    transcriptPath: "/sessions/session-multi-line.jsonl",
+    cwd: "/workspace/multi-line",
+  } satisfies TranslationContext;
   const expectedPayload = {
     session_id: "session-multi-line",
     transcript_path: "/sessions/session-multi-line.jsonl",
@@ -75,10 +79,96 @@ test("preserves a multi-line prompt in the complete UserPromptSubmit envelope", 
     hook_event_name: "UserPromptSubmit",
     prompt: "line 1\nline 2\nline 3",
   } satisfies UserPromptSubmitStdin;
+  const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
 
   // act
   const promptPayload = translate(event, context);
 
   // assert
   assert.deepStrictEqual(promptPayload, expectedPayload);
+  assert.deepStrictEqual(Object.keys(promptPayload), expectedKeys);
+  assert.deepStrictEqual(event, expectedEvent);
+  assert.deepStrictEqual(context, expectedContext);
+});
+
+test("preserves an empty prompt in the complete UserPromptSubmit envelope", () => {
+  // arrange
+  const event = {
+    type: "input",
+    text: "",
+    source: "interactive",
+  } satisfies InputEvent;
+  const context = {
+    sessionId: "session-empty-prompt",
+    transcriptPath: "/sessions/session-empty-prompt.jsonl",
+    cwd: "/workspace/empty-prompt",
+  } satisfies TranslationContext;
+  const expectedEvent = {
+    type: "input",
+    text: "",
+    source: "interactive",
+  } satisfies InputEvent;
+  const expectedContext = {
+    sessionId: "session-empty-prompt",
+    transcriptPath: "/sessions/session-empty-prompt.jsonl",
+    cwd: "/workspace/empty-prompt",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-empty-prompt",
+    transcript_path: "/sessions/session-empty-prompt.jsonl",
+    cwd: "/workspace/empty-prompt",
+    hook_event_name: "UserPromptSubmit",
+    prompt: "",
+  } satisfies UserPromptSubmitStdin;
+  const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
+
+  // act
+  const promptPayload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(promptPayload, expectedPayload);
+  assert.deepStrictEqual(Object.keys(promptPayload), expectedKeys);
+  assert.deepStrictEqual(event, expectedEvent);
+  assert.deepStrictEqual(context, expectedContext);
+});
+
+test("preserves a multi-byte prompt in the complete UserPromptSubmit envelope", () => {
+  // arrange
+  const event = {
+    type: "input",
+    text: "こんにちは、世界 🌍 café",
+    source: "interactive",
+  } satisfies InputEvent;
+  const context = {
+    sessionId: "session-multi-byte-prompt",
+    transcriptPath: "/sessions/session-multi-byte-prompt.jsonl",
+    cwd: "/workspace/multi-byte-prompt",
+  } satisfies TranslationContext;
+  const expectedEvent = {
+    type: "input",
+    text: "こんにちは、世界 🌍 café",
+    source: "interactive",
+  } satisfies InputEvent;
+  const expectedContext = {
+    sessionId: "session-multi-byte-prompt",
+    transcriptPath: "/sessions/session-multi-byte-prompt.jsonl",
+    cwd: "/workspace/multi-byte-prompt",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-multi-byte-prompt",
+    transcript_path: "/sessions/session-multi-byte-prompt.jsonl",
+    cwd: "/workspace/multi-byte-prompt",
+    hook_event_name: "UserPromptSubmit",
+    prompt: "こんにちは、世界 🌍 café",
+  } satisfies UserPromptSubmitStdin;
+  const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
+
+  // act
+  const promptPayload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(promptPayload, expectedPayload);
+  assert.deepStrictEqual(Object.keys(promptPayload), expectedKeys);
+  assert.deepStrictEqual(event, expectedEvent);
+  assert.deepStrictEqual(context, expectedContext);
 });
