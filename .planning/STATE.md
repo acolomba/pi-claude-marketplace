@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-22-PLAN.md
-last_updated: "2026-08-31T05:58:41.155Z"
+stopped_at: Completed 112-23-PLAN.md
+last_updated: "2026-08-31T06:14:02.203Z"
 last_activity: 2026-08-31
 last_activity_desc: Completed Phase 112 Plan 22 StopFailure payload owner
-state_head: ad232a4db15d12a51896af65cccde9774cb38841
+state_head: 7e0a1a2150b4f46b87000535e489d0f8556fff1b
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 100
+  completed_plans: 101
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 15 of 31
+Plan: 16 of 31
 Status: Ready to execute
 Last activity: 2026-08-31 — Completed Phase 112 Plan 22 StopFailure payload owner
 
@@ -133,6 +133,7 @@ evidence.
 | Phase 112 P20 | 5 min    | 2 tasks | 1 files |
 | Phase 112 P21 | 8 min     | 2 tasks | 1 files |
 | Phase 112 P22 | 20 min | 2 tasks | 1 files |
+| Phase 112 P23 | 10 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept stop-failure.ts byte-for-byte unchanged because its public translator and classifier expose the complete contract.
 - [Phase 112]: Used explicit sibling cases for classifier precedence and status partitions instead of a shared table or test seam.
 - [Phase 112]: Kept object and cause wrapping in Plan 112-27 instead of expanding the StopFailure owner scope.
+- [Phase 112]: Kept stop.ts byte-for-byte unchanged because its public translator exposes the complete contract.
+- [Phase 112]: Used separate case-local values and whole six-key expectations for active, inactive, and empty-text Stop partitions.
+- [Phase 112]: Kept Stop re-entry and observer behavior in Plan 112-26 instead of widening the direct payload owner.
 
 ### Pending Todos
 
@@ -231,6 +235,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T05:58:40.400Z
-Stopped at: Completed 112-22-PLAN.md
+Last session: 2026-08-31T06:14:01.416Z
+Stopped at: Completed 112-23-PLAN.md
 Resume file: None
