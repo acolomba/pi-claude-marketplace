@@ -269,9 +269,8 @@ export async function spawnAndRegister(
 
     const stderrBuffer = new RingBuffer(STDERR_CAP_BYTES);
     const stdoutBuffer = new RingBuffer(STDOUT_CAP_BYTES);
-    // Each `ChildProcess` is its own EventEmitter; the five listeners
-    // we attach (stderr.data, stdout.data, stdin.error, child.exit,
-    // child.error) all live on independent emitters. Node's default
+    // Each `ChildProcess` is its own EventEmitter; its lifecycle listeners and
+    // the owned-stream listeners live on their respective emitters. Node's default
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
@@ -310,11 +309,52 @@ export async function spawnAndRegister(
 
     asyncRewakeRegistry.set(dispatchId, asyncEntry);
 
+    let exitOutcome:
+      | { readonly code: number | null; readonly signal: NodeJS.Signals | null }
+      | undefined;
+    let finalized = false;
+    let stderrEnded = child.stderr === null || child.stderr.readableEnded;
+    let stdoutEnded = child.stdout === null || child.stdout.readableEnded;
+
+    const finalizeOnce = (
+      outcome:
+        | { readonly code: number | null; readonly signal: NodeJS.Signals | null }
+        | undefined,
+    ): void => {
+      if (finalized) {
+        return;
+      }
+
+      finalized = true;
+      finalizeChild(dispatchId, outcome, ctx, pi);
+    };
+    const finalizeAfterOwnedStreams = (): void => {
+      if (exitOutcome !== undefined && stdoutEnded && stderrEnded) {
+        finalizeOnce(exitOutcome);
+      }
+    };
+
+    child.stderr?.once("end", () => {
+      stderrEnded = true;
+      finalizeAfterOwnedStreams();
+    });
+    child.stdout?.once("end", () => {
+      stdoutEnded = true;
+      finalizeAfterOwnedStreams();
+    });
     child.once("exit", (code, signal) => {
-      onChildExit(dispatchId, code, signal, ctx, pi);
+      ladder.cancel();
+      exitOutcome = { code, signal };
+      finalizeAfterOwnedStreams();
+    });
+    child.once("close", (code, signal) => {
+      ladder.cancel();
+      finalizeOnce(exitOutcome ?? { code, signal });
     });
     child.once("error", (err) => {
-      onChildError(dispatchId, err);
+      ladder.cancel();
+      hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
+      finalizeOnce(undefined);
     });
 
     // EPIPE defense: attach the stdin error listener BEFORE the write
@@ -343,23 +383,29 @@ export async function spawnAndRegister(
 // Per-child exit / error handlers
 // ──────────────────────────────────────────────────────────────────────────
 
-function onChildExit(
+function finalizeChild(
   dispatchId: string,
-  code: number | null,
-  signal: NodeJS.Signals | null,
+  outcome:
+    | { readonly code: number | null; readonly signal: NodeJS.Signals | null }
+    | undefined,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
 ): void {
   const entry = asyncRewakeRegistry.get(dispatchId);
   if (entry === undefined) {
-    // Double-fire guard: `exit` and `error` may both fire; whichever
-    // arrives first removes the entry and the second observes absent.
+    // Defensive guard for cleanup paths that removed the entry before a
+    // terminal child event reached this closure.
     return;
   }
 
-  entry.ladder.cancel();
   asyncRewakeRegistry.delete(dispatchId);
   void persistPidTableForLoc(entry.loc);
+
+  if (outcome === undefined) {
+    return;
+  }
+
+  const { code, signal } = outcome;
 
   // D-62-03 / D-59-03 captured-epoch zombie defense. A slow child from
   // a prior `/reload` cycle must not inject into the freshly-hydrated
@@ -421,18 +467,6 @@ function onChildExit(
   } catch (err) {
     hookDebugLog(`async-rewake: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
   }
-}
-
-function onChildError(dispatchId: string, err: unknown): void {
-  hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
-  const entry = asyncRewakeRegistry.get(dispatchId);
-  if (entry === undefined) {
-    return;
-  }
-
-  entry.ladder.cancel();
-  asyncRewakeRegistry.delete(dispatchId);
-  void persistPidTableForLoc(entry.loc);
 }
 
 /**

@@ -43,6 +43,7 @@ interface ChildHarness {
   readonly stdout: PassThrough;
   readonly stderr: PassThrough;
   readonly signals: NodeJS.Signals[];
+  emitClose(code?: number | null, signal?: NodeJS.Signals | null): void;
   emitExit(code: number | null, signal?: NodeJS.Signals | null): void;
 }
 
@@ -103,6 +104,9 @@ function createChild(pid: number): ChildHarness {
     stdout,
     stderr,
     signals,
+    emitClose(code = exitCode, signal = signalCode): void {
+      events.emit("close", code, signal);
+    },
     emitExit(code, signal = null): void {
       exitCode = code;
       signalCode = signal;
@@ -398,6 +402,7 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
 
     // act
     child?.emitExit(2);
+    child?.emitClose();
     await tableRewrite.completion;
     tableRewrite.close();
     shutdownInMemoryChildren();

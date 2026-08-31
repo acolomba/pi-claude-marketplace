@@ -52,6 +52,7 @@ interface ChildHarness {
   readonly stdout: PassThrough;
   readonly stderr: PassThrough;
   readonly signals: Array<number | NodeJS.Signals>;
+  emitClose(code?: number | null, signal?: NodeJS.Signals | null): void;
   emitExit(code: number | null, signal?: NodeJS.Signals | null): void;
   emitError(error: Error): void;
 }
@@ -145,6 +146,9 @@ function createChild(pid: number | undefined, options: ChildOptions = {}): Child
     stdout,
     stderr,
     signals,
+    emitClose(code = exitCode, signal = signalCode): void {
+      events.emit("close", code, signal);
+    },
     emitExit(code, signal = null): void {
       exitCode = code;
       signalCode = signal;
@@ -429,6 +433,7 @@ test(
       await Promise.all([stdoutEnd, stderrEnd]);
       tableRewrite = observeTableRewrite(tablePath);
       child.emitExit(2);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       const removedBytes = await readFile(tablePath, "utf8");
@@ -873,6 +878,7 @@ test("settles a child error once and ignores its later exit", { concurrency: fal
     await tableRewrite.completion;
     tableRewrite.close();
     child.emitExit(2);
+    child.emitClose();
     t.mock.timers.tick(605_000);
     const persistedEntries = await readPidTable(locations);
 
@@ -932,6 +938,7 @@ test(
 
       // act
       child.emitExit(0);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       child.emitError(new Error("late duplicate terminal event"));
@@ -982,6 +989,7 @@ test(
 
       // act
       child.emitExit(0);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1029,6 +1037,7 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
 
     // act
     child.emitExit(null, "SIGTERM");
+    child.emitClose();
     await tableRewrite.completion;
     tableRewrite.close();
     t.mock.timers.tick(605_000);
@@ -1078,6 +1087,7 @@ test(
 
       // act
       child.emitExit(2);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1135,6 +1145,7 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
 
     // act
     child.emitExit(2);
+    child.emitClose();
     await tableRewrite.completion;
     tableRewrite.close();
     t.mock.timers.tick(605_000);
@@ -1192,6 +1203,7 @@ test(
 
       // act
       child.emitExit(2);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1248,6 +1260,7 @@ test(
 
       // act
       child.emitExit(2);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1278,7 +1291,7 @@ test(
 );
 
 test(
-  "settles from bytes available when exit precedes pipe close",
+  "waits for late stdio after exit before settling exactly once",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -1316,20 +1329,23 @@ test(
 
       // act
       child.emitExit(2);
-      await tableRewrite.completion;
-      tableRewrite.close();
+      const messagesAfterExit = [...pi.messages];
       const stdoutEnd = once(child.stdout, "end");
       child.stdout.end("-after-exit");
       child.stderr.end();
       await Promise.all([stdoutEnd, once(child.stderr, "end")]);
+      child.emitClose();
+      await tableRewrite.completion;
+      tableRewrite.close();
       t.mock.timers.tick(605_000);
 
       // assert
+      assert.deepStrictEqual(messagesAfterExit, []);
       assert.deepStrictEqual(pi.messages, [
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "available-before-exit",
+            content: "available-before-exit-after-exit",
             display: false,
             details: {
               pluginId: "plugin-lifecycle",
@@ -1381,6 +1397,7 @@ test(
 
       // act
       child.emitExit(0);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1439,6 +1456,7 @@ test(
 
       // act
       child.emitExit(2);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1486,6 +1504,7 @@ test(
 
       // act
       child.emitExit(2);
+      child.emitClose();
       await tableRewrite.completion;
       tableRewrite.close();
       t.mock.timers.tick(605_000);
@@ -1552,6 +1571,7 @@ test(
 
       // act
       firstChild.emitExit(0);
+      firstChild.emitClose();
       await firstRewrite.completion;
       firstRewrite.close();
       const entriesAfterFirstExit = await readPidTable(firstLocations);
