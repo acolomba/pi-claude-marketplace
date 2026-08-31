@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-24-PLAN.md
-last_updated: "2026-08-31T06:28:55.516Z"
+stopped_at: Completed 112-27-PLAN.md
+last_updated: "2026-08-31T06:52:54.012Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 24 UserPromptSubmit payload owner
-state_head: 8185b5e04121c27d0193b8bcbca14eeaa3131935
+last_activity_desc: Completed Phase 112 Plan 27 spawn helper owner
+state_head: 3223a68a182763273a58f8a72164f40ccc5f790a
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 102
+  completed_plans: 103
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 17 of 31
+Plan: 18 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 24 UserPromptSubmit payload owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 27 spawn helper owner
 
 Progress: [████░░░░░░] 40%
 
@@ -135,6 +135,7 @@ evidence.
 | Phase 112 P22 | 20 min | 2 tasks | 1 files |
 | Phase 112 P23 | 10 min | 2 tasks | 1 files |
 | Phase 112 P24 | 10 min | 2 tasks | 1 files |
+| Phase 112 P27 | 19 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept user-prompt-submit.ts byte-for-byte unchanged because its public translator exposes the complete contract.
 - [Phase 112]: UserPromptSubmit evidence uses separate case-local values and whole five-key expectations for ordinary, multi-line, empty, and multi-byte prompts.
 - [Phase 112]: Kept malformed process-output behavior in Plan 112-04 instead of widening the direct payload owner.
+- [Phase 112]: Kept spawn-helpers.ts byte-for-byte unchanged because its public helpers expose the complete execution-form and serialization contracts.
+- [Phase 112]: Treated defined args, including an empty array, as exec form with shell disabled; absent args retain shell-form behavior.
+- [Phase 112]: Made the truncation marker authoritative without mutating object, primitive, or array inputs and accepted the documented envelope overshoot.
 
 ### Pending Todos
 
@@ -239,6 +243,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T06:28:54.752Z
-Stopped at: Completed 112-24-PLAN.md
+Last session: 2026-08-31T06:52:53.336Z
+Stopped at: Completed 112-27-PLAN.md
 Resume file: None
