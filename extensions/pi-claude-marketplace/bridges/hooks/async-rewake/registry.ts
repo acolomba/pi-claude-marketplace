@@ -405,7 +405,11 @@ function finalizeChild(
   }
 
   asyncRewakeRegistry.delete(dispatchId);
-  void persistPidTableForLoc(entry.loc, pidTableWriter);
+  void persistPidTableForLoc(entry.loc, pidTableWriter).catch((err: unknown) => {
+    hookDebugLog(
+      `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
+    );
+  });
 
   if (outcome === undefined) {
     return;
@@ -622,15 +626,17 @@ function enqueuePidTableOperation(
 ): Promise<void> {
   const key = pidTablePath(loc);
   const previous = pidTableOperations.get(key) ?? Promise.resolve();
-  const operationPromise = previous.then(operation);
-  const trackedPromise = operationPromise.finally(() => {
-    if (pidTableOperations.get(key) === trackedPromise) {
-      pidTableOperations.delete(key);
-    }
-  });
+  const operationPromise = previous.then(operation, operation);
+  const queueTail = operationPromise
+    .catch(() => undefined)
+    .finally(() => {
+      if (pidTableOperations.get(key) === queueTail) {
+        pidTableOperations.delete(key);
+      }
+    });
 
-  pidTableOperations.set(key, trackedPromise);
-  return trackedPromise;
+  pidTableOperations.set(key, queueTail);
+  return operationPromise;
 }
 
 async function persistPidTableForLoc(

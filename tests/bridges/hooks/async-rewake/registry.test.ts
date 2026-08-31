@@ -81,6 +81,7 @@ interface TimerObservation {
 interface ControlledPidTableWrite {
   readonly completion: Promise<void>;
   readonly entries: readonly PidTableEntry[];
+  reject(error: Error): void;
   release(): void;
 }
 
@@ -307,8 +308,10 @@ function createControlledPidTableWriter(): ControlledPidTableWriter {
     activeWrites += 1;
     maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
     let release!: () => void;
-    const released = new Promise<void>((resolve) => {
+    let fail!: (error: Error) => void;
+    const controlled = new Promise<void>((resolve, reject) => {
       release = resolve;
+      fail = reject;
     });
     let complete!: () => void;
     const completion = new Promise<void>((resolve) => {
@@ -317,6 +320,7 @@ function createControlledPidTableWriter(): ControlledPidTableWriter {
     const record: ControlledPidTableWrite = {
       completion,
       entries: entries.map((entry) => ({ ...entry })),
+      reject: fail,
       release,
     };
     const index = records.push(record) - 1;
@@ -327,7 +331,7 @@ function createControlledPidTableWriter(): ControlledPidTableWriter {
     }
 
     try {
-      await released;
+      await controlled;
       await writePidTable(loc, entries);
     } finally {
       activeWrites -= 1;
@@ -1676,6 +1680,145 @@ test(
       destroyChild(secondChild);
       await reapOrphans(locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  },
+);
+
+test(
+  "continues queued lifecycle persistence after awaited and terminal write failures",
+  { concurrency: false, timeout: 10_000 },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-persist-failure-"));
+    const timers = observeTimers(t, Date.parse("2026-08-31T11:22:00.000Z"));
+    resetRoutingState();
+    shutdownInMemoryChildren();
+    const locations = locationsFor("project", root);
+    const context = createContext(root, "session-persist-failure", true);
+    const pi = createPi();
+    const firstChild = createChild(24_699);
+    const secondChild = createChild(24_700);
+    const persistence = createControlledPidTableWriter();
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+
+    process.on("unhandledRejection", onUnhandledRejection);
+    let firstSpawn: Promise<void> | undefined;
+    let secondSpawn: Promise<void> | undefined;
+    let orphanCleanup: Promise<void> | undefined;
+
+    try {
+      firstSpawn = spawnAndRegister(
+        createEntry(root, {
+          pluginId: "plugin-failing-first",
+          handlerDecl: { type: "command", command: "/opt/hooks/failing-first", timeout: 600 },
+        }),
+        {},
+        context.context,
+        pi.pi,
+        locations,
+        {
+          spawnImpl: createSpawn(firstChild.child, []),
+          dispatchId: () => "dispatch-failing-first",
+          pidTableWriter: persistence.writer,
+        },
+      );
+      const firstWrite = await persistence.waitForWrite(0);
+      let reportSecondSpawn!: () => void;
+      const secondSpawned = new Promise<void>((resolve) => {
+        reportSecondSpawn = resolve;
+      });
+      const baseSecondSpawn = createSpawn(secondChild.child, []);
+      const secondSpawnImpl = ((
+        command: string,
+        args: readonly string[],
+        options: SpawnOptions,
+      ) => {
+        const child = baseSecondSpawn(command, args, options);
+        reportSecondSpawn();
+        return child;
+      }) as NonNullable<SpawnDeps["spawnImpl"]>;
+      secondSpawn = spawnAndRegister(
+        createEntry(root, {
+          pluginId: "plugin-surviving-second",
+          handlerDecl: { type: "command", command: "/opt/hooks/surviving-second", timeout: 600 },
+        }),
+        {},
+        context.context,
+        pi.pi,
+        locations,
+        {
+          spawnImpl: secondSpawnImpl,
+          dispatchId: () => "dispatch-surviving-second",
+          pidTableWriter: persistence.writer,
+        },
+      );
+      await secondSpawned;
+      firstChild.emitError(new Error("case-owned terminal cleanup"));
+      orphanCleanup = reapOrphans(locations, deadOrphanProbes());
+      assert.strictEqual(persistence.writesStarted, 1);
+
+      // act
+      firstWrite.reject(new Error("case-owned awaited persistence failure"));
+      const secondWrite = await persistence.waitForWrite(1);
+      secondWrite.release();
+      const terminalWrite = await persistence.waitForWrite(2);
+      terminalWrite.reject(new Error("case-owned terminal persistence failure"));
+      await Promise.all([firstSpawn, secondSpawn, orphanCleanup, terminalWrite.completion]);
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      shutdownInMemoryChildren();
+      t.mock.timers.tick(605_000);
+
+      // assert
+      assert.deepStrictEqual(firstWrite.entries, [
+        {
+          pid: 24_699,
+          dispatchId: "dispatch-failing-first",
+          scope: "project",
+          marketplace: "catalog-lifecycle",
+          plugin: "plugin-failing-first",
+          spawnedAt: "2026-08-31T11:22:00.000Z",
+        },
+      ]);
+      assert.deepStrictEqual(secondWrite.entries, [
+        {
+          pid: 24_700,
+          dispatchId: "dispatch-surviving-second",
+          scope: "project",
+          marketplace: "catalog-lifecycle",
+          plugin: "plugin-surviving-second",
+          spawnedAt: "2026-08-31T11:22:00.000Z",
+        },
+      ]);
+      assert.deepStrictEqual(terminalWrite.entries, secondWrite.entries);
+      assert.deepStrictEqual(await readPidTable(locations), []);
+      assert.strictEqual(persistence.writesStarted, 3);
+      assert.strictEqual(persistence.maxActiveWrites, 1);
+      assert.deepStrictEqual(unhandledRejections, []);
+      assert.deepStrictEqual(timers.clearHandles, timers.handles);
+      assert.deepStrictEqual(pi.messages, []);
+      assert.deepStrictEqual(context.notifications, []);
+    } finally {
+      persistence.releaseAll();
+      await Promise.allSettled(
+        [firstSpawn, secondSpawn, orphanCleanup].filter(
+          (value): value is Promise<void> => value !== undefined,
+        ),
+      );
+      shutdownInMemoryChildren();
+      resetRoutingState();
+      destroyChild(firstChild);
+      destroyChild(secondChild);
+      await reapOrphans(locations, deadOrphanProbes());
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      process.off("unhandledRejection", onUnhandledRejection);
     }
   },
 );
