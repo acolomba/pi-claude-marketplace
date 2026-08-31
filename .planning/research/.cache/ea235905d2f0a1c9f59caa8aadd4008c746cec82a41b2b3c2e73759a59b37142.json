@@ -1,0 +1,1 @@
+{"content":"Node 24 test-context mocks restore through the test MockTracker after each case; t.mock.method wraps an existing method and records calls; t.mock.timers can enable only setTimeout and tick deterministically; t.after registers case cleanup.","source":"web","provider":"websearch","confidence":"MEDIUM","fetched_at":"2026-08-29T02:34:17.699Z","ttl":86400000,"kind":"docs"}

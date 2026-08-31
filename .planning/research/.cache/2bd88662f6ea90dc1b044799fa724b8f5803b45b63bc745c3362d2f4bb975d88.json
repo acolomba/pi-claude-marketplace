@@ -1,0 +1,1 @@
+{"content":"RFC 8628 requires clients to wait at least the advertised interval before each poll, continue polling on authorization_pending, add five seconds for slow_down and all later requests, stop on access_denied, and conclude on expired_token.","source":"web","provider":"websearch","confidence":"MEDIUM","fetched_at":"2026-08-29T02:34:18.566Z","ttl":86400000,"kind":"web"}
