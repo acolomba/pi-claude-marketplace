@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import fs, { type PathLike } from "node:fs";
 import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   readlink,
   realpath,
   rm,
@@ -10,6 +12,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -263,12 +266,19 @@ test("rejects a buried directory link that escapes the plugin root", async () =>
     const buriedDirectory = path.join(pluginRoot, "hooks", "scripts", "nested");
     await mkdir(buriedDirectory, { recursive: true });
     await mkdir(externalRoot, { recursive: true });
+    const externalNestedDirectory = path.join(externalRoot, "nested");
+    await mkdir(externalNestedDirectory);
+    await writeFile(path.join(externalRoot, "sentinel-do-not-read"), "secret\n");
+    await writeFile(path.join(externalNestedDirectory, "deep-sentinel"), "deep\n");
     const normalizedPluginRoot = await realpath(pluginRoot);
     const normalizedExternalRoot = await realpath(externalRoot);
     const linkPath = path.join(normalizedPluginRoot, "hooks", "scripts", "nested", "escape");
     await createDirectoryLink(normalizedExternalRoot, linkPath);
     const expectedLinkTarget = await readlink(linkPath);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    const expectedMessage =
+      `hooks subtree symlink ${linkPath} contains symlink ${linkPath} -> ` +
+      `${expectedLinkTarget} (parent: ${normalizedPluginRoot}, target: ${normalizedExternalRoot}).`;
     let rejection: unknown;
 
     // act
@@ -290,6 +300,7 @@ test("rejects a buried directory link that escapes the plugin root", async () =>
     assert.deepStrictEqual(
       {
         name: rejection.name,
+        message: rejection.message,
         parent: rejection.parent,
         child: rejection.child,
         linkPath: rejection.linkPath,
@@ -297,12 +308,269 @@ test("rejects a buried directory link that escapes the plugin root", async () =>
       },
       {
         name: "SymlinkRefusedError",
+        message: expectedMessage,
         parent: normalizedPluginRoot,
         child: normalizedExternalRoot,
         linkPath,
         linkTarget: expectedLinkTarget,
       },
     );
+    assert.strictEqual(rejection.message.includes("sentinel-do-not-read"), false);
+    assert.strictEqual(rejection.message.includes("deep-sentinel"), false);
+    assert.strictEqual(rejection.message.includes(externalNestedDirectory), false);
+    assert.strictEqual(stagedState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("uses the unreadable target marker when escape diagnostics cannot read the link", async (t) => {
+  const { externalRoot, locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+    "hooks-stage-unreadable-link-",
+  );
+  try {
+    // arrange
+    await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+    await mkdir(externalRoot, { recursive: true });
+    const normalizedPluginRoot = await realpath(pluginRoot);
+    const normalizedExternalRoot = await realpath(externalRoot);
+    const linkPath = path.join(normalizedPluginRoot, "hooks", "escape");
+    await createDirectoryLink(normalizedExternalRoot, linkPath);
+    const readlinkError = Object.assign(new Error("link changed before diagnostics"), {
+      code: "EIO",
+    });
+    const linkReader = t.mock.method(fs.promises, "readlink", (): Promise<never> =>
+      Promise.reject(readlinkError),
+    );
+    t.after(() => {
+      linkReader.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    const expectedError = {
+      name: "SymlinkRefusedError",
+      message:
+        `hooks subtree symlink ${linkPath} contains symlink ${linkPath} -> <unreadable> ` +
+        `(parent: ${normalizedPluginRoot}, target: ${normalizedExternalRoot}).`,
+      parent: normalizedPluginRoot,
+      child: normalizedExternalRoot,
+      linkPath,
+      linkTarget: "<unreadable>",
+    };
+    let rejection: unknown;
+
+    // act
+    try {
+      await writeHookConfig({
+        locations,
+        pluginName: PLUGIN,
+        pluginRoot: normalizedPluginRoot,
+        hooksValue: HOOKS_VALUE,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.ok(rejection instanceof SymlinkRefusedError);
+    assert.deepStrictEqual(
+      {
+        name: rejection.name,
+        message: rejection.message,
+        parent: rejection.parent,
+        child: rejection.child,
+        linkPath: rejection.linkPath,
+        linkTarget: rejection.linkTarget,
+      },
+      expectedError,
+    );
+    assert.strictEqual(stagedState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("preserves an in-tree symlink refusal when a resolved target becomes a link", async (t) => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+    "hooks-stage-replaced-target-",
+  );
+  try {
+    // arrange
+    const hooksDirectory = path.join(pluginRoot, "hooks");
+    const originalTarget = path.join(pluginRoot, "original-target");
+    const replacementTarget = path.join(pluginRoot, "replacement-target");
+    await mkdir(hooksDirectory, { recursive: true });
+    await mkdir(originalTarget);
+    await mkdir(replacementTarget);
+    const normalizedPluginRoot = await realpath(pluginRoot);
+    const normalizedOriginalTarget = await realpath(originalTarget);
+    const normalizedReplacementTarget = await realpath(replacementTarget);
+    const linkPath = path.join(hooksDirectory, "alias");
+    await createDirectoryLink(normalizedOriginalTarget, linkPath);
+    let resolveInitialLink: (() => void) | undefined;
+    const initialLinkResolved = new Promise<void>((resolve) => {
+      resolveInitialLink = resolve;
+    });
+    const originalRealpath = fs.promises.realpath.bind(fs.promises);
+    const pathResolver = t.mock.method(fs.promises, "realpath", async (target: PathLike) => {
+      if (String(target) === linkPath) {
+        const resolved = await originalRealpath(target);
+        resolveInitialLink?.();
+        return resolved;
+      }
+
+      if (String(target) === normalizedPluginRoot) {
+        await initialLinkResolved;
+        await rm(normalizedOriginalTarget, { recursive: true, force: true });
+        await createDirectoryLink(normalizedReplacementTarget, normalizedOriginalTarget);
+      }
+
+      return originalRealpath(target);
+    });
+    t.after(() => {
+      pathResolver.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    let rejection: unknown;
+
+    // act
+    try {
+      await writeHookConfig({
+        locations,
+        pluginName: PLUGIN,
+        pluginRoot: normalizedPluginRoot,
+        hooksValue: HOOKS_VALUE,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    const expectedReplacementLinkTarget = await readlink(normalizedOriginalTarget);
+    const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.ok(rejection instanceof SymlinkRefusedError);
+    assert.deepStrictEqual(
+      {
+        name: rejection.name,
+        message: rejection.message,
+        parent: rejection.parent,
+        child: rejection.child,
+        linkPath: rejection.linkPath,
+        linkTarget: rejection.linkTarget,
+      },
+      {
+        name: "SymlinkRefusedError",
+        message:
+          `hooks subtree symlink ${linkPath} contains symlink ${normalizedOriginalTarget} -> ` +
+          `${expectedReplacementLinkTarget} (parent: ${normalizedPluginRoot}, ` +
+          `target: ${normalizedOriginalTarget}).`,
+        parent: normalizedPluginRoot,
+        child: normalizedOriginalTarget,
+        linkPath: normalizedOriginalTarget,
+        linkTarget: expectedReplacementLinkTarget,
+      },
+    );
+    assert.strictEqual(stagedState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("propagates an unexpected hook directory read failure unchanged", async (t) => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+    "hooks-stage-readdir-error-",
+  );
+  try {
+    // arrange
+    await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+    const normalizedPluginRoot = await realpath(pluginRoot);
+    const readError = Object.assign(new Error("hooks directory read denied"), { code: "EACCES" });
+    const directoryReader = t.mock.method(fs.promises, "readdir", (): Promise<never> =>
+      Promise.reject(readError),
+    );
+    t.after(() => {
+      directoryReader.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    let rejection: unknown;
+
+    // act
+    try {
+      await writeHookConfig({
+        locations,
+        pluginName: PLUGIN,
+        pluginRoot: normalizedPluginRoot,
+        hooksValue: HOOKS_VALUE,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.strictEqual(rejection, readError);
+    assert.strictEqual(stagedState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("propagates an unexpected contained-target walk failure unchanged", async (t) => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+    "hooks-stage-contained-walk-error-",
+  );
+  try {
+    // arrange
+    const hooksDirectory = path.join(pluginRoot, "hooks");
+    const containedTarget = path.join(pluginRoot, "contained-target");
+    await mkdir(hooksDirectory, { recursive: true });
+    await mkdir(containedTarget);
+    const normalizedPluginRoot = await realpath(pluginRoot);
+    const normalizedContainedTarget = await realpath(containedTarget);
+    const linkPath = path.join(hooksDirectory, "alias");
+    await createDirectoryLink(normalizedContainedTarget, linkPath);
+    const walkError = Object.assign(new Error("contained target lstat denied"), { code: "EACCES" });
+    const originalLstat = fs.promises.lstat.bind(fs.promises);
+    const pathInspector = t.mock.method(fs.promises, "lstat", async (target: PathLike) => {
+      if (String(target) === normalizedContainedTarget) {
+        throw walkError;
+      }
+
+      return originalLstat(target);
+    });
+    t.after(() => {
+      pathInspector.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    let rejection: unknown;
+
+    // act
+    try {
+      await writeHookConfig({
+        locations,
+        pluginName: PLUGIN,
+        pluginRoot: normalizedPluginRoot,
+        hooksValue: HOOKS_VALUE,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.strictEqual(rejection, walkError);
     assert.strictEqual(stagedState, "ENOENT");
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
@@ -326,10 +594,14 @@ test("writes hooks.json and returns its absolute path", async () => {
       hooksValue: HOOKS_VALUE,
     });
     const storedBytes = await readFile(expectedPath, "utf8");
+    const stagedEntries = await readdir(path.dirname(expectedPath));
+    const relativeStagePath = path.relative(locations.hooksDir, write.path);
 
     // assert
     assert.deepStrictEqual(write, { written: true, path: expectedPath });
     assert.strictEqual(storedBytes, EXPECTED_HOOKS_BYTES);
+    assert.deepStrictEqual(stagedEntries, ["hooks.json"]);
+    assert.strictEqual(relativeStagePath, path.join("acme", "hooks.json"));
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -444,8 +716,17 @@ test("rejects an unsafe plugin name before writing", async () => {
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       }),
-      (error: unknown) =>
-        error instanceof Error && error.message.includes("hooks bridge plugin name"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message },
+          {
+            name: "Error",
+            message: 'hooks bridge plugin name "../escape" must not contain path separators.',
+          },
+        );
+        return true;
+      },
     );
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
@@ -461,8 +742,17 @@ test("rejects an unsafe plugin name before removal", async () => {
     // act & assert
     await assert.rejects(
       removeHookConfig({ locations, pluginName: unsafePluginName }),
-      (error: unknown) =>
-        error instanceof Error && error.message.includes("hooks bridge plugin name"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message },
+          {
+            name: "Error",
+            message: 'hooks bridge plugin name "../escape" must not contain path separators.',
+          },
+        );
+        return true;
+      },
     );
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
