@@ -30,8 +30,11 @@ void ({
   last_assistant_message: "Unclassified failure",
 } satisfies StopFailureStdin);
 
-// @ts-expect-error a StopFailure event has a closed error vocabulary
-void ({ error: "network_error", last_assistant_message: "Request failed" } satisfies StopFailureEvent);
+void ({
+  // @ts-expect-error a StopFailure event has a closed error vocabulary
+  error: "network_error",
+  last_assistant_message: "Request failed",
+} satisfies StopFailureEvent);
 void ({
   session_id: "session-type",
   transcript_path: "/tmp/session-type.jsonl",
@@ -144,81 +147,443 @@ test("preserves an empty transcript path in the complete envelope", () => {
 // SFAIL-03: errorMessage-only classifier into the closed 10-value vocab
 // ---------------------------------------------------------------------------
 
-// Each fixture is [errorMessage, stopReason, expected classified type].
-const CLASSIFIER_FIXTURES: ReadonlyArray<readonly [string, "error" | "length", string]> = [
-  // length is deterministic and ignores errorMessage entirely.
-  ["", "length", "max_output_tokens"],
-  ["Rate limit exceeded (429)", "length", "max_output_tokens"],
-  // empty / unmatched errorMessage falls back to the in-vocabulary unknown.
-  ["", "error", "unknown"],
-  ["something entirely unclassifiable", "error", "unknown"],
-  // bare 3-digit runs inside a longer number must NOT alias an HTTP-status code
-  // (bounded numeric matches): 5000 != 500, 4290 != 429, 4013 != 401.
-  ["retry after 5000ms", "error", "unknown"],
-  ["request 4290 failed", "error", "unknown"],
-  ["consumed 4013 tokens", "error", "unknown"],
-  // org-policy has no observed Pi substring -> unknown.
-  ["Organization is not allowed to use this model by policy", "error", "unknown"],
-  // rate_limit
-  ["Rate limit exceeded (429)", "error", "rate_limit"],
-  ["Too many requests, slow down", "error", "rate_limit"],
-  // overloaded
-  ["Overloaded", "error", "overloaded"],
-  ["Provider returned 529", "error", "overloaded"],
-  // authentication_failed
-  ['Authentication failed for "anthropic".', "error", "authentication_failed"],
-  ["Received 401 Unauthorized", "error", "authentication_failed"],
-  // billing_error
-  ["billing issue on your account", "error", "billing_error"],
-  ["quota exceeded", "error", "billing_error"],
-  ["insufficient_quota", "error", "billing_error"],
-  ["Monthly usage limit reached", "error", "billing_error"],
-  // server_error
-  ["503 service unavailable", "error", "server_error"],
-  ["internal error occurred", "error", "server_error"],
-  // model_not_found
-  ["model not found", "error", "model_not_found"],
-  // invalid_request
-  ["invalid request: bad params", "error", "invalid_request"],
-  ["HTTP 400 Bad Request", "error", "invalid_request"],
-];
+test("classifies billing before every later error indicator", () => {
+  // arrange
+  const errorMessage =
+    "OUT OF BUDGET; RATE LIMIT; OVERLOADED; AUTHENTICATION FAILED; SERVER ERROR; " +
+    "MODEL_NOT_FOUND; INVALID REQUEST";
+  const stopReason = "error";
+  const expectedError = "billing_error";
 
-for (const [errorMessage, stopReason, expected] of CLASSIFIER_FIXTURES) {
-  test(`SFAIL-03: classify(${JSON.stringify(errorMessage)}, ${stopReason}) -> ${expected}`, () => {
-    const actual = classifyStopFailure(errorMessage, stopReason);
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
 
-    assert.equal(actual, expected);
-    assert.ok(
-      CLOSED_VOCAB.has(actual),
-      `classifier output ${JSON.stringify(actual)} must be a member of the closed vocab`,
-    );
-  });
-}
-
-test("SFAIL-03: substring matching is case-insensitive", () => {
-  assert.equal(classifyStopFailure("RATE LIMIT EXCEEDED", "error"), "rate_limit");
-  assert.equal(classifyStopFailure("oVeRlOaDeD", "error"), "overloaded");
-  assert.equal(classifyStopFailure("Authentication Failed", "error"), "authentication_failed");
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
 });
 
-test("SFAIL-03: every classifier output is a member of the closed vocabulary", () => {
-  const probes: ReadonlyArray<readonly [string, "error" | "length"]> = [
-    ["", "error"],
-    ["", "length"],
-    ["rate limit", "error"],
-    ["overloaded", "error"],
-    ["401", "error"],
-    ["billing", "error"],
-    ["500", "error"],
-    ["model not found", "error"],
-    ["400", "error"],
-    ["gibberish", "error"],
-  ];
+test("classifies rate limiting before every later error indicator", () => {
+  // arrange
+  const errorMessage =
+    "TOO MANY REQUESTS; OVERLOADED; AUTHENTICATION FAILED; SERVER ERROR; MODEL_NOT_FOUND; " +
+    "INVALID REQUEST";
+  const stopReason = "error";
+  const expectedError = "rate_limit";
 
-  for (const [msg, reason] of probes) {
-    assert.ok(
-      CLOSED_VOCAB.has(classifyStopFailure(msg, reason)),
-      `classify(${JSON.stringify(msg)}, ${reason}) escaped the closed vocab`,
-    );
-  }
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies overload before every later error indicator", () => {
+  // arrange
+  const errorMessage =
+    "OVERLOADED; AUTHENTICATION FAILED; SERVER ERROR; MODEL_NOT_FOUND; INVALID REQUEST";
+  const stopReason = "error";
+  const expectedError = "overloaded";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies authentication before every later error indicator", () => {
+  // arrange
+  const errorMessage = "AUTHENTICATION FAILED; SERVER ERROR; MODEL_NOT_FOUND; INVALID REQUEST";
+  const stopReason = "error";
+  const expectedError = "authentication_failed";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies server failures before model and request indicators", () => {
+  // arrange
+  const errorMessage = "SERVICE UNAVAILABLE; MODEL_NOT_FOUND; INVALID REQUEST";
+  const stopReason = "error";
+  const expectedError = "server_error";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies a missing model before an invalid request indicator", () => {
+  // arrange
+  const errorMessage = "MODEL_NOT_FOUND; INVALID REQUEST";
+  const stopReason = "error";
+  const expectedError = "model_not_found";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies an invalid request indicator", () => {
+  // arrange
+  const errorMessage = "INVALID REQUEST: BAD PARAMETERS";
+  const stopReason = "error";
+  const expectedError = "invalid_request";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("maps a length ending before inspecting error indicators", () => {
+  // arrange
+  const errorMessage =
+    "OUT OF BUDGET; RATE LIMIT; OVERLOADED; AUTHENTICATION FAILED; SERVER ERROR; " +
+    "MODEL_NOT_FOUND; INVALID REQUEST";
+  const stopReason = "length";
+  const expectedError = "max_output_tokens";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("falls back to unknown for an empty error message", () => {
+  // arrange
+  const errorMessage = "";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("falls back to unknown for an organization policy failure", () => {
+  // arrange
+  const errorMessage = "Organization is not allowed to use this model by policy";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies the lowest recognized status code as an invalid request", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 400.";
+  const stopReason = "error";
+  const expectedError = "invalid_request";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies status 401 as an authentication failure", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 401.";
+  const stopReason = "error";
+  const expectedError = "authentication_failed";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies status 403 as an authentication failure", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 403.";
+  const stopReason = "error";
+  const expectedError = "authentication_failed";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies status 429 as rate limiting", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 429.";
+  const stopReason = "error";
+  const expectedError = "rate_limit";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies the lowest recognized server status as a server failure", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 500.";
+  const stopReason = "error";
+  const expectedError = "server_error";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies status 502 as a server failure", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 502.";
+  const stopReason = "error";
+  const expectedError = "server_error";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies status 503 as a server failure", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 503.";
+  const stopReason = "error";
+  const expectedError = "server_error";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies the highest recognized server status as a server failure", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 504.";
+  const stopReason = "error";
+  const expectedError = "server_error";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("classifies the highest recognized status code as overload", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 529.";
+  const stopReason = "error";
+  const expectedError = "overloaded";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately below the recognized range", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 399.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the gap between authentication statuses", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 402.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately above authentication", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 404.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately below rate limiting", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 428.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately above rate limiting", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 430.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately below server failures", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 499.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the gap between server statuses", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 501.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately above server failures", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 505.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately below overload", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 528.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not classify the status immediately above the recognized range", () => {
+  // arrange
+  const errorMessage = "Provider returned HTTP 530.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not match recognized statuses at the end of longer numbers", () => {
+  // arrange
+  const errorMessage = "Provider returned 1400, 1401, 1403, 1429, 1500, 1502, 1503, 1504, or 1529.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
+});
+
+test("does not match recognized statuses at the start of longer numbers", () => {
+  // arrange
+  const errorMessage = "Provider returned 4000, 4010, 4030, 4290, 5000, 5020, 5030, 5040, or 5290.";
+  const stopReason = "error";
+  const expectedError = "unknown";
+
+  // act
+  const stopFailureError = classifyStopFailure(errorMessage, stopReason);
+
+  // assert
+  assert.strictEqual(stopFailureError, expectedError);
+  assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
 });
