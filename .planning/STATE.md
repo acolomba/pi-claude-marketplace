@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-01-PLAN.md
-last_updated: "2026-08-31T03:29:08.950Z"
+stopped_at: Completed 112-03-PLAN.md
+last_updated: "2026-08-31T03:40:37.912Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 112 execution started
-state_head: 21e59887a38b178ddb6ab2c1471a5ce9a84fd1b9
+state_head: 42c9e72e82b3c49bf3c3742b9d235df30d376474
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 87
+  completed_plans: 88
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 2 of 31
+Plan: 3 of 31
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 112 execution started
 
@@ -120,6 +120,7 @@ evidence.
 | Phase 111 P01 | 14 min   | 2 tasks | 2 files |
 | Phase 111 P02 | 10 min   | 2 tasks | 1 files |
 | Phase 112 P01 | 14 min | 2 tasks | 1 files |
+| Phase 112 P03 | 9 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 111]: Two provably unreachable private skills-stage fallbacks were removed without adding a test-only seam, export, pragma, or behavior change.
 - [Phase 112]: Kept pid-table.ts byte-for-byte unchanged and covered every branch through its public filesystem contract.
 - [Phase 112]: Used a case-owned _shared regular-file boundary for deterministic filesystem failures without a test seam.
+- [Phase 112]: Kept ring-buffer.ts byte-for-byte unchanged and proved every byte boundary through its public API.
+- [Phase 112]: RingBuffer evidence uses fresh case-local byte inputs and independent complete text/truncation outcomes.
 
 ### Pending Todos
 
@@ -183,6 +186,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T03:29:08.263Z
-Stopped at: Completed 112-01-PLAN.md
+Last session: 2026-08-31T03:40:37.270Z
+Stopped at: Completed 112-03-PLAN.md
 Resume file: None
