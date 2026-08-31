@@ -948,6 +948,7 @@ test("settles a child error once and ignores its later exit", { concurrency: fal
     // act
     child.emitError(new Error("child launch failed after spawn"));
     await waitForPidTable(locations, []);
+    child.emitClose(1);
     child.emitExit(2);
     child.emitClose();
     t.mock.timers.tick(605_000);
