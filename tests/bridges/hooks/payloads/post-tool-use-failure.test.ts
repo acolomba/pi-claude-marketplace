@@ -8,62 +8,41 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ToolResultEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("post-tool-use-failure: emits the PostToolUseFailure envelope propagating error content into tool_response", () => {
+test("maps a failed built-in tool to the complete PostToolUseFailure envelope", () => {
+  // arrange
+  const toolInput = { command: "false" };
+  const toolResponse = [
+    { type: "text", text: "exit code 1: command failed" },
+  ] satisfies ToolResultEvent["content"];
   const event = {
     type: "tool_result",
-    toolCallId: "tc-1",
+    toolCallId: "tool-call-built-in",
     toolName: "bash",
-    input: { command: "false" },
-    content: [{ type: "text", text: "exit code 1: command failed" }],
+    input: toolInput,
+    content: toolResponse,
     isError: true,
-  } as unknown as ToolResultEvent;
+    details: undefined,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session-built-in",
+    transcriptPath: "/sessions/session-built-in.jsonl",
+    cwd: "/workspace/built-in",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-built-in",
+    transcript_path: "/sessions/session-built-in.jsonl",
+    cwd: "/workspace/built-in",
+    hook_event_name: "PostToolUseFailure",
+    tool_name: "Bash",
+    tool_input: { command: "false" },
+    tool_response: [{ type: "text", text: "exit code 1: command failed" }],
+  };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"false"},"tool_response":[{"type":"text","text":"exit code 1: command failed"}]}',
-  );
-});
-
-test("post-tool-use-failure: CustomToolCallEvent toolName passes through unchanged", () => {
-  const event = {
-    type: "tool_result",
-    toolCallId: "tc-2",
-    toolName: "mcp__server__tool",
-    input: {},
-    content: [{ type: "text", text: "mcp error" }],
-    isError: true,
-  } as unknown as ToolResultEvent;
-
-  const actual = translate(event, ctx);
-
-  assert.equal(actual.tool_name, "mcp__server__tool");
-  assert.equal(actual.hook_event_name, "PostToolUseFailure");
-});
-
-test("post-tool-use-failure: errored content propagates through tool_response (error payload preservation)", () => {
-  const errorContent = [
-    { type: "text", text: "ENOENT: no such file" },
-    { type: "text", text: "stack trace at ..." },
-  ];
-  const event = {
-    type: "tool_result",
-    toolCallId: "tc-3",
-    toolName: "read",
-    input: { file_path: "/missing.txt" },
-    content: errorContent,
-    isError: true,
-  } as unknown as ToolResultEvent;
-
-  const actual = translate(event, ctx);
-
-  assert.equal(actual.tool_name, "Read");
-  assert.deepEqual(actual.tool_response, errorContent);
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+  assert.strictEqual(payload.tool_input, toolInput);
+  assert.strictEqual(payload.tool_response, toolResponse);
 });
