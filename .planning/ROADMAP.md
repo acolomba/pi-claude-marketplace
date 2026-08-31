@@ -323,7 +323,7 @@ Plans:
 3. Each case owns its router, process, session, environment, and timer state. Scheduling cases use test-context timers.
 4. Hook metadata tables and internal types stay private unless current production callers use them.
 
-**Plans**: 30/31 plans executed
+**Plans**: 31/31 plans executed
 
 Plans:
 
@@ -340,7 +340,7 @@ Plans:
 - [x] 112-11-PLAN.md
 - [x] 112-12-PLAN.md
 - [x] 112-13-PLAN.md
-- [ ] 112-14-PLAN.md
+- [x] 112-14-PLAN.md
 - [x] 112-15-PLAN.md
 - [x] 112-16-PLAN.md
 - [x] 112-17-PLAN.md
@@ -372,7 +372,7 @@ Plans:
 - [x] **112-11** (`112-11-PLAN.md`, `P112-11`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts` → `tests/bridges/hooks/if-field/bash.test.ts`
 - [x] **112-12** (`112-12-PLAN.md`, `P112-12`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts` → `tests/bridges/hooks/if-field/glob.test.ts`
 - [x] **112-13** (`112-13-PLAN.md`, `P112-13`) - `extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts` → `tests/bridges/hooks/if-field/index.test.ts`
-- [ ] **112-14** (`112-14-PLAN.md`, `P112-14`) - `extensions/pi-claude-marketplace/bridges/hooks/index.ts` → `tests/bridges/hooks/index.test.ts`
+- [x] **112-14** (`112-14-PLAN.md`, `P112-14`) - `extensions/pi-claude-marketplace/bridges/hooks/index.ts` → `tests/bridges/hooks/index.test.ts`
 - [x] **112-15** (`112-15-PLAN.md`, `P112-15`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts` → `tests/bridges/hooks/payloads/post-compact.test.ts`
 - [x] **112-16** (`112-16-PLAN.md`, `P112-16`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts` → `tests/bridges/hooks/payloads/post-tool-use-failure.test.ts`
 - [x] **112-17** (`112-17-PLAN.md`, `P112-17`) - `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts` → `tests/bridges/hooks/payloads/post-tool-use.test.ts`
