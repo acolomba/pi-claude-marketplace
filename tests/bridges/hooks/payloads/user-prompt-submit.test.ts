@@ -5,39 +5,80 @@ import test from "node:test";
 
 import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts";
 
+import type { UserPromptSubmitStdin } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts";
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { InputEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("user-prompt-submit: emits the UserPromptSubmit envelope with text -> prompt propagation", () => {
-  const event: InputEvent = {
+test("emits the complete UserPromptSubmit envelope with the prompt text", () => {
+  // arrange
+  const event = {
     type: "input",
     text: "hello world",
     source: "interactive",
-  };
+  } satisfies InputEvent;
+  const context = {
+    sessionId: "session-prompt",
+    transcriptPath: "/sessions/session-prompt.jsonl",
+    cwd: "/workspace/project",
+  } satisfies TranslationContext;
+  const expectedEvent = {
+    type: "input",
+    text: "hello world",
+    source: "interactive",
+  } satisfies InputEvent;
+  const expectedContext = {
+    sessionId: "session-prompt",
+    transcriptPath: "/sessions/session-prompt.jsonl",
+    cwd: "/workspace/project",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-prompt",
+    transcript_path: "/sessions/session-prompt.jsonl",
+    cwd: "/workspace/project",
+    hook_event_name: "UserPromptSubmit",
+    prompt: "hello world",
+  } satisfies UserPromptSubmitStdin;
+  const expectedKeys = [
+    "session_id",
+    "transcript_path",
+    "cwd",
+    "hook_event_name",
+    "prompt",
+  ];
 
-  const actual = translate(event, ctx);
+  // act
+  const promptPayload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"UserPromptSubmit","prompt":"hello world"}',
-  );
+  // assert
+  assert.deepStrictEqual(promptPayload, expectedPayload);
+  assert.deepStrictEqual(Object.keys(promptPayload), expectedKeys);
+  assert.deepStrictEqual(event, expectedEvent);
+  assert.deepStrictEqual(context, expectedContext);
 });
 
-test("user-prompt-submit: propagates multi-line prompts verbatim", () => {
-  const event: InputEvent = {
+test("preserves a multi-line prompt in the complete UserPromptSubmit envelope", () => {
+  // arrange
+  const event = {
     type: "input",
     text: "line 1\nline 2\nline 3",
     source: "interactive",
-  };
+  } satisfies InputEvent;
+  const context = {
+    sessionId: "session-multi-line",
+    transcriptPath: "/sessions/session-multi-line.jsonl",
+    cwd: "/workspace/multi-line",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-multi-line",
+    transcript_path: "/sessions/session-multi-line.jsonl",
+    cwd: "/workspace/multi-line",
+    hook_event_name: "UserPromptSubmit",
+    prompt: "line 1\nline 2\nline 3",
+  } satisfies UserPromptSubmitStdin;
 
-  const actual = translate(event, ctx);
+  // act
+  const promptPayload = translate(event, context);
 
-  assert.equal(actual.prompt, "line 1\nline 2\nline 3");
-  assert.equal(actual.hook_event_name, "UserPromptSubmit");
+  // assert
+  assert.deepStrictEqual(promptPayload, expectedPayload);
 });
