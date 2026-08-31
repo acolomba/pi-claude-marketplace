@@ -247,7 +247,7 @@ that Node does not guarantee.
 
 | Option                           | Description                                                                                                           | Selected |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
-| Complete UTF-8 boundary contract | Cover exact cap, one byte over, multibyte bytes, marker precedence, non-object wrapping, overshoot, and immutability. | ✓        |
+| Complete UTF-8 boundary contract | Cover exact cap, one byte over, substantially oversized and multibyte values, marker precedence, bounded non-object wrapping, and immutability. | ✓        |
 | Object boundary cases            | Cover exact cap, over-cap, and marker insertion for objects.                                                          |          |
 | Oversized payload only           | Assert only that an oversized value gains the marker.                                                                 |          |
 | Something else                   | Supply another serialization depth.                                                                                   |          |

@@ -114,9 +114,10 @@ does not redesign hook behavior or widen production APIs for tests.
   before block, top-level decisions before nested output, nested deny before mutation,
   mutation before `suppressOutput`, wrong-type omission, and final noop fallback.
 - **D-25:** Serialization tests cover the complete UTF-8 boundary contract: exact cap,
-  one byte over, multibyte byte counting, top-level `_truncated: true` precedence over an
-  input field of the same name, defensive wrapping of oversized non-object values,
-  permitted marker overshoot, and no mutation of the source payload.
+  one byte over, substantially oversized and multibyte values, top-level
+  `_truncated: true` precedence over an input field of the same name, bounded defensive
+  wrapping of oversized non-object values, final output at or below 256 KiB, and no
+  mutation of the source payload.
 
 ### the agent's Discretion
 

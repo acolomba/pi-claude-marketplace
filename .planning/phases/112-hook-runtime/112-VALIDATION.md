@@ -181,7 +181,7 @@ required.
 
 | Gate or evidence                         | Observed result                                                                                                                                | Phase 112 classification |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| Fresh focused owner/direct coverage      | 31/31 owners; 906/906 branches, 198/198 functions, and 6,823/6,823 lines                                                                        | PASS                     |
+| Fresh focused owner/direct coverage      | 31/31 owners; 939/939 branches, 210/210 functions, and 6,961/6,961 lines after bounded-serialization remediation                                 | PASS                     |
 | Current async-rewake registry owner      | 115/115 branches, 30/30 functions, and 730/730 lines                                                                                            | PASS                     |
 | Focused hook architecture and integration | 12/12 retained files; no failures, skips, or todos                                                                                              | PASS                     |
 | TypeScript typecheck                     | Exit 0                                                                                                                                         | PASS                     |
