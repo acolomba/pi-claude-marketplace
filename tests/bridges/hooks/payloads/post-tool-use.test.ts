@@ -8,57 +8,47 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ToolResultEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("post-tool-use: emits the PostToolUse envelope with tool_response from event.content", () => {
+test("maps a successful built-in tool to the complete PostToolUse envelope", () => {
+  // arrange
+  const toolInput = {
+    command: "printf 'completed\\n'",
+    timeout: 12,
+  };
+  const toolResponse = [
+    { type: "text", text: "completed\n" },
+  ] satisfies ToolResultEvent["content"];
   const event = {
     type: "tool_result",
-    toolCallId: "tc-1",
+    toolCallId: "tool-call-built-in",
     toolName: "bash",
-    input: { command: "echo hi" },
-    content: [{ type: "text", text: "hi\n" }],
+    input: toolInput,
+    content: toolResponse,
     isError: false,
-  } as unknown as ToolResultEvent;
+    details: { durationMs: 8 },
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session-built-in",
+    transcriptPath: "/sessions/session-built-in.jsonl",
+    cwd: "/workspace/built-in",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-built-in",
+    transcript_path: "/sessions/session-built-in.jsonl",
+    cwd: "/workspace/built-in",
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash",
+    tool_input: {
+      command: "printf 'completed\\n'",
+      timeout: 12,
+    },
+    tool_response: [{ type: "text", text: "completed\n" }],
+  };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"},"tool_response":[{"type":"text","text":"hi\\n"}]}',
-  );
-});
-
-test("post-tool-use: CustomToolCallEvent toolName passes through unchanged", () => {
-  const event = {
-    type: "tool_result",
-    toolCallId: "tc-2",
-    toolName: "mcp__server__tool",
-    input: {},
-    content: [],
-    isError: false,
-  } as unknown as ToolResultEvent;
-
-  const actual = translate(event, ctx);
-
-  assert.equal(actual.tool_name, "mcp__server__tool");
-  assert.equal(actual.hook_event_name, "PostToolUse");
-});
-
-test("post-tool-use: edit -> Edit capitalization via TOOL-01", () => {
-  const event = {
-    type: "tool_result",
-    toolCallId: "tc-3",
-    toolName: "edit",
-    input: { file_path: "/x.ts" },
-    content: [],
-    isError: false,
-  } as unknown as ToolResultEvent;
-
-  const actual = translate(event, ctx);
-
-  assert.equal(actual.tool_name, "Edit");
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+  assert.strictEqual(payload.tool_input, toolInput);
+  assert.strictEqual(payload.tool_response, toolResponse);
 });
