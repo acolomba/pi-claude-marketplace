@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-23-PLAN.md
-last_updated: "2026-08-31T06:14:02.203Z"
+stopped_at: Completed 112-24-PLAN.md
+last_updated: "2026-08-31T06:28:55.516Z"
 last_activity: 2026-08-31
-last_activity_desc: Completed Phase 112 Plan 22 StopFailure payload owner
-state_head: 7e0a1a2150b4f46b87000535e489d0f8556fff1b
+last_activity_desc: Completed Phase 112 Plan 24 UserPromptSubmit payload owner
+state_head: 8185b5e04121c27d0193b8bcbca14eeaa3131935
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 101
+  completed_plans: 102
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 16 of 31
+Plan: 17 of 31
 Status: Ready to execute
-Last activity: 2026-08-31 — Completed Phase 112 Plan 22 StopFailure payload owner
+Last activity: 2026-08-31 — Completed Phase 112 Plan 24 UserPromptSubmit payload owner
 
 Progress: [████░░░░░░] 40%
 
@@ -134,6 +134,7 @@ evidence.
 | Phase 112 P21 | 8 min     | 2 tasks | 1 files |
 | Phase 112 P22 | 20 min | 2 tasks | 1 files |
 | Phase 112 P23 | 10 min | 2 tasks | 1 files |
+| Phase 112 P24 | 10 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -217,6 +218,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept stop.ts byte-for-byte unchanged because its public translator exposes the complete contract.
 - [Phase 112]: Used separate case-local values and whole six-key expectations for active, inactive, and empty-text Stop partitions.
 - [Phase 112]: Kept Stop re-entry and observer behavior in Plan 112-26 instead of widening the direct payload owner.
+- [Phase 112]: Kept user-prompt-submit.ts byte-for-byte unchanged because its public translator exposes the complete contract.
+- [Phase 112]: UserPromptSubmit evidence uses separate case-local values and whole five-key expectations for ordinary, multi-line, empty, and multi-byte prompts.
+- [Phase 112]: Kept malformed process-output behavior in Plan 112-04 instead of widening the direct payload owner.
 
 ### Pending Todos
 
@@ -235,6 +239,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T06:14:01.416Z
-Stopped at: Completed 112-23-PLAN.md
+Last session: 2026-08-31T06:28:54.752Z
+Stopped at: Completed 112-24-PLAN.md
 Resume file: None
