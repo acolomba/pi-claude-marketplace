@@ -334,6 +334,7 @@ export async function spawnAndRegister(
       finalized = true;
       finalizeChild(dispatchId, outcome, ctx, pi, pidTableWriter);
     };
+
     const finalizeAfterOwnedStreams = (): void => {
       if (exitOutcome !== undefined && stdoutEnded && stderrEnded) {
         finalizeOnce(exitOutcome);
