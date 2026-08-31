@@ -44,3 +44,40 @@ test("emits the complete PostCompact envelope with an automatic trigger", () => 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
 });
+
+test("preserves empty context strings in the complete PostCompact envelope", () => {
+  // arrange
+  const event = {
+    type: "session_compact",
+    compactionEntry: {
+      type: "compaction",
+      id: "compact-empty-context",
+      parentId: null,
+      timestamp: "2026-08-31T04:37:05.000Z",
+      summary: "",
+      firstKeptEntryId: "message-first",
+      tokensBefore: 0,
+    },
+    fromExtension: true,
+    reason: "manual",
+    willRetry: true,
+  } satisfies SessionCompactEvent;
+  const context = {
+    sessionId: "",
+    transcriptPath: "",
+    cwd: "",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "",
+    transcript_path: "",
+    cwd: "",
+    hook_event_name: "PostCompact",
+    trigger: "auto",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+});
