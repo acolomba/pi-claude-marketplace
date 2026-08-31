@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 112
 current_phase_name: Hook Runtime
 status: executing
-stopped_at: Completed 112-03-PLAN.md
-last_updated: "2026-08-31T03:40:37.912Z"
+stopped_at: Completed 112-08-PLAN.md
+last_updated: "2026-08-31T03:48:26.994Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 112 execution started
-state_head: 42c9e72e82b3c49bf3c3742b9d235df30d376474
+state_head: 66c95d945f4d019a36348379d473420d5c2b288b
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 117
-  completed_plans: 88
+  completed_plans: 89
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 112 (Hook Runtime) — EXECUTING
-Plan: 3 of 31
+Plan: 4 of 31
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 112 execution started
 
@@ -121,6 +121,7 @@ evidence.
 | Phase 111 P02 | 10 min   | 2 tasks | 1 files |
 | Phase 112 P01 | 14 min | 2 tasks | 1 files |
 | Phase 112 P03 | 9 min | 2 tasks | 1 files |
+| Phase 112 P08 | 5 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Used a case-owned _shared regular-file boundary for deterministic filesystem failures without a test seam.
 - [Phase 112]: Kept ring-buffer.ts byte-for-byte unchanged and proved every byte boundary through its public API.
 - [Phase 112]: RingBuffer evidence uses fresh case-local byte inputs and independent complete text/truncation outcomes.
+- [Phase 112]: Kept exec-result.ts byte-for-byte unchanged because its exported type and assertNever function expose the complete contract.
+- [Phase 112]: Kept all HookExecResult positive and negative type evidence at module scope, with runtime execution only for assertNever.
+- [Phase 112]: Proved allow, deny, and ask inline without introducing a new permission type export.
 
 ### Pending Todos
 
@@ -186,6 +190,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T03:40:37.270Z
-Stopped at: Completed 112-03-PLAN.md
+Last session: 2026-08-31T03:48:26.270Z
+Stopped at: Completed 112-08-PLAN.md
 Resume file: None
