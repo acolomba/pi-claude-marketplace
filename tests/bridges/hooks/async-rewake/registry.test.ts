@@ -791,6 +791,86 @@ test("kills a spawned child that has no PID and leaves no registry state", async
   }
 });
 
+test(
+  "contains an asynchronous spawn error for a child with no PID",
+  { concurrency: false, timeout: 5_000 },
+  async () => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-pid-error-"));
+    resetRoutingState();
+    shutdownInMemoryChildren();
+    const locations = locationsFor("project", root);
+    const context = createContext(root, "session-no-pid-error", true);
+    const pi = createPi();
+    const child = createChild(undefined);
+    const spawnCalls: SpawnCall[] = [];
+    const uncaughtExceptions: unknown[] = [];
+    const unhandledRejections: unknown[] = [];
+    const onUncaughtException = (error: Error): void => {
+      uncaughtExceptions.push(error);
+    };
+
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+
+    let reportLifecycle!: () => void;
+    const lifecycleEmitted = new Promise<void>((resolve) => {
+      reportLifecycle = resolve;
+    });
+    const spawnImpl = ((
+      command: string,
+      args: readonly string[],
+      options: SpawnOptions,
+    ): ChildProcess => {
+      spawnCalls.push({ command, args: [...args], options });
+      setImmediate(() => {
+        reportLifecycle();
+        child.emitError(new Error("ENOENT from exec-form spawn"));
+        child.emitClose(1);
+      });
+      return child.child;
+    }) as NonNullable<SpawnDeps["spawnImpl"]>;
+
+    process.on("uncaughtException", onUncaughtException);
+    process.on("unhandledRejection", onUnhandledRejection);
+
+    try {
+      // act
+      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+        spawnImpl,
+        dispatchId: () => "dispatch-no-pid-error",
+      });
+      await lifecycleEmitted;
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      child.emitClose(2);
+      const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
+      shutdownInMemoryChildren();
+
+      // assert
+      assert.strictEqual(spawnCalls.length, 1);
+      assert.strictEqual(spawnCalls[0]?.options.shell, false);
+      assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+      assert.strictEqual(child.child.listenerCount("error"), 0);
+      assert.strictEqual(child.child.listenerCount("close"), 0);
+      assert.strictEqual(tableState, "ENOENT");
+      assert.deepStrictEqual(uncaughtExceptions, []);
+      assert.deepStrictEqual(unhandledRejections, []);
+      assert.deepStrictEqual(pi.messages, []);
+      assert.deepStrictEqual(context.notifications, []);
+    } finally {
+      process.off("uncaughtException", onUncaughtException);
+      process.off("unhandledRejection", onUnhandledRejection);
+      shutdownInMemoryChildren();
+      resetRoutingState();
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  },
+);
+
 test("contains a kill failure for a spawned child that has no PID", async () => {
   // arrange
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-pid-kill-"));

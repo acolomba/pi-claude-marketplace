@@ -266,6 +266,16 @@ export async function spawnAndRegister(
 
     const pid = child.pid;
     if (pid === undefined) {
+      const onSpawnError = (err: Error): void => {
+        hookDebugLog(
+          `async-rewake: spawn failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+        );
+      };
+
+      child.once("error", onSpawnError);
+      child.once("close", () => {
+        child.removeListener("error", onSpawnError);
+      });
       hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
       try {
         child.kill("SIGKILL");
