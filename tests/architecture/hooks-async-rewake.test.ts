@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { watch, type FSWatcher } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
-import { pidTablePath } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
+import {
+  readPidTable,
+  type PidTableEntry,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
   MARKER_ENV,
   shutdownInMemoryChildren,
@@ -255,26 +258,23 @@ function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEn
   }
 }
 
-function observeTableRewrite(tablePath: string): {
-  readonly completion: Promise<void>;
-  close(): void;
-} {
-  let watcher: FSWatcher | undefined;
-  const completion = new Promise<void>((resolve, reject) => {
-    watcher = watch(path.dirname(tablePath), (_event, filename) => {
-      if (filename?.toString() === path.basename(tablePath)) {
-        resolve();
-      }
-    });
-    watcher.once("error", reject);
-  });
+async function waitForPidTable(
+  loc: ReturnType<typeof locationsFor>,
+  expected: readonly PidTableEntry[],
+): Promise<void> {
+  const deadline = process.hrtime.bigint() + 2_000_000_000n;
+  for (let attempt = 0; attempt < 1_000 && process.hrtime.bigint() < deadline; attempt += 1) {
+    const entries = await readPidTable(loc);
+    if (isDeepStrictEqual(entries, expected)) {
+      return;
+    }
 
-  return {
-    completion,
-    close(): void {
-      watcher?.close();
-    },
-  };
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+
+  assert.deepStrictEqual(await readPidTable(loc), expected, "PID table did not reach exact state");
 }
 
 test("keeps PreToolUse hook environments equal across sync and async lanes except the marker", async () => {
@@ -380,8 +380,6 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
   const pi = createPi();
   const entry = createEntry(root, "PreToolUse", true);
   const processes = createSpawnHarness(false);
-  const tablePath = pidTablePath(locations);
-  let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
   try {
     await spawnAndRegister(
@@ -398,13 +396,11 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
     const child = processes.children[0];
     child?.stderr.write("stale body");
     bumpEpoch();
-    tableRewrite = observeTableRewrite(tablePath);
 
     // act
     child?.emitExit(2);
     child?.emitClose();
-    await tableRewrite.completion;
-    tableRewrite.close();
+    await waitForPidTable(locations, []);
     shutdownInMemoryChildren();
 
     // assert
@@ -412,7 +408,6 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
     assert.deepStrictEqual(context.notifications, []);
     assert.deepStrictEqual(child?.signals, []);
   } finally {
-    tableRewrite?.close();
     shutdownInMemoryChildren();
     resetRoutingState();
     destroyChildren(processes.children);

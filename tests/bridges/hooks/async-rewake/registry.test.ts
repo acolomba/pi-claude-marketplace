@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
-import { watch, type FSWatcher } from "node:fs";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { test, type TestContext } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -393,26 +393,23 @@ function observeTimers(t: TestContext, now: number): TimerObservation {
   return { clearHandles, handles };
 }
 
-function observeTableRewrite(tablePath: string): {
-  readonly completion: Promise<void>;
-  close(): void;
-} {
-  let watcher: FSWatcher | undefined;
-  const completion = new Promise<void>((resolve, reject) => {
-    watcher = watch(path.dirname(tablePath), (_event, filename) => {
-      if (filename?.toString() === path.basename(tablePath)) {
-        resolve();
-      }
-    });
-    watcher.once("error", reject);
-  });
+async function waitForPidTable(
+  loc: ReturnType<typeof locationsFor>,
+  expected: readonly PidTableEntry[],
+): Promise<void> {
+  const deadline = process.hrtime.bigint() + 2_000_000_000n;
+  for (let attempt = 0; attempt < 1_000 && process.hrtime.bigint() < deadline; attempt += 1) {
+    const entries = await readPidTable(loc);
+    if (isDeepStrictEqual(entries, expected)) {
+      return;
+    }
 
-  return {
-    completion,
-    close(): void {
-      watcher?.close();
-    },
-  };
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+
+  assert.deepStrictEqual(await readPidTable(loc), expected, "PID table did not reach exact state");
 }
 
 function filesystemErrorCode(error: unknown): string | undefined {
@@ -490,7 +487,6 @@ test(
       '      "marketplace": "catalog-lifecycle",\n      "plugin": "plugin-lifecycle",\n' +
       '      "spawnedAt": "2026-08-31T10:00:00.000Z"\n    }\n  ]\n}\n';
     const expectedRemovedBytes = '{\n  "version": 1,\n  "entries": []\n}\n';
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       // act
@@ -512,11 +508,9 @@ test(
       child.stderr.end("-stderr-two");
       child.stdout.end("-stdout-two");
       await Promise.all([stdoutEnd, stderrEnd]);
-      tableRewrite = observeTableRewrite(tablePath);
       child.emitExit(2);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       const removedBytes = await readFile(tablePath, "utf8");
       const listenersAfterExit = {
         childExit: child.child.listenerCount("exit"),
@@ -583,7 +577,6 @@ test(
       assert.strictEqual(finalTableState, "ENOENT");
       assert.deepStrictEqual(child.signals, []);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       child.child.removeAllListeners();
@@ -945,19 +938,16 @@ test("settles a child error once and ignores its later exit", { concurrency: fal
   const context = createContext(root, "session-child-error", true);
   const pi = createPi();
   const child = createChild(24_685);
-  let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
   try {
     await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl: createSpawn(child.child, []),
       dispatchId: () => "dispatch-child-error",
     });
-    tableRewrite = observeTableRewrite(pidTablePath(locations));
 
     // act
     child.emitError(new Error("child launch failed after spawn"));
-    await tableRewrite.completion;
-    tableRewrite.close();
+    await waitForPidTable(locations, []);
     child.emitExit(2);
     child.emitClose();
     t.mock.timers.tick(605_000);
@@ -972,7 +962,6 @@ test("settles a child error once and ignores its later exit", { concurrency: fal
     assert.strictEqual(child.child.listenerCount("exit"), 0);
     assert.deepStrictEqual(child.signals, []);
   } finally {
-    tableRewrite?.close();
     shutdownInMemoryChildren();
     resetRoutingState();
     destroyChild(child);
@@ -994,7 +983,6 @@ test(
     const context = createContext(root, "session-late-error", true);
     const pi = createPi();
     const child = createChild(24_686);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(
@@ -1015,13 +1003,11 @@ test(
           dispatchId: () => "dispatch-late-error",
         },
       );
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(0);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       child.emitError(new Error("late duplicate terminal event"));
       t.mock.timers.tick(605_000);
       const persistedEntries = await readPidTable(locations);
@@ -1034,7 +1020,6 @@ test(
       assert.strictEqual(child.child.listenerCount("error"), 0);
       assert.strictEqual(child.child.listenerCount("exit"), 0);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1057,7 +1042,6 @@ test(
     const context = createContext(root, "session-exit-zero", true);
     const pi = createPi();
     const child = createChild(24_687);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
@@ -1066,13 +1050,11 @@ test(
       });
       child.stderr.end("ignored ordinary output");
       await once(child.stderr, "end");
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(0);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1081,7 +1063,6 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1101,7 +1082,6 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
   const context = createContext(root, "session-signal-exit", true);
   const pi = createPi();
   const child = createChild(24_688);
-  let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
   try {
     await spawnAndRegister(
@@ -1114,13 +1094,11 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
       locations,
       { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-signal-exit" },
     );
-    tableRewrite = observeTableRewrite(pidTablePath(locations));
 
     // act
     child.emitExit(null, "SIGTERM");
     child.emitClose();
-    await tableRewrite.completion;
-    tableRewrite.close();
+    await waitForPidTable(locations, []);
     t.mock.timers.tick(605_000);
 
     // assert
@@ -1129,7 +1107,6 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
     assert.deepStrictEqual(timers.clearHandles, timers.handles);
     assert.deepStrictEqual(await readPidTable(locations), []);
   } finally {
-    tableRewrite?.close();
     shutdownInMemoryChildren();
     resetRoutingState();
     destroyChild(child);
@@ -1151,7 +1128,6 @@ test(
     const context = createContext(root, "session-empty-exit-two", true);
     const pi = createPi();
     const child = createChild(24_689, { stdout: "absent", stderr: "absent" });
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(
@@ -1164,13 +1140,11 @@ test(
         locations,
         { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-empty-exit-two" },
       );
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(2);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1180,7 +1154,6 @@ test(
       assert.deepStrictEqual(context.notifications, []);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1200,7 +1173,6 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
   const context = createContext(root, "session-stdout-busy", false);
   const pi = createPi();
   const child = createChild(24_690);
-  let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
   try {
     await spawnAndRegister(
@@ -1222,13 +1194,11 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
     child.stdout.write("stdout-first-");
     child.stdout.end("stdout-second");
     await once(child.stdout, "end");
-    tableRewrite = observeTableRewrite(pidTablePath(locations));
 
     // act
     child.emitExit(2);
     child.emitClose();
-    await tableRewrite.completion;
-    tableRewrite.close();
+    await waitForPidTable(locations, []);
     t.mock.timers.tick(605_000);
 
     // assert
@@ -1246,7 +1216,6 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
     assert.deepStrictEqual(context.notifications, []);
     assert.deepStrictEqual(timers.clearHandles, timers.handles);
   } finally {
-    tableRewrite?.close();
     shutdownInMemoryChildren();
     resetRoutingState();
     destroyChild(child);
@@ -1268,7 +1237,6 @@ test(
     const context = createContext(root, "session-interleaved", true);
     const pi = createPi();
     const child = createChild(24_691);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
@@ -1280,13 +1248,11 @@ test(
       child.stdout.end("stdout-two");
       child.stderr.end("stderr-two");
       await Promise.all([once(child.stdout, "end"), once(child.stderr, "end")]);
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(2);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1304,7 +1270,6 @@ test(
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1328,7 +1293,6 @@ test(
     const pi = createPi();
     const child = createChild(24_692);
     const survivingTail = "x".repeat(65_536);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
@@ -1337,13 +1301,11 @@ test(
       });
       child.stderr.end(Buffer.from(`d${survivingTail}`));
       await once(child.stderr, "end");
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(2);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1361,7 +1323,6 @@ test(
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1384,7 +1345,6 @@ test(
     const context = createContext(root, "session-exit-before-close", true);
     const pi = createPi();
     const child = createChild(24_693);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(
@@ -1406,7 +1366,6 @@ test(
         },
       );
       child.stdout.write("available-before-exit");
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(2);
@@ -1416,8 +1375,7 @@ test(
       child.stderr.end();
       await Promise.all([stdoutEnd, once(child.stderr, "end")]);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1439,7 +1397,6 @@ test(
       assert.deepStrictEqual(context.notifications, []);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1467,20 +1424,17 @@ test(
     );
     const pi = createPi();
     const child = createChild(24_694);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
         dispatchId: () => "dispatch-notify-failure",
       });
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(0);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1489,7 +1443,6 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1513,7 +1466,6 @@ test(
     const pi = createPi();
     pi.setSendError(new Error("message queue unavailable"));
     const child = createChild(24_695);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(
@@ -1533,13 +1485,11 @@ test(
       );
       child.stderr.end("send body");
       await once(child.stderr, "end");
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(2);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1548,7 +1498,6 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1571,7 +1520,6 @@ test(
     const context = createContext(root, "session-stale-epoch", true);
     const pi = createPi();
     const child = createChild(24_696);
-    let tableRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
@@ -1581,13 +1529,11 @@ test(
       child.stderr.end("stale output");
       await once(child.stderr, "end");
       bumpEpoch();
-      tableRewrite = observeTableRewrite(pidTablePath(locations));
 
       // act
       child.emitExit(2);
       child.emitClose();
-      await tableRewrite.completion;
-      tableRewrite.close();
+      await waitForPidTable(locations, []);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1596,7 +1542,6 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      tableRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(child);
@@ -1722,9 +1667,7 @@ test(
     } finally {
       persistence.releaseAll();
       await Promise.allSettled(
-        [firstSpawn, secondSpawn].filter(
-          (value): value is Promise<void> => value !== undefined,
-        ),
+        [firstSpawn, secondSpawn].filter((value): value is Promise<void> => value !== undefined),
       );
       shutdownInMemoryChildren();
       resetRoutingState();
@@ -1751,8 +1694,6 @@ test(
     const pi = createPi();
     const firstChild = createChild(24_697);
     const secondChild = createChild(24_698);
-    let firstRewrite: ReturnType<typeof observeTableRewrite> | undefined;
-    let secondRewrite: ReturnType<typeof observeTableRewrite> | undefined;
 
     try {
       await spawnAndRegister(
@@ -1778,18 +1719,14 @@ test(
         { spawnImpl: createSpawn(secondChild.child, []), dispatchId: () => "dispatch-second" },
       );
       const registeredEntries = await readPidTable(firstLocations);
-      firstRewrite = observeTableRewrite(pidTablePath(firstLocations));
 
       // act
       firstChild.emitExit(0);
       firstChild.emitClose();
-      await firstRewrite.completion;
-      firstRewrite.close();
+      await waitForPidTable(firstLocations, registeredEntries.slice(1));
       const entriesAfterFirstExit = await readPidTable(firstLocations);
-      secondRewrite = observeTableRewrite(pidTablePath(firstLocations));
       secondChild.emitError(new Error("second child terminal error"));
-      await secondRewrite.completion;
-      secondRewrite.close();
+      await waitForPidTable(firstLocations, []);
       const finalEntries = await readPidTable(firstLocations);
       t.mock.timers.tick(605_000);
 
@@ -1830,8 +1767,6 @@ test(
       assert.deepStrictEqual(pi.messages, []);
       assert.deepStrictEqual(context.notifications, []);
     } finally {
-      firstRewrite?.close();
-      secondRewrite?.close();
       shutdownInMemoryChildren();
       resetRoutingState();
       destroyChild(firstChild);
