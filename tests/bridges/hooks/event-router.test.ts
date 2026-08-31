@@ -1,24 +1,38 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { test, beforeEach } from "node:test";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+
+import { pidTablePath } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
+import {
+  shutdownInMemoryChildren,
+  spawnAndRegister,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import {
   compositeHandlerFor,
   toolResultCompositeHandler,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
+import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   addPluginConfigToCache,
   hydrateProjectScopeForCwd,
   rebuildRoutingTables,
+  registerHooksBridge,
   removePluginConfigFromCache,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
   bumpEpoch,
+  getRoutingBucket,
   parsedConfigEntries,
+  pendingSessionStartContextEntries,
   resetRoutingState,
   routingTableEntries,
   setRoutingBucket,
@@ -28,6 +42,11 @@ import {
   type RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
+  agentEndCacheHandler,
+  resetSettleState,
+  settleHandlerFor,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
+import {
   BUCKET_A_EVENTS,
   type BucketAEvent,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
@@ -36,13 +55,18 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
+  AgentEndEvent,
+  ExtensionAPI,
   ExtensionContext,
+  ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -64,6 +88,455 @@ import type {
 beforeEach(() => {
   resetRoutingState();
 });
+
+test(
+  "reload resets lifecycle state before hydrating routes, reaping orphans, and registering handlers",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reload-"));
+    const projectRoot = path.join(root, "project");
+    const userAgentRoot = path.join(root, "user-agent");
+    const originalHome = process.env.HOME;
+    const originalAgentRoot = process.env.PI_CODING_AGENT_DIR;
+    process.env.HOME = path.join(root, "home");
+    process.env.PI_CODING_AGENT_DIR = userAgentRoot;
+    t.after(async () => {
+      shutdownInMemoryChildren();
+      resetSettleState();
+      resetRoutingState();
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+
+      if (originalAgentRoot === undefined) {
+        delete process.env.PI_CODING_AGENT_DIR;
+      } else {
+        process.env.PI_CODING_AGENT_DIR = originalAgentRoot;
+      }
+
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    });
+    resetSettleState();
+    shutdownInMemoryChildren();
+    const userLocations = locationsFor("user", projectRoot);
+    const projectLocations = locationsFor("project", projectRoot);
+    const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
+    const projectHooksPath = path.join(projectLocations.hooksDir, "project-hooks", "hooks.json");
+    const userPluginRoot = path.join(root, "plugins", "user-plugin");
+    const projectPluginRoot = path.join(root, "plugins", "project-plugin");
+    const userMarketplaceRoot = path.join(root, "marketplaces", "user-catalog");
+    const projectMarketplaceRoot = path.join(root, "marketplaces", "project-catalog");
+    const userState = {
+      schemaVersion: 2,
+      marketplaces: {
+        "user-catalog": {
+          name: "user-catalog",
+          scope: "user",
+          source: { kind: "path", raw: userMarketplaceRoot, logical: userMarketplaceRoot },
+          addedFromCwd: projectRoot,
+          manifestPath: path.join(userMarketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: userMarketplaceRoot,
+          plugins: {
+            "user-plugin": {
+              version: "1.0.0",
+              resolvedSource: userPluginRoot,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["user-hooks"],
+              },
+              enabled: true,
+              installedAt: "2026-08-31T10:00:00.000Z",
+              updatedAt: "2026-08-31T10:00:00.000Z",
+            },
+          },
+        },
+      },
+    } satisfies ExtensionState;
+    const projectState = {
+      schemaVersion: 2,
+      marketplaces: {
+        "project-catalog": {
+          name: "project-catalog",
+          scope: "project",
+          source: {
+            kind: "path",
+            raw: projectMarketplaceRoot,
+            logical: projectMarketplaceRoot,
+          },
+          addedFromCwd: projectRoot,
+          manifestPath: path.join(projectMarketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: projectMarketplaceRoot,
+          plugins: {
+            "project-plugin": {
+              version: "1.0.0",
+              resolvedSource: projectPluginRoot,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["project-hooks"],
+              },
+              enabled: true,
+              installedAt: "2026-08-31T10:00:00.000Z",
+              updatedAt: "2026-08-31T10:00:00.000Z",
+            },
+          },
+        },
+      },
+    } satisfies ExtensionState;
+    await mkdir(path.dirname(userHooksPath), { recursive: true });
+    await mkdir(path.dirname(projectHooksPath), { recursive: true });
+    await writeFile(
+      userHooksPath,
+      JSON.stringify(
+        makeConfig([
+          { event: "SessionStart", handlers: 1 },
+          { event: "Stop", handlers: 1 },
+        ]),
+      ),
+      "utf8",
+    );
+    await writeFile(
+      projectHooksPath,
+      JSON.stringify(makeConfig([{ event: "PreToolUse", handlers: 1 }])),
+      "utf8",
+    );
+    await saveState(userLocations.extensionRoot, userState);
+    await saveState(projectLocations.extensionRoot, projectState);
+    const notifications: Array<{
+      readonly text: string;
+      readonly severity: "info" | "warning" | "error" | undefined;
+    }> = [];
+    const context = {
+      ui: {
+        notify(text: string, severity?: "info" | "warning" | "error"): void {
+          notifications.push({ text, severity });
+        },
+      } as ExtensionContext["ui"],
+      mode: "print",
+      hasUI: false,
+      cwd: projectRoot,
+      sessionManager: SessionManager.inMemory(root, { id: "router-reload-session" }),
+      get modelRegistry(): ExtensionContext["modelRegistry"] {
+        throw new Error("router reload must not read modelRegistry");
+      },
+      model: undefined,
+      scopedModels: [],
+      isIdle: () => true,
+      isProjectTrusted: () => true,
+      signal: undefined,
+      abort(): never {
+        throw new Error("router reload must not abort Pi");
+      },
+      hasPendingMessages: () => false,
+      shutdown(): never {
+        throw new Error("router reload must not shut down Pi");
+      },
+      getContextUsage: () => undefined,
+      compact(): never {
+        throw new Error("router reload must not compact the session");
+      },
+      getSystemPrompt(): never {
+        throw new Error("router reload must not read the system prompt");
+      },
+    } satisfies ExtensionContext;
+    const registrations: Array<{ readonly event: string; readonly handler: unknown }> = [];
+    const sentMessages: Array<{ readonly message: unknown; readonly options: unknown }> = [];
+    const operationLog: string[] = [];
+    let traceReload = false;
+    const pi = {
+      on(event: string, handler: unknown): void {
+        registrations.push({ event, handler });
+        if (traceReload) {
+          operationLog.push(`register:${event}`);
+        }
+      },
+      sendMessage(message: unknown, options: unknown): void {
+        sentMessages.push({ message, options });
+      },
+    } as ExtensionAPI;
+    const dispatched: string[] = [];
+    const executor: HookExecutor = (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    const previousEpoch = currentEpoch();
+    const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
+    registrations.length = 0;
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "stale context" },
+      "SessionStart",
+      { scope: "user", marketplace: "user-catalog", pluginId: "user-plugin" },
+    );
+    const previousEnding = {
+      type: "agent_end",
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "stale assistant" }],
+          stopReason: "stop",
+          timestamp: 1,
+        },
+      ],
+    } as AgentEndEvent;
+    agentEndCacheHandler(previousEpoch)(previousEnding);
+    const settleResetCalls: string[] = [];
+    const settleResetPromises: Promise<void>[] = [];
+    const settleResetExecutor: HookExecutor = (entry) => {
+      settleResetCalls.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const childEvents = new EventEmitter();
+    const childStdin = new PassThrough();
+    const childStdout = new PassThrough();
+    const childStderr = new PassThrough();
+    let childKilled = false;
+    const child: ChildProcess = Object.assign(childEvents, {
+      stdin: childStdin,
+      stdout: childStdout,
+      stderr: childStderr,
+      stdio: [childStdin, childStdout, childStderr, undefined, undefined] as ChildProcess["stdio"],
+      connected: false,
+      pid: 43_107,
+      exitCode: null,
+      signalCode: null,
+      get killed(): boolean {
+        return childKilled;
+      },
+      spawnargs: [],
+      spawnfile: "",
+      kill(signal?: NodeJS.Signals | number): boolean {
+        assert.strictEqual(currentEpoch(), previousEpoch + 1);
+        operationLog.push("epoch:bumped");
+        assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+        operationLog.push("pending:reset");
+        const settleReset = settleHandlerFor(
+          currentEpoch(),
+          pi,
+          settleResetExecutor,
+        )({ type: "agent_settled" }, context);
+        settleResetPromises.push(settleReset);
+        assert.deepStrictEqual(settleResetCalls, []);
+        operationLog.push("settle:reset");
+        assert.strictEqual(signal, "SIGKILL");
+        operationLog.push("child:shutdown");
+        childKilled = true;
+        return true;
+      },
+      disconnect(): void {
+        return;
+      },
+      send(): boolean {
+        return false;
+      },
+      ref(): void {
+        return;
+      },
+      unref(): void {
+        return;
+      },
+      [Symbol.dispose](): void {
+        return;
+      },
+    });
+    const spawnImpl = ((_command: string, _args: readonly string[], _options: SpawnOptions) =>
+      child) as NonNullable<SpawnDeps["spawnImpl"]>;
+    const asyncEntry = {
+      scope: "project",
+      marketplace: "project-catalog",
+      pluginId: "project-plugin",
+      resolvedSource: asAbsolutePluginRoot(projectPluginRoot),
+      claudeEvent: "PreToolUse",
+      matcher: parseMatcher("Bash"),
+      rawMatcher: "Bash",
+      handlerDecl: { type: "command", command: "router-child", asyncRewake: true },
+      declarationIndex: 0,
+      ifPredicate: MATCH_ALL_IF,
+    } satisfies RoutingEntry;
+    const toolCall = {
+      type: "tool_call",
+      toolCallId: "router-reload-call",
+      toolName: "bash",
+      input: { command: "printf reload" },
+    } satisfies ToolCallEvent;
+    await spawnAndRegister(asyncEntry, toolCall, context, pi, projectLocations, {
+      spawnImpl,
+      dispatchId: () => "router-reload-child",
+    });
+    const processPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+    if (processPlatform === undefined) {
+      throw new Error("process.platform descriptor is unavailable");
+    }
+
+    t.after(() => {
+      Object.defineProperty(process, "platform", processPlatform);
+    });
+    Object.defineProperty(process, "platform", { ...processPlatform, value: "linux" });
+    const originalReadFile = fs.promises.readFile.bind(fs.promises);
+    const readFile = t.mock.method(
+      fs.promises,
+      "readFile",
+      async (
+        target: Parameters<typeof originalReadFile>[0],
+        options?: Parameters<typeof originalReadFile>[1],
+      ) => {
+        const targetPath = typeof target === "string" ? target : "";
+        if (targetPath === path.join(userLocations.extensionRoot, "state.json")) {
+          operationLog.push("hydrate:user-state");
+        } else if (targetPath === userHooksPath) {
+          operationLog.push("hydrate:user-hooks");
+        } else if (targetPath === path.join(projectLocations.extensionRoot, "state.json")) {
+          operationLog.push("hydrate:project-state");
+        } else if (targetPath === projectHooksPath) {
+          operationLog.push("hydrate:project-hooks");
+        } else if (targetPath === "/proc/43107/environ") {
+          operationLog.push("orphan:marker");
+          return "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=router-reload-child\0";
+        }
+
+        return originalReadFile(target, options);
+      },
+    );
+    t.after(() => {
+      readFile.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    t.mock.method(process, "kill", (pid: number, signal?: number | NodeJS.Signals): true => {
+      assert.strictEqual(pid, 43_107);
+      if (signal === 0) {
+        assert.deepStrictEqual(
+          getRoutingBucket("SessionStart").map((entry) => ({
+            scope: entry.scope,
+            pluginId: entry.pluginId,
+            command: entry.handlerDecl.command,
+          })),
+          [{ scope: "user", pluginId: "user-plugin", command: "echo handler-0" }],
+        );
+        assert.deepStrictEqual(
+          getRoutingBucket("PreToolUse").map((entry) => ({
+            scope: entry.scope,
+            pluginId: entry.pluginId,
+            command: entry.handlerDecl.command,
+          })),
+          [{ scope: "project", pluginId: "project-plugin", command: "echo handler-0" }],
+        );
+        operationLog.push("routes:rebuilt");
+        operationLog.push("orphan:probe");
+        return true;
+      }
+
+      assert.strictEqual(signal, "SIGKILL");
+      operationLog.push("orphan:kill");
+      return true;
+    });
+    traceReload = true;
+
+    // act
+    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    await Promise.all(settleResetPromises);
+    if (typeof staleToolCallHandler === "function") {
+      await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
+    }
+
+    const cacheAfterReload = Array.from(parsedConfigEntries().values()).map((entry) => ({
+      scope: entry.scope,
+      marketplace: entry.marketplace,
+      pluginId: entry.pluginId,
+      resolvedSource: entry.resolvedSource,
+    }));
+    const epochAfterReload = currentEpoch();
+    const pendingAfterReload = [...pendingSessionStartContextEntries()];
+    const orphanTableExistsAfterReload = fs.existsSync(pidTablePath(projectLocations));
+    shutdownInMemoryChildren();
+    resetSettleState();
+    resetRoutingState();
+    const stateAfterCleanup = {
+      epoch: currentEpoch(),
+      cache: Array.from(parsedConfigEntries()),
+      routes: Array.from(routingTableEntries()),
+      pending: [...pendingSessionStartContextEntries()],
+    };
+
+    // assert
+    assert.deepStrictEqual(operationLog, [
+      "epoch:bumped",
+      "pending:reset",
+      "settle:reset",
+      "child:shutdown",
+      "hydrate:user-state",
+      "hydrate:user-hooks",
+      "hydrate:project-state",
+      "hydrate:project-hooks",
+      "routes:rebuilt",
+      "orphan:probe",
+      "orphan:marker",
+      "orphan:kill",
+      "register:session_start",
+      "register:session_shutdown",
+      "register:session_before_compact",
+      "register:session_compact",
+      "register:input",
+      "register:tool_call",
+      "register:tool_result",
+      "register:before_agent_start",
+      "register:agent_end",
+      "register:agent_settled",
+      "register:input",
+    ]);
+    assert.deepStrictEqual(
+      registrations.map(({ event, handler }) => ({ event, handlerType: typeof handler })),
+      [
+        { event: "session_start", handlerType: "function" },
+        { event: "session_shutdown", handlerType: "function" },
+        { event: "session_before_compact", handlerType: "function" },
+        { event: "session_compact", handlerType: "function" },
+        { event: "input", handlerType: "function" },
+        { event: "tool_call", handlerType: "function" },
+        { event: "tool_result", handlerType: "function" },
+        { event: "before_agent_start", handlerType: "function" },
+        { event: "agent_end", handlerType: "function" },
+        { event: "agent_settled", handlerType: "function" },
+        { event: "input", handlerType: "function" },
+      ],
+    );
+    assert.deepStrictEqual(cacheAfterReload, [
+      {
+        scope: "user",
+        marketplace: "user-catalog",
+        pluginId: "user-plugin",
+        resolvedSource: userPluginRoot,
+      },
+      {
+        scope: "project",
+        marketplace: "project-catalog",
+        pluginId: "project-plugin",
+        resolvedSource: projectPluginRoot,
+      },
+    ]);
+    assert.strictEqual(epochAfterReload, previousEpoch + 1);
+    assert.deepStrictEqual(pendingAfterReload, []);
+    assert.strictEqual(childKilled, true);
+    assert.strictEqual(orphanTableExistsAfterReload, false);
+    assert.deepStrictEqual(settleResetCalls, []);
+    assert.deepStrictEqual(dispatched, []);
+    assert.deepStrictEqual(sentMessages, []);
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(stateAfterCleanup, { epoch: 0, cache: [], routes: [], pending: [] });
+  },
+);
 
 // Build a minimal HooksConfig with the given event -> matcher -> handler
 // shape. `matcher` defaults to "" (match-all).
