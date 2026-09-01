@@ -105,7 +105,6 @@ import {
   MarketplaceUpdateError,
   PluginShapeError,
   composeErrorWithCauseChain,
-  errorMessage,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
@@ -702,7 +701,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       status: "failed",
       name,
       reasons: typedReasons ?? (["network unreachable"] as const),
-      cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      cause: err as Error,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
       needsReload: false,
