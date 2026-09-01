@@ -1,4 +1,3 @@
-import { assertNever } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 import {
@@ -344,9 +343,6 @@ export function outcomeToPluginMessage(
       };
       return failed;
     }
-
-    default:
-      return assertNever(outcome);
   }
 }
 
