@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+
+import { Type } from "typebox";
 
 import {
   GENERATED_AGENT_MARKER,
@@ -12,6 +15,8 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { PLUGIN_ENTRY_VALIDATOR } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -20,22 +25,33 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   installPlugin,
+  runInstallLedger,
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
+  STATE_VALIDATOR,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+
+const require = createRequire(import.meta.url);
+const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
 //
@@ -70,7 +86,17 @@ interface NotifyRecord {
 }
 
 function toolInfo(name: string): ToolInfo {
-  return { name } as ToolInfo;
+  return {
+    name,
+    description: `test tool ${name}`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      origin: "top-level",
+      path: `/test/tools/${name}.ts`,
+      scope: "temporary",
+      source: "test",
+    },
+  } satisfies ToolInfo;
 }
 
 function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
@@ -5351,10 +5377,15 @@ const INSTALL_REMOTE_URLS = [
   "https://example.com/org/repo.git",
   "https://example.com/org/mono.git",
   "https://github.com/org/repo.git",
+  "https://github.com/org/private.git",
+  "https://gitlab.com/o/r.git",
+  "https://gitlab.example.com/o/private.git",
+  "https://gitlab.example.com/o/r.git",
 ] as const;
 
 function makeMockGitOps(options: {
   readonly fixtureSourceDir: string;
+  readonly cloneThrows?: Error;
   readonly head?: string;
   readonly localRefs?: Readonly<Record<string, string>>;
   readonly remoteRefs?: Readonly<Record<string, string>>;
@@ -5379,6 +5410,7 @@ function makeMockGitOps(options: {
     boundary: "memory",
     allowedRemoteUrls: INSTALL_REMOTE_URLS,
     cloneFixture: { boundary: "local", sourceDir: options.fixtureSourceDir },
+    ...(options.cloneThrows !== undefined && { cloneError: options.cloneThrows }),
     ...(options.head !== undefined && { initialOid: options.head, remoteHead: options.head }),
     ...(options.localRefs !== undefined && { localRefs: options.localRefs }),
     ...(Object.keys(remoteRefs).length > 0 && { remoteRefs }),
@@ -5424,6 +5456,45 @@ function seamWith(gitOps: GitOps): InstallCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
+  };
+}
+
+const INSTALL_DEVICE_CODE = {
+  device_code: "MOCK_DEVICE_CODE",
+  expires_in: 900,
+  interval: 0,
+  user_code: "ABCD-1234",
+  verification_uri: "https://github.com/login/device",
+} as const;
+
+function installDeviceFlow(
+  options: {
+    readonly pollResponses?: Parameters<typeof createDeviceFlowFake>[0]["pollResponses"];
+  } = {},
+): ReturnType<typeof createDeviceFlowFake> {
+  return createDeviceFlowFake({
+    boundary: "memory",
+    deviceCode: INSTALL_DEVICE_CODE,
+    network: "disabled",
+    ...(options.pollResponses === undefined ? {} : { pollResponses: options.pollResponses }),
+  });
+}
+
+function captureInstallAuth(inner: InstallCloneCacheSeam): {
+  readonly calls: Array<{ readonly auth: GitAuthBundle | undefined; readonly cloneUrl: string }>;
+  readonly seam: InstallCloneCacheSeam;
+} {
+  const calls: Array<{ auth: GitAuthBundle | undefined; cloneUrl: string }> = [];
+  return {
+    calls,
+    seam: {
+      materializeOrRefreshPluginMirror: inner.materializeOrRefreshPluginMirror,
+      materializePluginClone: (options) => {
+        calls.push({ auth: options.auth, cloneUrl: options.cloneUrl });
+        return inner.materializePluginClone(options);
+      },
+      resolvePluginPin: inner.resolvePluginPin,
+    },
   };
 }
 
@@ -6384,6 +6455,1448 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("plugin install authentication: threads a GitHub provider bundle to the pinned clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-github-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gh",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        authMemo: new Map(),
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "gh",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "sha-a1b2c3d4e5f6",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(authCapture.calls.length, 1);
+      assert.deepStrictEqual(
+        authCapture.calls.map(({ auth, cloneUrl }) => ({
+          authHost: auth?.host,
+          authRequiredType: typeof auth?.onAuthRequired,
+          cloneUrl,
+          credentialOps: auth?.credentialOps,
+        })),
+        [
+          {
+            authHost: "github.com",
+            authRequiredType: "function",
+            cloneUrl: "https://github.com/org/repo",
+            credentialOps: credentials.credentialOps,
+          },
+        ],
+      );
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: leaves a providerless clone authless", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-providerless-"));
+    try {
+      // arrange
+      const cloneUrl = "https://gitlab.example.com/o/r";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "public",
+        source: { source: "url", url: cloneUrl, sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "public",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "sha-a1b2c3d4e5f6",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(authCapture.calls, [{ auth: undefined, cloneUrl }]);
+      assert.deepStrictEqual(
+        git.state.cloneCalls.map(({ auth, ref, singleBranch, url }) => ({
+          auth,
+          ref,
+          singleBranch,
+          url,
+        })),
+        [{ auth: undefined, ref: undefined, singleBranch: undefined, url: `${cloneUrl}.git` }],
+      );
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: threads the GitLab provider bundle onto the canonical clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-gitlab-"));
+    try {
+      // arrange
+      const cloneUrl = "https://gitlab.com/o/r";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gitlab",
+        source: { source: "url", url: cloneUrl, sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "gitlab",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "sha-a1b2c3d4e5f6",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(authCapture.calls.length, 1);
+      assert.deepStrictEqual(
+        authCapture.calls.map(({ auth, cloneUrl: recordedCloneUrl }) => ({
+          authHost: auth?.host,
+          cloneUrl: recordedCloneUrl,
+          credentialOps: auth?.credentialOps,
+        })),
+        [{ authHost: "gitlab.com", cloneUrl, credentialOps: credentials.credentialOps }],
+      );
+      assert.deepStrictEqual(
+        git.state.cloneCalls.map(({ url }) => url),
+        [`${cloneUrl}.git`],
+      );
+      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: memoizes one Device Flow result across same-host installs", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-memo-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "first",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const secondSha = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
+      await writeFile(
+        path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "first", source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA } },
+            {
+              name: "second",
+              source: { source: "github", repo: "org/private", sha: secondSha },
+            },
+          ],
+        }),
+      );
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow({
+        pollResponses: [
+          { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
+        ],
+      });
+      const authMemo = new Map<string, Awaited<ReturnType<GitAuthBundle["onAuthRequired"]>>>();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const firstOutcome = await installPlugin({
+        authMemo,
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "first",
+        scope: "project",
+      });
+      const secondOutcome = await installPlugin({
+        authMemo,
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "second",
+        scope: "project",
+      });
+      const firstAuthResult = await authCapture.calls[0]?.auth?.onAuthRequired();
+      const secondAuthResult = await authCapture.calls[1]?.auth?.onAuthRequired();
+
+      // assert
+      assert.deepStrictEqual(
+        [firstOutcome, secondOutcome],
+        [
+          {
+            declaresAgents: false,
+            declaresMcp: false,
+            resourcesChanged: true,
+            status: "installed",
+            version: "sha-a1b2c3d4e5f6",
+          },
+          {
+            declaresAgents: false,
+            declaresMcp: false,
+            resourcesChanged: true,
+            status: "installed",
+            version: "sha-b2c3d4e5f607",
+          },
+        ],
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "Open https://github.com/login/device and enter: ABCD-1234",
+          severity: "info",
+        },
+      ]);
+      assert.deepStrictEqual(
+        [firstAuthResult, secondAuthResult],
+        [
+          {
+            authAttempted: true,
+            cred: { password: "token", username: "x-access-token" },
+            ok: true,
+          },
+          {
+            authAttempted: true,
+            cred: { password: "token", username: "x-access-token" },
+            ok: true,
+          },
+        ],
+      );
+      assert.deepStrictEqual(deviceFlow.calls, {
+        pollToken: [
+          { clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "MOCK_DEVICE_CODE", intervalSec: 0 },
+        ],
+        requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
+      });
+      assert.deepStrictEqual(credentials.calls, {
+        approve: [
+          {
+            credential: { password: "token", username: "x-access-token" },
+            host: "github.com",
+          },
+        ],
+        fill: [],
+        reject: [],
+      });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: classifies a providerless 401 without a cause line", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-401-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "private",
+        source: {
+          source: "url",
+          url: "https://gitlab.example.com/o/private",
+          sha: GIT_SOURCE_SHA,
+        },
+      });
+      const cloneError = Object.assign(new Error("HTTP 401 from clone"), {
+        code: "HttpError",
+        data: { statusCode: 401 },
+      });
+      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "private",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "HTTP 401 from clone\n\ncause: HTTP 401 from clone",
+        error: cloneError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ private (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: preserves a network failure outside authentication narrowing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-network-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "network",
+        source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
+      });
+      const cloneError = Object.assign(new Error("connect ENETUNREACH 10.0.0.1:443"), {
+        code: "ENETUNREACH",
+      });
+      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "network",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "connect ENETUNREACH 10.0.0.1:443\n\ncause: connect ENETUNREACH 10.0.0.1:443",
+        error: cloneError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed)\n    cause: connect ENETUNREACH 10.0.0.1:443",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: contains a non-Error clone failure without synthesizing a row cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-non-error-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "oddball",
+        source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const cloneCache = seamWith(git.gitOps);
+      const seam: InstallCloneCacheSeam = {
+        materializeOrRefreshPluginMirror: cloneCache.materializeOrRefreshPluginMirror,
+        materializePluginClone: async () => {
+          await Promise.resolve();
+          throw "disk exploded"; // eslint-disable-line @typescript-eslint/only-throw-error
+        },
+        resolvePluginPin: cloneCache.resolvePluginPin,
+      };
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "oddball",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "disk exploded\n\ncause: disk exploded",
+        error: new Error("disk exploded"),
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ oddball (failed)\n    cause: disk exploded",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: classifies a cancelled Device Flow clone without a cause line", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-cancelled-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "private",
+        source: { source: "github", repo: "org/private", sha: GIT_SOURCE_SHA },
+      });
+      const cloneError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        pi,
+        plugin: "private",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "cancelled\n\ncause: cancelled",
+        error: cloneError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ private (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger returns the marketplace-absent discriminant without mutating state", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-absent-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
+      const { ctx } = makeCtx();
+
+      // act
+      const result = await runInstallLedger(state, locations, {
+        ctx,
+        cwd,
+        marketplace: "missing",
+        plugin: "empty",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(result, { kind: "marketplace-absent" });
+      assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger projects a complete empty-plugin summary and preserves a caller pin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-summary-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "empty",
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const { ctx } = makeCtx();
+
+      // act
+      const result = await runInstallLedger(state, locations, {
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pinVersionOverride: "pinned-by-caller",
+        plugin: "empty",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(result, {
+        kind: "installed",
+        summary: {
+          frontmatterDegradations: [],
+          resolved: {
+            componentPaths: { agents: [], commands: [], skills: [] },
+            defaultEnabled: true,
+            installable: true,
+            mcpServers: {},
+            name: "empty",
+            notes: [],
+            pluginRoot,
+            state: "installable",
+            supported: [],
+            unsupported: [],
+          },
+          stagedAgentNames: [],
+          stagedMcpServerNames: [],
+        },
+      });
+      assert.strictEqual(state.marketplaces.mp?.plugins.empty?.version, "pinned-by-caller");
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger unwinds the completed phases when a plugin appears at state commit", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-race-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "empty",
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const marketplace = state.marketplaces.mp;
+      assert.ok(marketplace !== undefined);
+      const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        enabled: true,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        resolvedSource: "/raced/plugin",
+        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "raced",
+      };
+      let pluginReads = 0;
+      marketplace.plugins = new Proxy(marketplace.plugins, {
+        get(target, property, receiver): unknown {
+          if (property === "empty") {
+            pluginReads += 1;
+            return pluginReads >= 2 ? racedRecord : undefined;
+          }
+
+          const value: unknown = Reflect.get(target, property, receiver);
+          return value;
+        },
+      });
+      const capture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      const operation = runInstallLedger(
+        state,
+        locations,
+        { ctx, cwd, marketplace: "mp", plugin: "empty", scope: "project" },
+        capture,
+      );
+
+      // assert
+      await assert.rejects(operation, {
+        message: 'Plugin "empty" was installed concurrently in marketplace "mp".',
+        name: "ConcurrentInstallError",
+      });
+      assert.strictEqual(pluginReads, 2);
+      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger unwinds when its marketplace disappears before state commit", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-marketplace-race-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "empty",
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const marketplace = state.marketplaces.mp;
+      assert.ok(marketplace !== undefined);
+      let marketplaceReads = 0;
+      state.marketplaces = new Proxy(state.marketplaces, {
+        get(target, property, receiver): unknown {
+          if (property === "mp") {
+            marketplaceReads += 1;
+            return marketplaceReads >= 4 ? undefined : marketplace;
+          }
+
+          const value: unknown = Reflect.get(target, property, receiver);
+          return value;
+        },
+      });
+      const capture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      const operation = runInstallLedger(
+        state,
+        locations,
+        { ctx, cwd, marketplace: "mp", plugin: "empty", scope: "project" },
+        capture,
+      );
+
+      // assert
+      await assert.rejects(operation, {
+        message: 'Marketplace "mp" disappeared from state during install of "empty".',
+        name: "Error",
+      });
+      assert.strictEqual(marketplaceReads, 4);
+      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("orchestrated install preserves ordered bridge cleanup leaks as post-commit warnings", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-leaks-"));
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    let removal: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "complete",
+        skills: [{ sourceName: "audit" }],
+      });
+      const cleanupRoots = [
+        locations.skillsStagingDir,
+        locations.commandsStagingDir,
+        locations.agentsStagingDir,
+      ];
+      const leakedTargets: string[] = [];
+      removal = t.mock.method(
+        filesystemPromises,
+        "rm",
+        async (
+          target: Parameters<typeof originalRm>[0],
+          options?: Parameters<typeof originalRm>[1],
+        ) => {
+          const targetPath = String(target);
+          if (cleanupRoots.some((root) => targetPath.startsWith(`${root}${path.sep}`))) {
+            leakedTargets.push(targetPath);
+            throw new Error("staging cleanup denied");
+          }
+
+          await originalRm(target, options);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["subagent"] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "complete",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        leakedTargets.map((target) =>
+          cleanupRoots.findIndex((root) => target.startsWith(`${root}${path.sep}`)),
+        ),
+        [0, 1, 2],
+      );
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: true,
+        declaresMcp: false,
+        postCommitWarnings: [
+          `failed to clean up skills staging directory at ${leakedTargets[0]}: staging cleanup denied`,
+          `failed to clean up commands staging directory at ${leakedTargets[1]}: staging cleanup denied`,
+          "[reviewer] source description was missing or empty -- using fallback",
+          `failed to clean up agents staging directory at ${leakedTargets[2]}: staging cleanup denied`,
+        ],
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
+        {
+          agents: [`${GENERATED_AGENT_PREFIX}complete-reviewer`],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["complete:deploy"],
+          skills: ["complete-audit"],
+        },
+      );
+    } finally {
+      removal?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("install rejects the selected entry when its defense-in-depth validator fails", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-entry-revalidation-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "invalid",
+      });
+      const validation = t.mock.method(PLUGIN_ENTRY_VALIDATOR, "Check", () => false);
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "invalid",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause:
+          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.\n\ncause: Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
+        error: new Error(
+          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
+        ),
+        status: "failed",
+      });
+      assert.strictEqual(validation.mock.callCount(), 1);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger rejects a hooks file that changes after resolver validation", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-reparse-race-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let read: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hooky",
+      });
+      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      let hooksReads = 0;
+      read = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === hooksPath) {
+            hooksReads += 1;
+            if (hooksReads === 2) {
+              return "{";
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const capture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      const operation = runInstallLedger(
+        state,
+        locations,
+        { ctx, cwd, marketplace: "mp", plugin: "hooky", scope: "project" },
+        capture,
+      );
+
+      // assert
+      await assert.rejects(operation, {
+        message:
+          "hooks.json re-parse failed: hooks.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+        name: "Error",
+      });
+      assert.strictEqual(hooksReads, 2);
+      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+    } finally {
+      read?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("install keeps its success outcome when post-save hooks cache hydration fails", async (t) => {
+  const { resetRoutingState, setParsedConfig } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-race-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let read: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const poison: CacheEntry = {
+        get config(): CacheEntry["config"] {
+          throw new Error("routing rebuild denied");
+        },
+        ifPredicates: new Map(),
+        marketplace: "poison-marketplace",
+        pluginId: "poison-plugin",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "project",
+      };
+      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hooky",
+      });
+      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      let hooksReads = 0;
+      read = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === hooksPath) {
+            hooksReads += 1;
+            if (hooksReads === 3) {
+              throw new Error("post-save hook read denied");
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: false,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.strictEqual(hooksReads, 3);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      read?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("orchestrated install folds a removed hook before an MCP disable failure", async (t) => {
+  const { resetRoutingState, setParsedConfig } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-disable-hooks-mcp-failure-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let read: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        entryDefaultEnabled: false,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        mcpServers: { server: { command: "node", args: ["server.js"] } },
+        pluginName: "hooky",
+      });
+      const cacheError = new Error("routing rebuild denied");
+      const poison: CacheEntry = {
+        get config(): CacheEntry["config"] {
+          throw cacheError;
+        },
+        ifPredicates: new Map(),
+        marketplace: "poison-marketplace",
+        pluginId: "poison-plugin",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "project",
+      };
+      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const mcpError = new Error("mcp cleanup denied");
+      let mcpReads = 0;
+      read = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === locations.mcpJsonPath) {
+            mcpReads += 1;
+            if (mcpReads === 3) {
+              throw mcpError;
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "mcp cleanup denied",
+        error: mcpError,
+        status: "failed",
+      });
+      assert.strictEqual(mcpReads, 3);
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
+        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+      );
+      await assert.rejects(stat(path.join(locations.hooksDir, "hooky", "hooks.json")), /ENOENT/);
+    } finally {
+      read?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("orchestrated install returns the invalid-config outcome without emitting", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orchestrated-invalid-config-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+      const stateBytes = await readFile(path.join(locations.extensionRoot, "state.json"), "utf8");
+      const expectedError = new Error(
+        'Config file "claude-plugins.json" failed schema validation.',
+      );
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: 'Config file "claude-plugins.json" failed schema validation.',
+        error: expectedError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(
+        await readFile(path.join(locations.extensionRoot, "state.json"), "utf8"),
+        stateBytes,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("orchestrated install reports when the state write does not retain its fresh record", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-fresh-record-race-"));
+    const originalParse: (text: string) => unknown = JSON.parse;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        entryDefaultEnabled: false,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "vanishing",
+      });
+      const parse = t.mock.method(JSON, "parse", (text: string): unknown => {
+        const parsed = originalParse(text);
+        if (STATE_VALIDATOR.Check(parsed)) {
+          const marketplace = parsed.marketplaces.mp;
+          if (marketplace !== undefined) {
+            marketplace.plugins = new Proxy(marketplace.plugins, {
+              set(target, property, value, receiver) {
+                return property === "vanishing"
+                  ? true
+                  : Reflect.set(target, property, value, receiver);
+              },
+            });
+          }
+        }
+
+        return parsed;
+      });
+      const { ctx, notifications, pi } = makeCtx();
+      const expectedError = new Error(
+        'installPlugin: internal error -- the state phase left no record for plugin "vanishing" to disable.',
+      );
+
+      // act
+      const outcome = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "vanishing",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause:
+          'installPlugin: internal error -- the state phase left no record for plugin "vanishing" to disable.',
+        error: expectedError,
+        status: "failed",
+      });
+      assert.ok(parse.mock.callCount() >= 1);
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.vanishing,
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger preserves installedAt while replacing an existing disabled record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-existing-record-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "existing",
+        preInstall: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const { ctx } = makeCtx();
+
+      // act
+      const result = await runInstallLedger(state, locations, {
+        allowExistingRecord: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        plugin: "existing",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(result.kind, "installed");
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.existing, {
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        enabled: true,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        resolvedSource: path.join(cwd, "mp-src", "plugins", "existing"),
+        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        updatedAt: state.marketplaces.mp?.plugins.existing?.updatedAt,
+        version: "0.0.1",
+      });
+      assert.notEqual(
+        state.marketplaces.mp?.plugins.existing?.updatedAt,
+        "2026-01-01T00:00:00.000Z",
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("install forwards explicit map-model and version-pin entrypoint options", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-explicit-options-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "plain",
+      });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        mapModel: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        pinVersionOverride: "pinned-by-entrypoint",
+        plugin: "plain",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: false,
+        status: "installed",
+        version: "pinned-by-entrypoint",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp?.plugins
+          .plain,
+        {
+          compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+          enabled: true,
+          installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
+            ?.plugins.plain?.installedAt,
+          resolvedSource: pluginRoot,
+          resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+          updatedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
+            ?.plugins.plain?.updatedAt,
+          version: "pinned-by-entrypoint",
+        },
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("an unpinned ref-only source forwards the moving ref to its cold mirror clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-unpinned-ref-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "moving",
+        source: { ref: "main", source: "url", url: "https://example.com/org/repo" },
+      });
+      const headSha = "1234567890abcdef1234567890abcdef12345678";
+      const git = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: headSha,
+        localRefs: { "refs/heads/main": headSha },
+        remoteRefs: { "refs/remotes/origin/main": headSha },
+      });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "moving",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: `sha-${headSha.slice(0, 12)}`,
+      });
+      assert.deepStrictEqual(
+        git.state.cloneCalls.map(({ ref, singleBranch, url }) => ({ ref, singleBranch, url })),
+        [{ ref: "main", singleBranch: true, url: "https://example.com/org/repo.git" }],
+      );
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(
+        (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp?.plugins
+          .moving?.resolvedSha,
+        headSha,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("standalone install normalizes a non-Error lock-directory failure", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-lock-non-error-"));
+    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      mkdirMock = t.mock.method(
+        filesystemPromises,
+        "mkdir",
+        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+          if (String(args[0]) === locations.extensionRoot) {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error
+            throw "lock directory unavailable";
+          }
+
+          return originalMkdir(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "lock directory unavailable\n\ncause: lock directory unavailable",
+        error: new Error("lock directory unavailable"),
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed)",
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(mkdirMock.mock.callCount(), 1);
+    } finally {
+      mkdirMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
     }
   });
 });
