@@ -129,7 +129,9 @@ import {
 } from "./reinstall.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
+  emitMarketplaceNotAddedSignal,
   MarketplaceNotAddedSignal,
+  missIsNotInstalled,
   maybeWritePluginConfigBack,
   removePluginRecord,
   resolveCrossScopePluginTarget,
@@ -521,7 +523,7 @@ export async function reinstallPlugins(
   try {
     targets = await enumerateReinstallTargets(opts);
   } catch (err) {
-    handleEnumerationFailure(opts, err);
+    await handleEnumerationFailure(opts, err);
     return [];
   }
 
@@ -635,11 +637,11 @@ function surfaceReinstallDiscoveryWarnings(
  * Two arms:
  *   - ATTR-03 / D-47-A marketplace-not-added: the enumerator raised the
  *     structural `MarketplaceNotAddedSignal` (instead of synthesizing a phantom
- *     target or throwing a raw `MarketplaceNotFoundError`/`Error`). Emit ONE
- *     standalone top-level `MarketplaceNotAddedMessage` -- byte-identical to
- *     `info` and the install/uninstall plan (47-01) -- BEFORE any cascade row
- *     exists. The `requestedScope` (when present) renders the `[scope]` bracket
- *     (SCOPE-01); the bare both-scopes-miss form carries no bracket.
+ *     target or throwing a raw `MarketplaceNotFoundError`/`Error`). Delegated to
+ *     the shared `emitMarketplaceNotAddedSignal`, which update drives with ITS
+ *     context off the same signal -- one emitter, so the SCOPE-01 plugin row
+ *     and the `{marketplace not added}` marketplace row cannot drift between
+ *     the two verbs.
  *   - Any other enumeration failure: the legacy synthetic `(reinstall)` failed
  *     row. The failed entity is the targeting layer (no specific plugin), so
  *     the row carries a placeholder name `"(reinstall)"` under a synthetic
@@ -648,15 +650,14 @@ function surfaceReinstallDiscoveryWarnings(
  *     trailer (marketplace-level rows carry no cause per SNM-10). Severity
  *     (`error`) + no reload-hint are computed by notify().
  */
-function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: unknown): void {
-  const { ctx, pi } = opts;
+async function handleEnumerationFailure(
+  opts: ReinstallPluginsOptions,
+  err: unknown,
+): Promise<void> {
+  const { ctx, pi, cwd } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
-    notify(ctx, pi, {
-      kind: "marketplace-not-added",
-      name: err.marketplace,
-      ...(err.requestedScope !== undefined && { scope: err.requestedScope }),
-    });
+    await emitMarketplaceNotAddedSignal({ ctx, pi, cwd, context: REINSTALL_CONTEXT, err });
     return;
   }
 
@@ -730,7 +731,7 @@ async function enumerateMarketplaceReinstallTargets(
   // three forms (explicit-scope-plugin, explicit-scope-marketplace, bare).
   // A miss raises `MarketplaceNotAddedSignal` -- caught at the
   // `reinstallPlugins` entrypoint and re-attributed to the standalone
-  // `{not added}` variant -- instead of the former per-form divergence
+  // `{marketplace not added}` variant -- instead of the former per-form divergence
   // (synthesized phantom target / raw `MarketplaceNotFoundError`/`Error`).
   const resolved = await resolveMarketplaceReinstallScope(cwd, marketplace, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
@@ -759,9 +760,9 @@ async function enumerateMarketplaceReinstallTargets(
  *    hint (signal carrying the REQUESTED scope) rather than a synthesized
  *    `(skipped) {not installed}` phantom target.
  *  - explicit-scope MARKETPLACE form: confirm the container in the requested
- *    scope; on a miss, signal `{not added}` carrying the REQUESTED scope.
+ *    scope; on a miss, signal `{marketplace not added}` carrying the REQUESTED scope.
  *  - bare (no `--scope`) form: the existing two-scope `resolveScopeFromState`
- *    read establishes both-scope absence; on a miss, signal `{not added}`
+ *    read establishes both-scope absence; on a miss, signal `{marketplace not added}`
  *    with NO bracket (absent-from-both form).
  *
  * All reads are `loadState` only (NFR-5: no network).
@@ -794,7 +795,14 @@ async function resolveMarketplaceReinstallScope(
     // bracket reads "not added in the scope you asked for"; the bare form that
     // missed everywhere carries no bracket (resolution.requestedScope is
     // undefined there).
-    throw new MarketplaceNotAddedSignal(marketplace, resolution.requestedScope);
+    // SCOPE-01: a container one scope over means nothing is installed HERE,
+    // so the row's subject is the plugin, not the marketplace.
+    const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
+    throw new MarketplaceNotAddedSignal(
+      marketplace,
+      resolution.requestedScope,
+      notInstalledAt === undefined ? undefined : { scope: notInstalledAt, plugin: target.plugin },
+    );
   }
 
   // MARKETPLACE form.
@@ -804,7 +812,7 @@ async function resolveMarketplaceReinstallScope(
     // is consistent with update. Byte-neutral for the operator: a `resolved`
     // arm yields the same (scope, locations) the former inline guard returned;
     // both the `marketplace-absent` and `other-scope` arms (which carry the
-    // REQUESTED scope) collapse to the same `{not added} [requestedScope]`
+    // REQUESTED scope) collapse to the same `{marketplace not added} [requestedScope]`
     // bracket-only emission per resolved Open Question #1.
     const resolution = await resolveInstalledMarketplaceTarget({
       cwd,
@@ -826,7 +834,7 @@ async function resolveMarketplaceReinstallScope(
     );
   } catch (err) {
     // resolveScopeFromState throws MarketplaceNotFoundError when absent from
-    // BOTH scopes -- re-attribute to the no-bracket `{not added}` signal
+    // BOTH scopes -- re-attribute to the no-bracket `{marketplace not added}` signal
     // (absent-from-both form). Any other error propagates unchanged.
     if (err instanceof MarketplaceNotFoundError) {
       throw new MarketplaceNotAddedSignal(marketplace);

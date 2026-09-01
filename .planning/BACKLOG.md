@@ -1975,6 +1975,90 @@ together or neither.
 Code seams: `bridges/hooks/event-router.ts` (the `session_start` wrapper),
 `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
 
+## ARGS-01: the edge parse layer silently swallows unknown flags and surplus positionals
+
+Surfaced 2026-08-24 while probing what a usage error looks like, during the
+cross-scope reason-token work. Two independent defects in the same layer,
+neither one a regression -- both predate the branch that found them. Measured
+by sweeping all 18 verbs with a junk long flag and with one extra positional.
+
+**Defect A -- unknown long flag accepted on three marketplace verbs.**
+`marketplace info`, `marketplace list`, and `marketplace update` accept any
+unrecognized `--flag` and ignore it. The other fifteen verbs reject it:
+
+```text
+/claude:plugin marketplace remove m --bogus
+    Unknown flag: "--bogus".
+
+    Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]
+
+/claude:plugin marketplace info m --bogus
+    A marketplace operation has failed.
+
+    ⊘ m (failed) {marketplace not added}
+```
+
+The gate already exists -- `extractLocalFlag` (`edge/handlers/shared.ts`) scans
+for `--` tokens and emits `Unknown flag: "<tok>".` before parsing positionals.
+The three holes are exactly the three marketplace handlers that never call it:
+`info` goes through `makeSingleNameMarketplaceHandler`, and `list` / `update`
+call `parseCommandArgs` directly. `add` / `remove` reach the gate via
+`openMarketplaceCommand`; `autoupdate` / `noautoupdate` call it themselves.
+
+An unrecognized token survives because `parseArgs` (`edge/args.ts`) files every
+non-`--scope` token as a positional, and the schema loop below never looks at
+the surplus.
+
+**Defect B -- surplus positionals ignored on eleven verbs.** `parseCommandArgs`
+(`edge/args-schema.ts`) iterates `schema.positional` and never compares its
+length against `parsed.positional.length`, so anything past the last declared
+name is dropped without comment. `marketplace info a b` reports on `a`.
+Eleven verbs accept the surplus: `uninstall`, `enable`, `disable`, `list`, and
+all seven `marketplace` subcommands. The seven that reject (`install`,
+`update`, `reinstall`, `fetch`, `info`, `pending`, `import`) do so incidentally,
+via their own exactly-one-`<plugin>@<marketplace>`-argument checks -- not via
+the shared parser.
+
+**The open design question, and why this is not a pure tightening.** The three
+Defect-A verbs also ignore `--local` today. Routing them through
+`extractLocalFlag` would make `--local` *work* on them, which is a feature
+addition, not a rejection. Their usage strings advertise only
+`[--scope user|project]`. So the fix has to choose: extract the unknown-flag
+scan into a standalone gate that rejects without granting `--local`, or decide
+`--local` is meaningful for these three and widen the usage strings to match.
+That choice is the whole cost of the item; the scan itself is mechanical.
+
+**Why the drift guard did not catch it.**
+`tests/architecture/flag-catalog-drift.test.ts` pins each verb's parse set
+against `flag-catalog.ts`, but `CatalogVerb` enumerates only the twelve
+plugin-family verbs. No `marketplace <subcommand>` has a catalog entry or a
+drift assertion, so the three holes are outside what the guard can see. Closing
+Defect A should widen the catalog to the marketplace family rather than fix the
+three handlers and leave the guard blind.
+
+Impact is low -- a typo'd flag runs the command it was attached to instead of
+warning. It matters most on `marketplace update`, where the user believes a
+modifier applied and it did not.
+
+Code seams: `edge/args-schema.ts` (`parseCommandArgs`, the arity gap),
+`edge/args.ts` (`parseArgs`, the everything-is-a-positional tokenizer),
+`edge/handlers/shared.ts` (`extractLocalFlag`, the existing gate),
+`edge/handlers/marketplace/{info,list,update}.ts` (the three holes),
+`edge/flag-catalog.ts` + `tests/architecture/flag-catalog-drift.test.ts`
+(the guard that needs to grow a marketplace half).
+
+## ~~SEV-01: "absent target" renders at two severities depending on the verb~~ -- CLOSED
+
+Filed and closed the same day (2026-08-24). `enable` / `disable` stamped
+`warning` on `{not installed}` where `uninstall` / `update` / `reinstall` stamp
+`error`, each citing D-01. Closed by re-grading `composeOutcomeRow`'s
+`not-recorded` arm to `error`, so all five verbs now agree under the tri-state
+rule (info = reached, warning = fell short, error = not carried out).
+
+The re-grade moves the IN-SCOPE case too, which is why it needed a decision
+rather than a drive-by: the `enable-not-installed` catalog state was re-graded
+with it, not worked around.
+
 ## HKMS-01: the two new model-switch hook events (`PreModelSwitch`, `PostModelSwitch`)
 
 Surfaced by an upstream hooks review (2026-09-01). Claude Code 2.1.251 added

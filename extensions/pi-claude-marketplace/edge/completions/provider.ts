@@ -19,7 +19,7 @@
 //      && tokens.length === 1 -> `<plugin>@<marketplace>` via
 //      `getPluginRefCompletions`. The `info` mode unions every status
 //      across both scopes; the orchestrator handles scope-mismatch via
-//      the `{not added}` row.
+//      the `{marketplace not added}` row.
 //   5. TC-5 -- (head in {list, ls} && tokens.length === 1) ||
 //             (head === "marketplace" && tokens.length === 2 && verb in
 //              {remove, rm, info, update, autoupdate, noautoupdate}) ->
@@ -228,7 +228,7 @@ function pluginRefBranchConfig(
       // `info` requires both halves of the `<plugin>@<marketplace>` ref
       // (no bare `@<marketplace>` form). `--scope` does not narrow the
       // candidate set -- the orchestrator handles scope mismatch via
-      // the `{not added}` row.
+      // the `{marketplace not added}` row.
       return {
         mode: "info",
         allowMarketplaceOnly: false,

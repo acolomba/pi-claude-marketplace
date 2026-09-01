@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -55,6 +55,17 @@ async function stagePrompt(locations: ScopedLocations, name: string): Promise<st
   return file;
 }
 
+async function stageWorkflowDecoy(
+  locations: ScopedLocations,
+  name: string,
+  contents: string,
+): Promise<string> {
+  const file = path.join(locations.extensionRoot, "resources", "workflows", name);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, contents);
+  return file;
+}
+
 test("resources_discover returns empty lists when staged resource directories are missing", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "resources-discover-missing-"));
   try {
@@ -78,12 +89,40 @@ test("resources_discover returns deterministic user and project skill and prompt
     const projectSkill = await stageSkill(project, "same-name");
     const userPrompt = await stagePrompt(user, "same-name");
     const projectPrompt = await stagePrompt(project, "same-name");
+    const executionSentinel = path.join(tmp, "workflow-command-executed");
+    const userWorkflow = await stageWorkflowDecoy(
+      user,
+      "user.workflow.yml",
+      "{ this is not valid workflow data",
+    );
+    const projectWorkflow = await stageWorkflowDecoy(
+      project,
+      "project.workflow.yml",
+      "steps:\n" +
+        `  - run: ${JSON.stringify(
+          `${process.execPath} -e ${JSON.stringify(
+            `require("node:fs").writeFileSync(${JSON.stringify(executionSentinel)}, "executed")`,
+          )}`,
+        )}\n`,
+    );
     await writeFile(path.join(user.promptsTargetDir, "not-a-prompt.txt"), "ignore me");
 
+    assert.equal((await stat(userWorkflow)).isFile(), true);
+    assert.equal((await stat(projectWorkflow)).isFile(), true);
     const result = await aggregateDiscoveredResources(user, project);
 
-    assert.deepEqual(result.skillPaths, [userSkillA, userSkillB, projectSkill]);
-    assert.deepEqual(result.promptPaths, [userPrompt, projectPrompt]);
+    assert.deepEqual(result, {
+      skillPaths: [userSkillA, userSkillB, projectSkill],
+      promptPaths: [userPrompt, projectPrompt],
+    } satisfies DiscoveredResources);
+    assert.deepEqual(Object.keys(result), ["skillPaths", "promptPaths"]);
+    await assert.rejects(stat(executionSentinel), { code: "ENOENT" });
+    assert.equal(
+      [...result.skillPaths, ...result.promptPaths].some(
+        (resourcePath) => resourcePath === userWorkflow || resourcePath === projectWorkflow,
+      ),
+      false,
+    );
   } finally {
     await cleanupStaging(tmp, "test-cleanup");
   }

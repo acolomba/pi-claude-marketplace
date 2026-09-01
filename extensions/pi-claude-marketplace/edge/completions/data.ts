@@ -455,7 +455,7 @@ async function getFetchPluginToMarketplacesMap(
  * Union of every (plugin, marketplace) row across both scopes with NO
  * `row.status` filter -- `info` is a read-only detail surface that
  * accepts any known plugin. The orchestrator handles scope mismatches
- * at execution time via the `{not added}` row, so explicit scope does
+ * at execution time via the `{marketplace not added}` row, so explicit scope does
  * NOT narrow the candidate set here.
  */
 async function getInfoPluginToMarketplacesMap(

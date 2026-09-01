@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyGitTransportFailure } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
+import {
+  classifyGitSourceAccessFailure,
+  classifyGitTransportFailure,
+} from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
 // Closed-set ladder coverage for the shared git transport-failure classifier:
 // every arm (non-Error input, HttpError 401/403, HttpError with a non-auth
@@ -34,13 +37,32 @@ test("classifyGitTransportFailure maps HttpError 403 to authentication required"
   assert.equal(classifyGitTransportFailure(err), "authentication required");
 });
 
-test("classifyGitTransportFailure leaves an HttpError with a non-auth status unclassified", () => {
-  const err = Object.assign(new Error("HTTP Error: 500 Internal Server Error"), {
-    code: "HttpError",
-    data: { statusCode: 500 },
+for (const [statusCode, reason] of [
+  [404, "source missing"],
+  [410, "source missing"],
+  [408, "network unreachable"],
+  [429, "network unreachable"],
+  [500, "network unreachable"],
+  [502, "network unreachable"],
+  [503, "network unreachable"],
+  [504, "network unreachable"],
+] as const) {
+  test(`classifyGitSourceAccessFailure maps HttpError ${statusCode} to ${reason}`, () => {
+    const err = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+      code: "HttpError",
+      data: { statusCode },
+    });
+    assert.equal(classifyGitSourceAccessFailure(err), reason);
   });
-  assert.equal(classifyGitTransportFailure(err), undefined);
-});
+
+  test(`classifyGitTransportFailure leaves HttpError ${statusCode} to caller fallthrough`, () => {
+    const err = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+      code: "HttpError",
+      data: { statusCode },
+    });
+    assert.equal(classifyGitTransportFailure(err), undefined);
+  });
+}
 
 test("classifyGitTransportFailure leaves an HttpError with no data payload unclassified", () => {
   const err = Object.assign(new Error("HTTP Error"), { code: "HttpError" });

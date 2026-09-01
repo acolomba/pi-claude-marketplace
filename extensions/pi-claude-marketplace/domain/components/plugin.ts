@@ -1,11 +1,12 @@
 // domain/components/plugin.ts
 //
 // TypeBox schemas for plugin entries (inside `marketplace.json` `plugins[]`)
-// and standalone plugin.json files. Per MM-2, all unsupported-component
-// declarations are accepted as opaque `Type.Unknown()` -- the resolver
-// classifies and disqualifies them. Per MM-3 the resolver also runs the
-// source field through parsePluginSource; the schema layer accepts `source`
-// as Unknown.
+// and standalone plugin.json files. Per MM-2, declarations for unsupported
+// kinds remain opaque `Type.Unknown()` values. The resolver classifies each
+// declaration into the partial arm. A normal install rejects that arm;
+// `--partial` admits only its supported components. Per MM-3 the resolver also
+// runs the source field through parsePluginSource; the schema layer accepts
+// `source` as Unknown.
 //
 // TypeBox `Type.Optional` produces `T | undefined` in Static<>, not `T?`.
 // Use `=== undefined` checks downstream, not `in`.
@@ -41,6 +42,7 @@ const UNSUPPORTED_COMPONENT_FIELDS = {
   userConfig: Type.Optional(Type.Unknown()),
   bin: Type.Optional(Type.Unknown()),
   settings: Type.Optional(Type.Unknown()),
+  workflows: Type.Optional(Type.Unknown()),
 };
 
 // MCPR-01 / MCPR-02: mcpServers may be a relative (to pluginRoot) string
@@ -54,9 +56,10 @@ const McpServersField = Type.Union([Type.String(), MCP_SERVERS_SCHEMA]);
  * MM-2: plugin entry inside `marketplace.json` `plugins[]`. Required
  * fields are `name` (safe-name validation runs separately at the resolver
  * via assertSafeName from domain/name.ts) and `source` (the resolver runs
- * parsePluginSource on it). All component-path fields are optional;
- * unsupported components (hooks, lspServers, etc.) are declared opaquely
- * and disqualify install per PR-3 (resolver).
+ * parsePluginSource on it). All component-path fields are optional. Opaque
+ * declarations for resolver-unsupported kinds select the partial arm under
+ * PR-3. A normal install rejects that arm; `--partial` admits its supported
+ * components.
  */
 export const PLUGIN_ENTRY_SCHEMA = Type.Object({
   // required

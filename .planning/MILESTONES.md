@@ -1,5 +1,24 @@
 # Milestones: pi-claude-marketplace
 
+## workflows-detection -- Workflow Detection (Shipped: 2026-08-29)
+
+**Phases completed:** 1 phase (106), 4 plans, 8 tasks
+
+**Driver:** Claude plugins can contain workflow components that Pi cannot run. The extension must detect those components, report them truthfully, and preserve the existing partial-install boundary.
+
+**Key accomplishments:**
+
+- Marketplace entries and plugin manifests accept an opaque `workflows` declaration. The strict and loose resolver paths also detect only the literal `<pluginRoot>/workflows/` directory, including the current `claude-security` and `code-modernization` layouts.
+- Every workflow signal produces one deduplicated unsupported kind after structural validation. All reason-bearing surfaces use the shared classifier and render the exact `{workflows}` reason with the existing partial status grammar.
+- A normal install rejects the plugin without mutation. An install with `--partial` stages only supported components and stores `workflows` in `compatibility.unsupported`.
+- Workflow files remain source-only. The install ledger, five-key resource record, two-key reload discovery result, and runtime executor set have no workflow entry.
+
+**Closeout:** `verified_closeout` -- 1/1 phase verified, 6/6 requirements complete, 5/5 integration seams wired, and 4/4 end-to-end flows complete. Nyquist coverage is compliant. Security closed all 9 threats. The terminal UI review scored 24/24. The final `npm run check` passed with 3,649 unit tests, 21 integration assertions, and no failures. The open-artifact audit found no items.
+
+**Archive:** `.planning/workstreams/workflows-detection/milestones/workflows-detection-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
+
+---
+
 ## defaults-enabled — defaultEnabled Manifest Field (Shipped: 2026-08-15)
 
 **Phases completed:** 5 phases (101-105), 23 plans, 47 tasks

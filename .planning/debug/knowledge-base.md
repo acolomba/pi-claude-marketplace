@@ -46,3 +46,23 @@ knowledge base itself. The marker keeps it out of the open-session count.
 - **Generalizable lesson:** A deferred initialization is only correct for events that fire after the point it was deferred TO. Wiring project-scope hydrate to `resources_discover` silently excluded the one event that precedes it. When deferring setup to "the first event that carries X", enumerate which events fire before that one and confirm none of them need X. The proximate cause here was a research-time guess recorded as fact — "`session_start`'s ctx does not obviously carry cwd" — when `ExtensionContext.cwd` is populated for every event (`types.d.ts:216`, `runner.js:473-475`); an unverified "does not obviously" belongs in a question, not a design.
 - **Files changed:** bridges/hooks/event-router.ts, index.ts, tests/integration/hooks-dispatch-end-to-end.test.ts
 ---
+
+## pr-145-sonar-violations — Sonar reports duplicate imports in two orchestrators
+- **Date:** 2026-08-29
+- **Error patterns:** Sonar `typescript:S3863`, duplicate imports, four open PR issues
+- **Root cause:** Two orchestrator files repeated import declarations from the same local `shared.ts` module.
+- **Fix:** Consolidated each set of duplicate `./shared.ts` imports into one declaration.
+- **Files changed:** extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts, extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts
+- **Why not caught:** No local gate enforces Sonar `typescript:S3863`. The PR analysis found the duplicate imports.
+- **Recurrence guard:** Sonar `typescript:S3863` finds duplicate imports. This entry records the pattern for future Phase-0 recall.
+---
+
+## marketplace-add-http-errors — marketplace add exposes raw HTTP clone errors
+- **Date:** 2026-08-29
+- **Error patterns:** `HTTP Error: 404 Not Found`, raw extension error, missing repository, transient HTTP failure
+- **Root cause:** Marketplace add used a transport-only classifier that did not classify repository absence or transient HTTP status codes.
+- **Fix:** Added an opt-in source-access classifier for marketplace add. It maps 404/410 to source missing and transient statuses to network unreachable.
+- **Files changed:** extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts, extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts, tests/orchestrators/marketplace/add.test.ts, tests/shared/git-failure-classifiers.test.ts
+- **Why not caught:** No marketplace-add test covered non-authentication HTTP clone errors.
+- **Recurrence guard:** D-76-09 tests pin marketplace-add mappings. Shared-classifier tests protect other callers' fallthrough behavior.
+---

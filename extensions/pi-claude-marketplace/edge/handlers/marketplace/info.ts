@@ -4,7 +4,7 @@
 // `/claude:plugin marketplace info <name> [--scope user|project]`.
 // Argument-parsing failures route through `notifyUsageError`; the
 // orchestrator handles per-scope projection, fan-out, and the
-// `{not added}` carve-out. This shim validates the positional/scope
+// `{marketplace not added}` carve-out. This shim validates the positional/scope
 // shape and delegates.
 
 import { getMarketplaceInfo } from "../../../orchestrators/marketplace/info.ts";

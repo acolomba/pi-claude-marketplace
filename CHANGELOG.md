@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.18.1] - 2026-08-29
+
+- Structurally valid plugins that declare `workflows` or contain a literal `workflows/` directory now report `(partially-available) {workflows}`.
+- A normal install rejects these plugins. `--partial` installs only supported components.
+- Workflow contents remain opaque. The extension does not inspect them, materialize them into Pi targets, register them, or run them.
+
+## [0.18.0] - 2026-08-29
 
 - A plugin author can now ship a command in a subdirectory of `commands/` and have it register. `commands/build/web.md` becomes `/acme:build:web`, one colon per path segment, to any depth, the same as Claude Code. Such a file was silently dropped before. Thanks to @rakesh-vs (#141).
 - The `<plugin>-` prefix is elided from the head of a command source name, and the head is the first path segment when the source is nested. `acme-tools/lint.md` in plugin `acme` becomes `/acme:tools:lint`, where Claude Code registers `acme:acme-tools:lint`. Claude Code performs no elision at all, so a flat `acme-flat.md` already diverged the same way.
@@ -12,6 +18,12 @@
 - A skipped subdirectory is reported, whether it is dotfile-prefixed or a symlink. A skipped file stays silent: it costs you one command, where a directory costs you every command below it.
 - A file that two declared commands directories both reach now warns. It installs under two names, which is correct but rarely what the author meant.
 - A staging failure names the plugin and the command. A nested source makes the generated name as long as the whole path, so a name too long for the filesystem is now reachable; it used to report a raw error code against an internal temporary path.
+- A `{not added}` row used to say a marketplace did not exist when it existed one scope over -- the common repo-bundled-marketplace case, where a default-scope (`user`) install misses a project-only marketplace. The row now names the scope that missed: `{marketplace not added to user scope}`, or `{marketplace not added to project scope}` in the other direction, replacing the plain `{marketplace not added}` that a miss in BOTH scopes still renders. Every command that can produce the row carries it -- `install`, `info`, `update`, `reinstall`, `uninstall`, `enable`, `disable`, and the three `marketplace` verbs. The commands still fail and their severity and summary are unchanged. The lookup deciding which token applies can never take the failure row down with it -- an unreadable state file in the other scope falls back to the plain token and keeps the error.
+- `uninstall`, `enable`, `disable`, `update`, and `reinstall` used to blame the marketplace when a plugin simply was not installed at the scope you named. Asking for `--scope project` while the marketplace sits at user scope reported `{marketplace not added to project scope}` -- but adding the marketplace there would not have made the command succeed, because nothing was installed there either. Those five now report the plugin: `⊘ <plugin> (failed|skipped) {not installed}`, the same row an in-scope marketplace with no record already produced. A marketplace absent from BOTH scopes still reports the marketplace, so a mistyped marketplace name is not disguised as a plugin that merely is not installed. `info` and the `marketplace` verbs are unchanged -- their subject is the marketplace.
+- A plugin one scope away from its marketplace no longer looks identical to one that was simply never installed. Both rendered `⊘ <plugin> (skipped) {not installed}`, but the fixes differ: install the plugin in the second case; in the first, either name the other scope or add the marketplace where you asked. The cross-scope row now says which: `{not installed, marketplace in user scope}`.
+- `enable` and `disable` reported an absent target as a warning where `uninstall`, `update`, and `reinstall` reported it as an error. Nothing is enabled or disabled when the plugin is not installed, so all five now agree on error. This also re-grades the plain not-installed case for those two verbs.
+- Tab completion now offers `--local` on `install`, `update`, `uninstall`, `reinstall`, `enable`, and `disable`, with a description naming the file it writes to. Every one of those verbs already listed `[--local]` in its usage line, so the flag was documented everywhere and suggested nowhere.
+- `marketplace add` no longer exposes raw HTTP errors for missing or temporarily unavailable repositories. HTTP 404 and 410 now report `{source missing}`. HTTP 408, 429, and 5xx responses report `{network unreachable}`.
 
 ## [0.17.0] - 2026-08-19
 

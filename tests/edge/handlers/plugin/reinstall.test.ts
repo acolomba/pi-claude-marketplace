@@ -162,12 +162,12 @@ test("shim :: @marketplace form calls reinstallPlugins marketplace target", asyn
     await handler("@mymkt", ctx);
     assert.equal(notifications.length, 1);
     // ATTR-03 / D-47-A: bare `@<marketplace>` form absent in both scopes ->
-    // standalone `{not added}` with NO bracket (re-attributed from the former
+    // standalone `{marketplace not added}` with NO bracket (re-attributed from the former
     // `{not found}`). Severity error.
     assert.equal(notifications[0]?.severity, "error");
     assert.equal(
       notifications[0]?.message ?? "",
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
   });
 });
@@ -179,11 +179,11 @@ test("shim :: plugin@marketplace form calls reinstallPlugins plugin target", asy
     await handler("myplug@mymkt", ctx);
     assert.equal(notifications.length, 1);
     // ATTR-03 / D-47-A: bare `<plugin>@<marketplace>` form absent in both
-    // scopes -> standalone `{not added}` with NO bracket. Severity error.
+    // scopes -> standalone `{marketplace not added}` with NO bracket. Severity error.
     assert.equal(notifications[0]?.severity, "error");
     assert.equal(
       notifications[0]?.message ?? "",
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
   });
 });
@@ -204,13 +204,13 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     await handler("myplug@mymkt --scope project", second.ctx);
     assert.equal(second.notifications.length, 1);
     // ATTR-03 / D-47-A / SCOPE-01: explicit `--scope project` where mymkt is
-    // not added in project -> standalone `{not added}` carrying the requested
+    // not added in project -> standalone `{marketplace not added}` carrying the requested
     // `[project]` bracket (re-attributed from the former synthesized phantom
     // target -> `(skipped) {not installed}`). Severity error.
     assert.equal(second.notifications[0]?.severity, "error");
     assert.equal(
       second.notifications[0]?.message ?? "",
-      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {marketplace not added}",
     );
   });
 });
@@ -318,9 +318,12 @@ test("Flag: --local at the leading position parses identically", async () => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeReinstallHandler(makePi());
     await handler("--local @mymkt", ctx);
-    // @mymkt against empty state -> {not added} on the marketplace.
+    // @mymkt against empty state -> {marketplace not added} on the marketplace.
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\(failed\) \{not added\}|\(no marketplaces\)/);
+    assert.match(
+      notifications[0]!.message,
+      /\(failed\) \{marketplace not added\}|\(no marketplaces\)/,
+    );
   });
 });
 

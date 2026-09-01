@@ -82,6 +82,88 @@ interface GrammarFixture {
   readonly message: NotificationMessage;
 }
 
+// CMP-4 / SCOPE-01: both directions of the cross-scope arm. Held in their own
+// array (and spread into FIXTURES below) so the scope-agreement test can iterate
+// exactly the fixtures whose brace carries a baked-in scope word.
+const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
+  {
+    // The cross-scope arm stays a TWO-block surface -- the structural token
+    // rides the detail row's brace, so no third block is introduced. The
+    // summary must still be the first line and still be distinct from the
+    // detail block.
+    label: "standalone marketplace-not-added carrying the cross-scope reason token",
+    pi: piWithBothLoaded(),
+    message: {
+      kind: "marketplace-not-added",
+      name: "mp",
+      scope: "user",
+      presentInOtherScope: true,
+    },
+  },
+  {
+    // The project-target direction: the baked-in scope word must track the
+    // bracket, never contradict it.
+    label: "standalone marketplace-not-added carrying the project-direction token",
+    pi: piWithBothLoaded(),
+    message: {
+      kind: "marketplace-not-added",
+      name: "mp",
+      scope: "project",
+      presentInOtherScope: true,
+    },
+  },
+];
+
+// SCOPE-01 / D-01: the absent-target lifecycle row whose brace joins the
+// cross-scope CONTENT token to `not installed`. Held in its own array (and
+// spread into FIXTURES below) so the scope-DISAGREEMENT test can iterate exactly
+// the rows whose brace names a scope OTHER than the one beside them.
+const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "absent-target plugin row carrying the user-scope cross-scope token",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "skipped",
+              severity: "error",
+              needsReload: false,
+              name: "helper",
+              reasons: ["not installed", "marketplace in user scope"],
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The other direction: a user-scope target whose container sits in project.
+    label: "absent-target plugin row carrying the project-scope cross-scope token",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: "failed",
+              severity: "error",
+              needsReload: false,
+              name: "helper",
+              reasons: ["not installed", "marketplace in project scope"],
+            },
+          ],
+        },
+      ],
+    },
+  },
+];
+
 const FIXTURES: readonly GrammarFixture[] = [
   {
     label: "standalone marketplace-not-added (marketplace subject)",
@@ -92,6 +174,8 @@ const FIXTURES: readonly GrammarFixture[] = [
       scope: "project",
     },
   },
+  ...CROSS_SCOPE_FIXTURES,
+  ...CROSS_SCOPE_ROW_FIXTURES,
   {
     label: "standalone failed plugin-info (plugin subject, multi-line body)",
     pi: piWithBothLoaded(),
@@ -585,6 +669,75 @@ test("GRAM-01/04/05: every error/warning emission has a non-empty summary first 
       detailBlock,
       firstLine,
       `${fixture.label}: the detail block must be distinct from the summary first line`,
+    );
+  }
+});
+
+// CMP-4 / SCOPE-01: the scope word BAKED INTO the reason token names the scope
+// that missed, which is the same scope the `[bracket]` beside it renders. The
+// two are derived independently -- the bracket from `message.scope`, the token
+// by `notAddedReasonFor`'s arm selection -- so swapping those arms would render
+// `⊘ mp [user] (failed) {marketplace not added to project scope}` and every
+// shape-level assertion in this file would stay green. This is the assertion
+// that catches it.
+test("CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope inside the row bracket", () => {
+  for (const fixture of CROSS_SCOPE_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+    const row = emitted.slice(emitted.indexOf("\n\n") + 2);
+
+    const bracket = /\[(user|project)\]/.exec(row);
+    assert.ok(bracket, `${fixture.label}: the row must carry a [scope] bracket; got '${row}'`);
+
+    const token = /\{marketplace not added to (user|project) scope\}/.exec(row);
+    assert.ok(token, `${fixture.label}: the brace must carry the qualified token; got '${row}'`);
+
+    assert.equal(
+      token[1],
+      bracket[1],
+      `${fixture.label}: the baked-in scope word must track the bracket, never contradict it; got '${row}'`,
+    );
+  }
+});
+
+// SCOPE-01 / D-01: the cross-scope CONTENT token names where the marketplace
+// container IS, so its scope word is the OPPOSITE of the scope the command
+// targeted -- the one the marketplace header's `[bracket]` renders. The two are
+// derived independently (the bracket from the header's `scope`, the token by
+// `absentTargetReasons` flipping `missIsNotInstalled`'s answer), so dropping the
+// flip would render `● mp [project]` above `{not installed, marketplace in
+// project scope}` -- a row that tells the operator to look where they already
+// looked -- and every shape-level assertion in this file would stay green. This
+// is the assertion that catches it, and it is deliberately the INVERSE of the
+// `marketplace not added to <scope>` agreement test above: that token names the
+// scope that MISSED, this one names the scope that HAS it.
+test("SCOPE-01: the scope word inside the cross-scope reason brace is the OPPOSITE of the scope in the marketplace header bracket", () => {
+  for (const fixture of CROSS_SCOPE_ROW_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+    const body = emitted.slice(emitted.indexOf("\n\n") + 2);
+
+    const bracket = /\[(user|project)\]/.exec(body);
+    assert.ok(bracket, `${fixture.label}: the header must carry a [scope] bracket; got '${body}'`);
+
+    const token = /\{[^}]*marketplace in (user|project) scope[^}]*\}/.exec(body);
+    assert.ok(token, `${fixture.label}: the brace must carry the cross-scope token; got '${body}'`);
+
+    assert.notEqual(
+      token[1],
+      bracket[1],
+      `${fixture.label}: the cross-scope token names the OTHER scope; naming the targeted scope tells the operator to look where they already looked. Got '${body}'`,
+    );
+
+    // The token JOINS `not installed`, never replaces it: the row must still
+    // say the plugin is not installed here, or the remedy has no subject.
+    assert.ok(
+      token[0].startsWith("{not installed, "),
+      `${fixture.label}: the cross-scope token must JOIN 'not installed' in the same brace; got '${token[0]}'`,
     );
   }
 });

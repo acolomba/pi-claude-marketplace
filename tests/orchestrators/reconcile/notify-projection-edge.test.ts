@@ -7,7 +7,7 @@
  *   - the `mp-remove-partial` arm (I1 / PR #51): a bare `(failed)` marketplace
  *     header with NO mp-level `reasons` brace (the per-plugin children carry the
  *     granular reasons);
- *   - the `reasonAsContent` `"not added"` defensive fallback: the structural
+ *   - the `reasonAsContent` `"marketplace not added"` defensive fallback: the structural
  *     marketplace-absent marker is unreachable from the planner-driven apply
  *     pass, but the projection maps it to `"not found"` rather than crashing;
  *   - the `assertNever` exhaustiveness guard on an out-of-set outcome kind.
@@ -33,14 +33,19 @@ test("I1: mp-remove-partial projects a bare (failed) marketplace header with no 
   assert.equal(block.reasons, undefined);
 });
 
-test("reasonAsContent: the structural 'not added' marker falls back to 'not found' rather than crashing", () => {
+test("reasonAsContent: the structural 'marketplace not added' marker falls back to 'not found' rather than crashing", () => {
   const msg = buildReconcileAppliedCascade([
-    { kind: "mp-remove-failed", scope: "user", marketplace: "absent-mp", reason: "not added" },
+    {
+      kind: "mp-remove-failed",
+      scope: "user",
+      marketplace: "absent-mp",
+      reason: "marketplace not added",
+    },
   ]);
 
   const block = msg.marketplaces[0]!;
   assert.equal(block.status, "failed");
-  // The defensive fallback maps the structural `"not added"` sentinel to the
+  // The defensive fallback maps the structural `"marketplace not added"` sentinel to the
   // closed-set `"not found"` ContentReason so the projection never crashes.
   assert.deepEqual(block.reasons, ["not found"]);
 });

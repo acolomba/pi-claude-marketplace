@@ -1,7 +1,7 @@
 // Enable/disable edge handler shim tests.
 //
 // Mirrors `uninstall.test.ts`. Valid-args tests run a well-formed
-// `plugin@marketplace` against empty state and assert the `{not added}` row
+// `plugin@marketplace` against empty state and assert the `{marketplace not added}` row
 // (proving control reached the orchestrator and the shim selected the right
 // scope, visible in the `[scope]` bracket).
 
@@ -122,7 +122,7 @@ test("Flag: --local is parsed and forwarded to the orchestrator (enable)", async
     await handler("foo@mp --scope user --local", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mp \[user\] \(failed\) \{not added\}/);
+    assert.match(notifications[0]!.message, /⊘ mp \[user\] \(failed\) \{marketplace not added\}/);
   });
 });
 
@@ -166,7 +166,7 @@ test("WR-02: --local BEFORE the ref parses identically to --local after (flag po
     await handler("--local foo@mp --scope user", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mp \[user\] \(failed\) \{not added\}/);
+    assert.match(notifications[0]!.message, /⊘ mp \[user\] \(failed\) \{marketplace not added\}/);
     assert.ok(
       !notifications[0]!.message.includes("Invalid <plugin>@<marketplace> ref"),
       `--local must not be mistaken for the ref positional: ${notifications[0]!.message}`,
@@ -181,7 +181,10 @@ test("WR-02: --local between ref and --scope also parses (disable)", async () =>
     await handler("foo@mp --local --scope project", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mp \[project\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ mp \[project\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -192,7 +195,10 @@ test("Flag: --scope user|project is parsed and forwarded to the orchestrator (di
     await handler("foo@mp --scope project", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mp \[project\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ mp \[project\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 

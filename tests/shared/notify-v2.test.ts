@@ -925,7 +925,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 //   - `failure-unreachable` (marketplace add)  -> `⊘ <mp> [<scope>] (failed)`
 //   - `mp-failure-network`  (marketplace update) -> same header (cause rides a
 //      synthetic child row in the live path; the bare header is the locked form)
-//   - the autoupdate bare-not-found form was SUPERSEDED to `{not added}` in Plan
+//   - the autoupdate bare-not-found form was SUPERSEDED to `{marketplace not added}` in Plan
 //      48-02, so the third bare form is re-asserted here on the same MpFailed
 //      arm (an autoupdate-shaped marketplace `failed` with reasons omitted) to
 //      prove the arm itself stayed byte-stable for any reasons-omitted failed mp.
@@ -3334,13 +3334,13 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
 // INFO-04 / INFO-08 -- info-message variants + `wrapDescription`
 //
 // Two top-level NotificationMessage variants (`MarketplaceInfoMessage`,
-// `PluginInfoMessage`), the `"not added"` REASON closed-set entry, and
+// `PluginInfoMessage`), the `"marketplace not added"` REASON closed-set entry, and
 // the file-private `wrapDescription` helper. The tests below lock:
 //   - wrapDescription edge cases (6 tests covering empty, short, exact-fit,
 //     long, over-length single word, whitespace normalization) -- driven
 //     end-to-end through `notify()` with a `plugin-info` payload whose
 //     description exercises each case (do NOT export wrapDescription).
-//   - The INFO-04 `{not added}` --scope mismatch byte form + severity.
+//   - The INFO-04 `{marketplace not added}` --scope mismatch byte form + severity.
 //   - renderMarketplaceInfo: github source with ref + lastUpdated +
 //     description; path source without lastUpdated and without description.
 //   - renderPluginInfo: componentsResolved:true with sorted components +
@@ -3469,7 +3469,7 @@ test("WR-05 / wrapDescription: two words whose `current.length + 1 + word.length
   assert.deepEqual(tail, [`    ${a} ${b}`, "    components: not resolved"]);
 });
 
-test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", () => {
+test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", () => {
   // GRAM-01: an error-severity standalone emission carries a non-empty summary
   // first line, with the detail row as its own block below (separated by
   // `\n\n`) -- never the glued single line. GRAM-02: the summary subject
@@ -3486,7 +3486,7 @@ test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summar
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {marketplace not added}",
     "error",
   ]);
 });
@@ -3526,7 +3526,7 @@ test("GRAM-02: standalone failed plugin-info renders `A plugin operation has fai
   ]);
 });
 
-test("INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
+test("INFO-04: {marketplace not added} row never carries a reload-hint (read-only surface)", () => {
   // TYPE-03: `shouldEmitReloadHint` routes the new `marketplace-not-added`
   // arm to `false` through the single `isInfoKind` guard. Lock that the bare
   // row does NOT carry `\n\n/reload to pick up changes`.
@@ -3897,7 +3897,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
 // renderer joins per-block bodies with `\n\n` (mirrors the cascade
 // composeMarketplaceBlock `\n\n` join). Severity is ALWAYS info (no
 // failure surface on the fan-out wrapper itself -- the orchestrator routes
-// `{not added}` through PluginInfoMessage); reload-hint NEVER fires (info
+// `{marketplace not added}` through PluginInfoMessage); reload-hint NEVER fires (info
 // surface, read-only). The single-block case is byte-identical to a bare
 // MarketplaceInfoMessage so the wrapper composes via reuse of
 // `renderMarketplaceInfo` rather than re-implementing the per-block
@@ -4092,7 +4092,7 @@ test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form o
 // MarketplaceInfoCascadeMessage AND the install-cascade
 // composeMarketplaceBlock `\n\n` join). Severity is ALWAYS info (no
 // failure surface on the fan-out wrapper itself -- the orchestrator
-// routes `{not added}` through PluginInfoMessage); reload-hint NEVER
+// routes `{marketplace not added}` through PluginInfoMessage); reload-hint NEVER
 // fires (info surface, read-only). The single-block case is byte-
 // identical to a bare PluginInfoMessage so the wrapper composes via
 // reuse of `renderPluginInfo` rather than re-implementing the per-block

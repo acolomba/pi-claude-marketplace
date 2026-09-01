@@ -3,7 +3,7 @@
 // Thin-shim handler factory for
 // `/claude:plugin info <plugin>@<marketplace> [--scope user|project]`.
 // Argument-parsing failures route through `notifyUsageError`; the
-// orchestrator handles per-scope projection, fan-out, the `{not added}`
+// orchestrator handles per-scope projection, fan-out, the `{marketplace not added}`
 // carve-out, and the `{not in manifest}` carve-out. This shim validates
 // the positional/scope shape and delegates.
 

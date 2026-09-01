@@ -158,7 +158,14 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
       "permission denied",
       "source missing",
       "network unreachable",
-      "not added",
+      "marketplace not added",
+      // CMP-4 / SCOPE-01, post-COMPAT-01: the second STRUCTURAL
+      // marketplace-absent marker. COMPAT-01 promised the manifest-independent
+      // lifecycle work added no reason token, and it did not; this member
+      // belongs to the later cross-scope install work and is amended in
+      // deliberately, which is exactly what this enumeration gate is for.
+      "marketplace not added to user scope",
+      "marketplace not added to project scope",
       "orphan rewake",
       "authentication required",
       "dangling reference",
@@ -166,6 +173,16 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
       "malformed skill",
       "malformed command",
       "installs disabled",
+      // SCOPE-01 / D-01, post-COMPAT-01: the cross-scope CONTENT pair an
+      // absent-target lifecycle row joins to `not installed`. Amended in
+      // deliberately, like the two structural markers above -- and unlike them,
+      // these two stay inside `ContentReason`, because their subject is the
+      // plugin row they ride, not the marketplace.
+      "marketplace in user scope",
+      "marketplace in project scope",
+      // WDET-04 / D-106-04: workflows is the only reason added after the 43
+      // inherited members. Appending it preserves every inherited index.
+      "workflows",
     ],
     "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
   );

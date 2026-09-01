@@ -55,8 +55,10 @@ import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import {
+  absentTargetReasons,
   applyPartialCascadeFold,
   emitMarketplaceNotAdded,
+  missIsNotInstalled,
   resolveCrossScopePluginTarget,
 } from "./shared.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
@@ -103,7 +105,7 @@ export type UninstallPluginNotifications =
  * is NOT a reliable converge discriminator, hence the explicit variant.
  *
  * `reason` is typed as `Reason` (broader than `ContentReason`) so the
- * structural `"not added"` sentinel returned by the missing-marketplace arm
+ * structural `"marketplace not added"` sentinel returned by the missing-marketplace arm
  * flows through the same field; mirrors `RemoveMarketplaceOutcome`.
  */
 export type UninstallPluginOutcome =
@@ -450,6 +452,11 @@ async function runPostUninstallCleanup(
  * on, so it emits an error row (it was literal silence before). The row is
  * `failed` carrying the `not installed` reason -- uninstall's render map has
  * no `skipped` arm -- and carries no `cause`, so no path redaction applies.
+ *
+ * SCOPE-01: `notInstalledAt` separates the two callers. The cross-scope caller
+ * passes the scope the operator named, and the brace additionally names where
+ * the container really is; the in-scope PU-5 caller omits it, because the
+ * container IS here and the only remedy is to install.
  */
 function emitAlreadyGone(args: {
   readonly ctx: ExtensionContext;
@@ -458,6 +465,7 @@ function emitAlreadyGone(args: {
   readonly scope: Scope;
   readonly plugin: string;
   readonly orchestrated: boolean;
+  readonly notInstalledAt?: Scope;
 }): UninstallPluginOutcome | undefined {
   const { ctx, pi, marketplace, scope, plugin, orchestrated } = args;
   if (orchestrated) {
@@ -467,7 +475,7 @@ function emitAlreadyGone(args: {
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: ["not installed"],
+    reasons: absentTargetReasons(args.notInstalledAt),
     severity: "error",
     needsReload: false,
   };
@@ -489,7 +497,7 @@ export async function uninstallPlugin(
   const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
-  // distinguishes "marketplace container absent" (loud `{not added}`) from
+  // distinguishes "marketplace container absent" (loud `{marketplace not added}`) from
   // "container present, plugin row absent" (silent PU-5 converge, reached via
   // the `resolved` arm's downstream `installed === undefined` branch).
   const resolution = await resolveCrossScopePluginTarget({
@@ -499,7 +507,28 @@ export async function uninstallPlugin(
     ...(opts.scope !== undefined && { explicitScope: opts.scope }),
   });
 
-  if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
+  // SCOPE-01: the two misses make DIFFERENT claims and must not share a row.
+  // `other-scope` means the marketplace exists, just not at the requested
+  // scope -- so no install record can exist there either, and the truthful
+  // complaint is about the PLUGIN, not the container. Telling the operator to
+  // add the marketplace would not make this uninstall succeed. `install`
+  // reaches a user-scope marketplace from a project target through the CMP-3
+  // fallback; uninstall deliberately does not follow it, because uninstalling
+  // a record in a scope the operator did not name is not a safe guess.
+  if (resolution.kind !== "resolved") {
+    const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
+    if (notInstalledAt !== undefined) {
+      return emitAlreadyGone({
+        ctx,
+        pi,
+        marketplace,
+        scope: notInstalledAt,
+        plugin,
+        orchestrated,
+        notInstalledAt,
+      });
+    }
+
     return emitMarketplaceNotAdded({
       ctx,
       pi,
@@ -552,7 +581,7 @@ export async function uninstallPlugin(
       if (mp === undefined) {
         // ATTR-04 reachability note. The "marketplace never added" case is
         // now caught BEFORE the guard by `resolveCrossScopePluginTarget`
-        // (the `marketplace-absent` / `other-scope` arms emit `{not added}`
+        // (the `marketplace-absent` / `other-scope` arms emit `{marketplace not added}`
         // and return). So a `mp === undefined` HERE is exclusively a
         // CONCURRENT-REMOVAL race: the container existed at the resolver's
         // unlocked read but was removed by another process before this

@@ -281,15 +281,17 @@ test("TC-3 / RSTA-07 :: ls alias flag completion is EXACTLY scope + the filter f
   }
 });
 
-test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model + partial", async () => {
+test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + local + map-model + partial", async () => {
   resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("install -", f.resolver);
     assert.ok(items !== null);
-    // Exact-set: `--map-model` (AG-7) and `--partial` (LIST-02) are the only
-    // install extras; list-only filter flags MUST NOT leak in.
+    // Exact-set: `--map-model` (AG-7), `--partial` (LIST-02) and `--local`
+    // (WB-02, the per-machine write target) are the only install extras;
+    // list-only filter flags MUST NOT leak in.
     assert.deepEqual([...items.map((i) => i.label)].sort(), [
+      "--local",
       "--map-model",
       "--partial",
       "--scope",
@@ -299,13 +301,14 @@ test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model +
   }
 });
 
-test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + map-model + partial", async () => {
+test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + local + map-model + partial", async () => {
   resetCompletionCache();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("update -", f.resolver);
     assert.ok(items !== null);
     assert.deepEqual([...items.map((i) => i.label)].sort(), [
+      "--local",
       "--map-model",
       "--partial",
       "--scope",
@@ -314,6 +317,25 @@ test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + map-model + 
     await f.cleanup();
   }
 });
+
+// WB-02: the four verbs whose ONLY per-verb extra is `--local`. Each is an
+// exact-set assertion rather than a `some()` probe so a future catalog entry
+// leaking onto one of them fails here. All four carry `[--local]` in their
+// handler USAGE string, so completion offering it is the surface agreeing with
+// the documentation rather than a new capability.
+for (const verb of ["uninstall", "reinstall", "enable", "disable"] as const) {
+  test(`TC-3 / WB-02 :: ${verb} head flag completion is EXACTLY scope + local`, async () => {
+    resetCompletionCache();
+    const f = await emptyFixture();
+    try {
+      const items = await getArgumentCompletions(`${verb} -`, f.resolver);
+      assert.ok(items !== null);
+      assert.deepEqual([...items.map((i) => i.label)].sort(), ["--local", "--scope"]);
+    } finally {
+      await f.cleanup();
+    }
+  });
+}
 
 test("TC-3 / FTCH-03 :: info head flag completion is EXACTLY scope + fetch", async () => {
   resetCompletionCache();
@@ -625,7 +647,7 @@ test("TC-5 :: marketplace noautoupdate <here> completes with marketplace names",
 // union surface is reused: candidates are the union
 // of marketplace names across BOTH scopes; the `--scope` filter does NOT
 // narrow the completion candidate set (the orchestrator handles scope-
-// mismatch at execution time via the INFO-04 `{not added}` row).
+// mismatch at execution time via the INFO-04 `{marketplace not added}` row).
 
 test("TC-5 :: marketplace info <here> completes with union of marketplace names from both scopes", async () => {
   resetCompletionCache();
@@ -672,7 +694,7 @@ test("TC-5 :: marketplace info --scope project <here> still completes union of m
   const f = await makeFixture({
     // Marketplace lives in USER scope only; with `--scope project` the
     // completion still surfaces the name. The orchestrator handles the
-    // mismatch at execution time via the INFO-04 `{not added}` row.
+    // mismatch at execution time via the INFO-04 `{marketplace not added}` row.
     state: { user: { "mp-a": {} }, project: {} },
     manifests: { user: {}, project: {} },
   });
@@ -1141,7 +1163,7 @@ test("TC-6 :: multi-marketplace plugin yields name@ without trailing space", asy
 // installed + available + unavailable rows from BOTH scopes (no
 // install-state exclusion; scope filter does NOT narrow the candidate
 // set -- the orchestrator handles scope mismatches via the INFO-04
-// `{not added}` row).
+// `{marketplace not added}` row).
 // ---------------------------------------------------------------------------
 
 test("TC-6 / INFO-02 :: info <here> returns union of installed + available + unavailable refs across both scopes", async () => {
@@ -1201,7 +1223,7 @@ test("TC-6 / INFO-02 :: info --scope project <here> returns the SAME union (scop
   // Marketplace lives in USER scope only; with `--scope project` the
   // completion still surfaces every known plugin. The orchestrator
   // handles the mismatch at execution time via the INFO-04
-  // `{not added}` row.
+  // `{marketplace not added}` row.
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {

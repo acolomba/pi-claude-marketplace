@@ -4,7 +4,7 @@
 //
 // The audit's Class C finding was that the "marketplace absent in the target
 // scope" precondition rendered DIFFERENT user-facing rows across ops (some
-// converged on the dedicated `{not added}` form, some threw raw). Every op
+// converged on the dedicated `{marketplace not added}` form, some threw raw). Every op
 // now lands on the SINGLE dedicated `MarketplaceNotAddedMessage` variant
 // + the ONE shared renderer
 // (`renderMarketplaceNotAdded`). This test PROVES no op slipped its own row in.
@@ -15,15 +15,15 @@
 // HOME + tmp cwd (no state seeded -> the marketplace is absent in both scopes),
 // captures the bytes + severity the orchestrator actually emitted through
 // `ctx.ui.notify`, and asserts EVERY op's emission is byte-IDENTICAL to the
-// canonical `⊘ <name> [scope?] (failed) {not added}` row AND identical to every
+// canonical `⊘ <name> [scope?] (failed) {marketplace not added}` row AND identical to every
 // other op's emission. This is the load-bearing capstone SC#1 lock: a future
 // regression that gave one ORCHESTRATOR a divergent payload kind (e.g. a
 // synthetic `(failed)` cascade row, or a raw throw) would break this gate even
 // though each op's own orchestrator test might not catch the cross-op drift.
 //
 // CANONICAL ROWS (two):
-//   - explicit-scope: `⊘ ghost-mp [project] (failed) {not added}`
-//   - bare/bracketless: `⊘ ghost-mp (failed) {not added}`
+//   - explicit-scope: `⊘ ghost-mp [project] (failed) {marketplace not added}`
+//   - bare/bracketless: `⊘ ghost-mp (failed) {marketplace not added}`
 // Both at severity "error", one emission per invocation (IL-2).
 //
 // SCOPE-BRACKET ASYMMETRY: `install` ALWAYS carries a resolved scope, so it has
@@ -60,7 +60,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
 // (makeCtx + withHermeticHome). No seeded state -> the marketplace is absent in
-// BOTH scopes, which drives every op onto the converged `{not added}` row.
+// BOTH scopes, which drives every op onto the converged `{marketplace not added}` row.
 // ---------------------------------------------------------------------------
 
 interface NotifyRecord {
@@ -103,8 +103,9 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
 
 const NAME = "ghost-mp";
 const CANONICAL_EXPLICIT =
-  "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}";
-const CANONICAL_BARE = "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}";
+  "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}";
+const CANONICAL_BARE =
+  "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}";
 
 interface Emission {
   body: string;
@@ -257,7 +258,7 @@ const OPS_BARE = [
   "marketplace update",
 ] as const;
 
-test("SC#1 cross-op convergence: explicit-scope {not added} is byte-identical across every REAL orchestrator (incl. marketplace update)", async () => {
+test("SC#1 cross-op convergence: explicit-scope {marketplace not added} is byte-identical across every REAL orchestrator (incl. marketplace update)", async () => {
   // Invoke each real orchestrator against a missing marketplace and assert its
   // ACTUAL emission equals the canonical explicit-scope row AND every other
   // op's. The cross-op equality is the load-bearing convergence invariant.
@@ -286,7 +287,7 @@ test("SC#1 cross-op convergence: explicit-scope {not added} is byte-identical ac
   assert.equal(canonicalBody, CANONICAL_EXPLICIT);
 });
 
-test("SC#1 cross-op convergence: bare/bracketless {not added} is byte-identical across every bare-capable REAL orchestrator (install excluded)", async () => {
+test("SC#1 cross-op convergence: bare/bracketless {marketplace not added} is byte-identical across every bare-capable REAL orchestrator (install excluded)", async () => {
   let canonicalBody: string | undefined;
   for (const op of OPS_BARE) {
     const emission = await captureOp(op, "bare");
@@ -325,7 +326,7 @@ test("SC#1 cross-op convergence: NONE of the converged ops emit the lying `{netw
   // marketplace must NEVER surface the network-reason default on ANY op (NFR-5 /
   // ATTR-10). marketplace update was the residual offender (TOCTOU raw throw ->
   // `?? network unreachable`); assert every op's missing-mp emission is the
-  // `{not added}` convergence row and carries no `{network unreachable}`.
+  // `{marketplace not added}` convergence row and carries no `{network unreachable}`.
   for (const op of OPS_EXPLICIT_SCOPE) {
     const emission = await captureOp(op, "explicit");
     assert.doesNotMatch(
@@ -335,8 +336,8 @@ test("SC#1 cross-op convergence: NONE of the converged ops emit the lying `{netw
     );
     assert.match(
       emission.body,
-      /\{not added\}/,
-      `op "${op}" must render the converged {not added} reason`,
+      /\{marketplace not added\}/,
+      `op "${op}" must render the converged {marketplace not added} reason`,
     );
   }
 });

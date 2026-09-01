@@ -122,13 +122,16 @@ test('shim :: valid args call installPlugin with { ctx, pi, scope: "user", cwd, 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt", ctx);
-    // Empty user state -> orchestrator surfaces the ATTR-01 `{not added}`
+    // Empty user state -> orchestrator surfaces the ATTR-01 `{marketplace not added}`
     // marketplace-subject error. This proves (a) control reached installPlugin,
     // (b) default scope was user (the `[user]` bracket on the not-added row
     // comes from the user-scope state.json read path).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mymkt \[user\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ mymkt \[user\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -137,12 +140,15 @@ test('shim :: --scope project calls installPlugin with scope: "project"', async 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt --scope project", ctx);
-    // Empty project state -> the ATTR-01 `{not added}` row surfaces. The shim
+    // Empty project state -> the ATTR-01 `{marketplace not added}` row surfaces. The shim
     // selected the project locations (state.json under
     // <cwd>/.pi/pi-claude-marketplace/), proven by the `[project]` bracket.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mymkt \[project\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ mymkt \[project\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -156,12 +162,15 @@ test("shim :: --map-model flag is accepted and control reaches installPlugin", a
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt --map-model", ctx);
     // The flag must NOT produce USAGE; control must reach installPlugin
-    // which then surfaces the ATTR-01 `{not added}` row against the empty
+    // which then surfaces the ATTR-01 `{marketplace not added}` row against the empty
     // hermetic state.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin install/);
-    assert.match(notifications[0]!.message, /⊘ mymkt \[user\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ mymkt \[user\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -172,7 +181,10 @@ test("shim :: --map-model + --scope project both accepted together", async () =>
     await handler("myplug@mymkt --map-model --scope project", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ mymkt \[project\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ mymkt \[project\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -206,10 +218,10 @@ test("Flag: --local at the trailing position is accepted and control reaches ins
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt --local", ctx);
-    // Control reaches installPlugin; ATTR-01 `{not added}` row surfaces.
+    // Control reaches installPlugin; ATTR-01 `{marketplace not added}` row surfaces.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+    assert.match(notifications[0]!.message, /\(failed\) \{marketplace not added\}/);
   });
 });
 
@@ -219,7 +231,7 @@ test("Flag: --local at the leading position parses identically", async () => {
     const handler = makeInstallHandler(makePi());
     await handler("--local myplug@mymkt", ctx);
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+    assert.match(notifications[0]!.message, /\(failed\) \{marketplace not added\}/);
   });
 });
 

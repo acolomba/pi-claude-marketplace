@@ -67,6 +67,7 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { crossScopeFlag } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import {
@@ -2301,11 +2302,16 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     // doesn't exist". `scope` is set when a `--scope` was requested (renders
     // `[user]` / `[project]`); OMITTED when `--scope` was undefined and BOTH
     // scopes missed (the bracket suppresses). `renderMarketplaceNotAdded`
-    // emits the bare column-0 row `⊘ <name> [scope?] (failed) {not added}`.
+    // emits the bare column-0 row `⊘ <name> [scope?] (failed) {marketplace not added}`.
     const message: NotificationMessage = {
       kind: "marketplace-not-added",
       name: opts.marketplace,
       ...(opts.scope !== undefined && { scope: opts.scope }),
+      ...(await crossScopeFlag({
+        cwd: opts.cwd,
+        marketplace: opts.marketplace,
+        scope: opts.scope,
+      })),
     };
     notify(opts.ctx, opts.pi, message);
     return;

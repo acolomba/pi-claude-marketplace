@@ -19,7 +19,7 @@
 // Flow:
 //   1. resolveScopeOrNotifyNotAdded(opts, userLocs, projectLocs) when --scope
 //      omitted (MR-1). The standalone-mode helper resolves project-then-user
-//      and emits the `{not added}` notify when the marketplace is in neither
+//      and emits the `{marketplace not added}` notify when the marketplace is in neither
 //      scope; orchestrated mode uses `resolveScopeOrFailedOutcome` (defined
 //      below) to return a typed `RemoveMarketplaceOutcome` instead.
 //   2. withLockedStateTransaction(locations, async (tx) => {
@@ -105,7 +105,7 @@ export type RemoveMarketplaceNotifications =
  * silence on post-state cleanup hiccups.
  *
  * `reason` is typed as `Reason` (not `ContentReason`) so the orchestrated
- * `"not added"` arm (missing marketplace, MarketplaceNotFoundError) can
+ * `"marketplace not added"` arm (missing marketplace, MarketplaceNotFoundError) can
  * surface its structural sentinel through the same field. Mirrors the
  * `AddMarketplaceOutcome` shape note.
  */
@@ -200,14 +200,24 @@ async function resolveScopeOrFailedOutcome(
     }
 
     const err = new MarketplaceNotFoundError(opts.name, ["project", "user"]);
-    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+    return {
+      status: "failed",
+      reason: "marketplace not added",
+      error: err,
+      cause: errorMessage(err),
+    };
   }
 
   const candLocations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(candLocations.extensionRoot);
   if (preState.marketplaces[opts.name] === undefined) {
     const err = new MarketplaceNotFoundError(opts.name, [opts.scope]);
-    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+    return {
+      status: "failed",
+      reason: "marketplace not added",
+      error: err,
+      cause: errorMessage(err),
+    };
   }
 
   return { scope: opts.scope, locations: candLocations };
@@ -497,10 +507,10 @@ interface ExtensionMarketplaceRow {
  * Resolve the target scope/locations or surface the missing-marketplace
  * precondition through the correct standalone/orchestrated arm. Returns:
  *   - `{ scope, locations }` on success
- *   - `RemoveMarketplaceOutcome` (status: "failed", reason: "not added") in
+ *   - `RemoveMarketplaceOutcome` (status: "failed", reason: "marketplace not added") in
  *     orchestrated mode when the marketplace is missing
  *   - `undefined` in standalone mode when the helper already emitted the
- *     standalone `(failed) {not added}` variant
+ *     standalone `(failed) {marketplace not added}` variant
  */
 async function resolveRemoveTargetOrSurface(
   opts: RemoveMarketplaceOptions,
@@ -639,7 +649,7 @@ export async function removeMarketplace(
 
   // MR-1 + ATTR-06: resolve scope and enforce the missing-marketplace
   // precondition. On a miss the helper has already emitted the standalone
-  // `(failed) {not added}` variant, so return without entering the guard.
+  // `(failed) {marketplace not added}` variant, so return without entering the guard.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
 

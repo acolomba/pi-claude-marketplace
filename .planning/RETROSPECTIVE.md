@@ -2,6 +2,55 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: workflows-detection -- Workflow Detection
+
+**Shipped:** 2026-08-29
+**Phases:** 1 (106) | **Plans:** 4 | **Tasks:** 8 | **Requirements:** 6/6 | **Tests:** 3,649 unit + 21 integration assertions + 14 phase E2E tests | **Audit:** passed (5/5 integration seams, 4/4 flows, `threats_open: 0`, terminal UI 24/24)
+
+### What Was Built
+
+- One shared opaque `workflows` field admits the declaration on marketplace entries and plugin manifests.
+- The strict and loose resolvers detect the literal `workflows/` directory and combine all workflow signals into one unsupported kind.
+- Normal install rejects workflow-bearing plugins. `--partial` installs supported components and stores workflow presence only as compatibility metadata.
+- The shared reason classifier and executable catalog bind `{workflows}` across inventory, rejection, and partial-install output.
+- Regression tests prove that workflow files never enter resources, reload discovery, staging, rollback, retry, or execution.
+
+### What Worked
+
+- The first plan traced one real plugin through resolver, rejection, partial install, persistence, and containment before the schema matrix expanded.
+- Existing unsupported-component gates handled the new kind with small production changes. Most later work strengthened shared contracts and boundaries.
+- Exact-array and bidirectional catalog tests made reason order, deduplication, and terminal bytes mechanical to verify.
+- Code review caught the stale versioned rejection example. Re-review, verification, Nyquist, security, UI, and milestone audit then converged with no open gap.
+
+### What Was Inefficient
+
+- The worktree started with root-level planning files while the repository already used workstreams. Phase completion required moving the milestone into a workstream before GSD could close it.
+- The verifier sandbox blocked unrelated local Git and network fixtures. The full gate needed a second run with the required fixture access.
+- The initial terminal contract carried a version that production cannot know at the early rejection gate. The catalog correction caused one avoidable review cycle.
+
+### Patterns Established
+
+- Treat an unsupported declaration as opaque when only presence affects classification.
+- Add a fixed convention, typed kind, shared reason, and closed-set locks in one change.
+- Prove non-support with source sentinels and exact resource/discovery key sets, not only with the absence of a new bridge.
+- Keep structural failures above partial consent. Consent drops unsupported components but never repairs malformed input.
+
+### Key Lessons
+
+1. Trace the full unsupported-component path before widening each declaration and resolver matrix.
+2. Put early-rejection examples under the executable catalog gate before UI approval.
+3. Use one shared collector and reason mapper when strict, loose, list, info, install, update, and autoupdate must agree.
+4. Select the workstream before phase execution starts. Late planning-file relocation creates avoidable closeout work.
+
+### Cost Observations
+
+- Model mix: quality profile, autonomous execution with interactive product decisions
+- Timeline: one day (2026-08-29), 38 milestone commits before archival
+- Diff: 43 files, +5,212 / -18 lines across implementation, tests, docs, and planning records
+- Notable: production behavior landed in two feature commits; most of the branch is executable evidence and lifecycle documentation
+
+---
+
 ## Milestone: v1.18 -- Manifest-Independent Installed Plugin Info
 
 **Shipped:** 2026-08-12 (npm 0.14.0, PR #120)
@@ -605,6 +654,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.3 | 5 | Drift contract via YAML frontmatter; byte-equality catalog UAT; atomic user-contract supersession commits |
 | v1.12 | 6 | Declarative desired-state config + load-time reconciliation; architecture-test ratchets (write-seams, cast allow-list, planner purity) |
 | v1.18 | 6 | Characterize-then-change phasing; predicate collapse behind an inverted drift gate ("no twin survives"); milestone extended mid-flight rather than opening a successor |
+| workflows-detection | 1 | Unsupported declaration as opaque presence; shared strict/loose collector; exact no-materialization boundary |
 
 ### Cumulative Quality
 
@@ -616,6 +666,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.3 | 1249/1249 | Byte-equality catalog UAT + 34-rule MSG-* drift-guard plugin; v1.3 user-contract structurally enforced |
 | v1.12 | 1804 + 10 int | Config/state split architecture-tested; two-process reconcile race coverage; 5 review criticals fixed pre-ship |
 | v1.18 | 3386 + 18 int | COMPAT-01 no-expansion gate (closed sets, glyph roster, record key set, schema union, network clause) in one test; whole-tree predicate drift gate covering four spellings |
+| workflows-detection | 3649 + 21 int assertions | Fixed unsupported convention, reason parity, rollback/retry, and exact resource/discovery boundaries |
 
 ### Top Lessons (Verified Across Milestones)
 

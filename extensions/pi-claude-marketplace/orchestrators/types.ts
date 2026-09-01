@@ -127,7 +127,7 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * EACCES / EPERM / ENOENT failure renders as the matching closed
    * Reason (`permission denied` / `source missing`) rather than the
    * permissive `not in manifest` default. Typed `ContentReason` (TYPE-02):
-   * the structural `not added` marker is never a per-plugin outcome reason.
+   * the structural `marketplace not added` marker is never a per-plugin outcome reason.
    */
   readonly reasons?: readonly ContentReason[];
 }

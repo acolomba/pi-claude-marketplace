@@ -3,7 +3,7 @@
 // ATTR-06 / D-48-C Shape 1: removeMarketplace's MR-1 missing-marketplace
 // precondition no longer throws raw past the orchestrator. The orchestrator
 // routes the miss (bare form in BOTH scopes, or explicit-scope absence) to the
-// standalone `(failed) {not added}` notify variant. These shim tests assert the
+// standalone `(failed) {marketplace not added}` notify variant. These shim tests assert the
 // precondition error does NOT escape the handler -- a notification is captured,
 // no rejection propagates to the Pi command runner.
 
@@ -71,37 +71,37 @@ test("shim :: missing name positional emits USAGE", async () => {
   });
 });
 
-test("shim :: valid name reaches the orchestrator; bare-form miss routes to `{not added}` WITHOUT escaping the handler (ATTR-06 S4)", async () => {
+test("shim :: valid name reaches the orchestrator; bare-form miss routes to `{marketplace not added}` WITHOUT escaping the handler (ATTR-06 S4)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeRemoveHandler(makePi());
     // Without --scope and against empty state in both scopes, the orchestrator
     // catches resolveScopeFromState's MarketplaceNotFoundError and routes the
-    // miss to the standalone `(failed) {not added}` variant -- proving the
+    // miss to the standalone `(failed) {marketplace not added}` variant -- proving the
     // handler reached the orchestrator AND that no precondition error escapes.
     await assert.doesNotReject(async () => handler("ghost", ctx));
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ ghost (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("shim :: --scope propagated; explicit-scope miss routes to `{not added}` WITHOUT escaping the handler (ATTR-06 S3)", async () => {
+test("shim :: --scope propagated; explicit-scope miss routes to `{marketplace not added}` WITHOUT escaping the handler (ATTR-06 S3)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeRemoveHandler(makePi());
     // With --scope project, the orchestrator uses project locations directly
     // (bypassing resolveScopeFromState). Empty state -> the pre-guard existence
-    // check routes the miss to the standalone `(failed) {not added}` variant
+    // check routes the miss to the standalone `(failed) {marketplace not added}` variant
     // carrying the `[project]` bracket; no error escapes the handler.
     await assert.doesNotReject(async () => handler("ghost --scope project", ctx));
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -131,7 +131,7 @@ test("Flag: --local at trailing position parses and routes to the orchestrator",
     // did not break parsing.
     await handler("ghost --local", ctx);
     assert.ok(notifications.length >= 1);
-    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+    assert.match(notifications[0]!.message, /\(failed\) \{marketplace not added\}/);
   });
 });
 

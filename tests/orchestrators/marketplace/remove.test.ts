@@ -105,7 +105,7 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
 
 // MR-1 not-found ----------------------------------------------------
 
-test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalone `(failed) {not added}` with NO bracket (no raw throw)", async () => {
+test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalone `(failed) {marketplace not added}` with NO bracket (no raw throw)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-"));
     try {
@@ -121,7 +121,7 @@ test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalon
       // prefix.
       assert.equal(
         notifications[0]!.message,
-        "A marketplace operation has failed.\n\n⊘ absent-mp-zzz-9999 (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ absent-mp-zzz-9999 (failed) {marketplace not added}",
       );
       assert.equal(notifications[0]!.severity, "error");
     } finally {
@@ -130,7 +130,7 @@ test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalon
   });
 });
 
-test("ATTR-06 (S3): explicit --scope + name absent in that scope renders standalone `(failed) {not added}` WITH the scope bracket (no raw throw)", async () => {
+test("ATTR-06 (S3): explicit --scope + name absent in that scope renders standalone `(failed) {marketplace not added}` WITH the scope bracket (no raw throw)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-s3-"));
     try {
@@ -143,9 +143,55 @@ test("ATTR-06 (S3): explicit --scope + name absent in that scope renders standal
       // bracket. No raw MarketplaceNotFoundError escapes; state untouched.
       assert.equal(
         notifications[0]!.message,
-        "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {marketplace not added}",
       );
       assert.equal(notifications[0]!.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// CMP-4 / SCOPE-01: the qualified sibling of the S3 test above. When the named
+// marketplace IS added, just in the other scope, the row says so -- the
+// qualified token REPLACES the plain one rather than joining it, because "the
+// container does not exist" and "it exists, but not in the scope you targeted"
+// are competing claims about one subject. This is the project-target direction:
+// the container sits in user, the operator named project.
+test("CMP-4 / SCOPE-01: explicit --scope project against a user-only marketplace renders the project-direction qualified row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-scope01-"));
+    try {
+      const userLoc = locationsFor("user", cwd);
+      await seedState(userLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "user",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "mp", scope: "project", cwd });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]!.message,
+        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {marketplace not added to project scope}",
+      );
+      assert.equal(notifications[0]!.severity, "error");
+      // The miss is blocked by the pre-guard read, so the scope that DOES hold
+      // the record never enters a guard: removing from a scope the operator did
+      // not name would be the worst possible reading of this command.
+      const userAfter = await loadState(userLoc.extensionRoot);
+      assert.ok("mp" in userAfter.marketplaces, "user-scope record NOT removed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1129,7 +1175,7 @@ test("RECON-03 remove orchestrated mode -- clean success returns { status: 'remo
   });
 });
 
-test("RECON-03 remove orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added', error: MarketplaceNotFoundError } no notifications", async () => {
+test("RECON-03 remove orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'marketplace not added', error: MarketplaceNotFoundError } no notifications", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-na-"));
     try {
@@ -1146,7 +1192,7 @@ test("RECON-03 remove orchestrated mode -- missing marketplace returns { status:
       assert.ok(outcome);
       assert.equal(outcome.status, "failed");
       if (outcome.status === "failed") {
-        assert.equal(outcome.reason, "not added");
+        assert.equal(outcome.reason, "marketplace not added");
         assert.ok(outcome.error instanceof MarketplaceNotFoundError);
       }
     } finally {
@@ -1173,7 +1219,7 @@ test("RECON-03 remove orchestrated mode -- explicit --scope miss returns failed 
       assert.ok(outcome);
       assert.equal(outcome.status, "failed");
       if (outcome.status === "failed") {
-        assert.equal(outcome.reason, "not added");
+        assert.equal(outcome.reason, "marketplace not added");
         assert.ok(outcome.error instanceof MarketplaceNotFoundError);
       }
     } finally {

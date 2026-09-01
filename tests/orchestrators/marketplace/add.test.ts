@@ -45,6 +45,13 @@ function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: No
   return { ctx, pi, notifications };
 }
 
+function httpError(statusCode: number): Error {
+  return Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+    code: "HttpError",
+    data: { statusCode },
+  });
+}
+
 async function withTmpScope<T>(
   fn: (env: { cwd: string; locations: ScopedLocations }) => Promise<T>,
 ): Promise<T> {
@@ -1359,10 +1366,7 @@ test("D-76-08: a url clone throwing an HttpError with statusCode 401 renders (fa
 test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {authentication required}", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
-    const httpErr = Object.assign(new Error("HTTP 403 from clone"), {
-      code: "HttpError",
-      data: { statusCode: 403 },
-    });
+    const httpErr = httpError(403);
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
@@ -1380,6 +1384,88 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
     const note = notifications.find((n) => n.severity === "error");
     assert.ok(note);
     assert.ok(note.message.includes("(failed) {authentication required}"));
+  });
+});
+
+test("D-76-09: a missing repository HttpError renders (failed) {source missing} via notify()", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(404),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/missing-mp",
+      gitOps,
+    });
+
+    assert.equal(notifications.length, 1, "missing repository must render exactly one error");
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      "A marketplace operation has failed.\n\n" +
+        "⊘ https://gitlab.example.com/team/missing-mp [project] (failed) {source missing}",
+    );
+    assert.equal(note.severity, "error");
+  });
+});
+
+for (const statusCode of [429, 500]) {
+  test(`D-76-09: transient HTTP ${statusCode} clone failures render (failed) {network unreachable}`, async () => {
+    await withTmpScope(async ({ cwd }) => {
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+        cloneThrows: httpError(statusCode),
+      });
+
+      await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/flaky-mp",
+        gitOps,
+      });
+
+      const note = notifications.find((n) => n.severity === "error");
+      assert.ok(note);
+      assert.ok(note.message.includes("(failed) {network unreachable}"));
+      assert.equal(note.message.includes("HTTP Error"), false);
+    });
+  });
+}
+
+test("D-76-09 orchestrated mode -- missing repository returns source-missing outcome", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(410),
+    });
+
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/gone-mp",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      assert.equal(outcome.reason, "source missing");
+    }
   });
 });
 

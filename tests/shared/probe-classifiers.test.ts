@@ -188,6 +188,29 @@ test("D-90-05: a mixed carve-out + non-carve-out list yields `lsp` + `unsupporte
   );
 });
 
+test("WDET-04: an empty unsupported-kind list emits no reason", () => {
+  assert.deepEqual([...narrowUnsupportedKinds([])], []);
+});
+
+test("WDET-04: the workflows kind emits the dedicated workflows reason", () => {
+  assert.deepEqual([...narrowUnsupportedKinds(["workflows"])], ["workflows"]);
+});
+
+test("WDET-04: repeated workflows kinds collapse to one reason", () => {
+  assert.deepEqual([...narrowUnsupportedKinds(["workflows", "workflows"])], ["workflows"]);
+});
+
+test("WDET-04: workflows follows lsp in canonical reason order", () => {
+  assert.deepEqual([...narrowUnsupportedKinds(["lspServers", "workflows"])], ["lsp", "workflows"]);
+});
+
+test("WDET-04: workflows follows a generic unsupported component reason", () => {
+  assert.deepEqual(
+    [...narrowUnsupportedKinds(["monitors", "workflows"])],
+    ["unsupported component", "workflows"],
+  );
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // narrowProbeError: the errno/typed-error ladder behind every read surface.
 // ──────────────────────────────────────────────────────────────────────────

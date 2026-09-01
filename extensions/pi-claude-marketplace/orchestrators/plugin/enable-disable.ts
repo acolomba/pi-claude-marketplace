@@ -84,16 +84,20 @@ import {
 } from "./enable-disable.messaging.ts";
 import { runInstallLedger } from "./install.ts";
 import {
+  absentTargetReasons,
   applyPartialCascadeFold,
   emitMarketplaceNotAdded,
+  missIsNotInstalled,
   enableRowDependencies,
   resolveCrossScopePluginTarget,
   selectDeclaringConfigWriteTarget,
+  type CrossScopePluginResolution,
+  type DeclaringConfigWriteTarget,
+  type LedgerDegradationSignals,
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
 import type { InstallFailureCapture } from "./install.ts";
-import type { DeclaringConfigWriteTarget, LedgerDegradationSignals } from "./shared.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -135,7 +139,7 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  *   standalone rendering token set.
  * - `"failed"` -- enable / disable / not-recorded / invalid-config /
  *   marketplace-not-added paths. `reason` typed `Reason` so the
- *   structural `"not added"` sentinel can flow through the same field.
+ *   structural `"marketplace not added"` sentinel can flow through the same field.
  */
 export type EnableDisablePluginOutcome =
   | ({
@@ -193,7 +197,13 @@ type SetEnabledOutcome =
       version?: string;
     } & EnableDegradationSignals)
   | { kind: "invalid-config" }
-  | { kind: "not-recorded" }
+  /**
+   * SCOPE-01: `notInstalledAt` is set ONLY on the cross-scope arm -- the scope
+   * the operator named, whose marketplace container is registered one scope
+   * over. The in-scope arm (container here, plugin row absent) omits it, and
+   * the two arms then render different braces for their different remedies.
+   */
+  | { kind: "not-recorded"; notInstalledAt?: Scope }
   | {
       kind: "enable-failed";
       cause: Error;
@@ -522,6 +532,58 @@ async function resolveIdempotentOutcome(
 }
 
 /**
+ * SCOPE-01: render the miss for a target that did not resolve. Extracted from
+ * `setPluginEnabled` so its cognitive complexity stays under the ceiling.
+ *
+ * Two claims, two rows. When the container sits one scope over, nothing is
+ * installed at the scope the operator named, so the PLUGIN is the subject and
+ * the row is the same `(skipped) {not installed}` an in-scope marketplace with
+ * no record yields. When the container is absent from BOTH scopes the
+ * marketplace row stands, so a typo'd marketplace name is not disguised as a
+ * plugin that merely is not installed.
+ */
+async function emitUnresolvedTarget(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly enable: boolean;
+  readonly orchestrated: boolean;
+  readonly resolution: Exclude<CrossScopePluginResolution, { kind: "resolved" }>;
+}): Promise<EnableDisablePluginOutcome | undefined> {
+  const { ctx, pi, cwd, marketplace, plugin, enable, orchestrated, resolution } = args;
+
+  const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
+  if (notInstalledAt === undefined) {
+    return emitMarketplaceNotAdded({
+      ctx,
+      pi,
+      marketplace,
+      requestedScope: resolution.requestedScope,
+      orchestrated,
+    });
+  }
+
+  if (orchestrated) {
+    return { status: "skipped", name: plugin, reason: "not installed" };
+  }
+
+  dispatchOutcome({
+    ctx,
+    pi,
+    marketplace,
+    scope: notInstalledAt,
+    plugin,
+    enable,
+    // Only the `invalid-config` arm reads this, and `not-recorded` is not it.
+    configBasename: "",
+    outcome: { kind: "not-recorded", notInstalledAt },
+  });
+  return undefined;
+}
+
+/**
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
  * RECON-03 (orchestrated).
@@ -542,6 +604,7 @@ export function setPluginEnabled(
 export function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined>;
+
 export async function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
@@ -575,13 +638,23 @@ export async function setPluginEnabled(
     });
   }
 
-  if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
-    return emitMarketplaceNotAdded({
+  // SCOPE-01: the two misses make DIFFERENT claims and must not share a row.
+  // `other-scope` means the marketplace exists, just not at the requested
+  // scope -- so no install record can exist there either, and the truthful
+  // complaint is about the PLUGIN. It renders the SAME `(skipped)
+  // {not installed}` row an in-scope marketplace with no plugin record yields
+  // (`not-recorded`), because that is the identical underlying fact: nothing
+  // is installed at the scope the operator named.
+  if (resolution.kind !== "resolved") {
+    return await emitUnresolvedTarget({
       ctx,
       pi,
+      cwd,
       marketplace,
-      requestedScope: resolution.requestedScope,
+      plugin,
+      enable,
       orchestrated,
+      resolution,
     });
   }
 
@@ -781,7 +854,7 @@ function emitResolutionFailure(args: {
   const sanitized = sanitizeStateLoadError(cause);
   // classifyTransactionThrow returns a `Reason` (closed set including
   // "lock held"); none of the narrower outputs are the structural
-  // "not added" sentinel, so a ContentReason cast is sound here.
+  // "marketplace not added" sentinel, so a ContentReason cast is sound here.
   const reason: ContentReason = classifyTransactionThrow(sanitized) as ContentReason;
   if (orchestrated) {
     return {
@@ -1181,19 +1254,24 @@ function composeOutcomeRow(args: {
         needsReload: false,
       };
     case "not-recorded":
-      // ATTR-08: the marketplace container is PRESENT but the plugin row is
-      // absent from state.json (never installed, or concurrently
-      // uninstalled). The established taxonomy (ATTR-08, reinstall/update
-      // precedent) reserves `{not in manifest}` for "plugin absent from a
-      // PRESENT manifest" and uses `(skipped) {not installed}` for
-      // "marketplace present, plugin not installed". Non-benign reason ->
-      // warning severity (catalog `enable-not-installed` state).
+      // ATTR-08: the plugin row is absent from state.json (never installed, or
+      // concurrently uninstalled). The established taxonomy (ATTR-08,
+      // reinstall/update precedent) reserves `{not in manifest}` for "plugin
+      // absent from a PRESENT manifest" and uses `(skipped) {not installed}`
+      // for "plugin not installed". SCOPE-01: when the container sits one scope
+      // over, the brace additionally names where it is.
       return {
         status: "skipped",
         name: plugin,
-        reasons: ["not installed"] as const,
-        // D-03/D-06: `not installed` is actionable -> warning, no reload.
-        severity: "warning",
+        reasons: absentTargetReasons(outcome.notInstalledAt),
+        // D-01: an absent target means nothing was enabled or disabled, so the
+        // operation was NOT carried out -> error. Severity is the tri-state
+        // axis (info = desired state reached, warning = carried out but short,
+        // error = not carried out), and `(skipped)` is the status token, not a
+        // severity: the same `["not installed"]` set is stamped `error` by
+        // `uninstall`'s `emitAlreadyGone`, `update`'s `cascadeSkipSeverity`,
+        // and `reinstall`'s in-scope skipped arm. No reload.
+        severity: "error",
         needsReload: false,
       };
     case "idempotent": {

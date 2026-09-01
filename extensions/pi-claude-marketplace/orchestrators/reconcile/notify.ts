@@ -896,15 +896,20 @@ function outcomeSubject(outcome: PerEntryOutcome): string {
 
 /**
  * Narrow a broader `Reason` to `ContentReason` for `block.reasons` /
- * plugin-row `reasons`. The structural `"not added"` sentinel is unreachable
- * here: it would only arise from a missing-marketplace outcome, but the
+ * plugin-row `reasons`. All three structural sentinels
+ * (`"marketplace not added"` and its two scope-qualified siblings) are unreachable
+ * here: they would only arise from a missing-marketplace outcome, but the
  * planner-driven apply pass only drives an orchestrator when the
  * marketplace IS recorded (or being added). A defensive fallback maps the
  * sentinel to `"not found"` so the projection never crashes; this branch is
  * unreachable in normal operation.
  */
 function reasonAsContent(reason: Reason): readonly ContentReason[] {
-  if (reason === "not added") {
+  if (
+    reason === "marketplace not added" ||
+    reason === "marketplace not added to user scope" ||
+    reason === "marketplace not added to project scope"
+  ) {
     return ["not found"];
   }
 

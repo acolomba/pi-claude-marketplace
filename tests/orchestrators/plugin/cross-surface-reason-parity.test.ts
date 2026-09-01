@@ -101,22 +101,20 @@ test("SURF-01 / WR-01 structural both-defects plugin renders `unsupported source
 // byte-identically across `list`, `info`, and the `install` error surface for
 // the same unsupported plugin. `list` and `info` derive the marker from the
 // resolver's typed `unsupported[]` component-kind list via the single shared
-// helper `narrowUnsupportedKinds`; the `install` error surface derives it from
-// the thrown PluginShapeError's `r.notes` (`contains <kind>`) via
-// `narrowResolverReasons`. Both MUST agree for the same kind, so a force-
-// degradable component never surfaces a different `{<reason>}` brace content
-// depending on which command the user runs (the outer status token differs --
-// list/info `(unsupported)` vs install `(unavailable)` per USTAT-01 -- but the
-// brace content this test pins is byte-identical). Each case pairs the typed
-// kind token (list/info input) with its matching resolver note (install input).
+// helper `narrowUnsupportedKinds`. The install error carries the same typed
+// list on `PluginShapeError`. `narrowResolverReasons` consumes that list first,
+// then folds notes with first-wins dedup. Both MUST agree for the same kind, so
+// a force-degradable component never gets different `{<reason>}` brace content
+// on different commands. Each case supplies the matching note as a secondary input.
 const PER_KIND_PARITY_CASES = [
-  // HOOK-04 / D-58-02: `lspServers` is the sole non-generic (soft-degradable)
-  // per-kind marker and renders as `lsp`.
+  // HOOK-04 / D-58-02: `lspServers` has a dedicated per-kind mapping to `lsp`.
   { kind: "lspServers", note: "contains lspServers", expected: "lsp" },
   // D-90-05: every other non-carve-out component kind renders the truthful
   // `unsupported component` marker (was the generic source-axis token).
   { kind: "monitors", note: "contains monitors", expected: "unsupported component" },
   { kind: "themes", note: "contains themes", expected: "unsupported component" },
+  // WDET-04: the typed workflow kind owns the dedicated `workflows` reason.
+  { kind: "workflows", note: "contains workflows", expected: "workflows" },
 ] as const;
 
 for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
@@ -124,9 +122,8 @@ for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
     // list + info derive markers from the typed `unsupported[]` list via the
     // shared helper (both orchestrators import `narrowUnsupportedKinds`).
     const listInfoOut = narrowUnsupportedKinds([kind]);
-    // install error surface derives the marker from the resolver `contains
-    // <kind>` note on the partially-available arm (arm discriminant `true`),
-    // threaded onto the thrown PluginShapeError's `reasons` + typed kinds.
+    // The install surface consumes the typed kind first. It then folds the
+    // matching note from the partially-available arm and deduplicates it.
     const installOut = narrowResolverReasons([note], [kind], true);
     assert.deepEqual(
       listInfoOut,
@@ -147,21 +144,17 @@ for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
 }
 
 // RSTATE-05 / SURF-01 / D-64-02 multi-kind parity: a single-element case agrees
-// across surfaces only by coincidence (the install path's empty-array fallback
-// happens to emit the same generic marker). The byte-parity invariant must hold
-// for a MULTI-kind `unsupported` plugin, where the install path previously
-// dropped every non-`lspServers` kind once an earlier kind had populated the
-// row -- so `install` rendered `["lsp"]` while `list`/`info` rendered
-// `["lsp","unsupported component"]` for the SAME plugin. This case pairs the typed
-// kind list (list/info input) against the matching resolver notes (install
-// input) and asserts both surfaces emit a byte-identical multi-marker set.
+// across surfaces only by coincidence. The byte-parity invariant must hold for
+// a multi-kind `unsupported` plugin. The install path previously dropped each
+// non-`lspServers` kind after an earlier kind populated the row. The install
+// now consumes the typed list first and folds matching notes second. This case
+// asserts that first-wins dedup keeps both surfaces byte-identical.
 test("RSTATE-05 / SURF-01 / D-64-02 multi-kind unsupported markers are byte-identical across list, info, and install", () => {
   // list + info derive markers from the typed `unsupported[]` list via the
   // shared helper.
   const listInfoOut = narrowUnsupportedKinds(["lspServers", "themes"]);
-  // install error surface derives markers from the resolver `contains <kind>`
-  // notes on the partially-available arm (arm discriminant `true`), threaded
-  // onto the thrown PluginShapeError's `reasons` + typed kinds.
+  // The install surface consumes the typed kinds first. Matching notes from
+  // the partially-available arm are secondary inputs and deduplicate.
   const installOut = narrowResolverReasons(
     ["contains lspServers", "contains themes"],
     ["lspServers", "themes"],
@@ -181,6 +174,26 @@ test("RSTATE-05 / SURF-01 / D-64-02 multi-kind unsupported markers are byte-iden
     listInfoOut,
     installOut,
     "list/info and install multi-kind markers must be byte-identical",
+  );
+});
+
+test("WDET-04: multi-kind workflows reasons are byte-identical across list, info, and install", () => {
+  const kinds = ["lspServers", "themes", "workflows"] as const;
+  const listInfoOut = narrowUnsupportedKinds(kinds);
+  // The typed `workflows` kind produces the exact dedicated reason. The
+  // matching `contains workflows` note is a secondary, deduplicated input.
+  const installOut = narrowResolverReasons(
+    ["contains lspServers", "contains themes", "contains workflows"],
+    kinds,
+    true,
+  );
+
+  assert.deepEqual(listInfoOut, ["lsp", "unsupported component", "workflows"]);
+  assert.deepEqual(installOut, ["lsp", "unsupported component", "workflows"]);
+  assert.deepEqual(
+    listInfoOut,
+    installOut,
+    "list/info and install must keep workflows last in canonical reason order",
   );
 });
 

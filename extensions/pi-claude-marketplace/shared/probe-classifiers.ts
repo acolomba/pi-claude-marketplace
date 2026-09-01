@@ -67,20 +67,20 @@ export function narrowProbeError(
 
 /**
  * Closed-set REASONS vocabulary shared by the unsupported-classification
- * helpers below (`narrowResolverNotes`, `narrowUnsupportedKinds`,
- * `kindToReason`). Extracted so the three sites reference one alias instead of
- * re-declaring the union.
+ * helpers below. The helpers accept two separate input axes.
+ * `narrowResolverNotes` maps resolver notes to hooks, LSP, source, and
+ * malformed-MCP reasons. `narrowUnsupportedKinds` maps typed kinds to hooks,
+ * LSP, generic component, and workflows reasons. `kindToReason` owns the
+ * typed-kind mappings.
  */
 export type UnsupportedReason =
-  "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component";
+  "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component" | "workflows";
 
 /**
- * MCPR-03 / D-02: the closed-set members `narrowResolverNotes` can emit. It is
- * the `UnsupportedReason` union widened by the failure-class `malformed mcp`
- * token (a broken `mcpServers` string reference). Only `narrowResolverNotes`
- * carries this member; the sibling `narrowUnsupportedKinds` / `kindToReason`
- * stay on the narrow `UnsupportedReason` alias (they classify per-kind markers,
- * never resolver notes).
+ * MCPR-03 / D-02: the return-type envelope for `narrowResolverNotes`. It widens
+ * `UnsupportedReason` with the failure-class `malformed mcp` token. The shared
+ * alias also contains the typed-kind-only `workflows` member, but this helper
+ * never emits it. The sibling typed-kind helpers never emit `malformed mcp`.
  */
 export type ResolverNoteReason = UnsupportedReason | "malformed mcp";
 
@@ -97,7 +97,8 @@ export type ResolverNoteReason = UnsupportedReason | "malformed mcp";
  * The manifest-field detection token `lspServers` (camelCase, sliced from
  * the resolver's `"contains lspServers"` note) maps to the emitted
  * Reason `lsp`. Any other unsupported-source note falls through to
- * `unsupported source`. Empty notes -> empty reasons array.
+ * `unsupported source`. Workflows do not use this axis, so this helper never
+ * emits `workflows`. Empty notes -> empty reasons array.
  *
  * Each note classifies into EXACTLY ONE bucket; once a bucket has been
  * pushed, repeated notes for the same bucket are no-ops (and crucially do
@@ -165,14 +166,13 @@ function classifyResolverNote(note: string): ResolverNoteReason {
  * parity), by construction rather than by three drift-prone copies.
  *
  * Mapping (HOOK-04 / D-58-02 / D-71-04 / D-90-05): `lspServers` renders as
- * `lsp`; the `hooks` kind (a parseable hooks.json with at least one
- * unsupportable event / matcher group / handler dropped) renders the single
- * aggregate `unsupported hooks` marker. Every other unsupported component kind
- * renders `unsupported component` (D-90-05) -- the truthful COMPONENT-axis
- * marker, distinct from `unsupported source` (the source/note axis, owned by
- * `narrowResolverNotes`). First-wins dedup matches `narrowResolverNotes`
- * semantics (WR-01) so a multi-kind list never emits a duplicate token (one
- * `{unsupported hooks}` regardless of how many handlers dropped).
+ * `lsp`. A typed `hooks` kind renders the aggregate `unsupported hooks` marker.
+ * A typed `workflows` kind renders the dedicated `workflows` marker through
+ * `kindToReason`; it is not a `narrowResolverNotes` result. Every other typed
+ * kind renders `unsupported component` (D-90-05). This marker names the
+ * component axis, unlike the source-axis `unsupported source` marker.
+ * First-wins dedup matches `narrowResolverNotes` semantics (WR-01), so a
+ * multi-kind list never emits a duplicate token.
  *
  * Structural reasons (malformed `hooks.json`, NFR-10 source escape) are NOT
  * in this family: a structural defect routes to the `unavailable` arm
@@ -200,10 +200,10 @@ export function narrowUnsupportedKinds(
 // union. The resolver's `unsupported` array is `Type.Array(Type.String())` and
 // legitimately carries `hooks` (a SUPPORTED kind flagged as dropped) alongside
 // the `UnsupportedKind` literals, so no closed union spans the real input.
-// D-90-05: a kind outside the two carve-outs (`lspServers` -> `lsp`, `hooks` ->
-// `unsupported hooks`) is a non-carve-out COMPONENT kind and collapses to
-// `unsupported component`, naming the axis truthfully rather than borrowing the
-// source-axis `unsupported source` token.
+// D-90-05 / WDET-04: three kinds have dedicated mappings: `lspServers` ->
+// `lsp`, `hooks` -> `unsupported hooks`, and `workflows` -> `workflows`. A kind
+// outside these carve-outs collapses to `unsupported component`. This result
+// names the component axis instead of borrowing the source-axis token.
 function kindToReason(kind: string): UnsupportedReason {
   if (kind === "lspServers") {
     return "lsp";
@@ -211,6 +211,10 @@ function kindToReason(kind: string): UnsupportedReason {
 
   if (kind === "hooks") {
     return "unsupported hooks";
+  }
+
+  if (kind === "workflows") {
+    return "workflows";
   }
 
   return "unsupported component";

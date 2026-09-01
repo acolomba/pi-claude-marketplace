@@ -441,13 +441,13 @@ test("single-name cross-scope flip surfaces state lock failures as V2 `(failed)`
   });
 });
 
-test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces standalone `(failed) {not added}` (no reason-less row)", async () => {
+test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces standalone `(failed) {marketplace not added}` (no reason-less row)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "absent-zzz-9999", enable: true, cwd });
     assert.equal(notifications.length, 1);
     // ATTR-05 / D-48-C Shape 1: missing-everywhere routes through the
-    // standalone MarketplaceNotAddedMessage `{not added}` variant -- NOT the
+    // standalone MarketplaceNotAddedMessage `{marketplace not added}` variant -- NOT the
     // former reason-LESS bare `(failed)`. The bare form carries `first.scope`
     // (the scope where the first not-found was observed); SC-6 iterates
     // project-before-user, so the bracket is `[project]`. The standalone
@@ -455,14 +455,14 @@ test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces stand
     // summary prefix.
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ absent-zzz-9999 [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ absent-zzz-9999 [project] (failed) {marketplace not added}",
     );
     // D-18-05 severity ladder: not-added -> error.
     assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone `(failed) {not added}` with the scope bracket (not `{not found}`)", async () => {
+test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone `(failed) {marketplace not added}` with the scope bracket (not `{not found}`)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Empty project scope; request an explicit project-scope flip of a name
     // that is not added there. classifyAutoupdateFlip throws
@@ -478,14 +478,47 @@ test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone 
     });
     assert.equal(notifications.length, 1);
     // ATTR-05: the explicit-scope MarketplaceNotFoundError converts to the
-    // standalone `{not added}` variant carrying the requested `[project]`
+    // standalone `{marketplace not added}` variant carrying the requested `[project]`
     // bracket -- the former synthetic-child `{not found}` reason is gone.
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ absent-explicit [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ absent-explicit [project] (failed) {marketplace not added}",
     );
     assert.doesNotMatch(notifications[0]!.message, /\{not found\}/);
     assert.equal(notifications[0]!.severity, "error");
+  });
+});
+
+// CMP-4 / SCOPE-01: the qualified sibling of the ATTR-05 explicit-scope test
+// above. When the named marketplace IS added, just in the other scope, the row
+// says so -- the qualified token REPLACES the plain one rather than joining it,
+// because "the container does not exist" and "it exists, but not in the scope
+// you targeted" are competing claims about one subject. This is the user-target
+// direction: the container sits in project, the operator named user.
+//
+// The probe lives at the `missingEverywhere` emission -- the single-name flip
+// that missed in every iterated scope -- which is the only autoupdate site a
+// named marketplace can reach.
+test("CMP-4 / SCOPE-01: explicit --scope user flip of a project-only marketplace renders the user-direction qualified row", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await saveState(projectLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
+    );
+    assert.equal(notifications[0]!.severity, "error");
+    // The flip never reached the scope that DOES hold the record.
+    assert.equal(await configAutoupdate(projectLocations, "mp"), undefined);
   });
 });
 

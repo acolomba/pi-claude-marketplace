@@ -106,12 +106,12 @@ test("shim :: named form propagates name", async () => {
     // Name absent in BOTH scopes -> orchestrator emits a single error.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    // ATTR-05: name-absent routes to the standalone {not added} variant
+    // ATTR-05: name-absent routes to the standalone {marketplace not added} variant
     // (byte-regression sentinel at the edge-handler boundary). Bare form
     // carries first.scope == "project" (SC-6 project-first iteration).
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {marketplace not added}",
     );
   });
 });

@@ -419,7 +419,7 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
   });
 });
 
-test("INFO-04: --scope user mismatch (mp only in project) emits bare `{not added}` row with severity error", async () => {
+test("INFO-04: --scope user mismatch (mp only in project) emits the scope-qualified not-added row with severity error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });
@@ -446,13 +446,13 @@ test("INFO-04: --scope user mismatch (mp only in project) emits bare `{not added
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {marketplace not added to user scope}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("INFO-04: --scope project mismatch (mp only in user) emits bare `{not added}` row with severity error", async () => {
+test("INFO-04: --scope project mismatch (mp only in user) emits the scope-qualified not-added row with severity error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const userLocations = locationsFor("user", cwd);
     await mkdir(userLocations.extensionRoot, { recursive: true });
@@ -479,20 +479,20 @@ test("INFO-04: --scope project mismatch (mp only in user) emits bare `{not added
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ u-only [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ u-only [project] (failed) {marketplace not added to project scope}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added}` WITHOUT any [scope] bracket", async () => {
+test("D-03: absent from BOTH scopes with no --scope renders `(failed) {marketplace not added}` WITHOUT any [scope] bracket", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
     await getMarketplaceInfo({ ctx, pi, name: "ghost-mp", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
     assert.ok(

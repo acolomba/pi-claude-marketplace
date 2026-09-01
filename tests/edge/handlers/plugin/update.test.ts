@@ -92,13 +92,13 @@ test("shim :: <plugin>@<marketplace> form calls updatePlugins with single-plugin
     const handler = makeUpdateHandler(makePi());
     await handler("myplug@mymkt", ctx);
     // ATTR-02: a missing marketplace (no `--scope`, absent in both scopes) now
-    // surfaces the standalone `(failed) {not added}` marketplace-subject row --
+    // surfaces the standalone `(failed) {marketplace not added}` marketplace-subject row --
     // no raw `{not found}` misattribution. No bracket (absent-from-both form).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
   });
 });
@@ -109,12 +109,12 @@ test("shim :: bare @<marketplace> form calls updatePlugins with all-plugins-one-
     const handler = makeUpdateHandler(makePi());
     await handler("@mymkt", ctx);
     // ATTR-02: marketplace-form against a missing marketplace -> standalone
-    // `(failed) {not added}` (no bracket: absent in both scopes, no `--scope`).
+    // `(failed) {marketplace not added}` (no bracket: absent in both scopes, no `--scope`).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
   });
 });
@@ -168,10 +168,10 @@ test("shim :: @<mp> form + --map-model is accepted; control reaches updatePlugin
     assert.equal(notifications[0]!.severity, "error");
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
     // ATTR-02: control reaches updatePlugins, which emits the standalone
-    // `{not added}` for the missing marketplace (not the raw `{not found}`).
+    // `{marketplace not added}` for the missing marketplace (not the raw `{not found}`).
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
   });
 });
@@ -185,10 +185,10 @@ test("shim :: pl@<mp> form + --map-model is accepted; control reaches updatePlug
     assert.equal(notifications[0]!.severity, "error");
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
     // ATTR-02: control reaches updatePlugins, which emits the standalone
-    // `{not added}` for the missing marketplace (not the raw `{not found}`).
+    // `{marketplace not added}` for the missing marketplace (not the raw `{not found}`).
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
   });
 });

@@ -873,7 +873,7 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
   });
 });
 
-test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only target emits standalone {not added}", async () => {
+test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only target emits (skipped) {not installed, marketplace in user scope}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cross-scope-source-"));
     try {
@@ -889,10 +889,12 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       const { ctx, pi, notifications } = makeCtx();
 
       // --scope project where the marketplace lives ONLY in user scope.
-      // ATTR-03 / D-47-A: re-attributed from the former synthesized phantom
-      // target -> `(skipped) {not installed}` to the standalone
-      // `MarketplaceNotAddedMessage`. SCOPE-01: the `[project]` bracket carries
-      // the REQUESTED scope (the operator infers the other scope).
+      // ATTR-03 / D-47-A: the PLUGIN is the row's subject -- the container sits
+      // one scope over, so nothing is installed at the scope named. SCOPE-01:
+      // the `[project]` bracket carries the REQUESTED scope, and the brace
+      // token names the scope that HOLDS the container, so the operator is not
+      // left to infer it. SEV-04 / D-01: an absent target means the operation
+      // was NOT carried out, so the row is `error`.
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -906,7 +908,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
         body,
-        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {not added}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ plug (skipped) {not installed, marketplace in user scope}",
       );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
@@ -915,7 +917,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
   });
 });
 
-test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of a not-added marketplace emits standalone {not added}", async () => {
+test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-only marketplace emits the scope-qualified not-added row", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mp-cross-scope-empty-"));
     try {
@@ -947,7 +949,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of a not-added mark
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
         body,
-        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {marketplace not added to project scope}",
       );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
@@ -956,7 +958,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of a not-added mark
   });
 });
 
-test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits standalone {not added} with no bracket", async () => {
+test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits standalone {marketplace not added} with no bracket", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bare-absent-both-"));
     try {
@@ -975,7 +977,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
 
       // Bare form (no --scope): ghost-mp is absent in both scopes.
       // ATTR-03 / D-47-A: re-attributed from the former raw `Error` ->
-      // `{not found}` to the standalone `{not added}` with NO bracket
+      // `{not found}` to the standalone `{marketplace not added}` with NO bracket
       // (absent-from-both form).
       const outcomes = await reinstallPlugins({
         ctx,
@@ -986,7 +988,10 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
 
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}");
+      assert.equal(
+        body,
+        "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}",
+      );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2150,12 +2155,12 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
   });
 });
 
-test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketplace emits standalone {not added}", async () => {
+test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketplace emits the scope-qualified not-added row", async () => {
   // enumerateMarketplaceReinstallTargets raises the structural
   // MarketplaceNotAddedSignal when the marketplace exists only in user scope
   // and the caller specifies project scope explicitly. reinstallPlugins
   // catches it at the targets-enumeration boundary and emits the standalone
-  // `{not added}` variant (ATTR-03 / D-47-A) -- no raw throw escapes.
+  // `{marketplace not added}` variant (ATTR-03 / D-47-A) -- no raw throw escapes.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-enum-err-"));
     try {
@@ -2182,7 +2187,7 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
         body,
-        "A marketplace operation has failed.\n\n⊘ onlyuser [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ onlyuser [project] (failed) {marketplace not added to project scope}",
       );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {

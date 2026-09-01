@@ -210,7 +210,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
 
   // MU-1 + ATTR-06 / SC#1: resolve scope and enforce the missing-marketplace
   // precondition. On a miss the helper has already emitted the standalone
-  // `(failed) {not added}` variant, so return without entering the refresh path.
+  // `(failed) {marketplace not added}` variant, so return without entering the refresh path.
   const resolved = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
   if (resolved === undefined) {
     return;
@@ -510,7 +510,7 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
       // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
       // fresh `loadState`. The pre-guard already proved existence and the
       // missing-marketplace precondition is handled there (routed to the
-      // standalone `{not added}` variant); reaching here means a concurrent
+      // standalone `{marketplace not added}` variant); reaching here means a concurrent
       // removal in that window. Return undefined so the caller skips the
       // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
       // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
@@ -721,7 +721,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   if (snapshot === undefined) {
     // TOCTOU concurrent-removal no-op: the marketplace was removed between the
     // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
-    // pre-guard already emitted the standalone `{not added}` notification, so
+    // pre-guard already emitted the standalone `{marketplace not added}` notification, so
     // return silently -- NO second contradictory notification, and crucially NO
     // lying `{network unreachable}` (the raw MarketplaceNotFoundError no longer
     // escapes; mirrors remove.ts).

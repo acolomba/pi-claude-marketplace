@@ -3,7 +3,7 @@
 // Mirrors the structure of `tests/edge/handlers/marketplace/list.test.ts`
 // and `remove.test.ts`. The shim parses one required positional + the
 // optional `--scope` filter and delegates to `getMarketplaceInfo`. With
-// an empty hermetic state, the orchestrator's INFO-04 `{not added}`
+// an empty hermetic state, the orchestrator's INFO-04 `{marketplace not added}`
 // carve-out surfaces (the orchestrator's responsibility -- the shim is
 // "thin" and only enforces argv shape).
 //
@@ -77,7 +77,7 @@ test("shim :: missing name positional emits USAGE via notifyUsageError", async (
   });
 });
 
-test("shim :: `info my-mp` delegates with scope: undefined; absent-from-both -> bare {not added} row (no [scope] bracket)", async () => {
+test("shim :: `info my-mp` delegates with scope: undefined; absent-from-both -> bare {marketplace not added} row (no [scope] bracket)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeMarketplaceInfoHandler(makePi());
@@ -85,13 +85,13 @@ test("shim :: `info my-mp` delegates with scope: undefined; absent-from-both -> 
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ my-mp (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ my-mp (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("shim :: `info my-mp --scope user` delegates with scope: 'user'; absent -> `⊘ my-mp [user] (failed) {not added}` + error", async () => {
+test("shim :: `info my-mp --scope user` delegates with scope: 'user'; absent -> `⊘ my-mp [user] (failed) {marketplace not added}` + error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeMarketplaceInfoHandler(makePi());
@@ -99,13 +99,13 @@ test("shim :: `info my-mp --scope user` delegates with scope: 'user'; absent -> 
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("shim :: `info my-mp --scope project` delegates with scope: 'project'; absent -> `⊘ my-mp [project] (failed) {not added}` + error", async () => {
+test("shim :: `info my-mp --scope project` delegates with scope: 'project'; absent -> `⊘ my-mp [project] (failed) {marketplace not added}` + error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeMarketplaceInfoHandler(makePi());
@@ -113,7 +113,7 @@ test("shim :: `info my-mp --scope project` delegates with scope: 'project'; abse
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -129,10 +129,10 @@ test("shim :: bad --scope value routes through notifyUsageError (orchestrator NO
     // The argv parser rejects the bogus scope before the orchestrator
     // runs; the body carries the Usage block (notifyUsageError shape).
     assert.match(notifications[0]!.message, /Usage: \/claude:plugin marketplace info <name>/);
-    // The orchestrator's `{not added}` byte form does not appear because
+    // The orchestrator's `{marketplace not added}` byte form does not appear because
     // it never ran.
     assert.ok(
-      !notifications[0]!.message.includes("not added"),
+      !notifications[0]!.message.includes("marketplace not added"),
       "the orchestrator must not have been invoked",
     );
   });

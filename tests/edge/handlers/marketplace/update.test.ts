@@ -5,7 +5,7 @@
 //                  fresh state -> `(no marketplaces)` EmptyToken per
 //                  CMC-10)
 //   - <name>  -> updateMarketplace (SC#1 convergence: a missing marketplace
-//                  routes to the standalone `(failed) {not added}` variant,
+//                  routes to the standalone `(failed) {marketplace not added}` variant,
 //                  NOT a raw MarketplaceNotFoundError)
 
 import assert from "node:assert/strict";
@@ -105,7 +105,7 @@ test("shim :: named /marketplace update <name> calls updateMarketplace with name
     const handler = makeMarketplaceUpdateHandler(makePi(), deps);
     // SC#1 cross-op convergence: updateMarketplace's pre-guard catches
     // resolveScopeFromState's MarketplaceNotFoundError (--scope omitted, name
-    // absent in BOTH scopes) and routes to the standalone `(failed) {not added}`
+    // absent in BOTH scopes) and routes to the standalone `(failed) {marketplace not added}`
     // variant -- no raw error escapes past the orchestrator. The handler
     // resolves (no rejection) and a single bracketless not-added row is emitted,
     // proving control reached updateMarketplace with the requested name.
@@ -113,7 +113,7 @@ test("shim :: named /marketplace update <name> calls updateMarketplace with name
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {marketplace not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });

@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { MCP_SERVERS_VALIDATOR } from "../../extensions/pi-claude-marketplace/domain/components/mcp.ts";
 import {
+  PLUGIN_ENTRY_SCHEMA,
   PLUGIN_ENTRY_VALIDATOR,
   PLUGIN_MANIFEST_VALIDATOR,
 } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -202,6 +203,42 @@ test("MM-2 PLUGIN_ENTRY accepts opaque unsupported components", () => {
     }),
     true,
   );
+});
+
+test("WDET-01 plugin schemas admit opaque workflow declarations without mutation", async () => {
+  const workflowDeclaration = Object.freeze({ runner: 42, path: null });
+  const entry = Object.freeze({
+    name: "p",
+    source: "./local",
+    workflows: workflowDeclaration,
+  });
+  const manifest = Object.freeze({ name: "p", workflows: 17 });
+
+  assert.ok(
+    "workflows" in PLUGIN_ENTRY_SCHEMA.properties,
+    "workflows must be a named shared schema field",
+  );
+  assert.equal(PLUGIN_ENTRY_VALIDATOR.Check(entry), true);
+  assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check(manifest), true);
+
+  const results = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      Promise.resolve().then(() => [
+        PLUGIN_ENTRY_VALIDATOR.Check(entry),
+        PLUGIN_MANIFEST_VALIDATOR.Check(manifest),
+      ]),
+    ),
+  );
+  assert.deepEqual(
+    results,
+    Array.from({ length: 8 }, () => [true, true]),
+  );
+  assert.deepEqual(entry, {
+    name: "p",
+    source: "./local",
+    workflows: { runner: 42, path: null },
+  });
+  assert.deepEqual(manifest, { name: "p", workflows: 17 });
 });
 
 test("MM-2 PLUGIN_ENTRY accepts opaque dependencies (PI-13)", () => {

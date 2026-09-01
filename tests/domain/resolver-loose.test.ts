@@ -363,6 +363,7 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
     { kind: "themes", relativePath: "themes", stat: "dir" },
     { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
     { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
+    { kind: "workflows", relativePath: "workflows", stat: "dir" },
   ];
 
   for (const c of cases) {
@@ -376,6 +377,138 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
     assert.equal(r.state, "partially-available", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
   }
+});
+
+test("WDET-02 loose: every workflow signal resolves to one exact unsupported kind", async () => {
+  const cases: readonly {
+    readonly name: string;
+    readonly source: string;
+    readonly entry?: Readonly<Record<string, unknown>>;
+    readonly manifest?: Readonly<Record<string, unknown>>;
+    readonly directory?: boolean;
+  }[] = [
+    {
+      name: "entry null declaration",
+      source: "./workflow-entry-null",
+      entry: Object.freeze({ workflows: null }),
+    },
+    {
+      name: "entry false declaration",
+      source: "./workflow-entry-false",
+      entry: Object.freeze({ workflows: false }),
+    },
+    {
+      name: "plugin manifest null declaration",
+      source: "./workflow-manifest-null",
+      manifest: Object.freeze({ name: "p1", workflows: null }),
+    },
+    {
+      name: "plugin manifest false declaration",
+      source: "./workflow-manifest-false",
+      manifest: Object.freeze({ name: "p1", workflows: false }),
+    },
+    { name: "conventional directory", source: "./workflow-directory", directory: true },
+    {
+      name: "declaration and directory",
+      source: "./workflow-combined",
+      entry: Object.freeze({ workflows: 23 }),
+      directory: true,
+    },
+  ];
+
+  for (const c of cases) {
+    const localRoot = ROOT(c.source);
+    const files: Record<string, "dir" | { contents: string }> = { [localRoot]: "dir" };
+
+    if (c.manifest !== undefined) {
+      files[path.join(localRoot, ".claude-plugin", "plugin.json")] = {
+        contents: JSON.stringify(c.manifest),
+      };
+    }
+
+    if (c.directory === true) {
+      files[path.join(localRoot, "workflows")] = "dir";
+    }
+
+    const r = await resolveLoose(basicEntry({ source: c.source, ...c.entry }), mockCtx(MP, files));
+    assert.equal(r.state, "partially-available", c.name);
+    if (r.state === "partially-available") {
+      assert.deepEqual(r.unsupported, ["workflows"], c.name);
+      assert.deepEqual(r.notes, ["contains workflows"], c.name);
+    }
+  }
+});
+
+test("WDET-02 loose: a workflows regular file is not a convention signal", async () => {
+  const localRoot = ROOT("./workflow-file");
+  const r = await resolveLoose(
+    basicEntry({ source: "./workflow-file" }),
+    mockCtx(MP, {
+      [localRoot]: "dir",
+      [path.join(localRoot, "workflows")]: { contents: "opaque workflow bytes" },
+    }),
+  );
+
+  assert.equal(r.state, "installable");
+  assert.equal(r.notes.includes("contains workflows"), false);
+  if (r.state === "installable") {
+    assert.equal(r.unsupported.includes("workflows"), false);
+  }
+});
+
+test("WDET-02 loose: named local workflow layouts classify in parallel without a network seam call", async () => {
+  let networkCalls = 0;
+  const sources = Object.freeze(["./claude-security", "./code-modernization"] as const);
+  const entries = Object.freeze(sources.map((source) => Object.freeze(basicEntry({ source }))));
+
+  const results = await Promise.all(
+    entries.map((entry) => {
+      const localRoot = ROOT(entry.source as string);
+      const files = Object.freeze({
+        [localRoot]: "dir" as const,
+        [path.join(localRoot, "workflows")]: "dir" as const,
+      });
+      const ctx: ResolveContext = {
+        ...mockCtx(MP, files),
+        resolveGitPluginRoot(): Promise<never> {
+          networkCalls += 1;
+          return Promise.reject(new Error("network seam must stay unused"));
+        },
+      };
+      return resolveLoose(entry, ctx);
+    }),
+  );
+
+  assert.deepEqual(
+    results.map((r) => ({
+      state: r.state,
+      unsupported: r.state === "partially-available" ? r.unsupported : [],
+      notes: r.notes,
+    })),
+    sources.map(() => ({
+      state: "partially-available",
+      unsupported: ["workflows"],
+      notes: ["contains workflows"],
+    })),
+  );
+  assert.equal(networkCalls, 0);
+  assert.deepEqual(
+    entries,
+    sources.map((source) => basicEntry({ source })),
+  );
+});
+
+test("D-106-06 loose: a workflow signal cannot expose a structurally invalid plugin root", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveLoose(
+    basicEntry({ source: "./local", mcpServers: [1, 2, 3], workflows: 29 }),
+    ctx,
+  );
+
+  assert.equal(r.state, "unavailable");
+  assert.ok(r.notes.some((note) => note.includes("malformed mcpServers")));
+  assert.ok(r.notes.includes("contains workflows"));
+  assert.ok(!("pluginRoot" in r));
 });
 
 // D-90-06 loose: a bin/ dir on disk resolves installable (runtime-honored via
