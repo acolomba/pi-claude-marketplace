@@ -124,7 +124,8 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  * mutable internally (write() appends bytes) but the entry's reference
  * to them is fixed.
  */
-interface AsyncRewakeEntry {
+// fallow-ignore-next-line unused-type -- WR-01 compatibility: preserve the published registry row type; it remains internally consumed and has no replacement public binding.
+export interface AsyncRewakeEntry {
   readonly dispatchId: string;
   readonly pid: number;
   readonly scope: "user" | "project";
