@@ -1,6 +1,9 @@
 ---
 phase: 114-plugin-and-marketplace-lifecycle
-reviewed: 2026-09-01T15:16:01Z
+reviewed: 2026-09-01T15:42:31Z
+re_reviewed: 2026-09-01T15:42:31Z
+fix_commit: 84b147ec
+fix_report_commit: 98aa97ce
 depth: standard
 files_reviewed: 35
 files_reviewed_list:
@@ -41,43 +44,47 @@ files_reviewed_list:
   - tests/orchestrators/plugin/update.test.ts
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+resolved_findings: 1
+status: clean
 ---
 
 # Phase 114: Code Review Report
 
-**Reviewed:** 2026-09-01T15:16:01Z
+**Reviewed:** 2026-09-01T15:42:31Z
 **Depth:** standard
 **Files Reviewed:** 35
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-The complete Phase 114 implementation was reviewed against `114-CONTEXT.md`, Plans 01-14, their summaries, and the final aggregate evidence. The scope includes 29 present files and the six deleted supplemental-test paths; the transaction lifecycle test's rename was reviewed at its integration destination. No production correctness or security defect was proved. The production refinements preserve the exported contracts and the required direct/cascade behavior, and the OR-12 known-skills correction forwards recorded generated skill names to agent staging as required.
+The complete Phase 114 implementation was reviewed against `114-CONTEXT.md`, Plans 01-14, their summaries, and the final aggregate evidence. The original scope includes 29 present files and six deleted supplemental-test paths; the transaction lifecycle test's rename was reviewed at its integration destination. No production correctness or security defect was proved.
 
-The supplied clean-worktree aggregate evidence reports 4,710 passing unit cases and 28 passing integration cases. A focused sandbox run passed 15 of the 16 owner/integration files; `marketplace/add.test.ts` was blocked only because the sandbox rejects its Unix-domain-socket `server.listen` with `EPERM`, while the same file passes outside the sandbox. `plugin/info.test.ts` passes all 129 cases on the current POSIX, non-root host. Those green results do not exercise the eight conditional skip arms below, so the phase's cross-environment no-skip and exact owner-coverage claim is not yet reliable.
+The WR-01 fix in `84b147ec` and its report in `98aa97ce` were re-reviewed in the current tree. The re-review covered `plugin/info.test.ts`, the TypeScript unit-testing guideline, `114-PATTERNS.md`, all fourteen PLAN static gates, and `114-REVIEW-FIX.md`. The original warning is resolved without a production edit, export, seam, cast, coverage exception, skip, OS/UID exit, or conditional coverage path. All reviewed files meet quality standards. No current issues were found.
 
 ## Narrative Findings (AI reviewer)
 
-### Warnings
+### Resolved Findings
 
-#### WR-01: Dynamic skips evade the no-skip gate and make owner coverage environment-dependent
+#### WR-01: Dynamic skips evade the no-skip gate and make owner coverage environment-dependent — RESOLVED
 
-**Classification:** WARNING
-**File:** `tests/orchestrators/plugin/info.test.ts:1356` (also lines 1412, 2451, 2456, 4337, 4396, 6692, and 6750)
-**Issue:** Eight permission-failure cases call `t.skip()` on Windows, and one also skips when the suite runs as root. Phase 114 explicitly requires that no skip remain and that the sole owner prove its exact case count with 100 percent direct branch coverage. The prohibited-pattern command only searches for `test.(only|skip|todo)`, so it misses Node's callback-context form `t.skip()`. As a result, the aggregate gate can pass while these EACCES/EPERM and fallback branches are not executed on supported environments. This is a test-reliability defect: the final evidence is conditional on OS and UID even though the report claims an unconditional owner matrix.
+**Original classification:** WARNING
+**Resolution:** `tests/orchestrators/plugin/info.test.ts:72-105` now provides a case-scoped filesystem fault helper. The seven affected owner cases inject targeted `readFile` or `readdir` EACCES failures, call exported `getPluginInfo`, assert that the selected fault was exercised, and restore the exact built-in method descriptor in `finally`. The prior eight `t.skip()` calls and all platform/UID guards are absent. No production file changed in the fix range.
+**Prevention:** The guideline and pattern map now name callback-context calls explicitly. Every Phase 114 PLAN gate uses `(?:test|t)\.(?:only|skip|todo)\(`, and the phase owner/integration scan returns no matches.
 
-**Fix:** Replace the `chmod`/UID-dependent fixtures with deterministic, case-owned fault fixtures that reach the same behavior through `getPluginInfo` on every supported test host. If the public boundary cannot produce these filesystem errors portably without a forbidden production seam, resolve that contract conflict explicitly instead of skipping the cases; keep OS-permission semantics in a separately scoped platform integration while retaining deterministic owner coverage. Also expand the static gate so callback-context skips cannot evade it, for example:
+### Re-review Verification
 
-```bash
-! rg -n '(?:test|t)\.(?:only|skip|todo)\(' tests/orchestrators/plugin/info.test.ts
-```
+- `plugin/info.test.ts`: 129 passed, 0 failed, 0 skipped, 0 todo.
+- Manifest-absent prefix: exactly 40 passed, 0 skipped.
+- Direct `plugin/info.ts` coverage: 310/310 branches, 62/62 functions, 2,372/2,372 lines.
+- TypeScript typecheck, targeted ESLint, targeted Prettier, and fix-range `git diff --check`: passed.
+- All fourteen PLAN files contain the alias-aware prohibited-pattern gate.
+- The fix range changes no file under `extensions/`; `114-REVIEW-FIX.md` accurately records the implementation and verification evidence.
 
 ---
 
-_Reviewed: 2026-09-01T15:16:01Z_
+_Reviewed: 2026-09-01T15:42:31Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
