@@ -100,12 +100,13 @@ status: complete
 - Nine architecture carriers: 9/9 passed.
 - Fourteen-source direct loop: 2096/2096 branches, 394/394 functions, 17061/17061 lines.
 - TypeScript, ESLint, targeted Prettier, static scans, added-line scans, and diff checks passed.
-- Full unit suite: 4710/4710 tests across 260 suites; integration suite: 12/12 tests.
+- Full unit suite: 4710/4710 tests across 260 suites; all 12 integration files passed, with 28/28 cases in the literal clean-worktree run.
+- Literal `npm run check`: passed from the clean Phase 114 worktree, including the Unix-domain-socket case outside the socket-restricted sandbox.
 
 ## Deviations from Plan
 
 - Applied the approved production-edit exception to the uninstall catch. CodeGraph proved `withScopeLock` normalizes acquisition, body, cascade, and release failures through `toError`; the local `Error` refinement removes only the unreachable non-Error fallback and preserves identity and public behavior.
-- The literal root `npm run check` reached global formatting and found eight unrelated user-owned untracked JSON files. Those files were left untouched. The tracked-file formatting equivalent and every remaining check stage passed; the literal command is rerun from a clean temporary worktree after these commits.
+- The literal root `npm run check` reached global formatting and found eight unrelated user-owned untracked JSON files. Those files were left untouched. The exact command then passed from a clean temporary worktree; its Unix-domain-socket fixture required the normal unsandboxed test capability.
 
 ## Issues Encountered
 
