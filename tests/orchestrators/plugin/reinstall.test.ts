@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -40,6 +40,8 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+
+import { retryTree } from "./scope-tree-inventory.ts";
 
 import type {
   GitAuthBundle,
@@ -342,51 +344,6 @@ const retryFs = retryRequire("node:fs/promises") as typeof import("node:fs/promi
  * observer rather than be filtered by it.
  */
 const retryRepairRm = retryFs.rm.bind(retryFs);
-
-async function retryPathExists(target: string): Promise<boolean> {
-  try {
-    await stat(target);
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
-
-    throw err;
-  }
-}
-
-/**
- * Complete relative inventory of one scope root. Directories carry a trailing
- * slash; the advisory lock file is excluded because its presence depends on
- * lock timing rather than on reinstall's mutation ledger.
- */
-async function retryTree(root: string): Promise<readonly string[]> {
-  if (!(await retryPathExists(root))) {
-    return [];
-  }
-
-  const entries: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    const children = await retryFs.readdir(directory, { withFileTypes: true });
-    children.sort((left, right) => left.name.localeCompare(right.name));
-    for (const child of children) {
-      const absolute = path.join(directory, child.name);
-      const relative = path.relative(root, absolute).split(path.sep).join("/");
-      if (relative === "pi-claude-marketplace/.state-lock") {
-        continue;
-      }
-
-      entries.push(child.isDirectory() ? `${relative}/` : relative);
-      if (child.isDirectory()) {
-        await visit(absolute);
-      }
-    }
-  };
-
-  await visit(root);
-  return entries;
-}
 
 interface RetryScheduleDirs {
   readonly agentsStagingDir: string;

@@ -38,10 +38,13 @@ import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+
+import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
@@ -54,46 +57,6 @@ import type { TestContext } from "node:test";
 
 const require = createRequire(import.meta.url);
 const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
-
-async function retryPathExists(target: string): Promise<boolean> {
-  try {
-    await stat(target);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
-
-    throw error;
-  }
-}
-
-async function retryTree(root: string): Promise<readonly string[]> {
-  if (!(await retryPathExists(root))) {
-    return [];
-  }
-
-  const entries: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    const children = await filesystemPromises.readdir(directory, { withFileTypes: true });
-    children.sort((left, right) => left.name.localeCompare(right.name));
-    for (const child of children) {
-      const absolute = path.join(directory, child.name);
-      const relative = path.relative(root, absolute).split(path.sep).join("/");
-      if (relative === "pi-claude-marketplace/.state-lock") {
-        continue;
-      }
-
-      entries.push(child.isDirectory() ? `${relative}/` : relative);
-      if (child.isDirectory()) {
-        await visit(absolute);
-      }
-    }
-  };
-
-  await visit(root);
-  return entries;
-}
 
 function observeRetryBridgeSchedule(
   t: TestContext,
@@ -8452,7 +8415,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.strictEqual(firstStateBytes, stateBytes);
-      assert.strictEqual(await retryPathExists(locations.configJsonPath), false);
+      assert.strictEqual(await pathExists(locations.configJsonPath), false);
       assert.notStrictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       assert.deepStrictEqual(firstSchedule, [
         "prepare:skills",

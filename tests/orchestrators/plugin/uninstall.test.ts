@@ -32,6 +32,8 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import { retryTree } from "./scope-tree-inventory.ts";
+
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -2732,41 +2734,6 @@ test("LIFE-04: manifest-absent uninstall of a record with no resources still con
 
 const retryRequire = createRequire(import.meta.url);
 const retryFs = retryRequire("node:fs/promises") as typeof import("node:fs/promises");
-/** Snapshot taken before any case installs a mock, so the tree walk below
- *  never records a `gc:scan` of its own. */
-const retryReaddir = retryFs.readdir.bind(retryFs);
-
-/**
- * Complete relative inventory of one scope root. Directories carry a trailing
- * slash; the advisory lock file is excluded because its presence depends on
- * lock timing rather than on uninstall's mutation ledger.
- */
-async function retryTree(root: string): Promise<readonly string[]> {
-  if (!(await pathExists(root))) {
-    return [];
-  }
-
-  const entries: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    const children = await retryReaddir(directory, { withFileTypes: true });
-    children.sort((left, right) => left.name.localeCompare(right.name));
-    for (const child of children) {
-      const absolute = path.join(directory, child.name);
-      const relative = path.relative(root, absolute).split(path.sep).join("/");
-      if (relative === "pi-claude-marketplace/.state-lock") {
-        continue;
-      }
-
-      entries.push(child.isDirectory() ? `${relative}/` : relative);
-      if (child.isDirectory()) {
-        await visit(absolute);
-      }
-    }
-  };
-
-  await visit(root);
-  return entries;
-}
 
 /** Case-local projection of the paths the schedule observer recognizes. */
 interface RetryTargets {
