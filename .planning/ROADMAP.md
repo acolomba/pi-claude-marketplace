@@ -37,7 +37,7 @@ secondary detail.
 - [x] **Phase 111: Non-Hook Component Bridges** - Prove 31 agents, commands, MCP, and skills bridge contracts. (completed 2026-08-30)
 - [x] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts. (completed 2026-08-31)
 - [x] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts. (completed 2026-09-01)
-- [ ] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows.
+- [x] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows. (completed 2026-09-01)
 - [ ] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions.
 - [ ] **Phase 116: Edge Surface** - Prove 30 command parsing, completion, handler, tool, and dispatch contracts.
 - [ ] **Phase 117: Extension Entry and Final Gate** - Prove the root entry pair and close all repository-wide gates.
@@ -462,24 +462,24 @@ Plans:
 4. Offline operations stay offline. Network-capable cases use fake or loopback-only boundaries without developer credentials.
 5. State-changing cases prove atomicity and safe retries with case-owned state and temporary trees.
 
-**Plans**: 14 plans
+**Plans**: 14/14 plans complete
 
 Plans:
 
-- [ ] **114-01** (`114-01-PLAN.md`, `P114-01`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` → `tests/orchestrators/marketplace/add.test.ts`
-- [ ] **114-02** (`114-02-PLAN.md`, `P114-02`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts` → `tests/orchestrators/marketplace/autoupdate.test.ts`
-- [ ] **114-03** (`114-03-PLAN.md`, `P114-03`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts` → `tests/orchestrators/marketplace/info.test.ts`
-- [ ] **114-04** (`114-04-PLAN.md`, `P114-04`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts` → `tests/orchestrators/marketplace/list.test.ts`
-- [ ] **114-05** (`114-05-PLAN.md`, `P114-05`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` → `tests/orchestrators/marketplace/remove.test.ts`
-- [ ] **114-06** (`114-06-PLAN.md`, `P114-06`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` → `tests/orchestrators/marketplace/update.test.ts`
-- [ ] **114-07** (`114-07-PLAN.md`, `P114-07`) - `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts` → `tests/orchestrators/plugin/enable-disable.test.ts`
-- [ ] **114-08** (`114-08-PLAN.md`, `P114-08`) - `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts` → `tests/orchestrators/plugin/fetch.test.ts`
-- [ ] **114-09** (`114-09-PLAN.md`, `P114-09`) - `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` → `tests/orchestrators/plugin/info.test.ts`
-- [ ] **114-10** (`114-10-PLAN.md`, `P114-10`) - `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` → `tests/orchestrators/plugin/install.test.ts`
-- [ ] **114-11** (`114-11-PLAN.md`, `P114-11`) - `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` → `tests/orchestrators/plugin/list.test.ts`
-- [ ] **114-12** (`114-12-PLAN.md`, `P114-12`) - `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts` → `tests/orchestrators/plugin/reinstall.test.ts`
-- [ ] **114-13** (`114-13-PLAN.md`, `P114-13`) - `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` → `tests/orchestrators/plugin/uninstall.test.ts`
-- [ ] **114-14** (`114-14-PLAN.md`, `P114-14`) - `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` → `tests/orchestrators/plugin/update.test.ts`
+- [x] **114-01** (`114-01-PLAN.md`, `P114-01`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` → `tests/orchestrators/marketplace/add.test.ts`
+- [x] **114-02** (`114-02-PLAN.md`, `P114-02`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts` → `tests/orchestrators/marketplace/autoupdate.test.ts`
+- [x] **114-03** (`114-03-PLAN.md`, `P114-03`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts` → `tests/orchestrators/marketplace/info.test.ts`
+- [x] **114-04** (`114-04-PLAN.md`, `P114-04`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts` → `tests/orchestrators/marketplace/list.test.ts`
+- [x] **114-05** (`114-05-PLAN.md`, `P114-05`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` → `tests/orchestrators/marketplace/remove.test.ts`
+- [x] **114-06** (`114-06-PLAN.md`, `P114-06`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` → `tests/orchestrators/marketplace/update.test.ts`
+- [x] **114-07** (`114-07-PLAN.md`, `P114-07`) - `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts` → `tests/orchestrators/plugin/enable-disable.test.ts`
+- [x] **114-08** (`114-08-PLAN.md`, `P114-08`) - `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts` → `tests/orchestrators/plugin/fetch.test.ts`
+- [x] **114-09** (`114-09-PLAN.md`, `P114-09`) - `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` → `tests/orchestrators/plugin/info.test.ts`
+- [x] **114-10** (`114-10-PLAN.md`, `P114-10`) - `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` → `tests/orchestrators/plugin/install.test.ts`
+- [x] **114-11** (`114-11-PLAN.md`, `P114-11`) - `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` → `tests/orchestrators/plugin/list.test.ts`
+- [x] **114-12** (`114-12-PLAN.md`, `P114-12`) - `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts` → `tests/orchestrators/plugin/reinstall.test.ts`
+- [x] **114-13** (`114-13-PLAN.md`, `P114-13`) - `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` → `tests/orchestrators/plugin/uninstall.test.ts`
+- [x] **114-14** (`114-14-PLAN.md`, `P114-14`) - `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` → `tests/orchestrators/plugin/update.test.ts`
 
 ### Phase 115: Composition Orchestrators
 
@@ -615,8 +615,8 @@ and commit still owns one pair.
 | 111. Non-Hook Component Bridges          |          31/31 | Complete        | 2026-08-30 |
 | 112. Hook Runtime                        |          31/31 | Complete        | 2026-08-31 |
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
-| 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
+| 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            0/8 | Not started     | -          |
 | 116. Edge Surface                        |           0/30 | Not started     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
-| **Total**                                |    **151/204** | **In Progress** | **-**      |
+| **Total**                                |    **165/204** | **In Progress** | **-**      |

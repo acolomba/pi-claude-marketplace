@@ -22,6 +22,18 @@ re_verification:
 **Re-verification:** Yes — after gap closure (plans 114-15, 114-16, 114-17)
 **Tree:** HEAD `3331d23d238e408c58dc199ccbbcf0efe292ec16`, `features/unit-test-refactor`
 
+> **Tree has advanced since this verification.** A scoped re-review of the three
+> gap-closure files ran after this report and recorded one blocker plus nine
+> warnings; all ten were fixed in commits `590c6445` through `505ff1ee`. The
+> blocker was that both containment retry proofs matched a message alternation
+> shared by two error classes and then built the expected notification out of the
+> actual error, so neither could fail. Those proofs now discriminate with
+> `instanceof SymlinkRefusedError` against hand-authored literals, confirmed by a
+> negative control. The findings do not reverse any verdict below — the D-14
+> containment must-have is now proven non-vacuously rather than vacuously — and
+> the suite remains green at 134 install, 108 reinstall, and 58 uninstall cases.
+> See `114-REVIEW.md` and `114-REVIEW-FIX.md`.
+
 ## Verdict
 
 The single grouped blocker recorded at the prior `114-VERIFICATION.md:9` is closed. I independently re-derived every number the three closure summaries claimed — I did not accept a single count from a SUMMARY.md without re-running or re-deriving it myself. The AST audit, the semantic read of five representative retry cases sampled across all three owners, the full 14-owner aggregate run, all 14 direct-coverage records, the transfer/integration/architecture gates, static scans, and a full `npm run check` from a clean detached worktree all reproduce the executors' claims exactly. Phase 114 now meets its proof contract. MOD-07 is satisfied.

@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.19
-current_phase: 114
-current_phase_name: Plugin and Marketplace Lifecycle
-status: executing
-stopped_at: Phase 115 context gathered; Phase 114 re-review findings open and transition pending
-last_updated: "2026-09-01T20:29:13.183Z"
+current_phase: 115
+current_phase_name: Composition Orchestrators
+status: planning
+stopped_at: Phase 114 complete; Phase 115 context gathered and ready to plan
+last_updated: "2026-09-01T21:19:04.000Z"
 last_activity: 2026-09-01
-last_activity_desc: Phase 114 canonical verification passed 75/75; MOD-07 satisfied
-state_head: 7e58f33e4f8e67d187a707fdf1ace73ff323121d
+last_activity_desc: Phase 114 closed after review fixes; MOD-07 satisfied
+state_head: 1e2a2c97a02961d09f707d636a3ab3559dfcc6cf
 progress:
   total_phases: 10
   completed_phases: 7
@@ -30,14 +30,15 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 114 (Plugin and Marketplace Lifecycle) — EXECUTING
-Plan: 17 of 17
-Status: Phase 114 verified 75/75; post-gap code review and UAT remain before transition
-Last activity: 2026-09-01 — Phase 114 canonical verification passed 75/75 (MOD-07 satisfied)
+Phase: 115 (Composition Orchestrators) — READY TO PLAN
+Plan: 0 of 8
+Status: Context gathered and committed; planning not started
+Last activity: 2026-09-01 — Phase 114 closed: verification 75/75, re-review blocker and
+nine warnings fixed, transition applied
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
-One hundred fifty-one of 204 source-test pairs are complete. The remaining 53 are open.
+One hundred sixty-five of 204 source-test pairs are complete. The remaining 39 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -302,8 +303,13 @@ None for roadmap creation.
 
 ### Blockers/Concerns
 
-- Phase 114 planning must resolve update reason mismatches from public contracts.
 - Phase 117 must measure the Node 24 all-pair duration before adding concurrency.
+- `gsd-tools query phase.complete` cannot write the root planning files while
+  workstream mode is active, and neither existing workstream holds v1.19 —
+  `defaults-enabled` is a finished milestone at phase 105 and `milestone` is v1.18
+  at phase 100. Phase 114's ROADMAP and STATE transition was therefore applied by
+  hand. Phases 115 through 117 and milestone close will hit the same wall until the
+  stale workstream directories are retired or v1.19 is given its own workstream.
 
 ## Deferred Items
 
@@ -314,7 +320,8 @@ None for roadmap creation.
 ## Session Continuity
 
 Last session: 2026-09-01T20:29:11.520Z
-Stopped at: Phase 115 context gathered. Phase 114 still has open work: the
-gap-closure re-review recorded 1 blocker and 9 warnings, the fix pass has not
-run, and the phase transition has not run. Close those before planning 115.
+Stopped at: Phase 114 is complete and transitioned. Its re-review blocker and
+nine warnings are fixed across commits 590c6445..505ff1ee, with the containment
+proofs now discriminating by typed class. Phase 115 context is committed; the
+next step is planning Phase 115.
 Resume file: .planning/phases/115-composition-orchestrators/115-CONTEXT.md
