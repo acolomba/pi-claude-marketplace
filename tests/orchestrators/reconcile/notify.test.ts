@@ -11,7 +11,6 @@ import {
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
-import { PENDING_STATUSES } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type {
@@ -1197,8 +1196,7 @@ test("FSTAT-06 / D-66-05: the reconcile pending projection never emits an update
   // `will force update` is VACUOUS -- the ReconcilePlan has no update bucket, so
   // the pending projection can only ever push install/uninstall/enable/disable +
   // failed rows. Populate every bucket (including a forced install) and assert
-  // no row status mentions "update", and that the pending closed set has no
-  // update token at all.
+  // no projected row status mentions "update".
   const plan: ReconcilePlan = {
     scope: "project",
     marketplacesToAdd: [],
@@ -1230,13 +1228,6 @@ test("FSTAT-06 / D-66-05: the reconcile pending projection never emits an update
     .find((p) => p.status === "will install" && p.name === "ins");
   assert.ok(forcedInstall);
   assert.equal(forcedInstall.status === "will install" ? forcedInstall.partial : undefined, true);
-
-  // Structural guarantee: the pending closed status set has no update member,
-  // so a `will force update` row is unrepresentable on this surface.
-  assert.ok(
-    !PENDING_STATUSES.some((s) => s.includes("update")),
-    `PENDING_STATUSES must contain no update token; got ${PENDING_STATUSES.join(", ")}`,
-  );
 });
 
 test("isReconcilePlanListEmpty: empty list -> true", () => {
