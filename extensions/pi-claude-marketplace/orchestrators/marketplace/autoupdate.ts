@@ -65,7 +65,7 @@ import path from "node:path";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -149,7 +149,7 @@ function missingEverywhere(
     readonly errors: readonly unknown[];
     readonly scopes: readonly Scope[];
   },
-): boolean {
+): opts is AutoupdateOptions & { readonly name: string } {
   return (
     opts.name !== undefined &&
     result.rows.length === 0 &&
@@ -172,14 +172,14 @@ function missingEverywhere(
  * (-> `lock held`, whose message carries the retry hint) and other non-not-found
  * flip errors (-> the permissive `not found` fallback).
  */
-function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
+function autoupdateFailedRow(name: string, err: Error): PluginFailedMessage {
   const reasons: readonly ContentReason[] =
     err instanceof StateLockHeldError ? (["lock held"] as const) : (["not found"] as const);
   return {
     status: "failed",
     name,
     reasons,
-    cause: err instanceof Error ? err : new Error(errorMessage(err)),
+    cause: err,
     // D-03/D-06: a synthetic autoupdate-failure child -> error, no reload.
     severity: "error",
     needsReload: false,
@@ -198,27 +198,15 @@ function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOA
 /**
  * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
  *
- * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
- * missing-marketplace precondition, NOT a flip failure -- it routes to the
- * standalone MarketplaceNotAddedMessage `⊘ <name> [<scope>] (failed) {not added}`
- * variant carrying the explicit scope bracket (the former
- * synthetic-child `{not found}` reason lied about the blocker). Every OTHER
- * error -- notably `StateLockHeldError`, whose message carries an actionable
- * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
- * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
- * header carries no `cause` per SNM-10).
+ * Missing-marketplace errors are collected by the sole caller and routed
+ * through the aggregate `{not added}` path. Every error reaching this helper --
+ * notably `StateLockHeldError`, whose message carries an actionable retry hint --
+ * keeps the synthetic failed-plugin child whose `cause` drives the renderer's
+ * depth-5 cause-chain trailer (the MarketplaceNotificationMessage header carries
+ * no `cause` per SNM-10).
  */
-function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
+function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: Error): void {
   const failureName = opts.name ?? "(unknown)";
-
-  if (err instanceof MarketplaceNotFoundError) {
-    notify(opts.ctx, opts.pi, {
-      kind: "marketplace-not-added",
-      name: failureName,
-      scope,
-    });
-    return;
-  }
 
   // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
   // row -> Single. The flip command is selected by the boolean `opts.enable`
@@ -505,7 +493,10 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // the OTHER scope, so it is collected and surfaced only if BOTH scopes
       // failed AND no flip happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
-        notifyAutoupdateScopeFailure(opts, scope, err);
+        // `withLockedStateTransaction` normalizes every rejection through
+        // `toError` before `flipOneScope` rejects, so this caught value is an
+        // Error on every reachable path.
+        notifyAutoupdateScopeFailure(opts, scope, err as Error);
         return;
       }
 
@@ -526,7 +517,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // Scope bracket: an explicit `opts.scope` carries it; the bare form
       // carries `first.scope` (the scope where the first not-found was
       // observed), per the RESEARCH recommendation.
-      const failureName = opts.name ?? "(unknown)";
+      const failureName = opts.name;
       notify(opts.ctx, opts.pi, {
         kind: "marketplace-not-added",
         name: failureName,
