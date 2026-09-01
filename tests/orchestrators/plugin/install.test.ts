@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -49,9 +49,187 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type { TestContext } from "node:test";
 
 const require = createRequire(import.meta.url);
 const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
+
+async function retryPathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function retryTree(root: string): Promise<readonly string[]> {
+  if (!(await retryPathExists(root))) {
+    return [];
+  }
+
+  const entries: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    const children = await filesystemPromises.readdir(directory, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const absolute = path.join(directory, child.name);
+      const relative = path.relative(root, absolute).split(path.sep).join("/");
+      if (relative === "pi-claude-marketplace/.state-lock") {
+        continue;
+      }
+
+      entries.push(child.isDirectory() ? `${relative}/` : relative);
+      if (child.isDirectory()) {
+        await visit(absolute);
+      }
+    }
+  };
+
+  await visit(root);
+  return entries;
+}
+
+function observeRetryBridgeSchedule(
+  t: TestContext,
+  targets: {
+    readonly agentsStagingDir: string;
+    readonly agentTarget?: string;
+    readonly commandsStagingDir: string;
+    readonly commandTarget?: string;
+    readonly skillsStagingDir: string;
+    readonly skillTarget?: string;
+    readonly undoFault?: { enabled: boolean; readonly message: string; readonly target: string };
+  },
+  schedule: { current: string[] },
+): () => void {
+  const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+  const originalRename = filesystemPromises.rename.bind(filesystemPromises);
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+  const phaseForStagingPath = (target: string): "agents" | "commands" | "skills" | undefined => {
+    if (target.startsWith(`${targets.skillsStagingDir}${path.sep}`)) {
+      return "skills";
+    }
+
+    if (target.startsWith(`${targets.commandsStagingDir}${path.sep}`)) {
+      return "commands";
+    }
+
+    if (target.startsWith(`${targets.agentsStagingDir}${path.sep}`)) {
+      return "agents";
+    }
+
+    return undefined;
+  };
+
+  const recordOnce = (event: string): void => {
+    if (schedule.current.at(-1) !== event) {
+      schedule.current.push(event);
+    }
+  };
+
+  const mkdirMock = t.mock.method(
+    filesystemPromises,
+    "mkdir",
+    async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+      const phase = phaseForStagingPath(String(args[0]));
+      if (phase !== undefined) {
+        recordOnce(`prepare:${phase}`);
+      }
+
+      return originalMkdir(...args);
+    },
+  );
+  const renameMock = t.mock.method(
+    filesystemPromises,
+    "rename",
+    async (...args: Parameters<typeof filesystemPromises.rename>) => {
+      const destination = String(args[1]);
+      if (destination === targets.skillTarget) {
+        schedule.current.push("commit:skills");
+      }
+
+      if (destination === targets.commandTarget) {
+        schedule.current.push("commit:commands");
+      }
+
+      if (destination === targets.agentTarget) {
+        schedule.current.push("commit:agents");
+      }
+
+      return originalRename(...args);
+    },
+  );
+  const rmMock = t.mock.method(
+    filesystemPromises,
+    "rm",
+    async (...args: Parameters<typeof filesystemPromises.rm>) => {
+      const target = String(args[0]);
+      if (target === targets.skillTarget) {
+        schedule.current.push("undo:skills");
+      }
+
+      if (target === targets.commandTarget) {
+        schedule.current.push("undo:commands");
+      }
+
+      if (target === targets.agentTarget) {
+        schedule.current.push("undo:agents");
+      }
+
+      if (targets.undoFault?.enabled === true && target === targets.undoFault.target) {
+        throw new Error(targets.undoFault.message);
+      }
+
+      return originalRm(...args);
+    },
+  );
+  const unlinkMock = t.mock.method(
+    filesystemPromises,
+    "unlink",
+    async (...args: Parameters<typeof filesystemPromises.unlink>) => {
+      const target = String(args[0]);
+      if (target === targets.commandTarget) {
+        schedule.current.push("undo:commands");
+      }
+
+      if (target === targets.agentTarget) {
+        schedule.current.push("undo:agents");
+      }
+
+      if (targets.undoFault?.enabled === true && target === targets.undoFault.target) {
+        throw new Error(targets.undoFault.message);
+      }
+
+      return originalUnlink(...args);
+    },
+  );
+  syncBuiltinESMExports();
+
+  return () => {
+    unlinkMock.mock.restore();
+    rmMock.mock.restore();
+    renameMock.mock.restore();
+    mkdirMock.mock.restore();
+    syncBuiltinESMExports();
+  };
+}
+
+function assertRetryFailure(
+  outcome: Awaited<ReturnType<typeof installPlugin>>,
+  expectedMessage: RegExp,
+): void {
+  assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
+  assert.strictEqual(outcome.status, "failed");
+  assert.ok(outcome.error instanceof Error);
+  assert.match(outcome.error.message, expectedMessage);
+  assert.strictEqual(outcome.cause, `${outcome.error.message}\n\ncause: ${outcome.error.message}`);
+}
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
 //
@@ -3468,17 +3646,19 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
 // Orchestrated mode: post-commit warning collection
 // ───────────────────────────────────────────────────────────────────────────
 
-test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommitWarnings has deferred message", async () => {
+test("retry proof: install: completion-cache maintenance failure stays installed and retry is idempotent", async (t) => {
   // Gap: dropMarketplaceCache try/catch in orchestrated mode -- EISDIR from
   // the unlink call is re-thrown by dropMarketplaceCache (not ENOENT), so the
   // catch appends the 'completion cache refresh deferred' string to
   // postCommitWarnings instead of firing notifyWarning.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-cache-"));
+    const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       resetCompletionCache();
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
@@ -3486,16 +3666,46 @@ test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommit
         skills: [{ sourceName: "tool" }],
       });
 
-      // Pre-create a DIRECTORY at the pluginCacheFile path. When
-      // dropMarketplaceCache calls unlink() on it the OS returns EISDIR
-      // (not ENOENT), so dropMarketplaceCache re-throws. The orchestrator
-      // catches it and appends the deferred message to postCommitWarnings.
       const cacheFilePath = await locations.pluginCacheFile("mp");
-      await mkdir(path.dirname(cacheFilePath), { recursive: true });
-      await mkdir(cacheFilePath, { recursive: true });
+      const firstSchedule: string[] = [];
+      let cacheFault = true;
+      unlinkMock = t.mock.method(
+        filesystemPromises,
+        "unlink",
+        async (...args: Parameters<typeof filesystemPromises.unlink>) => {
+          if (String(args[0]) === cacheFilePath) {
+            firstSchedule.push(
+              cacheFault
+                ? "post-commit:completion-cache:failed"
+                : "post-commit:completion-cache:ok",
+            );
+            if (cacheFault) {
+              throw new Error("cache maintenance denied");
+            }
+          }
 
-      const { ctx, pi } = makeCtx();
-      const outcome = await installPlugin({
+          return originalUnlink(...args);
+        },
+      );
+      syncBuiltinESMExports();
+
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      cacheFault = false;
+      const second = await installPlugin({
         ctx,
         pi,
         scope: "project",
@@ -3505,28 +3715,46 @@ test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommit
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(outcome.status, "installed");
-      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
-      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
-      assert.ok(
-        warnings?.some((w) => w.includes("completion cache refresh deferred")),
-        `expected 'completion cache refresh deferred' in warnings; got: ${JSON.stringify(warnings)}`,
+      // assert
+      assert.deepStrictEqual(first, {
+        declaresAgents: false,
+        declaresMcp: false,
+        postCommitWarnings: [
+          'Plugin "hello" installed; completion cache refresh deferred: cache maintenance denied',
+        ],
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assertRetryFailure(second, /^Plugin "hello" is already installed in marketplace "mp"\.$/);
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["post-commit:completion-cache:failed"]);
+      assert.strictEqual(firstTree.includes("pi-claude-marketplace/data/mp/hello/"), true);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
       );
     } finally {
+      unlinkMock?.mock.restore();
+      syncBuiltinESMExports();
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("Orchestrated-pluginDataDir-failure: mkdir failure -> postCommitWarnings has deferred message", async () => {
+test("retry proof: install: plugin-data-dir maintenance failure stays installed and retry is idempotent", async (t) => {
   // Gap: orchestrated variant of AS-6 -- pluginDataDir mkdir failure appends
   // 'data dir creation deferred' to postCommitWarnings instead of calling
   // notifyWarning directly.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-data-"));
+    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
@@ -3534,37 +3762,72 @@ test("Orchestrated-pluginDataDir-failure: mkdir failure -> postCommitWarnings ha
         skills: [{ sourceName: "tool" }],
       });
 
-      // Make the parent of pluginDataDir read-only so mkdir(pluginDataDir)
-      // fails. The parent path is <dataRoot>/mp which we create and chmod.
-      await mkdir(path.join(locations.dataRoot, "mp"), { recursive: true });
-      await chmod(path.join(locations.dataRoot, "mp"), 0o555);
+      const pluginDataDir = await locations.pluginDataDir("mp", "hello");
+      const firstSchedule: string[] = [];
+      let dataDirFault = true;
+      mkdirMock = t.mock.method(
+        filesystemPromises,
+        "mkdir",
+        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+          if (String(args[0]) === pluginDataDir) {
+            firstSchedule.push(
+              dataDirFault ? "post-commit:data-dir:failed" : "post-commit:data-dir:ok",
+            );
+            if (dataDirFault) {
+              throw new Error("data directory maintenance denied");
+            }
+          }
 
-      const { ctx, pi } = makeCtx();
-      let outcome;
-      try {
-        outcome = await installPlugin({
-          ctx,
-          pi,
-          scope: "project",
-          cwd,
-          marketplace: "mp",
-          plugin: "hello",
-          notifications: { mode: "orchestrated" },
-        });
-      } finally {
-        // Restore permissions so cleanup can remove the temp dir.
-        await chmod(path.join(locations.dataRoot, "mp"), 0o755);
-      }
-
-      assert.ok(outcome !== undefined);
-      assert.equal(outcome.status, "installed");
-      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
-      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
-      assert.ok(
-        warnings?.some((w) => w.includes("data dir creation deferred")),
-        `expected 'data dir creation deferred' in warnings; got: ${JSON.stringify(warnings)}`,
+          return originalMkdir(...args);
+        },
       );
+      syncBuiltinESMExports();
+
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const { ctx, notifications, pi } = makeCtx();
+      // act
+      const first = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      dataDirFault = false;
+      const second = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(first, {
+        declaresAgents: false,
+        declaresMcp: false,
+        postCommitWarnings: [
+          `Plugin "hello" installed; data dir creation deferred at ${pluginDataDir}: data directory maintenance denied`,
+        ],
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assertRetryFailure(second, /^Plugin "hello" is already installed in marketplace "mp"\.$/);
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["post-commit:data-dir:failed"]);
+      assert.strictEqual(firstTree.includes("pi-claude-marketplace/data/mp/hello/"), false);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
     } finally {
+      mkdirMock?.mock.restore();
+      syncBuiltinESMExports();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -7200,7 +7463,7 @@ test("runInstallLedger unwinds when its marketplace disappears before state comm
   });
 });
 
-test("orchestrated install preserves ordered bridge cleanup leaks as post-commit warnings", async (t) => {
+test("retry proof: install: ordered bridge cleanup leaks remain explicit and retry is idempotent", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-leaks-"));
     const originalRm = filesystemPromises.rm.bind(filesystemPromises);
@@ -7208,7 +7471,7 @@ test("orchestrated install preserves ordered bridge cleanup leaks as post-commit
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         agents: [{ sourceName: "reviewer" }],
         commands: [{ sourceName: "deploy" }],
         cwd,
@@ -7222,7 +7485,10 @@ test("orchestrated install preserves ordered bridge cleanup leaks as post-commit
         locations.commandsStagingDir,
         locations.agentsStagingDir,
       ];
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
       const leakedTargets: string[] = [];
+      let cleanupFault = true;
       removal = t.mock.method(
         filesystemPromises,
         "rm",
@@ -7231,7 +7497,10 @@ test("orchestrated install preserves ordered bridge cleanup leaks as post-commit
           options?: Parameters<typeof originalRm>[1],
         ) => {
           const targetPath = String(target);
-          if (cleanupRoots.some((root) => targetPath.startsWith(`${root}${path.sep}`))) {
+          if (
+            cleanupFault &&
+            cleanupRoots.some((root) => targetPath.startsWith(`${root}${path.sep}`))
+          ) {
             leakedTargets.push(targetPath);
             throw new Error("staging cleanup denied");
           }
@@ -7243,7 +7512,19 @@ test("orchestrated install preserves ordered bridge cleanup leaks as post-commit
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["subagent"] });
 
       // act
-      const outcome = await installPlugin({
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "complete",
+        scope: "project",
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      cleanupFault = false;
+      const second = await installPlugin({
         ctx,
         cwd,
         marketplace: "mp",
@@ -7260,7 +7541,7 @@ test("orchestrated install preserves ordered bridge cleanup leaks as post-commit
         ),
         [0, 1, 2],
       );
-      assert.deepStrictEqual(outcome, {
+      assert.deepStrictEqual(first, {
         declaresAgents: true,
         declaresMcp: false,
         postCommitWarnings: [
@@ -7273,7 +7554,18 @@ test("orchestrated install preserves ordered bridge cleanup leaks as post-commit
         status: "installed",
         version: "0.0.1",
       });
+      assertRetryFailure(second, /^Plugin "complete" is already installed in marketplace "mp"\.$/);
       assert.deepStrictEqual(notifications, []);
+      assert.notStrictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.strictEqual(
+        firstTree.filter((entry) =>
+          /(?:skills|commands|agents)-staging\/[0-9a-f-]{36}\//.test(entry),
+        ).length,
+        3,
+      );
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
         {
@@ -7396,7 +7688,7 @@ test("runInstallLedger rejects a hooks file that changes after resolver validati
   });
 });
 
-test("install keeps its success outcome when post-save hooks cache hydration fails", async (t) => {
+test("retry proof: install: post-save hook-cache failure stays installed and retry is idempotent", async (t) => {
   const { resetRoutingState, setParsedConfig } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
@@ -7418,7 +7710,7 @@ test("install keeps its success outcome when post-save hooks cache hydration fai
         scope: "project",
       };
       setParsedConfig("project:poison-marketplace:poison-plugin", poison);
-      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
         hooksJson: {
           PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
@@ -7428,14 +7720,27 @@ test("install keeps its success outcome when post-save hooks cache hydration fai
         pluginName: "hooky",
       });
       const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
-      let hooksReads = 0;
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      let activeSchedule = firstSchedule;
+      let activeHooksReads = 0;
+      let hookCacheFault = true;
       read = t.mock.method(
         filesystemPromises,
         "readFile",
         async (...args: Parameters<typeof filesystemPromises.readFile>) => {
           if (args[0] === hooksPath) {
-            hooksReads += 1;
-            if (hooksReads === 3) {
+            activeHooksReads += 1;
+            activeSchedule.push(
+              activeHooksReads === 1
+                ? "resolve:hooks"
+                : activeHooksReads === 2
+                  ? "commit:hooks"
+                  : hookCacheFault
+                    ? "post-save:hook-cache:failed"
+                    : "post-save:hook-cache:ok",
+            );
+            if (activeHooksReads === 3 && hookCacheFault) {
               throw new Error("post-save hook read denied");
             }
           }
@@ -7444,10 +7749,26 @@ test("install keeps its success outcome when post-save hooks cache hydration fai
         },
       );
       syncBuiltinESMExports();
+      const locations = locationsFor("project", cwd);
+      const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const outcome = await installPlugin({
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      hookCacheFault = false;
+      activeHooksReads = 0;
+      activeSchedule = secondSchedule;
+      const second = await installPlugin({
         ctx,
         cwd,
         marketplace: "mp",
@@ -7458,15 +7779,28 @@ test("install keeps its success outcome when post-save hooks cache hydration fai
       });
 
       // assert
-      assert.deepStrictEqual(outcome, {
+      assert.deepStrictEqual(first, {
         declaresAgents: false,
         declaresMcp: false,
         resourcesChanged: false,
         status: "installed",
         version: "0.0.1",
       });
-      assert.strictEqual(hooksReads, 3);
+      assertRetryFailure(second, /^Plugin "hooky" is already installed in marketplace "mp"\.$/);
+      assert.deepStrictEqual(firstSchedule, [
+        "resolve:hooks",
+        "commit:hooks",
+        "post-save:hook-cache:failed",
+      ]);
+      assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
+        { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
+      );
     } finally {
       read?.mock.restore();
       syncBuiltinESMExports();
@@ -7476,7 +7810,7 @@ test("install keeps its success outcome when post-save hooks cache hydration fai
   });
 });
 
-test("orchestrated install folds a removed hook before an MCP disable failure", async (t) => {
+test("retry proof: install: disabled cascade failure preserves shrunken record and retry is safely idempotent", async (t) => {
   const { resetRoutingState, setParsedConfig } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
@@ -7488,7 +7822,7 @@ test("orchestrated install folds a removed hook before an MCP disable failure", 
       // arrange
       resetRoutingState();
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
         entryDefaultEnabled: false,
         hooksJson: {
@@ -7512,14 +7846,27 @@ test("orchestrated install folds a removed hook before an MCP disable failure", 
       };
       setParsedConfig("project:poison-marketplace:poison-plugin", poison);
       const mcpError = new Error("mcp cleanup denied");
-      let mcpReads = 0;
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      let activeSchedule = firstSchedule;
+      let activeMcpReads = 0;
+      let mcpFault = true;
       read = t.mock.method(
         filesystemPromises,
         "readFile",
         async (...args: Parameters<typeof filesystemPromises.readFile>) => {
           if (args[0] === locations.mcpJsonPath) {
-            mcpReads += 1;
-            if (mcpReads === 3) {
+            activeMcpReads += 1;
+            activeSchedule.push(
+              activeMcpReads === 1
+                ? "prepare:mcp"
+                : activeMcpReads === 2
+                  ? "commit:mcp"
+                  : mcpFault
+                    ? "disable:mcp:failed"
+                    : "disable:mcp:ok",
+            );
+            if (activeMcpReads === 3 && mcpFault) {
               throw mcpError;
             }
           }
@@ -7528,10 +7875,28 @@ test("orchestrated install folds a removed hook before an MCP disable failure", 
         },
       );
       syncBuiltinESMExports();
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const outcome = await installPlugin({
+      const first = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      mcpFault = false;
+      activeMcpReads = 0;
+      activeSchedule = secondSchedule;
+      const second = await installPlugin({
         applyDefaultEnabled: true,
         ctx,
         cwd,
@@ -7543,13 +7908,21 @@ test("orchestrated install folds a removed hook before an MCP disable failure", 
       });
 
       // assert
-      assert.deepStrictEqual(outcome, {
+      assert.deepStrictEqual(first, {
         cause: "mcp cleanup denied",
         error: mcpError,
         status: "failed",
       });
-      assert.strictEqual(mcpReads, 3);
+      assertRetryFailure(second, /^Plugin "hooky" is already installed in marketplace "mp"\.$/);
+      assert.deepStrictEqual(firstSchedule, ["prepare:mcp", "commit:mcp", "disable:mcp:failed"]);
+      assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(notifications, []);
+      assert.notStrictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.match(firstConfigBytes, /"enabled": false/);
+      assert.strictEqual(firstConfigBytes, await readFile(locations.configJsonPath, "utf8"));
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
         { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
@@ -7896,6 +8269,1078 @@ test("standalone install normalizes a non-Error lock-directory failure", async (
     } finally {
       mkdirMock?.mock.restore();
       syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: commands prepare failure after a committed skill converges on the same root", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-commands-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const faultTree = await retryTree(locations.scopeRoot);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          agentsStagingDir: locations.agentsStagingDir,
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
+      assert.strictEqual(first.status, "failed");
+      assert.ok(first.error instanceof Error);
+      assert.match(
+        first.error.message,
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.commandsStagingDir.replaceAll("/", "\\/")}\\/[0-9a-f-]+'$`,
+        ),
+      );
+      assert.strictEqual(first.cause, `${first.error.message}\n\ncause: ${first.error.message}`);
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await retryPathExists(locations.configJsonPath), false);
+      assert.notStrictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(faultTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/retryable/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/retryable:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: skills prepare failure with no committed phases converges on the same root", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-skills-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.skillsStagingDir), { recursive: true });
+      await writeFile(locations.skillsStagingDir, "fault: skills staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.skillsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(
+        first,
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.skillsStagingDir.replaceAll("/", "\\/")}\\/[0-9a-f-]+'$`,
+        ),
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
+      assert.deepStrictEqual(secondSchedule, ["prepare:skills", "commit:skills"]);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/skills-staging",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/retryable/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: agents prepare failure after committed commands unwinds newest first", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-agents-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews changes.\ntools: Read,Grep\n---\n\nBody.\n",
+      );
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.agentsStagingDir), { recursive: true });
+      await writeFile(locations.agentsStagingDir, "fault: agents staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentTarget: path.join(
+            locations.agentsDir,
+            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+          ),
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.agentsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(
+        first,
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.agentsStagingDir.replaceAll("/", "\\/")}\\/[0-9a-f-]+'$`,
+        ),
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: true,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "undo:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-staging",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable-audit")).length, 2);
+      assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable:deploy")).length, 1);
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.includes("retryable-reviewer")).length,
+        1,
+      );
+      assert.strictEqual(
+        finalTree.some((entry) => entry.includes("-staging/") && /[0-9a-f-]{36}/.test(entry)),
+        false,
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: hooks reparse failure after three bridges retries without reseeding", async (t) => {
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-hooks-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let readMock: ReturnType<typeof t.mock.method> | undefined;
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews changes.\ntools: Read,Grep\n---\n\nBody.\n",
+      );
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      let activeHookReads = 0;
+      let hooksFault = true;
+      readMock = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === hooksPath) {
+            activeHookReads += 1;
+            if (activeHookReads === 2) {
+              activeSchedule.current.push("prepare:hooks");
+              if (hooksFault) {
+                return "{";
+              }
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentTarget: path.join(
+            locations.agentsDir,
+            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+          ),
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      hooksFault = false;
+      activeHookReads = 0;
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(first, /^hooks\.json re-parse failed:/);
+      assert.deepStrictEqual(second, {
+        declaresAgents: true,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+        "prepare:hooks",
+        "undo:agents",
+        "undo:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+        "prepare:hooks",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "agents/",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable;
+      assert.deepStrictEqual(record?.resources, {
+        agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+        hooks: ["retryable"],
+        mcpServers: [],
+        prompts: ["retryable:deploy"],
+        skills: ["retryable-audit"],
+      });
+      assert.deepStrictEqual(record?.hookEntries, [{ event: "PreToolUse", matcher: "" }]);
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(finalTree.filter((entry) => entry.endsWith("hooks.json")).length, 1);
+      assert.strictEqual(
+        finalTree.some((entry) => /[0-9a-f-]{36}/.test(entry)),
+        false,
+      );
+    } finally {
+      restoreSchedule?.();
+      readMock?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: MCP prepare failure after hooks compensates every completed bridge", async (t) => {
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-mcp-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        mcpServers: { server: { command: "node" } },
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews changes.\ntools: Read,Grep\n---\n\nBody.\n",
+      );
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(locations.mcpJsonPath, { recursive: true });
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentTarget: path.join(
+            locations.agentsDir,
+            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+          ),
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.mcpJsonPath, { recursive: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(first, /EISDIR|illegal operation on a directory/);
+      assert.deepStrictEqual(second, {
+        declaresAgents: true,
+        declaresMcp: true,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+        "undo:agents",
+        "undo:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+      ]);
+      assert.strictEqual(firstTree.includes("mcp.json/"), true);
+      assert.strictEqual(
+        firstTree.some((entry) => entry.endsWith("hooks.json")),
+        false,
+      );
+      assert.strictEqual(
+        firstTree.some((entry) => entry.includes("retryable-audit/SKILL.md")),
+        false,
+      );
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          hooks: ["retryable"],
+          mcpServers: ["server"],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(finalTree.filter((entry) => entry === "mcp.json").length, 1);
+      assert.strictEqual(
+        finalTree.some((entry) => /[0-9a-f-]{36}/.test(entry)),
+        false,
+      );
+    } finally {
+      restoreSchedule?.();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: non-containment undo failure reports ordered rollback partials then recovers", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-rollback-partial-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
+      const undoFault = { enabled: true, message: "skill undo denied", target: skillTarget };
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget,
+          undoFault,
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      undoFault.enabled = false;
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
+      assert.strictEqual(first.status, "failed");
+      assert.ok(first.error instanceof Error);
+      assert.match(first.error.message, /^ENOTDIR: not a directory, mkdir /);
+      assert.strictEqual(first.cause, `${first.error.message}\n\ncause: ${first.error.message}`);
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ retryable v0.0.1 (failed) {rollback partial}\n" +
+            `    cause: ${first.error.message}\n` +
+            "    [skills] (rollback failed)\n" +
+            "      cause: skill undo denied",
+          severity: "error",
+        },
+        {
+          message: "● mp [project]\n  ● retryable v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "undo:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md"),
+        true,
+      );
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable-audit/SKILL.md")).length,
+        1,
+      );
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable:deploy.md")).length,
+        1,
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: containment failure preserves the refused residue and succeeds after unlink", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-containment-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await symlink("/tmp/retry-proof-decoy", skillTarget);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget,
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await filesystemPromises.unlink(skillTarget);
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
+      assert.strictEqual(first.status, "failed");
+      assert.ok(first.error instanceof Error);
+      assert.match(first.error.message, /contains symlink|escapes/);
+      assert.strictEqual(first.cause?.includes("rollback partial"), false);
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ retryable v0.0.1 (failed)\n" +
+            `    cause: ${first.error.message}`,
+          severity: "error",
+        },
+        {
+          message: "● mp [project]\n  ● retryable v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
+      assert.deepStrictEqual(secondSchedule, ["prepare:skills", "commit:skills"]);
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit"),
+        true,
+      );
+      assert.strictEqual(firstTree.includes("pi-claude-marketplace/skills-staging/"), true);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+      );
+      assert.strictEqual((await stat(skillTarget)).isDirectory(), true);
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: state commit race after staged work retries from unchanged state bytes", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-state-race-"));
+    const originalParse: (text: string) => unknown = JSON.parse;
+    let parseMock: ReturnType<typeof t.mock.method> | undefined;
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        entryDefaultEnabled: false,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      let eraseFreshRecord = true;
+      parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
+        const parsed = originalParse(text);
+        if (eraseFreshRecord && STATE_VALIDATOR.Check(parsed)) {
+          const marketplace = parsed.marketplaces.mp;
+          if (marketplace !== undefined) {
+            marketplace.plugins = new Proxy(marketplace.plugins, {
+              set(target, property, value, receiver) {
+                return property === "retryable"
+                  ? true
+                  : Reflect.set(target, property, value, receiver);
+              },
+            });
+          }
+        }
+
+        return parsed;
+      });
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      eraseFreshRecord = false;
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
+      assert.strictEqual(first.status, "failed");
+      assert.ok(first.error instanceof Error);
+      assert.match(
+        first.error.message,
+        /^installPlugin: internal error -- the state phase left no record for plugin "retryable" to disable\.$/,
+      );
+      assert.strictEqual(first.cause, first.error.message);
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.match(firstConfigBytes, /"enabled": false/);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "undo:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md"),
+        true,
+      );
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/prompts/retryable:deploy.md"),
+        true,
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable;
+      assert.deepStrictEqual(record?.resources, {
+        agents: [],
+        hooks: [],
+        mcpServers: [],
+        prompts: ["retryable:deploy"],
+        skills: ["retryable-audit"],
+      });
+      assert.strictEqual(record?.enabled, true);
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable-audit/SKILL.md")).length,
+        1,
+      );
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable:deploy.md")).length,
+        1,
+      );
+    } finally {
+      restoreSchedule?.();
+      parseMock?.mock.restore();
       await rm(cwd, { force: true, recursive: true });
     }
   });
