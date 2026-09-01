@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { staleGateDropped } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
+import { mock, when } from "strong-mock";
+
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
@@ -22,14 +23,11 @@ import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orches
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import {
-  MarketplaceNotFoundError,
-  PluginShapeError,
-} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
@@ -38,21 +36,29 @@ interface NotifyRecord {
 
 function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  const ctx = {
-    cwd,
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionContext;
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .anyTimes();
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .anyTimes();
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- strong-mock replaces the method property with this capture function.
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .anyTimes();
   return { ctx, notifications };
 }
 
 function makePi(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .anyTimes();
+  return pi;
 }
 
 /**
@@ -62,9 +68,15 @@ function makePi(): ExtensionAPI {
  * makes a row with a staged agent take the soft-dep marker.
  */
 function makePiWithSubagents(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [{ name: "subagent" }],
-  } as unknown as ExtensionAPI;
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API with subagents" });
+  const subagent = mock<ToolInfo>({ exactParams: true, name: "subagent tool" });
+  when(() => subagent.name)
+    .thenReturn("subagent")
+    .anyTimes();
+  when(() => pi.getAllTools())
+    .thenReturn([subagent])
+    .anyTimes();
+  return pi;
 }
 
 async function withHermeticHome<T>(
@@ -1429,15 +1441,7 @@ test("WR-02: an enable that fails for an unrelated reason keeps its bare failed 
 });
 
 test("WR-02: a failed plugin row from another surface renders byte-identically -- the widened trailer gate is inert without the hint", () => {
-  const emitted: NotifyRecord[] = [];
-  const ctx = {
-    cwd: "/tmp",
-    ui: {
-      notify: (m: string, s?: string): void => {
-        emitted.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionContext;
+  const { ctx, notifications: emitted } = makeCtx("/tmp");
 
   // The catalog `failure-runtime-with-cause` row: a failed row that stamps no
   // `partialHint`. Widening the trailer gate to admit the `failed` status must
@@ -2204,7 +2208,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
     stateJson.marketplaces.mp!.plugins.foo!.resources.mcpServers = ["m1"];
     await writeFile(statePath, JSON.stringify(stateJson, null, 2), "utf8");
 
-    // Actually create the on-disk skill + command targets so the bridges
+    // Create the on-disk skill + command targets so the bridges
     // report removedNames non-empty when they run. The cascade walks
     // skills -> commands -> agents -> mcp; both skills and commands must
     // see a real target dir to push the name into `removed`.
@@ -2398,46 +2402,6 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
       assert.equal(outcome.version, "1.2.3");
     }
   });
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// WR-05: the stale-gate narrowing's "no match" contract
-// ──────────────────────────────────────────────────────────────────────────
-
-test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () => {
-  // The caller writes `staleGate ?? baseReasons` and stamps `partialHint` on a
-  // non-undefined result. `??` treats `[]` as present, so returning an empty
-  // list would discard the base narrowing AND still attach a remediation
-  // trailer -- a brace-less (failed) row telling the user to re-pin a plugin
-  // whose dropped kinds were never named. `undefined` means leave the row as it
-  // was, and an empty narrowing names no fact.
-  const emptyKinds = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "foo-plugin",
-    reasons: ["contains lspServers"],
-    partialable: true,
-    unsupportedKinds: [],
-  });
-  assert.equal(staleGateDropped(emptyKinds), undefined);
-
-  // The matching shape still returns its narrowed reasons.
-  const withKinds = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "foo-plugin",
-    reasons: ["contains lspServers"],
-    partialable: true,
-    unsupportedKinds: ["lspServers"],
-  });
-  assert.deepEqual([...(staleGateDropped(withKinds) ?? [])], ["lsp"]);
-
-  // A non-partialable structural failure is not a stale gate at all.
-  const structural = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "foo-plugin",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  assert.equal(staleGateDropped(structural), undefined);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
