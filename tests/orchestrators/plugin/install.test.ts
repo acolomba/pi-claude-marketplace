@@ -221,15 +221,53 @@ function observeRetryBridgeSchedule(
   };
 }
 
+/** The doubled form `installPlugin` renders into a failed outcome's `cause`. */
+function retryCauseChain(message: string): string {
+  return `${message}\n\ncause: ${message}`;
+}
+
 function assertRetryFailure(
   outcome: Awaited<ReturnType<typeof installPlugin>>,
-  expectedMessage: RegExp,
+  expectedMessage: string,
 ): void {
   assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
   assert.strictEqual(outcome.status, "failed");
   assert.ok(outcome.error instanceof Error);
-  assert.match(outcome.error.message, expectedMessage);
-  assert.strictEqual(outcome.cause, `${outcome.error.message}\n\ncause: ${outcome.error.message}`);
+  assert.strictEqual(outcome.error.message, expectedMessage);
+  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+}
+
+/**
+ * Variant for the two failure messages this suite cannot author end to end:
+ * the staging root UUID a bridge generates per call, and V8's JSON position
+ * text. `expectedPrefix` is a case-authored literal covering every byte the
+ * module under test is responsible for, and `expectedTail` pins the shape of
+ * the remainder. Returns the two halves rejoined so a case that renders the
+ * cause into a notification asserts against that rather than against the raw
+ * actual message.
+ */
+function assertRetryPartialFailure(
+  outcome: Awaited<ReturnType<typeof installPlugin>>,
+  expectedPrefix: string,
+  expectedTail: RegExp,
+): string {
+  assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
+  assert.strictEqual(outcome.status, "failed");
+  assert.ok(outcome.error instanceof Error);
+  assert.strictEqual(outcome.error.message.slice(0, expectedPrefix.length), expectedPrefix);
+  const tail = outcome.error.message.slice(expectedPrefix.length);
+  assert.match(tail, expectedTail);
+  const expectedMessage = `${expectedPrefix}${tail}`;
+  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+  return expectedMessage;
+}
+
+/** The `randomUUID()` staging-root suffix each bridge appends to its dir. */
+const RETRY_STAGING_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'$/;
+
+/** `ENOTDIR` prefix for a staging root whose parent was replaced by a file. */
+function retryStagingMkdirPrefix(stagingDir: string): string {
+  return `ENOTDIR: not a directory, mkdir '${stagingDir}${path.sep}`;
 }
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
@@ -3727,7 +3765,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
         status: "installed",
         version: "0.0.1",
       });
-      assertRetryFailure(second, /^Plugin "hello" is already installed in marketplace "mp"\.$/);
+      assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(firstSchedule, ["post-commit:completion-cache:failed"]);
@@ -3820,7 +3858,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
         status: "installed",
         version: "0.0.1",
       });
-      assertRetryFailure(second, /^Plugin "hello" is already installed in marketplace "mp"\.$/);
+      assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(firstSchedule, ["post-commit:data-dir:failed"]);
@@ -7555,7 +7593,7 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
         status: "installed",
         version: "0.0.1",
       });
-      assertRetryFailure(second, /^Plugin "complete" is already installed in marketplace "mp"\.$/);
+      assertRetryFailure(second, 'Plugin "complete" is already installed in marketplace "mp".');
       assert.deepStrictEqual(notifications, []);
       assert.notStrictEqual(firstStateBytes, stateBytes);
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
@@ -7787,7 +7825,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         status: "installed",
         version: "0.0.1",
       });
-      assertRetryFailure(second, /^Plugin "hooky" is already installed in marketplace "mp"\.$/);
+      assertRetryFailure(second, 'Plugin "hooky" is already installed in marketplace "mp".');
       assert.deepStrictEqual(firstSchedule, [
         "resolve:hooks",
         "commit:hooks",
@@ -7914,7 +7952,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
         error: mcpError,
         status: "failed",
       });
-      assertRetryFailure(second, /^Plugin "hooky" is already installed in marketplace "mp"\.$/);
+      assertRetryFailure(second, 'Plugin "hooky" is already installed in marketplace "mp".');
       assert.deepStrictEqual(firstSchedule, ["prepare:mcp", "commit:mcp", "disable:mcp:failed"]);
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(notifications, []);
@@ -8336,16 +8374,11 @@ test("retry proof: install: commands prepare failure after a committed skill con
       });
 
       // assert
-      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
-      assert.strictEqual(first.status, "failed");
-      assert.ok(first.error instanceof Error);
-      assert.match(
-        first.error.message,
-        new RegExp(
-          `^ENOTDIR: not a directory, mkdir '${locations.commandsStagingDir.replaceAll("/", "\\/")}\\/[0-9a-f-]+'$`,
-        ),
+      assertRetryPartialFailure(
+        first,
+        retryStagingMkdirPrefix(locations.commandsStagingDir),
+        RETRY_STAGING_UUID,
       );
-      assert.strictEqual(first.cause, `${first.error.message}\n\ncause: ${first.error.message}`);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -8473,11 +8506,10 @@ test("retry proof: install: skills prepare failure with no committed phases conv
       });
 
       // assert
-      assertRetryFailure(
+      assertRetryPartialFailure(
         first,
-        new RegExp(
-          `^ENOTDIR: not a directory, mkdir '${locations.skillsStagingDir.replaceAll("/", "\\/")}\\/[0-9a-f-]+'$`,
-        ),
+        retryStagingMkdirPrefix(locations.skillsStagingDir),
+        RETRY_STAGING_UUID,
       );
       assert.deepStrictEqual(second, {
         declaresAgents: false,
@@ -8588,11 +8620,10 @@ test("retry proof: install: agents prepare failure after committed commands unwi
       });
 
       // assert
-      assertRetryFailure(
+      assertRetryPartialFailure(
         first,
-        new RegExp(
-          `^ENOTDIR: not a directory, mkdir '${locations.agentsStagingDir.replaceAll("/", "\\/")}\\/[0-9a-f-]+'$`,
-        ),
+        retryStagingMkdirPrefix(locations.agentsStagingDir),
+        RETRY_STAGING_UUID,
       );
       assert.deepStrictEqual(second, {
         declaresAgents: true,
@@ -8755,7 +8786,11 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       });
 
       // assert
-      assertRetryFailure(first, /^hooks\.json re-parse failed:/);
+      assertRetryPartialFailure(
+        first,
+        "hooks.json re-parse failed: hooks.json is not valid JSON: ",
+        /^Expected property name or '\}' in JSON at position \d+/,
+      );
       assert.deepStrictEqual(second, {
         declaresAgents: true,
         declaresMcp: false,
@@ -8899,7 +8934,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       });
 
       // assert
-      assertRetryFailure(first, /EISDIR|illegal operation on a directory/);
+      assertRetryFailure(first, "EISDIR: illegal operation on a directory, read");
       assert.deepStrictEqual(second, {
         declaresAgents: true,
         declaresMcp: true,
@@ -9024,11 +9059,11 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       });
 
       // assert
-      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
-      assert.strictEqual(first.status, "failed");
-      assert.ok(first.error instanceof Error);
-      assert.match(first.error.message, /^ENOTDIR: not a directory, mkdir /);
-      assert.strictEqual(first.cause, `${first.error.message}\n\ncause: ${first.error.message}`);
+      const expectedCause = assertRetryPartialFailure(
+        first,
+        retryStagingMkdirPrefix(locations.commandsStagingDir),
+        RETRY_STAGING_UUID,
+      );
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -9042,7 +9077,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ retryable v0.0.1 (failed) {rollback partial}\n" +
-            `    cause: ${first.error.message}\n` +
+            `    cause: ${expectedCause}\n` +
             "    [skills] (rollback failed)\n" +
             "      cause: skill undo denied",
           severity: "error",
