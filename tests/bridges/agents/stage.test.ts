@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { rmSync, watch } from "node:fs";
+import { rmSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1211,17 +1211,21 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const zuluTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-zulu.md");
     const alphaStaged = path.join(prepared.stagingDir, path.basename(alphaTarget));
     const zuluStaged = path.join(prepared.stagingDir, path.basename(zuluTarget));
-    const watcher = watch(locations.agentsDir, { persistent: false }, (_eventType, filename) => {
-      if (filename === path.basename(alphaTarget)) {
+    const stagedFilePaths = [...prepared._stagedFilePaths];
+    const zuluPair = stagedFilePaths[1];
+    assert.ok(zuluPair);
+    Object.defineProperty(stagedFilePaths, 1, {
+      configurable: true,
+      enumerable: true,
+      get() {
         rmSync(prepared.stagingDir, { recursive: true, force: true });
-      }
+        return zuluPair;
+      },
     });
-    t.after(() => {
-      watcher.close();
-    });
+    const vanishingPrepared = { ...prepared, _stagedFilePaths: stagedFilePaths };
 
     // act
-    const error = await commitPreparedAgents(prepared).then(
+    const error = await commitPreparedAgents(vanishingPrepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
