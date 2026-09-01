@@ -124,7 +124,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  * mutable internally (write() appends bytes) but the entry's reference
  * to them is fixed.
  */
-export interface AsyncRewakeEntry {
+interface AsyncRewakeEntry {
   readonly dispatchId: string;
   readonly pid: number;
   readonly scope: "user" | "project";
