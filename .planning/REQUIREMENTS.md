@@ -116,7 +116,7 @@ brownfield input and do not prove compliance for later phases.
       contract.
 
 - [x] **MOD-05**: All 31 hook-runtime pairs complete the pair contract.
-- [ ] **MOD-06**: All 35 orchestrator support and presenter pairs complete the
+- [x] **MOD-06**: All 35 orchestrator support and presenter pairs complete the
       pair contract.
 
 - [ ] **MOD-07**: All 14 plugin and marketplace lifecycle pairs complete the pair
@@ -496,7 +496,7 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | MOD-03      | Phase 110 | Complete |
 | MOD-04      | Phase 111 | Complete |
 | MOD-05      | Phase 112 | Complete |
-| MOD-06      | Phase 113 | Pending  |
+| MOD-06      | Phase 113 | Complete |
 | MOD-07      | Phase 114 | Pending  |
 | MOD-08      | Phase 115 | Pending  |
 | MOD-09      | Phase 116 | Pending  |

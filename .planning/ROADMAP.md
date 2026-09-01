@@ -36,7 +36,7 @@ secondary detail.
 - [x] **Phase 110: Persistence and Transaction** - Prove 12 durable-state, migration, ledger, rollback, and retry contracts. (completed 2026-08-30)
 - [x] **Phase 111: Non-Hook Component Bridges** - Prove 31 agents, commands, MCP, and skills bridge contracts. (completed 2026-08-30)
 - [x] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts. (completed 2026-08-31)
-- [ ] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts.
+- [x] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts. (completed 2026-09-01)
 - [ ] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows.
 - [ ] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions.
 - [ ] **Phase 116: Edge Surface** - Prove 30 command parsing, completion, handler, tool, and dispatch contracts.
@@ -406,45 +406,45 @@ Plans:
 3. Classifiers, probes, discovery helpers, and reconcile planning return deterministic complete values for success and failure inputs.
 4. Read-only support paths remain offline and case state does not cross test boundaries.
 
-**Plans**: 35 plans
+**Plans**: 35/35 plans complete
 
 Plans:
 
-- [ ] **113-01** (`113-01-PLAN.md`, `P113-01`) - `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` → `tests/orchestrators/auth-host.test.ts`
-- [ ] **113-02** (`113-02-PLAN.md`, `P113-02`) - `extensions/pi-claude-marketplace/orchestrators/discover.ts` → `tests/orchestrators/discover.test.ts`
-- [ ] **113-03** (`113-03-PLAN.md`, `P113-03`) - `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts` → `tests/orchestrators/import/execute.messaging.test.ts`
-- [ ] **113-04** (`113-04-PLAN.md`, `P113-04`) - `extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts` → `tests/orchestrators/import/marketplaces.test.ts`
-- [ ] **113-05** (`113-05-PLAN.md`, `P113-05`) - `extensions/pi-claude-marketplace/orchestrators/import/refs.ts` → `tests/orchestrators/import/refs.test.ts`
-- [ ] **113-06** (`113-06-PLAN.md`, `P113-06`) - `extensions/pi-claude-marketplace/orchestrators/import/settings.ts` → `tests/orchestrators/import/settings.test.ts`
-- [ ] **113-07** (`113-07-PLAN.md`, `P113-07`) - `extensions/pi-claude-marketplace/orchestrators/import/types.ts` → `tests/orchestrators/import/types.test.ts`
-- [ ] **113-08** (`113-08-PLAN.md`, `P113-08`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts` → `tests/orchestrators/marketplace/add.messaging.test.ts`
-- [ ] **113-09** (`113-09-PLAN.md`, `P113-09`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts` → `tests/orchestrators/marketplace/autoupdate.messaging.test.ts`
-- [ ] **113-10** (`113-10-PLAN.md`, `P113-10`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/list.messaging.ts` → `tests/orchestrators/marketplace/list.messaging.test.ts`
-- [ ] **113-11** (`113-11-PLAN.md`, `P113-11`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts` → `tests/orchestrators/marketplace/remove.messaging.test.ts`
-- [ ] **113-12** (`113-12-PLAN.md`, `P113-12`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` → `tests/orchestrators/marketplace/shared.test.ts`
-- [ ] **113-13** (`113-13-PLAN.md`, `P113-13`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts` → `tests/orchestrators/marketplace/update.messaging.test.ts`
-- [ ] **113-14** (`113-14-PLAN.md`, `P113-14`) - `extensions/pi-claude-marketplace/orchestrators/plugin-path.ts` → `tests/orchestrators/plugin-path.test.ts`
-- [ ] **113-15** (`113-15-PLAN.md`, `P113-15`) - `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts` → `tests/orchestrators/plugin/clone-cache.test.ts`
-- [ ] **113-16** (`113-16-PLAN.md`, `P113-16`) - `extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts` → `tests/orchestrators/plugin/clone-gc.test.ts`
-- [ ] **113-17** (`113-17-PLAN.md`, `P113-17`) - `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts` → `tests/orchestrators/plugin/discover-names.test.ts`
-- [ ] **113-18** (`113-18-PLAN.md`, `P113-18`) - `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts` → `tests/orchestrators/plugin/enable-disable.messaging.test.ts`
-- [ ] **113-19** (`113-19-PLAN.md`, `P113-19`) - `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts` → `tests/orchestrators/plugin/fetch.messaging.test.ts`
-- [ ] **113-20** (`113-20-PLAN.md`, `P113-20`) - `extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts` → `tests/orchestrators/plugin/git-source-probe.test.ts`
-- [ ] **113-21** (`113-21-PLAN.md`, `P113-21`) - `extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts` → `tests/orchestrators/plugin/info.messaging.test.ts`
-- [ ] **113-22** (`113-22-PLAN.md`, `P113-22`) - `extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts` → `tests/orchestrators/plugin/install.messaging.test.ts`
-- [ ] **113-23** (`113-23-PLAN.md`, `P113-23`) - `extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts` → `tests/orchestrators/plugin/list.messaging.test.ts`
-- [ ] **113-24** (`113-24-PLAN.md`, `P113-24`) - `extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts` → `tests/orchestrators/plugin/plugin-state-classifier.test.ts`
-- [ ] **113-25** (`113-25-PLAN.md`, `P113-25`) - `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts` → `tests/orchestrators/plugin/reinstall.messaging.test.ts`
-- [ ] **113-26** (`113-26-PLAN.md`, `P113-26`) - `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts` → `tests/orchestrators/plugin/shared.test.ts`
-- [ ] **113-27** (`113-27-PLAN.md`, `P113-27`) - `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts` → `tests/orchestrators/plugin/uninstall.messaging.test.ts`
-- [ ] **113-28** (`113-28-PLAN.md`, `P113-28`) - `extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts` → `tests/orchestrators/plugin/update-row.test.ts`
-- [ ] **113-29** (`113-29-PLAN.md`, `P113-29`) - `extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts` → `tests/orchestrators/plugin/update.messaging.test.ts`
-- [ ] **113-30** (`113-30-PLAN.md`, `P113-30`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts` → `tests/orchestrators/reconcile/apply-outcomes.test.ts`
-- [ ] **113-31** (`113-31-PLAN.md`, `P113-31`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts` → `tests/orchestrators/reconcile/plan.test.ts`
-- [ ] **113-32** (`113-32-PLAN.md`, `P113-32`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts` → `tests/orchestrators/reconcile/reconcile.messaging.test.ts`
-- [ ] **113-33** (`113-33-PLAN.md`, `P113-33`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts` → `tests/orchestrators/reconcile/types.test.ts`
-- [ ] **113-34** (`113-34-PLAN.md`, `P113-34`) - `extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts` → `tests/orchestrators/scope-fanout.test.ts`
-- [ ] **113-35** (`113-35-PLAN.md`, `P113-35`) - `extensions/pi-claude-marketplace/orchestrators/types.ts` → `tests/orchestrators/types.test.ts`
+- [x] **113-01** (`113-01-PLAN.md`, `P113-01`) - `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` → `tests/orchestrators/auth-host.test.ts`
+- [x] **113-02** (`113-02-PLAN.md`, `P113-02`) - `extensions/pi-claude-marketplace/orchestrators/discover.ts` → `tests/orchestrators/discover.test.ts`
+- [x] **113-03** (`113-03-PLAN.md`, `P113-03`) - `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts` → `tests/orchestrators/import/execute.messaging.test.ts`
+- [x] **113-04** (`113-04-PLAN.md`, `P113-04`) - `extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts` → `tests/orchestrators/import/marketplaces.test.ts`
+- [x] **113-05** (`113-05-PLAN.md`, `P113-05`) - `extensions/pi-claude-marketplace/orchestrators/import/refs.ts` → `tests/orchestrators/import/refs.test.ts`
+- [x] **113-06** (`113-06-PLAN.md`, `P113-06`) - `extensions/pi-claude-marketplace/orchestrators/import/settings.ts` → `tests/orchestrators/import/settings.test.ts`
+- [x] **113-07** (`113-07-PLAN.md`, `P113-07`) - `extensions/pi-claude-marketplace/orchestrators/import/types.ts` → `tests/orchestrators/import/types.test.ts`
+- [x] **113-08** (`113-08-PLAN.md`, `P113-08`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts` → `tests/orchestrators/marketplace/add.messaging.test.ts`
+- [x] **113-09** (`113-09-PLAN.md`, `P113-09`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts` → `tests/orchestrators/marketplace/autoupdate.messaging.test.ts`
+- [x] **113-10** (`113-10-PLAN.md`, `P113-10`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/list.messaging.ts` → `tests/orchestrators/marketplace/list.messaging.test.ts`
+- [x] **113-11** (`113-11-PLAN.md`, `P113-11`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts` → `tests/orchestrators/marketplace/remove.messaging.test.ts`
+- [x] **113-12** (`113-12-PLAN.md`, `P113-12`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` → `tests/orchestrators/marketplace/shared.test.ts`
+- [x] **113-13** (`113-13-PLAN.md`, `P113-13`) - `extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts` → `tests/orchestrators/marketplace/update.messaging.test.ts`
+- [x] **113-14** (`113-14-PLAN.md`, `P113-14`) - `extensions/pi-claude-marketplace/orchestrators/plugin-path.ts` → `tests/orchestrators/plugin-path.test.ts`
+- [x] **113-15** (`113-15-PLAN.md`, `P113-15`) - `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts` → `tests/orchestrators/plugin/clone-cache.test.ts`
+- [x] **113-16** (`113-16-PLAN.md`, `P113-16`) - `extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts` → `tests/orchestrators/plugin/clone-gc.test.ts`
+- [x] **113-17** (`113-17-PLAN.md`, `P113-17`) - `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts` → `tests/orchestrators/plugin/discover-names.test.ts`
+- [x] **113-18** (`113-18-PLAN.md`, `P113-18`) - `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts` → `tests/orchestrators/plugin/enable-disable.messaging.test.ts`
+- [x] **113-19** (`113-19-PLAN.md`, `P113-19`) - `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts` → `tests/orchestrators/plugin/fetch.messaging.test.ts`
+- [x] **113-20** (`113-20-PLAN.md`, `P113-20`) - `extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts` → `tests/orchestrators/plugin/git-source-probe.test.ts`
+- [x] **113-21** (`113-21-PLAN.md`, `P113-21`) - `extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts` → `tests/orchestrators/plugin/info.messaging.test.ts`
+- [x] **113-22** (`113-22-PLAN.md`, `P113-22`) - `extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts` → `tests/orchestrators/plugin/install.messaging.test.ts`
+- [x] **113-23** (`113-23-PLAN.md`, `P113-23`) - `extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts` → `tests/orchestrators/plugin/list.messaging.test.ts`
+- [x] **113-24** (`113-24-PLAN.md`, `P113-24`) - `extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts` → `tests/orchestrators/plugin/plugin-state-classifier.test.ts`
+- [x] **113-25** (`113-25-PLAN.md`, `P113-25`) - `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts` → `tests/orchestrators/plugin/reinstall.messaging.test.ts`
+- [x] **113-26** (`113-26-PLAN.md`, `P113-26`) - `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts` → `tests/orchestrators/plugin/shared.test.ts`
+- [x] **113-27** (`113-27-PLAN.md`, `P113-27`) - `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts` → `tests/orchestrators/plugin/uninstall.messaging.test.ts`
+- [x] **113-28** (`113-28-PLAN.md`, `P113-28`) - `extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts` → `tests/orchestrators/plugin/update-row.test.ts`
+- [x] **113-29** (`113-29-PLAN.md`, `P113-29`) - `extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts` → `tests/orchestrators/plugin/update.messaging.test.ts`
+- [x] **113-30** (`113-30-PLAN.md`, `P113-30`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts` → `tests/orchestrators/reconcile/apply-outcomes.test.ts`
+- [x] **113-31** (`113-31-PLAN.md`, `P113-31`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts` → `tests/orchestrators/reconcile/plan.test.ts`
+- [x] **113-32** (`113-32-PLAN.md`, `P113-32`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts` → `tests/orchestrators/reconcile/reconcile.messaging.test.ts`
+- [x] **113-33** (`113-33-PLAN.md`, `P113-33`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts` → `tests/orchestrators/reconcile/types.test.ts`
+- [x] **113-34** (`113-34-PLAN.md`, `P113-34`) - `extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts` → `tests/orchestrators/scope-fanout.test.ts`
+- [x] **113-35** (`113-35-PLAN.md`, `P113-35`) - `extensions/pi-claude-marketplace/orchestrators/types.ts` → `tests/orchestrators/types.test.ts`
 
 ### Phase 114: Plugin and Marketplace Lifecycle
 
@@ -614,9 +614,9 @@ and commit still owns one pair.
 | 110. Persistence and Transaction         |          12/12 | Complete        | 2026-08-30 |
 | 111. Non-Hook Component Bridges          |          31/31 | Complete        | 2026-08-30 |
 | 112. Hook Runtime                        |          31/31 | Complete        | 2026-08-31 |
-| 113. Orchestrator Support and Presenters |           0/35 | Not started     | -          |
+| 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |           0/14 | Not started     | -          |
 | 115. Composition Orchestrators           |            0/8 | Not started     | -          |
 | 116. Edge Surface                        |           0/30 | Not started     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
-| **Total**                                |    **116/204** | **In Progress** | **-**      |
+| **Total**                                |    **151/204** | **In Progress** | **-**      |

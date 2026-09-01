@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.19
-current_phase: 113
-current_phase_name: Orchestrator Support and Presenters
+current_phase: 114
+current_phase_name: Plugin and Marketplace Lifecycle
 status: ready_to_discuss
-stopped_at: Phase 112 complete; ready to discuss Phase 113
-last_updated: "2026-08-31T15:34:12.000Z"
-last_activity: 2026-08-31
-last_activity_desc: Completed and verified Phase 112 Hook Runtime
-state_head: c1cb1108
+stopped_at: Phase 113 complete; ready to discuss Phase 114
+last_updated: "2026-09-01T07:24:42.000Z"
+last_activity: 2026-09-01
+last_activity_desc: Completed and verified Phase 113 Orchestrator Support and Presenters
+state_head: 621a162b
 progress:
   total_phases: 10
-  completed_phases: 5
-  total_plans: 117
-  completed_plans: 117
+  completed_phases: 6
+  total_plans: 152
+  completed_plans: 152
 milestone_name: Unit Test Refactor
 ---
 
@@ -21,23 +21,23 @@ milestone_name: Unit Test Refactor
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-31 after Phase 112)
+See: `.planning/PROJECT.md` (updated 2026-09-01 after Phase 113)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 113 — Orchestrator Support and Presenters
+**Current focus:** Phase 114 — Plugin and Marketplace Lifecycle
 
 ## Current Position
 
-Phase: 113 (Orchestrator Support and Presenters) — READY TO DISCUSS
+Phase: 114 (Plugin and Marketplace Lifecycle) — READY TO DISCUSS
 Plan: Not started
-Status: Phase 112 complete; ready for Phase 113 discussion
-Last activity: 2026-08-31 — Completed and verified Phase 112 Hook Runtime
+Status: Phase 113 complete; ready for Phase 114 discussion
+Last activity: 2026-09-01 — Completed and verified Phase 113 Orchestrator Support and Presenters
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
-One hundred sixteen of 204 source-test pairs are complete. The remaining 88 are open.
+One hundred fifty-one of 204 source-test pairs are complete. The remaining 53 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -45,21 +45,22 @@ evidence.
 
 **Velocity:**
 
-- Total plans completed: 116
-- Average duration: 11.5 min
-- Total execution time: 22 hr 15 min
+- Total plans completed: 151
+- Average recorded duration: 11.9 min
+- Total recorded execution time: 30 hr 1 min
 
 **By Phase:**
 
-| Phase                           | Plans | Total   | Avg/Plan |
-| ------------------------------- | ----: | ------- | -------- |
-| 108. Domain and Platform        |    23 | 10h 58m | 28.6 min |
-| 109. Shared Contracts           |    19 | 3h 19m  | 10.5 min |
-| 110                             |    12 | -       | -        |
-| 111. Non-Hook Component Bridges |    31 | -       | -        |
-| 112. Hook Runtime               |    31 | 7h 58m  | 15.4 min |
+| Phase                           | Plans | Total           | Avg/Plan          |
+| ------------------------------- | ----: | --------------- | ----------------- |
+| 108. Domain and Platform        |    23 | 10h 58m         | 28.6 min          |
+| 109. Shared Contracts           |    19 | 3h 19m          | 10.5 min          |
+| 110                             |    12 | -               | -                 |
+| 111. Non-Hook Component Bridges |    31 | -               | -                 |
+| 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
+| 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
 
-**Recent Trend:** 31 Phase 112 plans completed with all direct owner, review, validation, verification, and security gates green.
+**Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
 
 | Plan          | Duration | Tasks   | Files   |
@@ -143,14 +144,14 @@ evidence.
 | Phase 112 P31 | 17 min   | 2 tasks | 1 files |
 | Phase 112 P11 | 14 min   | 2 tasks | 2 files |
 | Phase 112 P13 | 20 min   | 2 tasks | 2 files |
-| Phase 112 P25 | 12 min | 2 tasks | 1 files |
-| Phase 112 P02 | 45 min | 2 tasks | 3 files |
-| Phase 112 P06 | 26 min | 2 tasks | 3 files |
-| Phase 112 P04 | 33 min | 2 tasks | 3 files |
-| Phase 112 P05 | 18 min | 2 tasks | 2 files |
-| Phase 112 P26 | 19 min | 2 tasks | 2 files |
-| Phase 112 P07 | 34 min | 2 tasks | 3 files |
-| Phase 112 P14 | 16 min | 2 tasks | 1 file |
+| Phase 112 P25 | 12 min   | 2 tasks | 1 files |
+| Phase 112 P02 | 45 min   | 2 tasks | 3 files |
+| Phase 112 P06 | 26 min   | 2 tasks | 3 files |
+| Phase 112 P04 | 33 min   | 2 tasks | 3 files |
+| Phase 112 P05 | 18 min   | 2 tasks | 2 files |
+| Phase 112 P26 | 19 min   | 2 tasks | 2 files |
+| Phase 112 P07 | 34 min   | 2 tasks | 3 files |
+| Phase 112 P14 | 16 min   | 2 tasks | 1 file  |
 
 ## Accumulated Context
 
@@ -284,6 +285,16 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 112]: Kept event-router.ts byte-for-byte unchanged because its public cache, hydration, rebuild, handler, and registration operations expose the complete lifecycle contract.
 - [Phase 112]: Split in-memory and persisted child fixtures across user and project cleanup surfaces so exit persistence cannot race the orphan tracer.
 - [Phase 112]: Alphabetized the hook-barrel runtime identity and compiler-negative inventories while leaving production export declarations unchanged.
+- [Phase 113]: Completed all 35 mirrored owners; 33 executable sources reached 971/971 branches, 216/216 functions, and 7,941/7,941 lines, while both type-only owners passed compiler contracts.
+- [Phase 113]: Kept runtime tests on separate lowercase `// arrange`, `// act`, and `// assert` phases and kept presentation-only inventories alphabetical.
+- [Phase 113]: Preserved caller, scope, reason, and lifecycle order wherever sequence carries behavior.
+- [Phase 113]: Proved presenter structure and exact rendered bytes, including severity, dependency, omission, tally, trailer, and reload partitions.
+- [Phase 113]: Proved classifiers, discovery, clone helpers, probes, scope fan-out, import planning, and reconcile planning through complete case-local values.
+- [Phase 113]: Kept read-only support paths offline through fail-fast fakes and architecture prohibitions; all mutable state and collaborators are case-owned.
+- [Phase 113]: Absorbed single-module evidence into mirrored owners and removed seven redundant supplemental suites without losing their unique contracts.
+- [Phase 113]: Removed one unreachable closed-union presenter default instead of fabricating an impossible test value.
+- [Phase 113]: Restored shipped barrel and interface exports after review showed aggregate dead-code cleanup had narrowed public contracts.
+- [Phase 113]: Replaced passive-value mocks and every broad `anyTimes()` expectation with fresh typed data and exact, explicitly verified interaction doubles.
 
 ### Pending Todos
 
@@ -302,6 +313,6 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-08-31T15:34:12.000Z
-Stopped at: Phase 112 complete; ready to discuss Phase 113
+Last session: 2026-09-01T07:24:42.000Z
+Stopped at: Phase 113 complete; ready to discuss Phase 114
 Resume file: None
