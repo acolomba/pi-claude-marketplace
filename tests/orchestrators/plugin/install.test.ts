@@ -3697,6 +3697,9 @@ test("retry proof: install: completion-cache maintenance failure stays installed
     try {
       // arrange
       resetCompletionCache();
+      t.after(() => {
+        resetCompletionCache();
+      });
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,

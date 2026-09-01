@@ -3754,6 +3754,9 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
     try {
       // arrange
       resetCompletionCache();
+      t.after(() => {
+        resetCompletionCache();
+      });
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const targets = await retryTargets(cwd, "mp", "hello");
