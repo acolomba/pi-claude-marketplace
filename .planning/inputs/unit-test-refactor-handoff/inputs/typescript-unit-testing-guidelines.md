@@ -518,7 +518,7 @@ Structure every case as Arrange, Act, Assert, and mark each phase with a comment
 - `// act`: invoke the exported behavior and keep its result.
 - `// assert`: assert the public result and state, then verify every mock.
 
-Write the comments in lowercase, in that order, and separate the phases with a blank line. When the act and the assertion are one expression, such as `assert.rejects()`, `assert.throws()`, or a one-line data row, mark that phase `// act & assert`. Do not add other comments to a case unless the setup is not obvious.
+Write the comments in lowercase, in that order, and separate the phases with a blank line. Use `// act & assert` only when one `assert.rejects()` or `assert.throws()` expression performs both the action and assertion. Data rows still use separate phases. Do not add other comments to a case unless the setup is not obvious.
 
 ```ts
 test('stores the cancelled order and publishes order.cancelled', async () => {
@@ -1334,7 +1334,7 @@ A unit-test change is complete when:
 - [ ] No production export, reset hook, mutator, or state reader was added for testing.
 - [ ] Any production refactor created a coherent module, an explicit dependency, a narrow port, or removed hidden global state.
 - [ ] Tests use independent `node:test` cases and `node:assert/strict`, with no `only`, `skip`, or `todo`.
-- [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert` (or `// act & assert`) comments.
+- [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert`; `// act & assert` appears only for one throwing/rejection expression.
 - [ ] Any `describe()` block is top-level, names an exported entrypoint, and owns no shared mutable state.
 - [ ] Each stateful case gets fresh dependencies and fresh graph state.
 - [ ] Case titles state public behavior; values and doubles are named after their production role.
