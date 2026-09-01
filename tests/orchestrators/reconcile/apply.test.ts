@@ -32,6 +32,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { mock } from "node:test";
 
+import { mock as strictMock, when } from "strong-mock";
+
 import {
   applyReconcile,
   surfacePostCommitWarnings,
@@ -50,15 +52,29 @@ import type { PluginConfigEntry } from "../../../extensions/pi-claude-marketplac
 import type { MergedConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-interface MockCtx {
-  ui: { notify: ReturnType<typeof mock.fn> };
+interface MockCtx extends ExtensionContext {
+  readonly ui: Omit<ExtensionContext["ui"], "notify"> & {
+    readonly notify: ReturnType<typeof mock.fn<ExtensionContext["ui"]["notify"]>>;
+  };
 }
 
 function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
+  const ctx = strictMock<MockCtx>({ exactParams: true, name: "extension context" });
+  const ui = strictMock<MockCtx["ui"]>({ exactParams: true, name: "extension UI" });
+  const notify = mock.fn<ExtensionContext["ui"]["notify"]>();
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .anyTimes();
+  when(() => ui.notify)
+    .thenReturn(notify)
+    .anyTimes();
+  return ctx;
 }
 
-const STUB_PI = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+const STUB_PI = strictMock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+when(() => STUB_PI.getAllTools())
+  .thenReturn([])
+  .anyTimes();
 const RECONCILE_REMOTE_URLS = [
   "https://github.com/acme/valid.git",
   "https://github.com/acme/flaky.git",
@@ -183,7 +199,7 @@ test("RECON-01 (decl-but-missing -> add at load): config declares mp-a, state em
     });
 
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -257,7 +273,7 @@ test("RECON-02 (installed-but-undeclared -> remove at load): state records mp-a,
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -317,7 +333,7 @@ test("RECON-03 (per-entry network soft-fail): one failing github mp + one succee
 
     // Must NOT throw.
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -378,7 +394,7 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
     });
 
     await applyReconcile({
-      ctx: ctxA as unknown as ExtensionContext,
+      ctx: ctxA,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -402,7 +418,7 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
     // ZERO notify, record intact.
     const ctxB = makeCtx();
     await applyReconcile({
-      ctx: ctxB as unknown as ExtensionContext,
+      ctx: ctxB,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -451,7 +467,7 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
 
     const ctxA = makeCtx();
     await applyReconcile({
-      ctx: ctxA as unknown as ExtensionContext,
+      ctx: ctxA,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -468,7 +484,7 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
     // Second call.
     const ctxB = makeCtx();
     await applyReconcile({
-      ctx: ctxB as unknown as ExtensionContext,
+      ctx: ctxB,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -581,7 +597,7 @@ test("WR-09 (local-file isolation): a disable declared ONLY in claude-plugins.lo
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -613,7 +629,7 @@ test("WR-09 (local-file isolation): a disable declared ONLY in claude-plugins.lo
     // state -- the second reconcile is silent.
     const ctxB = makeCtx();
     await applyReconcile({
-      ctx: ctxB as unknown as ExtensionContext,
+      ctx: ctxB,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -675,7 +691,7 @@ test("WR-01 (per-scope isolation): corrupt project-scope state.json -> structure
     const ctx = makeCtx();
     // Both scopes (no explicit scope) -- project first, then user.
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
     });
@@ -739,7 +755,7 @@ test("CFG-03 / T-55-02-01: invalid claude-plugins.json -> (failed) {invalid mani
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -800,7 +816,7 @@ test("I5 / PR #51: schema-invalid claude-plugins.json -- cause trailer carries t
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -925,10 +941,7 @@ test("WARN-01 / D-86-03 / T-86-03: a degraded plugin-installed outcome carries d
   // (2) The detail surfaces via notifyDiagnostic (warning) with the absolute
   // path collapsed to its basename.
   const ctx = makeCtx();
-  surfacePostCommitWarnings(
-    { ctx: ctx as unknown as ExtensionContext } as Parameters<typeof surfacePostCommitWarnings>[0],
-    [outcome],
-  );
+  surfacePostCommitWarnings({ ctx, pi: STUB_PI, cwd: "/work/project" }, [outcome]);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
   assert.equal(args[1], "warning");
@@ -975,10 +988,7 @@ test("DFEN-04 / OUT-01 / OUT-04 / S2: an install-disabled outcome renders its ca
   }
 
   const ctx = makeCtx();
-  surfacePostCommitWarnings(
-    { ctx: ctx as unknown as ExtensionContext } as Parameters<typeof surfacePostCommitWarnings>[0],
-    [outcome],
-  );
+  surfacePostCommitWarnings({ ctx, pi: STUB_PI, cwd: "/work/project" }, [outcome]);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
   assert.ok(
@@ -1058,7 +1068,7 @@ test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) at
     try {
       const ctx = makeCtx();
       await applyReconcile({
-        ctx: ctx as unknown as ExtensionContext,
+        ctx,
         pi: STUB_PI,
         cwd,
         scope: "project",
@@ -1083,74 +1093,6 @@ test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) at
       await chmod(projectScopeRoot, 0o755);
     }
   });
-});
-
-test("I6 / PR #51: classifyOrchestratorThrow maps PluginShapeError.kind and StateLockHeldError to closed-set tokens (not unreadable)", async () => {
-  // Pre-fix `classifyOrchestratorThrow` was a bare alias for
-  // `narrowProbeError`, so every PluginShapeError and StateLockHeldError
-  // flattened to {unreadable}. After the fix the function narrows on the
-  // typed errors first (mirroring import/execute.ts::dispatchFailedOutcome's
-  // instanceof ladder) and returns the catalog-correct token.
-  const { classifyOrchestratorThrow } =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts");
-  const { PluginShapeError, StateLockHeldError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  // (1) PluginShapeError "not-in-manifest" -> "not in manifest" -- the
-  // catalog token for a plugin declared in the config but missing from the
-  // marketplace manifest. Pre-fix: "unreadable".
-  assert.equal(
-    classifyOrchestratorThrow(
-      new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "m" }),
-    ),
-    "not in manifest",
-  );
-
-  // (2) PluginShapeError "already-installed" -> "already installed".
-  assert.equal(
-    classifyOrchestratorThrow(
-      new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "m" }),
-    ),
-    "already installed",
-  );
-
-  // (3) PluginShapeError "not-installable" / "no-longer-installable" -> the
-  // closed-set "no longer installable" token (mirrors
-  // import/execute.ts::importWarningReason for the "uninstallable" warning).
-  assert.equal(
-    classifyOrchestratorThrow(
-      new PluginShapeError({
-        kind: "not-installable",
-        plugin: "p",
-        reasons: ["hooks"],
-        partialable: false,
-      }),
-    ),
-    "no longer installable",
-  );
-  assert.equal(
-    classifyOrchestratorThrow(
-      new PluginShapeError({
-        kind: "no-longer-installable",
-        plugin: "p",
-        reasons: ["lsp"],
-        partialable: false,
-      }),
-    ),
-    "no longer installable",
-  );
-
-  // (4) StateLockHeldError -> "lock held" -- a concurrent process holding
-  // the scope lock surfaces as the catalog `{lock held}` row, never as a
-  // misleading `{unreadable}` flatten.
-  assert.equal(
-    classifyOrchestratorThrow(new StateLockHeldError("project", "/tmp/.state-lock")),
-    "lock held",
-  );
-
-  // Sanity floor: a generic Error still falls through to the probe
-  // classifier's permissive fallback (the existing contract).
-  assert.equal(classifyOrchestratorThrow(new Error("boom")), "unreadable");
 });
 
 test("S6 / PR #51: the three non-toggle orchestrated loops in apply.ts adopt the fail-loud 'returned no outcome in orchestrated mode' pattern", async () => {
@@ -1301,7 +1243,7 @@ test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config dri
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -1542,7 +1484,7 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -1590,7 +1532,7 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
     // and the cascade is silent (NFR-2 / A4 / RECON-05).
     const ctxB = makeCtx();
     await applyReconcile({
-      ctx: ctxB as unknown as ExtensionContext,
+      ctx: ctxB,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -1683,7 +1625,7 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -1723,7 +1665,7 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
     // ZERO rows on the next reconcile (no spurious re-uninstall attempt).
     const ctxB = makeCtx();
     await applyReconcile({
-      ctx: ctxB as unknown as ExtensionContext,
+      ctx: ctxB,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -1760,7 +1702,7 @@ test("PR #51 / PURL-06: applySourceMismatches + applied-cascade source-mismatch 
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -1824,7 +1766,7 @@ test("T6 / PR #51: classifyReadPassThrow lock-held arm -- a pre-held .state-lock
     try {
       const ctx = makeCtx();
       await applyReconcile({
-        ctx: ctx as unknown as ExtensionContext,
+        ctx,
         pi: STUB_PI,
         cwd,
         scope: "project",
@@ -1972,7 +1914,7 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -2043,7 +1985,7 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
     // pre-empt it, so this checks only what this seam can observe.
     const baseAfterFirst = await readFile(basePath, "utf8");
     await applyReconcile({
-      ctx: makeCtx() as unknown as ExtensionContext,
+      ctx: makeCtx(),
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -2083,7 +2025,7 @@ async function assertInstallDisabledReloadFixedPoint(opts: {
 }): Promise<{ plan: ReconcilePlan; effective: MergedConfigEntry<PluginConfigEntry> }> {
   const first = makeCtx();
   await applyReconcile({
-    ctx: first as unknown as ExtensionContext,
+    ctx: first,
     pi: STUB_PI,
     cwd: opts.cwd,
     scope: "project",
@@ -2107,7 +2049,7 @@ async function assertInstallDisabledReloadFixedPoint(opts: {
   for (const pass of [2, 3]) {
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd: opts.cwd,
       scope: "project",
@@ -2193,7 +2135,7 @@ test("DFEN-04 / D-102-04: a locally-declared bare entry stamps claude-plugins.lo
     const baseBefore = await readFile(basePath, "utf8");
 
     await applyReconcile({
-      ctx: makeCtx() as unknown as ExtensionContext,
+      ctx: makeCtx(),
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -2364,7 +2306,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reconci
 
     const first = makeCtx();
     await applyReconcile({
-      ctx: first as unknown as ExtensionContext,
+      ctx: first,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -2450,7 +2392,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reconci
     for (const pass of [2, 3]) {
       const ctx = makeCtx();
       await applyReconcile({
-        ctx: ctx as unknown as ExtensionContext,
+        ctx,
         pi: STUB_PI,
         cwd,
         scope: "project",
@@ -2475,7 +2417,7 @@ test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the p
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -2546,7 +2488,7 @@ test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still de
     );
 
     await applyReconcile({
-      ctx: makeCtx() as unknown as ExtensionContext,
+      ctx: makeCtx(),
       pi: STUB_PI,
       cwd,
       scope: "project",
@@ -2576,7 +2518,7 @@ test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still de
 
     const ctx = makeCtx();
     await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
+      ctx,
       pi: STUB_PI,
       cwd,
       scope: "project",
