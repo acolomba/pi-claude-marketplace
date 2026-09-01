@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmodSync, readFileSync, watch, writeFileSync } from "node:fs";
+import {
+  chmod,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -33,20 +43,35 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
+  "https://github.com/org/repo.git",
   "https://github.com/test/repo.git",
   "https://example.com/org/repo.git",
   "https://example.com/org/mono.git",
   "https://example.com/org/monorepo.git",
 ] as const;
+
+const DEVICE_CODE = {
+  device_code: "MOCK_DEVICE_CODE",
+  user_code: "ABCD-1234",
+  verification_uri: "https://github.com/login/device",
+  expires_in: 900,
+  interval: 0,
+} as const;
 
 function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
@@ -58,6 +83,27 @@ function fixtureMarketplaceDir(
     "_fixtures",
     name,
   );
+}
+
+async function seedGithubMarketplaceForSync(cwd: string): Promise<void> {
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const cloneDir = await locations.sourceCloneDir("official");
+  await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      official: {
+        name: "official",
+        scope: "project",
+        source: githubSource("https://github.com/test/repo#main"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: cloneDir,
+        plugins: { hello: makePluginRecord("1.0.0") },
+      },
+    },
+  });
 }
 
 function makeMockGitOps(
@@ -188,11 +234,87 @@ function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-  } as unknown as ExtensionContext;
+  } as ExtensionContext;
   const pi = {
     getAllTools: piOverrides?.getAllTools ?? ((): unknown[] => []),
-  } as unknown as ExtensionAPI;
+  } as ExtensionAPI;
   return { ctx, pi, notifications };
+}
+
+function watchStateTransition(
+  locations: ReturnType<typeof locationsFor>,
+  predicate: (state: ExtensionState) => boolean,
+  effect: (state: ExtensionState) => void,
+): { readonly close: () => void; readonly fired: () => boolean } {
+  let didFire = false;
+  const stateName = path.basename(locations.stateJsonPath);
+  const watcher = watch(path.dirname(locations.stateJsonPath), (_event, filename) => {
+    if (didFire || filename !== stateName) {
+      return;
+    }
+
+    try {
+      const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
+      if (!predicate(state)) {
+        return;
+      }
+
+      didFire = true;
+      effect(state);
+    } catch {
+      // Atomic replacement can briefly report the destination event before
+      // the final pathname is readable; the next event retries the observation.
+    }
+  });
+  return {
+    close: () => {
+      watcher.close();
+    },
+    fired: () => didFire,
+  };
+}
+
+function makeCredentialOps(): ReturnType<typeof createCredentialOpsFake>["credentialOps"] {
+  return createCredentialOpsFake({ boundary: "memory" }).credentialOps;
+}
+
+function makeDeviceFlowHttp(): ReturnType<typeof createDeviceFlowFake>["http"] {
+  return createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: DEVICE_CODE,
+  }).http;
+}
+
+function capturingUpdateSeam(gitOps: GitOps): {
+  readonly seam: UpdateCloneCacheSeam;
+  readonly captured: {
+    pinAuth: GitAuthBundle | undefined;
+    cloneAuth: GitAuthBundle | undefined;
+  };
+} {
+  const captured: {
+    pinAuth: GitAuthBundle | undefined;
+    cloneAuth: GitAuthBundle | undefined;
+  } = {
+    pinAuth: undefined,
+    cloneAuth: undefined,
+  };
+  const seam: UpdateCloneCacheSeam = {
+    resolvePluginPin: (args) => {
+      captured.pinAuth = args.auth;
+      return resolvePluginPin({ ...args, gitOps });
+    },
+    materializePluginClone: (args) => {
+      captured.cloneAuth = args.auth;
+      return materializePluginClone({ ...args, gitOps });
+    },
+    materializeOrRefreshPluginMirror: (args) => {
+      captured.cloneAuth = args.auth;
+      return materializeOrRefreshPluginMirror({ ...args, gitOps });
+    },
+  };
+  return { seam, captured };
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
@@ -210,6 +332,75 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
 
     await rm(hermeticHome, { recursive: true, force: true });
   }
+}
+
+async function seedGitUpdateMarketplace(opts: {
+  readonly cwd: string;
+  readonly cloneUrl: string;
+  readonly entrySource: unknown;
+  readonly recordedSha: string;
+  readonly versionTag: string;
+}): Promise<void> {
+  const marketplaceRoot = path.join(opts.cwd, "mp-src");
+  const fixtureRepoDir = path.join(opts.cwd, "repo-fixture");
+  await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "gp", version: opts.versionTag }),
+  );
+  const skillDir = path.join(fixtureRepoDir, "skills", "greet");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    `---\nname: greet\n---\n\nHi ${opts.versionTag}.\n`,
+  );
+
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "gp", source: opts.entrySource }] }),
+  );
+
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  const key = pluginCloneKey(opts.cloneUrl, opts.recordedSha);
+  const oldCloneRoot = await locations.pluginCloneDir(key);
+  await mkdir(path.dirname(oldCloneRoot), { recursive: true });
+  await cp(fixtureRepoDir, oldCloneRoot, { recursive: true });
+
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          gp: {
+            version: `sha-${opts.recordedSha.slice(0, 12)}`,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            enabled: true,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: ["seeded-skill"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            resolvedSource: oldCloneRoot,
+            resolvedSha: opts.recordedSha,
+          },
+        },
+      },
+    },
+  });
 }
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -415,6 +606,19 @@ async function seedPathMarketplace(opts: {
   return { marketplaceRoot, manifestPath };
 }
 
+async function seedAgentSkillPreload(marketplaceRoot: string): Promise<void> {
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "hello", "agents", "bot.md"),
+    "---\n" +
+      "name: bot\n" +
+      "description: Uses the installed skill\n" +
+      "tools: Read,Skill\n" +
+      "skills: tool\n" +
+      "---\n\n" +
+      "Use hello:tool.\n",
+  );
+}
+
 /**
  * Rewrite the on-disk manifest to a new shape. Used to simulate a
  * marketplace update where entry.version changed or entries were removed.
@@ -607,6 +811,41 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
         "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}",
       );
       assert.equal(notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-5: an accepted empty recorded version is omitted from the failed row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup5-empty-version-"));
+    try {
+      // arrange
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "" },
+      });
+      await rewriteManifest(seeded.manifestPath, "mp", {});
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(
+        notifications[0]?.message,
+        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not in manifest}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -822,6 +1061,108 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+test("updatePlugins preserves a generated skill preload in the staged agent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-skill-direct-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.1", hasSkill: true, hasAgent: true },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await seedAgentSkillPreload(seeded.marketplaceRoot);
+      const git = makeMockGitOps();
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+      });
+      const { ctx, pi, notifications } = makeCtx({
+        getAllTools: () => [{ name: "subagent" }],
+      });
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        gitOps: git.gitOps,
+        credentialOps: credentials.credentialOps,
+        deviceFlowHttp: deviceFlow.http,
+      });
+
+      // assert
+      const agent = await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        "utf8",
+      );
+      assert.match(agent, /^skills: hello-tool$/m);
+      assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepEqual(git.state.fetchCalls, []);
+      assert.deepEqual(git.state.forceUpdateRefCalls, []);
+      assert.deepEqual(git.state.checkoutCalls, []);
+      assert.deepEqual(git.state.cloneCalls, []);
+      assert.deepEqual(git.state.resolveRefCalls, []);
+      assert.deepEqual(git.state.resolveRemoteRefCalls, []);
+      assert.deepEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+      assert.deepEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("updateSinglePlugin preserves a generated skill preload from its path source", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-skill-cascade-"));
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    const locations = locationsFor("project", cwd);
+    const seeded = await seedPathMarketplace({
+      cwd,
+      marketplaceRoot: path.join(cwd, "mp-src"),
+      marketplaceName: "mp",
+      manifestPlugins: {
+        hello: { version: "1.0.1", hasSkill: true, hasAgent: true },
+      },
+      installedVersions: { hello: "1.0.0" },
+    });
+    await seedAgentSkillPreload(seeded.marketplaceRoot);
+    process.chdir(cwd);
+
+    // act
+    const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+    // assert
+    const agent = await readFile(
+      path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+      "utf8",
+    );
+    assert.equal(outcome.partition, "updated");
+    assert.match(agent, /^skills: hello-tool$/m);
+    assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
   });
 });
 
@@ -1138,6 +1479,594 @@ test("PUP-9 cascade vs direct: catastrophic resolver failure routes differently"
 });
 
 // ─── PUP-6: phase-3 failure -- RECOVERY_PLUGIN_REINSTALL_PREFIX in body ───────
+
+test("updateSinglePlugin classifies a missing manifest path as source missing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-manifest-missing-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const state = await loadState(locations.extensionRoot);
+      const marketplace = state.marketplaces["mp"];
+      assert.ok(marketplace !== undefined);
+      marketplace.manifestPath = path.join(cwd, "missing", "marketplace.json");
+      await saveState(locations.extensionRoot, state);
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["source missing"]);
+      assert.match(outcome.notes?.[0] ?? "", /ENOENT/);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("updateSinglePlugin classifies a manifest beneath a file as source missing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-manifest-notdir-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const blockingFile = path.join(cwd, "manifest-parent");
+      await writeFile(blockingFile, "not a directory");
+      const state = await loadState(locations.extensionRoot);
+      const marketplace = state.marketplaces["mp"];
+      assert.ok(marketplace !== undefined);
+      marketplace.manifestPath = path.join(blockingFile, "marketplace.json");
+      await saveState(locations.extensionRoot, state);
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["source missing"]);
+      assert.match(outcome.notes?.[0] ?? "", /ENOTDIR/);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("updateSinglePlugin classifies an unreadable manifest as permission denied", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-manifest-denied-"));
+    const previousCwd = process.cwd();
+    let manifestPath: string | undefined;
+    try {
+      // arrange
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      manifestPath = seeded.manifestPath;
+      await chmod(manifestPath, 0o000);
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["permission denied"]);
+      assert.match(outcome.notes?.[0] ?? "", /EACCES|EPERM/);
+    } finally {
+      process.chdir(previousCwd);
+      if (manifestPath !== undefined) {
+        await chmod(manifestPath, 0o600).catch(() => undefined);
+      }
+
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("updateSinglePlugin classifies a plugin removed after preflight as concurrently uninstalled", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-preflight-uninstalled-"));
+    const previousCwd = process.cwd();
+    let stagingWatch: ReturnType<typeof watch> | undefined;
+    let didMutate = false;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await mkdir(locations.skillsStagingDir, { recursive: true });
+      stagingWatch = watch(locations.skillsStagingDir, () => {
+        if (didMutate) {
+          return;
+        }
+
+        didMutate = true;
+        const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
+        const marketplace = state.marketplaces["mp"];
+        assert.ok(marketplace !== undefined);
+        delete marketplace.plugins["hello"];
+        writeFileSync(locations.stateJsonPath, JSON.stringify(state));
+      });
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(didMutate, true);
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["concurrently uninstalled"]);
+      assert.match(outcome.notes?.[0] ?? "", /concurrently uninstalled/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"],
+        undefined,
+      );
+    } finally {
+      stagingWatch?.close();
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("updateSinglePlugin classifies a version changed after preflight as concurrently updated", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-cascade-preflight-updated-"));
+    const previousCwd = process.cwd();
+    let stagingWatch: ReturnType<typeof watch> | undefined;
+    let didMutate = false;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await mkdir(locations.skillsStagingDir, { recursive: true });
+      stagingWatch = watch(locations.skillsStagingDir, () => {
+        if (didMutate) {
+          return;
+        }
+
+        didMutate = true;
+        const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
+        const record = state.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        record.version = "1.0.9";
+        writeFileSync(locations.stateJsonPath, JSON.stringify(state));
+      });
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(didMutate, true);
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["concurrently updated"]);
+      assert.match(outcome.notes?.[0] ?? "", /concurrently updated/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.version,
+        "1.0.9",
+      );
+    } finally {
+      stagingWatch?.close();
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a hooks source corrupted after intent marking becomes an ordered phase failure", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-hooks-reparse-race-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: true,
+            hooksJson: {
+              hooks: { SessionStart: [{ hooks: [{ type: "command", command: "echo ok" }] }] },
+            },
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const hooksPath = path.join(
+        seeded.marketplaceRoot,
+        "plugins",
+        "hello",
+        "hooks",
+        "hooks.json",
+      );
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          writeFileSync(hooksPath, "{ invalid hooks");
+        },
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /hooks/);
+      assert.match(notifications[0]?.message ?? "", /re-parse failed/);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.equal(record?.version, "1.0.0");
+      assert.equal(record?.compatibility.installable, false);
+    } finally {
+      stateWatch?.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a marketplace removed after intent marking is not recreated during finalize", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-finalize-marketplace-race-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          writeFileSync(
+            locations.stateJsonPath,
+            JSON.stringify({ schemaVersion: 1, marketplaces: {} }),
+          );
+        },
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
+      assert.match(notifications[0]?.message ?? "", /Marketplace "mp" disappeared/);
+      assert.deepEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    } finally {
+      stateWatch?.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a plugin removed after intent marking is not recreated during finalize", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-finalize-plugin-race-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        (state) => {
+          const marketplace = state.marketplaces["mp"];
+          assert.ok(marketplace !== undefined);
+          delete marketplace.plugins["hello"];
+          writeFileSync(locations.stateJsonPath, JSON.stringify(state));
+        },
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
+      assert.match(notifications[0]?.message ?? "", /concurrently uninstalled during finalize/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"],
+        undefined,
+      );
+    } finally {
+      stateWatch?.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a skills staging cleanup leak becomes a rollback partial and retry converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-skills-cleanup-leak-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(locations.skillsStagingDir, 0o500);
+        },
+      );
+      const first = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(first.notifications.length, 1);
+      assert.equal(first.notifications[0]?.severity, "error");
+      assert.match(
+        first.notifications[0]?.message ?? "",
+        /failed to clean up skills staging directory/,
+      );
+      assert.match(first.notifications[0]?.message ?? "", /\{rollback partial\}/);
+      await chmod(locations.skillsStagingDir, 0o700);
+      const retry = makeCtx();
+      await updatePlugins({
+        ctx: retry.ctx,
+        pi: retry.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      assert.equal(retry.notifications.length, 1);
+      assert.match(retry.notifications[0]?.message ?? "", /\(updated\)/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.version,
+        "1.0.1",
+      );
+    } finally {
+      stateWatch?.close();
+      const locations = locationsFor("project", cwd);
+      await chmod(locations.skillsStagingDir, 0o700).catch(() => undefined);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an agents staging cleanup leak becomes a rollback partial and retry converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-agents-cleanup-leak-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.1", hasSkill: true, hasAgent: true },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(locations.agentsStagingDir, 0o500);
+        },
+      );
+      const first = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(first.notifications.length, 1);
+      assert.equal(first.notifications[0]?.severity, "error");
+      assert.match(
+        first.notifications[0]?.message ?? "",
+        /failed to clean up agents staging directory/,
+      );
+      assert.match(first.notifications[0]?.message ?? "", /\{rollback partial\}/);
+      await chmod(locations.agentsStagingDir, 0o700);
+      const retry = makeCtx();
+      await updatePlugins({
+        ctx: retry.ctx,
+        pi: retry.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      assert.equal(retry.notifications.length, 1);
+      assert.match(retry.notifications[0]?.message ?? "", /\(updated\)/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.version,
+        "1.0.1",
+      );
+    } finally {
+      stateWatch?.close();
+      const locations = locationsFor("project", cwd);
+      await chmod(locations.agentsStagingDir, 0o700).catch(() => undefined);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an MCP commit permission failure becomes a rollback partial and retry converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-mcp-commit-denied-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasMcp: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(path.dirname(locations.mcpJsonPath), 0o500);
+        },
+      );
+      const first = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(first.notifications.length, 1);
+      assert.equal(first.notifications[0]?.severity, "error");
+      assert.match(first.notifications[0]?.message ?? "", /\[mcp\] \(rollback failed\)/);
+      assert.match(first.notifications[0]?.message ?? "", /EACCES|EPERM/);
+      await chmod(path.dirname(locations.mcpJsonPath), 0o700);
+      const retry = makeCtx();
+      await updatePlugins({
+        ctx: retry.ctx,
+        pi: retry.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      assert.equal(retry.notifications.length, 1);
+      assert.match(retry.notifications[0]?.message ?? "", /\(updated\)/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.version,
+        "1.0.1",
+      );
+    } finally {
+      stateWatch?.close();
+      const locations = locationsFor("project", cwd);
+      await chmod(path.dirname(locations.mcpJsonPath), 0o700).catch(() => undefined);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'plugin-uninstall + plugin-install for \"<plugin>\".'", async () => {
   // The cleanest way to force a phase-3a failure deterministically is to
@@ -1997,6 +2926,130 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
   });
 });
 
+test("syncClone-fail: a non-Error injected rejection is normalized at the direct boundary", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sync-non-error-"));
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps: baseGitOps } = makeMockGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const rejectNonError = Promise.reject.bind(Promise);
+      const gitOps: GitOps = {
+        ...baseGitOps,
+        fetch: () => rejectNonError("transport string rejection"),
+      };
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /\{unreadable manifest\}/);
+      assert.match(notifications[0]?.message ?? "", /transport string rejection/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { title, makeFailure, reason } of [
+  {
+    title: "classifies EACCES marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("denied"), { code: "EACCES" }),
+    reason: "permission denied",
+  },
+  {
+    title: "classifies EPERM marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("denied"), { code: "EPERM" }),
+    reason: "permission denied",
+  },
+  {
+    title: "classifies ENOENT marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("missing"), { code: "ENOENT" }),
+    reason: "source missing",
+  },
+  {
+    title: "classifies ENOTDIR marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("missing"), { code: "ENOTDIR" }),
+    reason: "source missing",
+  },
+  {
+    title: "classifies missing marketplace refresh targets",
+    makeFailure: () => new Error("remote ref not found"),
+    reason: "not found",
+  },
+  {
+    title: "classifies rollback marketplace refresh failures",
+    makeFailure: () => new Error("rollback could not complete"),
+    reason: "rollback partial",
+  },
+  {
+    title: "classifies concurrently removed marketplace refresh targets",
+    makeFailure: () => new Error("marketplace concurrently removed"),
+    reason: "concurrently uninstalled",
+  },
+  {
+    title: "classifies concurrently uninstalled marketplace refresh targets",
+    makeFailure: () => new Error("plugin concurrently uninstalled"),
+    reason: "concurrently uninstalled",
+  },
+  {
+    title: "classifies concurrently updated marketplace refresh targets",
+    makeFailure: () => new Error("plugin concurrently updated"),
+    reason: "concurrently updated",
+  },
+  {
+    title: "classifies invalid marketplace refresh failures",
+    makeFailure: () => new Error("invalid remote manifest"),
+    reason: "invalid manifest",
+  },
+] as const) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "update-sync-reason-"));
+      try {
+        // arrange
+        await seedGithubMarketplaceForSync(cwd);
+        const { gitOps } = makeMockGitOps({
+          fetchThrows: makeFailure(),
+          remoteRefs: {
+            "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001",
+          },
+        });
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "marketplace", marketplace: "official" },
+          gitOps,
+        });
+
+        // assert
+        assert.equal(notifications.length, 1);
+        assert.match(notifications[0]?.message ?? "", new RegExp(`\\{${reason}\\}`));
+        assert.equal(notifications[0]?.severity, "error");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 // ─── invalid manifest -> loadMarketplaceManifest throws (covers preflightUpdate
 //     path where manifest load fails; lines 374-379 PLUGIN_ENTRY_VALIDATOR.Check
 //     is structurally unreachable because MARKETPLACE_VALIDATOR embeds the same
@@ -2062,11 +3115,11 @@ test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPart
   // the abortPartialHandles body (lines 467-486). The throw propagates to
   // runThreePhaseUpdate -> updateSinglePlugin cascade catch -> partition='failed'.
   //
-  // Setup: seed <cwd>/.pi/mcp.json with "server1" owned by a DIFFERENT plugin
-  // ("other-plugin"). Then seed hello@mp with version 1.0.1 declaring "server1".
+  // Setup: seed <cwd>/.pi/mcp.json with "rollback-server" owned by a DIFFERENT
+  // plugin. Then seed hello@mp with version 1.0.1 declaring the same server.
   // discoverGeneratedNames does NOT check MCP collisions (it only discovers
   // skills/commands/agents), so it succeeds. prepareStageMcpServers then reads
-  // the scoped mcp.json, finds "server1" in `theirs` (owned by other-plugin),
+  // the scoped mcp.json, finds "rollback-server" in `theirs`,
   // and throws McpServerCollisionError.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-prepare-mcp-fail-"));
@@ -2081,19 +3134,23 @@ test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPart
         },
         installedVersions: { hello: "1.0.0" },
       });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { "rollback-server": { command: "node", args: ["hello.js"] } },
+        }),
+      );
 
-      // Pre-populate the project-scope mcp.json with "server1" owned by
-      // "other-plugin". This puts "server1" into `theirs` when prepareStageMcpServers
-      // calls partitionExistingServers for the "hello" update.
-      // The hello plugin's .mcp.json (created by hasMcp: true) also declares
-      // "server1"; the collision fires because other-plugin already owns it.
+      // Pre-populate the project-scope mcp.json with "rollback-server" owned by
+      // another plugin. This puts the server into `theirs` when
+      // prepareStageMcpServers calls partitionExistingServers for the update.
       const locations = locationsFor("project", cwd);
       await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
       await writeFile(
         locations.mcpJsonPath,
         JSON.stringify({
           mcpServers: {
-            server1: {
+            "rollback-server": {
               command: "node",
               args: ["other.js"],
               _piClaudeMarketplace: { plugin: "other-plugin", marketplace: "mp" },
@@ -2109,6 +3166,7 @@ test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPart
         const outcome = await updateSinglePlugin("hello", "mp", "project");
         assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
         assert.equal(outcome.name, "hello");
+        assert.deepEqual(outcome.reasons, ["rollback partial"]);
         assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
       } finally {
         process.chdir(prevCwd);
@@ -2121,7 +3179,7 @@ test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPart
 
 // ─── bare form: enumerates both user and project scopes (lines 816-819) ───────
 
-test("bare-form both-scopes: plugins in user + project scopes both appear in update cascade", async () => {
+test("bare-form both-scopes: changed plugins render marketplace groups in presentation order", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-bare-both-"));
     try {
@@ -2130,7 +3188,7 @@ test("bare-form both-scopes: plugins in user + project scopes both appear in upd
         cwd,
         marketplaceRoot: path.join(cwd, "mp-proj"),
         marketplaceName: "mp-proj",
-        manifestPlugins: { alpha: { version: "1.0.0", hasSkill: true } },
+        manifestPlugins: { alpha: { version: "1.0.1", hasSkill: true } },
         installedVersions: { alpha: "1.0.0" },
       });
 
@@ -2147,7 +3205,7 @@ test("bare-form both-scopes: plugins in user + project scopes both appear in upd
       await mkdir(path.join(betaPluginRoot, ".claude-plugin"), { recursive: true });
       await writeFile(
         path.join(betaPluginRoot, ".claude-plugin", "plugin.json"),
-        JSON.stringify({ name: "beta", version: "1.0.0" }),
+        JSON.stringify({ name: "beta", version: "1.0.1" }),
       );
       const betaSkillDir = path.join(betaPluginRoot, "skills", "tool");
       await mkdir(betaSkillDir, { recursive: true });
@@ -2158,7 +3216,7 @@ test("bare-form both-scopes: plugins in user + project scopes both appear in upd
         userManifestPath,
         JSON.stringify({
           name: "mp-user",
-          plugins: [{ name: "beta", source: "./plugins/beta", version: "1.0.0" }],
+          plugins: [{ name: "beta", source: "./plugins/beta", version: "1.0.1" }],
         }),
       );
 
@@ -2189,15 +3247,16 @@ test("bare-form both-scopes: plugins in user + project scopes both appear in upd
         // No scope -> bare form enumerates both user and project scopes
       });
 
-      // Both scopes are enumerated and both plugins are up-to-date (same version
-      // in manifest as in state). UGRM-01: a bulk (bare-form, plural) update
-      // suppresses every per-plugin `(skipped) {up-to-date}` row and drops the
-      // now-empty marketplace headers, so the cascade body is empty. UGRM-02:
-      // rather than zero output, the orchestrator emits the never-silent no-op
-      // headline `Plugin update: nothing to update` at info severity.
+      // Both scopes are enumerated and both changed rows survive grouping. Static
+      // marketplace presentation is alphabetical; the plugin rows retain their
+      // public enumeration order inside each group.
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      assert.equal(body, "Plugin update: nothing to update");
+      const projectIndex = body.indexOf("● mp-proj [project]");
+      const userIndex = body.indexOf("● mp-user [user]");
+      assert.ok(projectIndex >= 0, body);
+      assert.ok(userIndex > projectIndex, body);
+      assert.match(body, /Plugin update: 2 updated/);
       assert.equal(notifications[0]?.severity, undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2256,6 +3315,70 @@ test("dropCache-fail: cache path is a directory -> notifyWarning emitted after s
 });
 
 // ─── swapStateRecord: marketplace removed between sync and preflight ───────────
+
+test("a later marketplace removed during an earlier refresh aborts before its own sync", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-later-marketplace-gone-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const aaaClone = await locations.sourceCloneDir("aaa");
+      const zzzClone = await locations.sourceCloneDir("zzz");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), aaaClone, { recursive: true });
+      await cp(fixtureMarketplaceDir("valid-marketplace"), zzzClone, { recursive: true });
+      const marketplaceRecord = (name: string, cloneDir: string) => ({
+        name,
+        scope: "project" as const,
+        source: githubSource("https://github.com/test/repo#main"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: cloneDir,
+        plugins: { hello: makePluginRecord("1.0.0") },
+      });
+      await saveState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          aaa: marketplaceRecord("aaa", aaaClone),
+          zzz: marketplaceRecord("zzz", zzzClone),
+        },
+      });
+      const { gitOps } = makeMockGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const originalFetch = gitOps.fetch.bind(gitOps);
+      const mutatingGitOps: GitOps = {
+        ...gitOps,
+        fetch: async (options) => {
+          await originalFetch(options);
+          const state = await loadState(locations.extensionRoot);
+          delete state.marketplaces["zzz"];
+          await saveState(locations.extensionRoot, state);
+        },
+      };
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+        gitOps: mutatingGitOps,
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /zzz/);
+      assert.match(notifications[0]?.message ?? "", /not found/);
+      assert.equal((await loadState(locations.extensionRoot)).marketplaces["zzz"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> graceful skipped outcome", async () => {
   // Uses a github-source marketplace with a custom gitOps. The gitOps.fetch
@@ -4175,7 +5298,7 @@ test("D-99-05a: a disabled record with nothing to move performs NO write", async
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // Assert the WRITE, not the row. The row renders the same bytes whether
+      // The write, not the row, discriminates this behavior. The row renders the same bytes whether
       // the refresh no-ops or rewrites the record with identical values, so a
       // row assertion cannot tell a guarded no-op from an unguarded rewrite --
       // which is exactly how the guard came to look like dead code. The bytes
@@ -4309,53 +5432,56 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
 
 // ─── S5: invalid config write-back no longer silently skips ─────────────────
 
-test("S5: update success + invalid config write-back surfaces a warning row (no longer silently skipped)", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-s5-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
-        installedVersions: { hello: "1.0.0" },
-      });
-      // Corrupt claude-plugins.json so the post-success write-back's loadConfig
-      // returns `invalid`. Pre-S5 this was a silent skip while the success
-      // notify proceeded; post-S5 a warning row must surface.
-      await writeFile(locations.configJsonPath, "{ not json ", "utf8");
+for (const { title, local } of [
+  { title: "base config", local: false },
+  { title: "local config", local: true },
+] as const) {
+  test(`S5: update success + invalid ${title} write-back names only its basename`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "update-s5-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        const configPath = local ? locations.configLocalJsonPath : locations.configJsonPath;
+        const configBasename = local ? "claude-plugins.local.json" : "claude-plugins.json";
+        await writeFile(configPath, "{ not json ", "utf8");
+        const { ctx, pi, notifications } = makeCtx();
 
-      const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+        // act
+        await updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+          ...(local && { local: true }),
+        });
 
-      // Two notify calls: the success row + a warning failed row pinned to
-      // the basename-only invalid-manifest cause.
-      assert.ok(
-        notifications.length >= 2,
-        `expected >= 2 notifications (success + S5 warning); got ${notifications.length}: ${notifications
-          .map((n) => n.message)
-          .join("\n---\n")}`,
-      );
-      const allText = notifications.map((n) => n.message).join("\n");
-      assert.match(allText, /\(updated\)/, "success row still emitted");
-      assert.match(allText, /\(failed\) \{invalid manifest\}/, "S5 warning row emitted");
-      assert.match(allText, /claude-plugins\.json/, "basename mentioned in S5 cause");
-      assert.ok(
-        !allText.includes(locations.configJsonPath),
-        `absolute config path must not leak: ${allText}`,
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
+        // assert
+        assert.ok(
+          notifications.length >= 2,
+          `expected >= 2 notifications (success + S5 warning); got ${notifications.length}: ${notifications
+            .map((n) => n.message)
+            .join("\n---\n")}`,
+        );
+        const allText = notifications.map((n) => n.message).join("\n");
+        assert.match(allText, /\(updated\)/, "success row still emitted");
+        assert.match(allText, /\(failed\) \{invalid manifest\}/, "S5 warning row emitted");
+        assert.ok(allText.includes(configBasename), allText);
+        assert.ok(!allText.includes(configPath), `absolute config path must not leak: ${allText}`);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
   });
-});
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after updatePlugins succeeds, the hooks-bridge routing
@@ -5259,6 +6385,61 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
   });
 });
 
+test("a post-commit clone cleanup failure preserves the successful update", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-clone-gc-fail-"));
+    let oldCloneRoot: string | undefined;
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      oldCloneRoot = seeded.oldCloneRoot;
+      assert.ok(oldCloneRoot !== undefined);
+      const locations = locationsFor("project", cwd);
+      stateWatch = watchStateTransition(
+        locations,
+        (state) => state.marketplaces["mp"]?.plugins["gp"]?.resolvedSha === SHA_NEW,
+        () => {
+          chmodSync(locations.pluginClonesDir, 0o000);
+        },
+      );
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      await chmod(locations.pluginClonesDir, 0o700);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSha, SHA_NEW);
+      assert.equal(notifications.length, 1);
+      assert.equal(await pathExists(oldCloneRoot), true);
+    } finally {
+      stateWatch?.close();
+      const locations = locationsFor("project", cwd);
+      await chmod(locations.pluginClonesDir, 0o700).catch(() => undefined);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcome (unchanged), no swap, clone dirs untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-git-pinned-unchanged-"));
@@ -5381,6 +6562,64 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
         "plugin-clones/ holds only the live key after the disabled-record refresh",
       );
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a disabled pin refresh swallows post-commit clone cleanup failure", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-clone-gc-fail-"));
+    let oldCloneRoot: string | undefined;
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      oldCloneRoot = seeded.oldCloneRoot;
+      assert.ok(oldCloneRoot !== undefined);
+      const locations = locationsFor("project", cwd);
+      await markGitPluginDisabled(locations);
+      stateWatch = watchStateTransition(
+        locations,
+        (state) => state.marketplaces["mp"]?.plugins["gp"]?.resolvedSha === SHA_NEW,
+        () => {
+          chmodSync(locations.pluginClonesDir, 0o000);
+        },
+      );
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      await chmod(locations.pluginClonesDir, 0o700);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSha, SHA_NEW);
+      assert.equal(record?.enabled, false);
+      assert.equal(notifications.length, 1);
+      assert.equal(await pathExists(oldCloneRoot), true);
+    } finally {
+      stateWatch?.close();
+      const locations = locationsFor("project", cwd);
+      await chmod(locations.pluginClonesDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -5833,6 +7072,136 @@ test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the re
   });
 });
 
+test("plugin update authentication: a pinned provider update threads auth to the clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-provider-"));
+    try {
+      // arrange
+      await seedGitUpdateMarketplace({
+        cwd,
+        cloneUrl: "https://github.com/org/repo",
+        entrySource: { source: "github", repo: "org/repo", sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        versionTag: "9.9.9",
+      });
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { seam, captured } = capturingUpdateSeam(gitOps);
+      const credentialOps = makeCredentialOps();
+      const deviceFlowHttp = makeDeviceFlowHttp();
+      const memoized: AuthAttemptResult = {
+        ok: false,
+        reason: "memoized authentication decline",
+        authAttempted: true,
+      };
+      const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps,
+        deviceFlowHttp,
+        authMemo,
+      });
+
+      // assert
+      assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
+      assert.equal(captured.cloneAuth?.host, "github.com");
+      assert.equal(typeof captured.cloneAuth?.onAuthRequired, "function");
+      assert.deepEqual(await captured.cloneAuth?.onAuthRequired(), memoized);
+      assert.equal(authMemo.size, 1);
+      assert.equal(notifications.length, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("plugin update authentication: an unpinned provider update threads auth to the mirror", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-mirror-"));
+    try {
+      // arrange
+      await seedGitUpdateMarketplace({
+        cwd,
+        cloneUrl: "https://github.com/org/repo",
+        entrySource: { source: "github", repo: "org/repo" },
+        recordedSha: SHA_OLD,
+        versionTag: "9.9.9",
+      });
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture"),
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { seam, captured } = capturingUpdateSeam(gitOps);
+      const credentialOps = makeCredentialOps();
+      const deviceFlowHttp = makeDeviceFlowHttp();
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps,
+        deviceFlowHttp,
+      });
+
+      // assert
+      assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
+      assert.equal(captured.cloneAuth?.host, "github.com");
+      assert.equal(typeof captured.cloneAuth?.onAuthRequired, "function");
+      assert.equal(captured.pinAuth, undefined);
+      assert.equal(notifications.length, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("updateSinglePlugin keeps a recorded provider SHA offline without an auth context", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-cascade-warm-"));
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await seedGitUpdateMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      entrySource: { source: "github", repo: "org/repo", sha: SHA_OLD },
+      recordedSha: SHA_OLD,
+      versionTag: "9.9.9",
+    });
+    process.chdir(cwd);
+
+    // act
+    const outcome = await updateSinglePlugin("gp", "mp", "project");
+
+    // assert
+    assert.deepEqual(outcome, {
+      partition: "unchanged",
+      name: "gp",
+      fromVersion: "sha-111111111111",
+      toVersion: "sha-111111111111",
+      declaresAgents: false,
+      declaresMcp: false,
+    });
+  });
+});
+
 test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError classifies as {authentication required}, not {no longer installable}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-git-usercanceled-"));
@@ -6130,7 +7499,7 @@ test("WR-12: an update whose new source skill will not parse names the kind on t
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // Asserted through the PUBLIC verb, not through the renderer function:
+      // This is exercised through the public verb, not through the renderer function:
       // `update` renders its rows through the verb-local `UPDATE_RENDER` map,
       // so a fix applied only to the central `renderPluginRow` arm would raise
       // the severity while still dropping the brace.
@@ -6435,6 +7804,65 @@ test("WR-05: a bare-form update whose scope state is unreadable fails on the syn
   });
 });
 
+test("a marketplace target with unreadable state reports its marketplace identity", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-marketplace-enumfail-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await writeFile(locations.stateJsonPath, '{"schemaVersion": 1, "marketplaces": {');
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /● mp \[project\]/);
+      assert.match(notifications[0]?.message ?? "", /⊘ \(mp\) \(failed\) \{unreadable manifest\}/);
+      assert.equal(notifications[0]?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a plugin target with unreadable state reports its plugin identity", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-plugin-enumfail-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await writeFile(locations.stateJsonPath, '{"schemaVersion": 1, "marketplaces": {');
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /● mp \[project\]/);
+      assert.match(notifications[0]?.message ?? "", /⊘ hello \(failed\) \{unreadable manifest\}/);
+      assert.equal(notifications[0]?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thrown past the other bridges", async () => {
   // writeHookConfig atomically renames onto <hooksDir>/<plugin>/hooks.json.
   // A leftover DIRECTORY at that exact path makes the rename fail with EISDIR
@@ -6515,6 +7943,15 @@ function seamMutatingStateMidUpdate(
       return result;
     },
   };
+}
+
+async function markGitPluginDisabled(locations: ReturnType<typeof locationsFor>): Promise<void> {
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces["mp"]?.plugins["gp"];
+  assert.ok(record !== undefined);
+  record.enabled = false;
+  record.resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  await saveState(locations.extensionRoot, state);
 }
 
 test("ST-9: a version that advanced under an in-flight update aborts on the intent-mark", async () => {
@@ -6625,6 +8062,206 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
         undefined,
         "the update must not resurrect the uninstalled record",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a marketplace removed under an in-flight update is not resurrected", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-marketplace-race-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture-new"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamMutatingStateMidUpdate(gitOps, async () => {
+          const state = await loadState(locations.extensionRoot);
+          delete state.marketplaces["mp"];
+          await saveState(locations.extensionRoot, state);
+        }),
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /\{unreadable manifest\}/);
+      assert.match(notifications[0]?.message ?? "", /disappeared from state during update/);
+      assert.deepEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a disabled update does not recreate a concurrently removed marketplace", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-marketplace-race-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture-new"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      await markGitPluginDisabled(locations);
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamMutatingStateMidUpdate(gitOps, async () => {
+          const state = await loadState(locations.extensionRoot);
+          delete state.marketplaces["mp"];
+          await saveState(locations.extensionRoot, state);
+        }),
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /gp \(skipped\) \{already disabled\}/);
+      assert.deepEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a disabled update does not recreate a concurrently removed plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-plugin-race-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture-new"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      await markGitPluginDisabled(locations);
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamMutatingStateMidUpdate(gitOps, async () => {
+          const state = await loadState(locations.extensionRoot);
+          const marketplace = state.marketplaces["mp"];
+          assert.ok(marketplace !== undefined);
+          delete marketplace.plugins["gp"];
+          await saveState(locations.extensionRoot, state);
+        }),
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /gp \(skipped\) \{already disabled\}/);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"],
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a disabled update accepts a concurrent writer that already stored the next pin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-disabled-next-pin-race-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture-new"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      await markGitPluginDisabled(locations);
+      const nextCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamMutatingStateMidUpdate(gitOps, async () => {
+          const state = await loadState(locations.extensionRoot);
+          const record = state.marketplaces["mp"]?.plugins["gp"];
+          assert.ok(record !== undefined);
+          record.version = "sha-222222222222";
+          record.resolvedSource = nextCloneRoot;
+          record.resolvedSha = SHA_NEW;
+          record.compatibility = {
+            installable: true,
+            notes: [],
+            supported: ["skills"],
+            unsupported: [],
+          };
+          await saveState(locations.extensionRoot, state);
+        }),
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined);
+      assert.equal(record.version, "sha-222222222222");
+      assert.equal(record.resolvedSource, nextCloneRoot);
+      assert.equal(record.resolvedSha, SHA_NEW);
+      assert.equal(record.enabled, false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

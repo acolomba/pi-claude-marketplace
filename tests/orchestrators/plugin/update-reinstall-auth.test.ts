@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -16,7 +16,6 @@ import {
   reinstallPlugin,
   reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -27,11 +26,8 @@ import type { GitAuthBundle } from "../../../extensions/pi-claude-marketplace/or
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import type { ReinstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const SHA_OLD = "1111111111111111111111111111111111111111";
-const SHA_NEW = "2222222222222222222222222222222222222222";
 const RECORDED_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const DEVICE_CODE = {
   device_code: "MOCK_DEVICE_CODE",
@@ -123,9 +119,9 @@ function makeMockGitOps(options: {
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI } {
   const ctx = {
-    ui: { notify: (): void => {} },
-  } as unknown as ExtensionContext;
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+    ui: { notify: (_message: string, _severity?: string): void => {} },
+  } as ExtensionContext;
+  const pi = { getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [] } as ExtensionAPI;
   return { ctx, pi };
 }
 
@@ -144,32 +140,6 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
 
     await rm(hermeticHome, { recursive: true, force: true });
   }
-}
-
-/** UpdateCloneCacheSeam over a mock gitOps that records the auth args it receives. */
-function capturingUpdateSeam(gitOps: GitOps): {
-  seam: UpdateCloneCacheSeam;
-  captured: { pinAuth: GitAuthBundle | undefined; cloneAuth: GitAuthBundle | undefined };
-} {
-  const captured: { pinAuth: GitAuthBundle | undefined; cloneAuth: GitAuthBundle | undefined } = {
-    pinAuth: undefined,
-    cloneAuth: undefined,
-  };
-  const seam: UpdateCloneCacheSeam = {
-    resolvePluginPin: (args) => {
-      captured.pinAuth = args.auth;
-      return resolvePluginPin({ ...args, gitOps });
-    },
-    materializePluginClone: (args) => {
-      captured.cloneAuth = args.auth;
-      return materializePluginClone({ ...args, gitOps });
-    },
-    materializeOrRefreshPluginMirror: (args) => {
-      captured.cloneAuth = args.auth;
-      return materializeOrRefreshPluginMirror({ ...args, gitOps });
-    },
-  };
-  return { seam, captured };
 }
 
 function installSeamWith(gitOps: GitOps): InstallCloneCacheSeam {
@@ -199,166 +169,6 @@ function capturingReinstallSeam(gitOps: GitOps): {
   };
   return { seam, captured };
 }
-
-async function seedGitUpdateMarketplace(opts: {
-  cwd: string;
-  cloneUrl: string;
-  entrySource: unknown;
-  recordedSha: string;
-  versionTag: string;
-}): Promise<void> {
-  const marketplaceRoot = path.join(opts.cwd, "mp-src");
-  const fixtureRepoDir = path.join(opts.cwd, "repo-fixture");
-  await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
-  await writeFile(
-    path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "gp", version: opts.versionTag }),
-  );
-  const skillDir = path.join(fixtureRepoDir, "skills", "greet");
-  await mkdir(skillDir, { recursive: true });
-  await writeFile(
-    path.join(skillDir, "SKILL.md"),
-    `---\nname: greet\n---\n\nHi ${opts.versionTag}.\n`,
-  );
-
-  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await writeFile(
-    manifestPath,
-    JSON.stringify({ name: "mp", plugins: [{ name: "gp", source: opts.entrySource }] }),
-  );
-
-  const locations = locationsFor("project", opts.cwd);
-  await mkdir(locations.extensionRoot, { recursive: true });
-
-  // Warm-clone the recorded sha so the update's re-clone of a DIFFERENT sha is
-  // the only clone that fires.
-  const key = pluginCloneKey(opts.cloneUrl, opts.recordedSha);
-  const oldCloneRoot = await locations.pluginCloneDir(key);
-  await mkdir(path.dirname(oldCloneRoot), { recursive: true });
-  await cp(fixtureRepoDir, oldCloneRoot, { recursive: true });
-
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 2,
-    marketplaces: {
-      mp: {
-        name: "mp",
-        scope: "project",
-        source: pathSource("./mp-src"),
-        addedFromCwd: opts.cwd,
-        manifestPath,
-        marketplaceRoot,
-        plugins: {
-          gp: {
-            version: `sha-${opts.recordedSha.slice(0, 12)}`,
-            installedAt: "2026-01-01T00:00:00.000Z",
-            updatedAt: "2026-01-01T00:00:00.000Z",
-            enabled: true,
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: {
-              skills: ["seeded-skill"],
-              prompts: [],
-              agents: [],
-              mcpServers: [],
-              hooks: [],
-            },
-            resolvedSource: oldCloneRoot,
-            resolvedSha: opts.recordedSha,
-          },
-        },
-      },
-    },
-  });
-}
-
-void test("PROV-03 update: a git-source update on a provider host threads the auth bundle to materializePluginClone", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-prov03-"));
-    try {
-      // github source -> host github.com has a registered provider. A pinned
-      // sha change (recorded SHA_OLD, manifest SHA_NEW) forces a re-clone.
-      await seedGitUpdateMarketplace({
-        cwd,
-        cloneUrl: "https://github.com/org/repo",
-        entrySource: { source: "github", repo: "org/repo", sha: SHA_NEW },
-        recordedSha: SHA_OLD,
-        versionTag: "9.9.9",
-      });
-
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
-      const { seam, captured } = capturingUpdateSeam(gitOps);
-      const { credOps: credentialOps } = makeMockCredentialOps();
-      const { http: deviceFlowHttp } = makeMockDeviceFlowHttp();
-      const { ctx, pi } = makeCtx();
-
-      await updatePlugins({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
-        cloneCacheSeam: seam,
-        credentialOps,
-        deviceFlowHttp,
-      });
-
-      assert.ok(captured.cloneAuth !== undefined, "the re-clone threaded a provider auth bundle");
-      assert.equal(captured.cloneAuth.host, "github.com");
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-void test("PROV-03 update (Q1): an unpinned git-source update threads auth into the mirror seam", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-auth-q1-"));
-    try {
-      // Unpinned github source -> routes to the mirror seam, which threads the
-      // provider auth bundle into its clone/refresh (MIRR-01 / Q1).
-      await seedGitUpdateMarketplace({
-        cwd,
-        cloneUrl: "https://github.com/org/repo",
-        entrySource: { source: "github", repo: "org/repo" },
-        recordedSha: SHA_OLD,
-        versionTag: "9.9.9",
-      });
-
-      const { gitOps } = makeMockGitOps({
-        fixtureSourceDir: path.join(cwd, "repo-fixture"),
-        head: SHA_NEW,
-        localRefs: { "refs/heads/main": SHA_NEW },
-        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
-      });
-      const { seam, captured } = capturingUpdateSeam(gitOps);
-      const { credOps: credentialOps } = makeMockCredentialOps();
-      const { http: deviceFlowHttp } = makeMockDeviceFlowHttp();
-      const { ctx, pi } = makeCtx();
-
-      await updatePlugins({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
-        cloneCacheSeam: seam,
-        credentialOps,
-        deviceFlowHttp,
-      });
-
-      assert.ok(
-        captured.cloneAuth !== undefined,
-        "the unpinned mirror materialize threaded a provider auth bundle (Q1)",
-      );
-      assert.equal(captured.cloneAuth.host, "github.com");
-      // The mirror route reads HEAD; it never resolves a remote ref, so the pin
-      // resolution path is not taken.
-      assert.equal(captured.pinAuth, undefined, "no resolvePluginPin auth on the mirror route");
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
 
 async function seedInstalledGitSourcePlugin(opts: { cwd: string; source: unknown }): Promise<void> {
   const marketplaceRoot = path.join(opts.cwd, "mp-src");
@@ -413,6 +223,7 @@ void test("PROV-03 reinstall (Q3 cold cache): a git-source reinstall re-clones a
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-cold-"));
     try {
+      // arrange
       await seedInstalledGitSourcePlugin({
         cwd,
         source: { source: "github", repo: "org/repo", sha: RECORDED_SHA },
@@ -433,6 +244,7 @@ void test("PROV-03 reinstall (Q3 cold cache): a git-source reinstall re-clones a
       const { http: deviceFlowHttp } = makeMockDeviceFlowHttp();
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -446,6 +258,7 @@ void test("PROV-03 reinstall (Q3 cold cache): a git-source reinstall re-clones a
         __deps: { cloneCacheSeam: seam },
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "cold-cache reinstall re-materializes");
       assert.equal(gitState.cloneCalls.length, 1, "the cold cache triggered a re-clone");
       assert.ok(captured.auth !== undefined, "the re-clone threaded a provider auth bundle (Q3)");
@@ -460,6 +273,7 @@ void test("PROV-02 reinstall: a git-source reinstall on a no-provider host threa
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-noprov-"));
     try {
+      // arrange
       await seedInstalledGitSourcePlugin({
         cwd,
         source: { source: "url", url: "https://gitlab.example.com/o/r", sha: RECORDED_SHA },
@@ -476,6 +290,7 @@ void test("PROV-02 reinstall: a git-source reinstall on a no-provider host threa
       const { credOps: credentialOps } = makeMockCredentialOps();
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -488,6 +303,7 @@ void test("PROV-02 reinstall: a git-source reinstall on a no-provider host threa
         __deps: { cloneCacheSeam: seam },
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1, "the cold cache re-cloned");
       assert.equal(captured.auth, undefined, "no provider -> no auth bundle (PROV-02)");
@@ -501,6 +317,7 @@ void test("D-79-02 bulk reinstall: two cold-cache private plugins share ONE auth
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-memo-"));
     try {
+      // arrange
       const SHA_ONE = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
       const SHA_TWO = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -581,6 +398,7 @@ void test("D-79-02 bulk reinstall: two cold-cache private plugins share ONE auth
       });
       const { ctx, pi } = makeCtx();
 
+      // act
       await reinstallPlugins({
         ctx,
         pi,
@@ -592,6 +410,7 @@ void test("D-79-02 bulk reinstall: two cold-cache private plugins share ONE auth
         __deps: { cloneCacheSeam: seam },
       });
 
+      // assert
       assert.equal(bundles.length, 2, "both cold-cache reinstalls re-cloned");
       const [first, second] = bundles;
       assert.ok(first !== undefined && second !== undefined, "both re-clones threaded bundles");
