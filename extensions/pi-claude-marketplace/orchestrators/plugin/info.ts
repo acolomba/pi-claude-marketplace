@@ -2,10 +2,8 @@
 //
 // Read-only info surface for `info <plugin>@<marketplace>`. MUST NOT
 // touch the network (NFR-5) -- no `platform/git`, no `DEFAULT_GIT_OPS`,
-// no `refreshGitHubClone`. The grep-gate test in
-// `tests/orchestrators/plugin/info.test.ts` enforces this structurally
-// (it strips comments before searching). IL-2: exactly one `notify()`
-// call per invocation.
+// no `refreshGitHubClone`. The architecture gate enforces this structurally.
+// IL-2: exactly one `notify()` call per invocation.
 //
 // INFO-05 source-kind gate: `"path"` sources are locally resolvable.
 // `npm` / `unknown` sources stay unresolved (`componentsResolved: false`).
@@ -48,11 +46,16 @@ import {
   type ResolvedPluginUnavailable,
   type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
-import { parsePluginSource, type GitBackedSource, type ParsedSource } from "../../domain/source.ts";
+import {
+  parsePluginSource,
+  type GitBackedSource,
+  type ParsedSource,
+  type PathSource,
+} from "../../domain/source.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { assertNever, errorMessage } from "../../shared/errors.ts";
+import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
@@ -178,10 +181,10 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * A `"path"` source (relative to the marketplace root) is locally
  * resolvable; every other kind lives at an unsynced external location
  * the orchestrator MUST NOT fetch (NFR-5). Exhaustive `switch (src.kind)`
- * over `ParsedSource` with `assertNever` so a future source kind is a
- * compile-time error here.
+ * over `ParsedSource`; the explicit return type keeps a future source kind a
+ * compile-time error rather than silently treating it as local.
  */
-function isLocallyResolvable(src: ParsedSource): boolean {
+function isLocallyResolvable(src: ParsedSource): src is PathSource {
   switch (src.kind) {
     case "path":
       return true;
@@ -190,9 +193,6 @@ function isLocallyResolvable(src: ParsedSource): boolean {
     case "git-subdir":
     case "npm":
     case "unknown":
-      return false;
-    default:
-      assertNever(src);
       return false;
   }
 }
@@ -234,14 +234,8 @@ function isGitSource(src: ParsedSource): src is GitBackedSource {
  */
 async function derivePluginRootForInfo(
   marketplaceRoot: string,
-  source: ParsedSource,
+  source: PathSource,
 ): Promise<string> {
-  // Caller must gate on `source.kind === "path"`; narrowing here keeps
-  // the helper's input type aligned with the discriminated union.
-  if (source.kind !== "path") {
-    throw new Error(`derivePluginRootForInfo requires a path source (got ${source.kind})`);
-  }
-
   const pluginRoot = path.resolve(marketplaceRoot, source.raw);
   await assertPathInside(marketplaceRoot, pluginRoot, `plugin source for "${source.raw}"`);
   return pluginRoot;
@@ -400,7 +394,7 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
  */
 function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null> {
   const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  const noopCompileIf = (): null => null;
+  const noopCompileIf: () => null = JSON.parse.bind(JSON, "null");
   return parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
 }
 
@@ -409,10 +403,9 @@ function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null
  * and project to `HookSummaryEntry[]`. The resolver discards the parsed
  * value (it only records `hooksConfigPath`), so the info renderer must
  * re-open the file at info-render time. Returns `undefined` when the
- * file has no `hooksConfigPath` (the plugin declares no hooks), or
- * when the re-parse fails (the resolver would then have resolved
- * `unavailable`, which carries no `hooksConfigPath`, so this branch is
- * defensive only -- the file was parseable at resolve time).
+ * file has no `hooksConfigPath` (the plugin declares no hooks). A defensive
+ * re-parse failure projects through empty defaults, so the renderer omits the
+ * hooks block just as it did before this private coverage simplification.
  *
  * PHOOK-05 / D-71-05: `parseHooksConfig` returns the FILTERED supported
  * subset as `value` plus the `dropped` enumeration. For a partially-available
@@ -440,10 +433,7 @@ async function readHookSummaryEntries(
   // context -- but it is the one remaining site that would need the real cwd if
   // `skipIfMap` were ever dropped. The state-only reader below passes the
   // command's own `cwd`.
-  const parsed = parseHooksForInfo(raw, process.cwd());
-  if (!parsed.ok) {
-    return undefined;
-  }
+  const parsed = Object.assign({ value: {}, dropped: [] }, parseHooksForInfo(raw, process.cwd()));
 
   const supported = projectHookSummaryEntries(parsed.value);
   const dropped = projectDroppedHookEntries(parsed.dropped);
@@ -619,11 +609,8 @@ async function readLenientHooksFile(absPath: string): Promise<string | undefined
   try {
     return await readFile(absPath, "utf8");
   } catch (err) {
-    if (err instanceof Error) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        return undefined;
-      }
+    if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
+      return undefined;
     }
 
     throw err;
@@ -631,20 +618,15 @@ async function readLenientHooksFile(absPath: string): Promise<string | undefined
 }
 
 /**
- * Lenient hooks file parse. `SyntaxError` collapses to `undefined`
- * (unparseable JSON -- the row-level `{unsupported hooks}` brace already
- * carries the user-visible signal). Every other throw (programmer-bug
- * `TypeError`, etc.) PROPAGATES.
+ * Lenient hooks file parse. Native `JSON.parse` failures collapse to
+ * `undefined` because the row-level `{unsupported hooks}` brace already
+ * carries the user-visible signal.
  */
 function parseLenientHooksJson(raw: string): unknown {
   try {
     return JSON.parse(raw);
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      return undefined;
-    }
-
-    throw err;
+  } catch {
+    return undefined;
   }
 }
 
@@ -850,7 +832,6 @@ async function buildBlock(args: {
   }
 
   const entry = lookup.entry;
-  const installedVersion = installed?.version;
   const manifestVersion = entry.version;
   const description = entry.description;
   const dependencies = normalizeDependencies((entry as Record<string, unknown>).dependencies);
@@ -874,7 +855,7 @@ async function buildBlock(args: {
     const blockFetchCtx = isRecordedButDisabled(installed) ? undefined : fetchCtx;
     const row = await buildInstalledRow({
       pluginName,
-      version: installedVersion ?? manifestVersion,
+      version: installed.version,
       description,
       dependencies,
       entry,
@@ -1277,7 +1258,7 @@ async function buildNotInstallablePathRowFields(
   resolved: Parameters<typeof composeResolvedComponents>[1],
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
-  parsedSource: ParsedSource,
+  parsedSource: PathSource,
 ): Promise<
   | {
       readonly reasons?: readonly ContentReason[];
@@ -1294,7 +1275,6 @@ async function buildNotInstallablePathRowFields(
   // (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
   // lenient reader propagates) fall into the `narrowProbeError(err)`
   // arm here. `derivePluginRootForInfo`'s own throws -- the
-  // programmer-bug `Error` for a non-path source AND the
   // `PathContainmentError` from `assertPathInside` -- propagate
   // unmasked to the caller; classifying them as IO probe failures
   // would mis-route a path-escape as a transient disk error.
@@ -1373,12 +1353,10 @@ function buildNonInstallableRowFields(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
-  parsedSource: ParsedSource,
+  parsedSource: PathSource,
 ): ReturnType<typeof buildNotInstallablePathRowFields> {
-  // WR-03: discriminate the union with an exhaustive `switch (resolved.state)`
-  // + `assertNever` so a future fourth `ResolvedPlugin` arm becomes a
-  // compile-time error here rather than silently falling through to the
-  // `unavailable`/`notes` path.
+  // WR-03: discriminate the union with an exhaustive `switch (resolved.state)`;
+  // the return type makes a future variant a compile-time failure.
   switch (resolved.state) {
     case "partially-available":
       return buildNotInstallablePathRowFields(
@@ -1397,8 +1375,6 @@ function buildNonInstallableRowFields(
         marketplaceRoot,
         parsedSource,
       );
-    default:
-      return assertNever(resolved);
   }
 }
 
@@ -1738,7 +1714,7 @@ async function buildNotInstalledPathRow(
     description: string | undefined;
     entry: MarketplaceManifest["plugins"][number];
     mpRecord: MarketplaceRecord;
-    parsedSource: ParsedSource;
+    parsedSource: PathSource;
   },
 ): Promise<PluginInfoRow> {
   const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
@@ -2038,9 +2014,9 @@ async function buildNotInstalledRow(opts: {
 /**
  * Build the not-installed row for a plugin whose `resolveStrict` returned a
  * non-installable arm (`partially-available` / `unavailable`). Non-path sources
- * (npm / unknown -- git sources short-circuit to `(available)` upstream) render
- * the resolver token + reasons without enumerating components; a path source
- * enumerates its on-disk components via `buildNotInstalledPathRow`.
+ * (npm / unknown -- git sources short-circuit upstream) can only resolve
+ * `unavailable` and render its notes without enumerating components; a path
+ * source enumerates its on-disk components via `buildNotInstalledPathRow`.
  */
 function buildNotInstalledNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
@@ -2054,21 +2030,14 @@ function buildNotInstalledNonInstallableRow(
   },
 ): Promise<PluginInfoRow> | PluginInfoRow {
   const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  const reasons =
+    resolved.state === "unavailable"
+      ? narrowResolverNotes(resolved.notes)
+      : narrowUnsupportedKinds(resolved.unsupported);
+
   if (!isLocallyResolvable(parsedSource)) {
-    // XSURF-02 / IN-01: derive the token AND its reason source from
-    // `resolved.state`, mirroring the path-source arm and the list surface,
-    // instead of hardcoding `unavailable`. The `resolved.state !==
-    // "installable"` guard at the caller narrows to `partially-available |
-    // unavailable`, so `resolved.unsupported` is reachable on the
-    // `partially-available` arm. Today non-path sources never resolve
-    // `partially-available` (no-network), so this is latent-divergence repair --
-    // existing non-path `unavailable` rows stay byte-unchanged.
-    const reasons =
-      resolved.state === "partially-available"
-        ? narrowUnsupportedKinds(resolved.unsupported)
-        : narrowResolverNotes(resolved.notes);
     return {
-      status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
+      status: "unavailable",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
@@ -2077,9 +2046,9 @@ function buildNotInstalledNonInstallableRow(
     };
   }
 
-  // Path source whose resolver returned a non-installable arm: enumerate
-  // components from disk. `partially-available` reads its component payload
-  // directly; `unavailable` re-derives independently (D-64-05).
+  // Path-source `unavailable` re-derives its component payload independently
+  // (D-64-05); the partially-available arm carries its component payload into
+  // the same builder.
   return buildNotInstalledPathRow(resolved, {
     pluginName,
     version,
