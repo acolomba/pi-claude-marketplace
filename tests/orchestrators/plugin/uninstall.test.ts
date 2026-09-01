@@ -2705,7 +2705,9 @@ test("LIFE-04: manifest-absent uninstall of a record with no resources still con
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// D-13 / D-15 retry proof.
+// NFR-3 retry proof: every operation is safe to retry -- idempotent or
+// fail-clean. NFR-2 bounds the recovery model: nothing below may need more
+// than a reload.
 //
 // Every material uninstall failure or post-commit cleanup residue is consumed
 // by a SECOND `uninstallPlugin` call over the same case-owned root, the same

@@ -326,7 +326,7 @@ function errorNotifications(notifications: readonly NotifyRecord[]): readonly No
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Retry-proof observation helpers (D-13/D-15/D-16)
+// Retry-proof observation helpers (NFR-3)
 //
 // Mechanical observation only: these read filesystem primitives and record
 // the ledger events reinstall's bridges emit. They choose no expected value
@@ -5460,7 +5460,9 @@ function retryCauseChain(message: string): string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// D-13/D-15/D-16 failure-then-retry proof.
+// NFR-3 failure-then-retry proof: every operation is safe to retry --
+// idempotent or fail-clean. NFR-2 bounds the recovery model: nothing below
+// may need more than a reload.
 //
 // Every case below calls the SAME exported reinstall entrypoint twice inside
 // one test, over one case-owned root, in one mode, against one target or
@@ -6509,7 +6511,7 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(firstSkill, oldSkill);
-      // WR-05: the hooks write is not on the replacement ledger, so the removed
+      // The hooks write is not on the replacement ledger, so the removed
       // subtree cannot be restored. The record still claims the hook.
       assert.deepStrictEqual(firstRecord?.resources.hooks, ["hello"]);
       assert.deepStrictEqual(firstSchedule, [
