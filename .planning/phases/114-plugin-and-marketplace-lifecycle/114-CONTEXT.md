@@ -37,7 +37,10 @@ composition ownership.
 
 - **D-05:** Current shipped public contracts outrank stale test expectations. Correct a
   historical test when it conflicts with a newer locked contract. Change production only
-  for a demonstrated product defect supported by public-contract evidence.
+  for a demonstrated product defect supported by public-contract evidence or to remove
+  CodeGraph-proven private unreachable code under D-UTR-12. An unreachable-code
+  simplification must preserve every public outcome and cannot add a test seam, export,
+  pragma, or coverage exception.
 - **D-06:** Keep plugin update's current `ContentReason[]` runtime and public output
   behavior. Correct the misleading comment that lists only four skipped reasons, and
   directly prove every produced class, including transport, degradation, disabled-state,
@@ -92,9 +95,9 @@ composition ownership.
   or filesystem kind itself is under test. Never use live remotes or developer
   credentials.
 - **D-18:** Install fail-fast external fakes in every offline case. Marketplace and plugin
-  list/info, uninstall, marketplace remove, path-source operations, warm SHA-pinned
-  cache operations, and reinstall's recorded-SHA path must prove zero unexpected network,
-  Git, credential, or subprocess calls.
+  list, bare info, uninstall, marketplace remove, path-source operations, warm
+  SHA-pinned cache operations, and reinstall's recorded-SHA path must prove zero
+  unexpected network, Git, credential, or subprocess calls.
 - **D-19:** Treat explicit `info --fetch`, cold-cache git operations, marketplace git
   add/update, and other documented network-capable arms as network-capable only through
   their injected production ports. Bare info remains filesystem-only.
