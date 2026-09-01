@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { mock, when } from "strong-mock";
-
 import {
   githubSource,
   parsePluginSource,
@@ -136,26 +134,18 @@ interface NotifyRecord {
   severity?: Severity;
 }
 
-type NotifyUi = Omit<ExtensionContext["ui"], "notify"> & {
-  readonly notify: (message: string, severity?: Severity) => void;
-};
-
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ui = mock<NotifyUi>({ exactParams: true, name: "extension UI" });
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .anyTimes();
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .anyTimes();
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .anyTimes();
+  const ctx = {
+    ui: {
+      notify(message: string, severity?: Severity): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      },
+    },
+  } as ExtensionContext;
+  const pi = {
+    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
+  } as ExtensionAPI;
   return { ctx, pi, notifications };
 }
 

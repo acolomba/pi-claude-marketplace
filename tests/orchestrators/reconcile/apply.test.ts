@@ -30,9 +30,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test, { mock } from "node:test";
-
-import { mock as strictMock, when } from "strong-mock";
+import test from "node:test";
 
 import {
   applyReconcile,
@@ -52,29 +50,28 @@ import type { PluginConfigEntry } from "../../../extensions/pi-claude-marketplac
 import type { MergedConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-interface MockCtx extends ExtensionContext {
-  readonly ui: Omit<ExtensionContext["ui"], "notify"> & {
-    readonly notify: ReturnType<typeof mock.fn<ExtensionContext["ui"]["notify"]>>;
-  };
+type NotifyCall = Parameters<ExtensionContext["ui"]["notify"]>;
+
+interface StubCtx extends ExtensionContext {
+  readonly notifications: NotifyCall[];
 }
 
-function makeCtx(): MockCtx {
-  const ctx = strictMock<MockCtx>({ exactParams: true, name: "extension context" });
-  const ui = strictMock<MockCtx["ui"]>({ exactParams: true, name: "extension UI" });
-  const notify = mock.fn<ExtensionContext["ui"]["notify"]>();
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .anyTimes();
-  when(() => ui.notify)
-    .thenReturn(notify)
-    .anyTimes();
-  return ctx;
+function makeCtx(): StubCtx {
+  const notifications: NotifyCall[] = [];
+  return {
+    notifications,
+    ui: {
+      notify(...args: NotifyCall): void {
+        notifications.push(args);
+      },
+    },
+  } as StubCtx;
 }
 
-const STUB_PI = strictMock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-when(() => STUB_PI.getAllTools())
-  .thenReturn([])
-  .anyTimes();
+function makePi(): ExtensionAPI {
+  return { getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [] } as ExtensionAPI;
+}
+
 const RECONCILE_REMOTE_URLS = [
   "https://github.com/acme/valid.git",
   "https://github.com/acme/flaky.git",
@@ -200,7 +197,7 @@ test("RECON-01 (decl-but-missing -> add at load): config declares mp-a, state em
 
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
       gitOps,
@@ -214,8 +211,8 @@ test("RECON-01 (decl-but-missing -> add at load): config declares mp-a, state em
     assert.ok("valid-marketplace" in persisted.marketplaces);
 
     // IL-2 / RECON-04: exactly one notify() call.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     // info severity -> no second arg.
     assert.equal(args.length, 1);
     // Body carries the (added) row.
@@ -274,7 +271,7 @@ test("RECON-02 (installed-but-undeclared -> remove at load): state records mp-a,
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -284,8 +281,8 @@ test("RECON-02 (installed-but-undeclared -> remove at load): state records mp-a,
     assert.ok(!("manual-mp" in persisted.marketplaces));
 
     // Exactly one notify() carrying a (removed) row.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.equal(args.length, 1);
     assert.ok(args[0].includes("(removed)"), `expected (removed) row; got:\n${args[0]}`);
     assert.ok(
@@ -334,7 +331,7 @@ test("RECON-03 (per-entry network soft-fail): one failing github mp + one succee
     // Must NOT throw.
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
       gitOps,
@@ -344,8 +341,8 @@ test("RECON-03 (per-entry network soft-fail): one failing github mp + one succee
     assert.ok(gitState.cloneCalls.length >= 2 || cloneCount >= 2);
 
     // IL-2: exactly one notify(); severity error (failed row present).
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.equal(args[1], "error");
     const emitted = args[0];
     assert.ok(emitted.includes("(failed)"), `expected (failed) row; got:\n${emitted}`);
@@ -395,7 +392,7 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
 
     await applyReconcile({
       ctx: ctxA,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
       gitOps,
@@ -407,8 +404,8 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
     assert.ok("valid-marketplace" in persisted.marketplaces);
 
     // The (added) row carries the name the record was actually created under.
-    assert.equal(ctxA.ui.notify.mock.calls.length, 1);
-    const firstArgs = ctxA.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctxA.notifications.length, 1);
+    const firstArgs = ctxA.notifications[0]!;
     assert.ok(
       firstArgs[0].includes("valid-marketplace") && firstArgs[0].includes("(added)"),
       `expected (added) row on the recorded name; got:\n${firstArgs[0]}`,
@@ -419,7 +416,7 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
     const ctxB = makeCtx();
     await applyReconcile({
       ctx: ctxB,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
       gitOps,
@@ -431,7 +428,7 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
       "second applyReconcile must NOT clone again (NFR-5: no network on a converged load)",
     );
     assert.equal(
-      ctxB.ui.notify.mock.calls.length,
+      ctxB.notifications.length,
       0,
       "second applyReconcile must be silent (back-to-back convergence, never remove/re-add churn)",
     );
@@ -468,7 +465,7 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
     const ctxA = makeCtx();
     await applyReconcile({
       ctx: ctxA,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -476,7 +473,7 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
     // First call against an already-empty/clean config -> SILENT (NFR-2 /
     // A4). The plan was empty AND no invalid-config rows surfaced.
     assert.equal(
-      ctxA.ui.notify.mock.calls.length,
+      ctxA.notifications.length,
       0,
       "first applyReconcile call against an empty/clean config must be silent (NFR-2 / A4)",
     );
@@ -485,13 +482,13 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
     const ctxB = makeCtx();
     await applyReconcile({
       ctx: ctxB,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
 
     assert.equal(
-      ctxB.ui.notify.mock.calls.length,
+      ctxB.notifications.length,
       0,
       "back-to-back applyReconcile against unchanged config must be silent (RECON-05)",
     );
@@ -598,14 +595,14 @@ test("WR-09 (local-file isolation): a disable declared ONLY in claude-plugins.lo
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
 
     // The disable was applied (one notify with a (disabled) row).
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.ok(
       args[0].includes("foo") && args[0].includes("(disabled)"),
       `expected (disabled) row for foo; got:\n${args[0]}`,
@@ -630,12 +627,12 @@ test("WR-09 (local-file isolation): a disable declared ONLY in claude-plugins.lo
     const ctxB = makeCtx();
     await applyReconcile({
       ctx: ctxB,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
     assert.equal(
-      ctxB.ui.notify.mock.calls.length,
+      ctxB.notifications.length,
       0,
       "second reconcile after the local-only disable must be a silent no-op",
     );
@@ -692,15 +689,15 @@ test("WR-01 (per-scope isolation): corrupt project-scope state.json -> structure
     // Both scopes (no explicit scope) -- project first, then user.
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
     });
 
     // ONE notify carrying BOTH the project-scope state-load failure row AND
     // the user-scope (removed) row -- the throw neither aborted the sibling
     // scope nor swallowed the accumulated outcomes.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.equal(args[1], "error");
     const emitted = args[0];
     assert.ok(
@@ -756,7 +753,7 @@ test("CFG-03 / T-55-02-01: invalid claude-plugins.json -> (failed) {invalid mani
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -771,8 +768,8 @@ test("CFG-03 / T-55-02-01: invalid claude-plugins.json -> (failed) {invalid mani
 
     // Exactly one notify carrying the BASENAME + invalid-manifest reason +
     // error severity + summary line. No absolute path leak.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.equal(args[1], "error");
     const emitted = args[0];
     assert.ok(
@@ -817,13 +814,13 @@ test("I5 / PR #51: schema-invalid claude-plugins.json -- cause trailer carries t
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
 
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     const emitted = args[0];
 
     // Baseline: BASENAME-only subject + {invalid manifest} reason preserved.
@@ -941,9 +938,9 @@ test("WARN-01 / D-86-03 / T-86-03: a degraded plugin-installed outcome carries d
   // (2) The detail surfaces via notifyDiagnostic (warning) with the absolute
   // path collapsed to its basename.
   const ctx = makeCtx();
-  surfacePostCommitWarnings({ ctx, pi: STUB_PI, cwd: "/work/project" }, [outcome]);
-  assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  surfacePostCommitWarnings({ ctx, pi: makePi(), cwd: "/work/project" }, [outcome]);
+  assert.equal(ctx.notifications.length, 1);
+  const args = ctx.notifications[0]!;
   assert.equal(args[1], "warning");
   assert.ok(args[0].includes("SKILL.md"), `expected the basename to survive; got:\n${args[0]}`);
   assert.ok(
@@ -988,9 +985,9 @@ test("DFEN-04 / OUT-01 / OUT-04 / S2: an install-disabled outcome renders its ca
   }
 
   const ctx = makeCtx();
-  surfacePostCommitWarnings({ ctx, pi: STUB_PI, cwd: "/work/project" }, [outcome]);
-  assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  surfacePostCommitWarnings({ ctx, pi: makePi(), cwd: "/work/project" }, [outcome]);
+  assert.equal(ctx.notifications.length, 1);
+  const args = ctx.notifications[0]!;
   assert.ok(
     args[0].includes("data dir creation deferred"),
     `expected the post-commit warning to surface; got:\n${args[0]}`,
@@ -1069,13 +1066,13 @@ test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) at
       const ctx = makeCtx();
       await applyReconcile({
         ctx,
-        pi: STUB_PI,
+        pi: makePi(),
         cwd,
         scope: "project",
       });
 
-      assert.equal(ctx.ui.notify.mock.calls.length, 1);
-      const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+      assert.equal(ctx.notifications.length, 1);
+      const args = ctx.notifications[0]!;
       const emitted = args[0];
 
       // S3 contract: the failure row names `claude-plugins.json` (the actual
@@ -1244,7 +1241,7 @@ test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config dri
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -1254,8 +1251,8 @@ test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config dri
     // orchestrated arm could return undefined and the toggle loop dropped
     // it with `continue`), leaving the cascade silent or with a misleading
     // empty marketplace block.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.ok(
       args[0].includes("foo") && args[0].includes("(failed)"),
       `expected (failed) child row for foo when enable cascade fails; got:\n${args[0]}`,
@@ -1485,7 +1482,7 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -1494,8 +1491,8 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
     // success arm of applyPluginToggles. The notify.ts plugin-enabled tuple
     // renders the same `(installed)` token as the standalone enable-fresh
     // cascade (the orchestrated outcome is the same kind).
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.equal(args.length, 1, "load-time ENABLE success routes to info severity (no 2nd arg)");
     assert.ok(
       args[0].includes("foo") && args[0].includes("(installed)"),
@@ -1533,12 +1530,12 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
     const ctxB = makeCtx();
     await applyReconcile({
       ctx: ctxB,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
     assert.equal(
-      ctxB.ui.notify.mock.calls.length,
+      ctxB.notifications.length,
       0,
       "T1: second reconcile after a load-time enable must be a silent no-op",
     );
@@ -1626,7 +1623,7 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -1634,8 +1631,8 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
     // Exactly one notify carrying the (uninstalled) row from the DIRECT
     // pluginsToUninstall bucket (not the marketplace-remove cascade --
     // the marketplace stays declared).
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.ok(
       args[0].includes("foo") && args[0].includes("(uninstalled)"),
       `T3: expected (uninstalled) child row for foo; got:\n${args[0]}`,
@@ -1666,12 +1663,12 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
     const ctxB = makeCtx();
     await applyReconcile({
       ctx: ctxB,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
     assert.equal(
-      ctxB.ui.notify.mock.calls.length,
+      ctxB.notifications.length,
       0,
       "T3 / WR-06: second reconcile after a direct uninstall must be a silent no-op",
     );
@@ -1703,13 +1700,13 @@ test("PR #51 / PURL-06: applySourceMismatches + applied-cascade source-mismatch 
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
 
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.equal(args[1], "error", "source-mismatch surfaces error severity");
     const emitted = args[0];
     // Marketplace-level (failed) row with the {dangling reference} reason; the
@@ -1767,13 +1764,13 @@ test("T6 / PR #51: classifyReadPassThrow lock-held arm -- a pre-held .state-lock
       const ctx = makeCtx();
       await applyReconcile({
         ctx,
-        pi: STUB_PI,
+        pi: makePi(),
         cwd,
         scope: "project",
       });
 
-      assert.equal(ctx.ui.notify.mock.calls.length, 1);
-      const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+      assert.equal(ctx.notifications.length, 1);
+      const args = ctx.notifications[0]!;
       assert.equal(args[1], "error");
       const emitted = args[0];
       // WR-01 invalid-block subject on `state.json` (the basename selected
@@ -1915,7 +1912,7 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -1963,8 +1960,8 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
     // over a record that is disabled. OUT-01 / OUT-04: the unattended row names
     // the author-declared cause and the remedy, or it is indistinguishable from
     // a disable the user asked for.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.match(
       args[0],
       /^ {2}◍ foo v1\.2\.3 \(disabled\) \{installs disabled\}$/m,
@@ -1986,7 +1983,7 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
     const baseAfterFirst = await readFile(basePath, "utf8");
     await applyReconcile({
       ctx: makeCtx(),
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -2026,14 +2023,14 @@ async function assertInstallDisabledReloadFixedPoint(opts: {
   const first = makeCtx();
   await applyReconcile({
     ctx: first,
-    pi: STUB_PI,
+    pi: makePi(),
     cwd: opts.cwd,
     scope: "project",
   });
 
   // The anchor for everything below.
-  assert.equal(first.ui.notify.mock.calls.length, 1, "pass 1 must render exactly one cascade");
-  const firstArgs = first.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  assert.equal(first.notifications.length, 1, "pass 1 must render exactly one cascade");
+  const firstArgs = first.notifications[0]!;
   assert.match(
     firstArgs[0],
     /^ {2}◍ foo v1\.2\.3 \(disabled\) \{installs disabled\}$/m,
@@ -2050,11 +2047,11 @@ async function assertInstallDisabledReloadFixedPoint(opts: {
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd: opts.cwd,
       scope: "project",
     });
-    assert.equal(ctx.ui.notify.mock.calls.length, 0, `pass ${pass} must render nothing`);
+    assert.equal(ctx.notifications.length, 0, `pass ${pass} must render nothing`);
     assert.equal(
       await readFile(opts.declaringConfigPath, "utf8"),
       declaredAfterFirst,
@@ -2136,7 +2133,7 @@ test("DFEN-04 / D-102-04: a locally-declared bare entry stamps claude-plugins.lo
 
     await applyReconcile({
       ctx: makeCtx(),
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -2307,15 +2304,15 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reconci
     const first = makeCtx();
     await applyReconcile({
       ctx: first,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
 
     // The anchor for everything below: silence is also what a fixture that
     // never reached the orchestrator produces.
-    assert.equal(first.ui.notify.mock.calls.length, 1, "pass 1 must render exactly one cascade");
-    const body = (first.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.equal(first.notifications.length, 1, "pass 1 must render exactly one cascade");
+    const body = first.notifications[0]![0];
 
     // Whole-body rather than per-row `includes`: the literal pins the row
     // ORDER, which a substring check does not constrain. Three of its lines
@@ -2393,11 +2390,11 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reconci
       const ctx = makeCtx();
       await applyReconcile({
         ctx,
-        pi: STUB_PI,
+        pi: makePi(),
         cwd,
         scope: "project",
       });
-      assert.equal(ctx.ui.notify.mock.calls.length, 0, `pass ${pass} must render nothing`);
+      assert.equal(ctx.notifications.length, 0, `pass ${pass} must render nothing`);
       assert.equal(
         await readFile(basePath, "utf8"),
         baseAfterFirst,
@@ -2418,7 +2415,7 @@ test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the p
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -2440,8 +2437,8 @@ test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the p
     };
     assert.deepEqual(base.plugins["foo@mp"], { enabled: true });
 
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const args = ctx.notifications[0]!;
     assert.ok(
       args[0].includes("foo") && args[0].includes("(installed)"),
       `expected the ordinary (installed) row for foo; got:\n${args[0]}`,
@@ -2489,7 +2486,7 @@ test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still de
 
     await applyReconcile({
       ctx: makeCtx(),
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -2519,7 +2516,7 @@ test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still de
     const ctx = makeCtx();
     await applyReconcile({
       ctx,
-      pi: STUB_PI,
+      pi: makePi(),
       cwd,
       scope: "project",
     });
@@ -2533,8 +2530,8 @@ test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still de
       false,
       "the second pass must complete the disable the first one could not",
     );
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const secondArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(ctx.notifications.length, 1);
+    const secondArgs = ctx.notifications[0]!;
     assert.ok(
       secondArgs[0].includes("foo") && secondArgs[0].includes("(disabled)"),
       `expected a (disabled) row for foo on the second pass; got:\n${secondArgs[0]}`,

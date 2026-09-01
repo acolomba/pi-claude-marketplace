@@ -46,8 +46,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { mock, when } from "strong-mock";
-
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
@@ -70,24 +68,17 @@ interface TestCtx {
 
 function makeCtx(cwd: string): TestCtx {
   const notifications: NotifyRecord[] = [];
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .anyTimes();
-  when(() => ctx.cwd)
-    .thenReturn(cwd)
-    .anyTimes();
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .anyTimes();
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- strong-mock replaces the method property with this capture function.
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .anyTimes();
+  const pi = {
+    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
+  } as ExtensionAPI;
+  const ctx = {
+    cwd,
+    ui: {
+      notify(message: string, severity?: string): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      },
+    },
+  } as ExtensionContext;
   return { ctx, pi, notifications };
 }
 

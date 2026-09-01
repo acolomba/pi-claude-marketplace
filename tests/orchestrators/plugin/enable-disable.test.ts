@@ -14,8 +14,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { mock, when } from "strong-mock";
-
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
@@ -36,29 +34,21 @@ interface NotifyRecord {
 
 function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-  when(() => ctx.cwd)
-    .thenReturn(cwd)
-    .anyTimes();
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .anyTimes();
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- strong-mock replaces the method property with this capture function.
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .anyTimes();
+  const ctx = {
+    cwd,
+    ui: {
+      notify(message: string, severity?: string): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      },
+    },
+  } as ExtensionContext;
   return { ctx, notifications };
 }
 
 function makePi(): ExtensionAPI {
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .anyTimes();
-  return pi;
+  return {
+    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
+  } as ExtensionAPI;
 }
 
 /**
@@ -68,15 +58,9 @@ function makePi(): ExtensionAPI {
  * makes a row with a staged agent take the soft-dep marker.
  */
 function makePiWithSubagents(): ExtensionAPI {
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API with subagents" });
-  const subagent = mock<ToolInfo>({ exactParams: true, name: "subagent tool" });
-  when(() => subagent.name)
-    .thenReturn("subagent")
-    .anyTimes();
-  when(() => pi.getAllTools())
-    .thenReturn([subagent])
-    .anyTimes();
-  return pi;
+  return {
+    getAllTools: () => [{ name: "subagent" } as ToolInfo],
+  } as ExtensionAPI;
 }
 
 async function withHermeticHome<T>(

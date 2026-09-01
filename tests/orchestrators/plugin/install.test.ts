@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { mock, when } from "strong-mock";
-
 import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
@@ -72,11 +70,7 @@ interface NotifyRecord {
 }
 
 function toolInfo(name: string): ToolInfo {
-  const tool = mock<ToolInfo>({ exactParams: true, name: `tool ${name}` });
-  when(() => tool.name)
-    .thenReturn(name)
-    .anyTimes();
-  return tool;
+  return { name } as ToolInfo;
 }
 
 function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
@@ -85,21 +79,16 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .anyTimes();
-  when(() => pi.getAllTools())
-    .thenReturn((piOverrides?.toolNames ?? []).map(toolInfo))
-    .anyTimes();
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- strong-mock replaces the method property with this capture function.
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .anyTimes();
+  const ctx = {
+    ui: {
+      notify(message: string, severity?: string): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      },
+    },
+  } as ExtensionContext;
+  const pi = {
+    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
+  } as ExtensionAPI;
   return { ctx, pi, notifications };
 }
 
