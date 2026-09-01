@@ -1913,6 +1913,69 @@ together or neither.
 Code seams: `bridges/hooks/event-router.ts` (the `session_start` wrapper),
 `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
 
+## HKMS-01: the two new model-switch hook events (`PreModelSwitch`, `PostModelSwitch`)
+
+Surfaced by an upstream hooks review (2026-09-01). Claude Code 2.1.251 added
+two hook events the bridge does not know: `PreModelSwitch` and
+`PostModelSwitch`. Both carry `from_model` / `to_model` (canonical model names)
+and both match against `to_model`. They differ on control: `PreModelSwitch` is
+sequential and can block the switch (exit 2, or `permissionDecision: "deny"`;
+a timeout also blocks), while `PostModelSwitch` is async and observation-only
+-- output and exit code are ignored apart from `systemMessage` /
+`terminalSequence` -- and it fires for self-initiated changes too, such as
+restoring the model on resume.
+
+Today both are non-bucket-A event keys, so `partitionHooks` drops them as
+`kind:"event"` and the plugin resolves `partially-available`. Nothing
+mis-fires; the hooks simply never run.
+
+**`PostModelSwitch` is a direct bucket-A admission.** Pi's `model_select`
+carries `{ model, previousModel, source: "set" | "cycle" | "restore" }`, its
+handler returns `void` (observation-only, matching upstream exactly), and
+`source: "restore"` covers the self-initiated arm. `from_model` / `to_model`
+come from `previousModel?.id` and `model.id` (`Model` carries `id`, `name`,
+`provider`). No peer-dep floor move is needed: `model_select` landed in pi
+0.44.0, far below the `>=0.80.5` floor.
+
+Two gaps to decide, neither blocking:
+
+- `previousModel` is `undefined` on the first selection, so `from_model` needs
+  an omit-or-empty rule where upstream always carries both.
+- **The matcher is the real design question.** Upstream matches the canonical
+  `to_model` with regex and `|` alternatives. Pi model ids are provider-scoped
+  and do not share Claude's canonical vocabulary, so `claude-opus-5` would
+  silently never fire while `.*opus.*` happens to work -- the exact
+  under-fire / over-fire pair D-58-06 refuses to ship. Recommended disposition
+  is the `SessionEnd` precedent: an empty closed set, match-all only, with
+  non-empty matchers group-dropped through the existing gate and documented
+  `⚠`. The alternative -- pass the matcher through as a regex against
+  `model.id` -- buys partial fidelity at the price of a silent never-fire.
+
+**`PreModelSwitch` is blocked on upstream Pi.** `model_select` fires after the
+change and cannot cancel, and Pi has no before-model-switch event. The
+cancelable shape already exists next door (`session_before_switch`,
+`session_before_fork`, and `session_before_compact` all take
+`{ cancel: true }`), so the ask is a small, idiomatic upstream feature request
+rather than a new concept. A synthesis that reverts through `pi.setModel()`
+after the fact is mechanically possible and should be rejected: it is a
+visible flip-flop rather than a block, and it re-enters `model_select`
+recursively.
+
+**Docs drift, independent of whether the events ship.**
+`docs/hooks-compatibility.md` predates both events, so its table is two rows
+short. `docs/research/claude-hooks-vs-pi-events.md` is worse than incomplete
+-- it lists `model_select` under "Pi events with no Claude analog", which
+`PostModelSwitch` has made false.
+
+Code seams: `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`,
+`DISPATCHABLE_EVENTS`, `NON_TOOL_EVENT_FIELDS`, `NON_TOOL_EVENT_CLOSED_SETS`),
+`shared/concerns/hooks.ts` (`ClaudeHookEvent`), a new
+`bridges/hooks/payloads/post-model-switch.ts`,
+`bridges/hooks/dispatch-exec.ts` (`TRANSLATORS` and the required-field table),
+`bridges/hooks/async-rewake/registry.ts`, `bridges/hooks/event-adapters.ts`
+(observation narrowing), `bridges/hooks/timeout.ts`, and one
+`pi.on("model_select", ...)` registration in `bridges/hooks/event-router.ts`.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
