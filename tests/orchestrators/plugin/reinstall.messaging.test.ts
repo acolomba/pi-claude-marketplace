@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { mock, verify, when } from "strong-mock";
+import { Type } from "typebox";
 
 import {
   narrowReasons,
@@ -59,11 +60,17 @@ interface NotifyHarness {
 }
 
 function toolInfo(name: string): ToolInfo {
-  const tool = mock<ToolInfo>({ exactParams: true, name: `tool ${name}` });
-  when(() => tool.name)
-    .thenReturn(name)
-    .anyTimes();
-  return tool;
+  return {
+    name,
+    description: `test tool ${name}`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      path: `/test/tools/${name}.ts`,
+      source: "test",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  } satisfies ToolInfo;
 }
 
 function createNotifyHarness(
@@ -75,7 +82,7 @@ function createNotifyHarness(
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   when(() => ctx.ui)
     .thenReturn(ui)
-    .anyTimes();
+    .once();
   when(() => pi.getAllTools())
     .thenReturn(toolNames.map(toolInfo))
     .twice();
