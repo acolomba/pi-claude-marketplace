@@ -137,7 +137,7 @@ Phase 114 should be planned as 14 pair-atomic owner rewrites, not as one lifecyc
 
 The only planned production behavior correction is P114-14's OR-12 fix: thread the just-staged skill generated names into `prepareStagePluginAgents`. Plugin install and reinstall already do this; update stages skills first but omits `knownSkills`. [VERIFIED: extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1003-1021; extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1287-1298; extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1275-1312] P114-14 must also correct the stale four-reason comment without narrowing `readonly ContentReason[]`, and it must prove the full live producer taxonomy through exported workflows. [VERIFIED: extensions/pi-claude-marketplace/orchestrators/types.ts:289-312]
 
-**Primary recommendation:** Normalize the two accepted owners and correct P114-14 first; run the independent owner rewrites next; then let P114-06 consume the corrected update contract and let P114-12 finish the split authentication supplemental; finally, let P114-13 relocate and run the four-owner lifecycle integration. [VERIFIED: .planning/phases/114-plugin-and-marketplace-lifecycle/114-CONTEXT.md:115-125]
+**Primary recommendation:** Run the ten independent owners first, including P114-10's install ledger and P114-14's update correction. Then let P114-06 consume the corrected update contract, P114-07 consume the settled install ledger, and P114-12 finish the split authentication supplemental. Finally, let P114-13 relocate and run the four-owner lifecycle integration. [VERIFIED: .planning/phases/114-plugin-and-marketplace-lifecycle/114-CONTEXT.md:115-125]
 
 ## Project Constraints (from AGENTS.md)
 
@@ -316,36 +316,31 @@ The seven supplemental files contain 82 cases: 75 single-owner cases must be abs
 
 ```text
 Wave 1
-  P114-03,04,14
-    - normalize the two accepted owners
-  P114-14 plugin update
-    - OR-12 knownSkills correction
-    - reason prose + complete producer taxonomy
-    - OR-13 warnings
-    - move 2 update auth cases and leave 3 reinstall cases
+  P114-01,02,03,04,05,08,09,10,11,14
+    - independent owner normalization
+    - P114-10 settles the install ledger
+    - P114-14 corrects OR-12 knownSkills, reason prose/taxonomy, and OR-13 warnings
+    - P114-14 moves 2 update auth cases and leaves 3 reinstall cases
                     |
                     v
 Wave 2
-  P114-01,02,05,07,08,09,10,11
-    - independent owner normalization and exclusive supplemental ownership
-                    |
-                    v
-Wave 3
-  P114-06 marketplace update
+  P114-06 marketplace update <- P114-14
     - consumes settled PluginUpdateOutcome behavior
     - absorbs 5 transport cases
-  P114-12 plugin reinstall
+  P114-07 plugin enable-disable <- P114-10
+    - consumes the settled install ledger
+  P114-12 plugin reinstall <- P114-14
     - consumes the split auth supplemental
     - absorbs 3 reinstall cases and deletes the supplemental
                     |
                     v
-Wave 4
-  P114-13 plugin uninstall
+Wave 3
+  P114-13 plugin uninstall <- P114-10,P114-12,P114-14
     - relocates and runs the lifecycle integration
     - runs 14-owner/direct aggregate and final phase gate
 ```
 
-P114-03 and P114-04 are safe independent quick wins because both already pass their direct gates. P114-06 and P114-12 must follow P114-14: marketplace update consumes the corrected update contract, while reinstall is the final writer for the split authentication supplemental. P114-13 runs last so its relocated lifecycle integration and aggregate gate observe all four constituent owners in their settled form. [VERIFIED: .planning/phases/114-plugin-and-marketplace-lifecycle/114-CONTEXT.md:115-125,234-237]
+P114-03 and P114-04 are safe independent quick wins because both already pass their direct gates. P114-06 and P114-12 must follow P114-14: marketplace update consumes the corrected update contract, while reinstall is the final writer for the split authentication supplemental. P114-07 follows P114-10 because enable consumes its install ledger. P114-13 runs last so its relocated lifecycle integration and aggregate gate observe all four constituent owners in their settled form. [VERIFIED: .planning/phases/114-plugin-and-marketplace-lifecycle/114-CONTEXT.md:115-125,234-237]
 
 ### Anti-Patterns to Avoid
 

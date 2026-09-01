@@ -171,6 +171,7 @@ Helpers such as `assertStaysEnabled`, `runConverseEnableChain`, `renderDisabledW
 - **Required partitions:** enable and disable across scopes; missing/disabled/already desired state; dependency/companion/cascade behavior; subagent/conversation side effects; direct/cascade parity; config/state write failures; notification failures if observable; retry and idempotence.
 - **Mock rule:** passive `ToolInfo` is a plain complete typed value. Genuine Pi/UI mocks declare an exact schedule and are always verified. Replace scenario/oracle helpers at the bottom of the current owner when they hide expectations; keep only passive setup/observation.
 - **Atomicity/offline proof:** state/config transition is the unit. Assert no external Git/auth work through fail-fast fakes.
+- **Dependency:** after P114-10, because enable directly consumes the install ledger.
 
 ### P114-08 — plugin fetch
 
@@ -250,13 +251,12 @@ This accounts for all 82 supplemental cases: 75 single-owner cases are absorbed 
 
 Recommended execution waves:
 
-| Wave       | Plans                                                                  | Reason                                                                                                                                                         |
-| ---------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1          | P114-03, P114-04, P114-14                                              | Normalize the independent accepted owners while correcting the upstream plugin-update exported workflow and reason contract first                              |
-| 2          | P114-01, P114-02, P114-05, P114-07, P114-08, P114-09, P114-10, P114-11 | Independent owner normalization; each has exclusive production/test/supplement ownership                                                                       |
-| 3          | P114-06, P114-12                                                       | Consume the corrected P114-14 workflow; P114-12 is the final writer for the split auth supplemental                                                            |
-| 4          | P114-13                                                                | Relocate and run the full install/update/reinstall/uninstall integration after all of its upstream owners are stable                                           |
-| Final gate | P114-13 or a dedicated no-edit verification task                       | Run every direct pair, both retained integration files, scoped type/lint/format/fallow/architecture checks, and the project-global gate from a frozen worktree |
+| Wave       | Plans                                                                                    | Reason                                                                                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1          | P114-01, P114-02, P114-03, P114-04, P114-05, P114-08, P114-09, P114-10, P114-11, P114-14 | Independent owner normalization plus the upstream plugin-update correction                                                                                     |
+| 2          | P114-06 after P114-14; P114-07 after P114-10; P114-12 after P114-14                      | Consume the corrected update/install workflows; P114-12 is the final writer for the split auth supplemental                                                    |
+| 3          | P114-13 after P114-10, P114-12, and P114-14                                              | Relocate and run the full install/update/reinstall/uninstall integration after all of its upstream owners are stable                                           |
+| Final gate | P114-13                                                                                  | Run every direct pair, both retained integration files, scoped type/lint/format/fallow/architecture checks, and the project-global gate from a frozen worktree |
 
 P114-03 and P114-04 have no dependency on P114-14. Retained integration files must never be included in a source's direct coverage denominator. The P114-13 dependency is for ownership of the final lifecycle integration, not because uninstall production itself depends on all earlier implementation tasks.
 
