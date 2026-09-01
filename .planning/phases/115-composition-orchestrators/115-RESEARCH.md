@@ -1583,9 +1583,9 @@ No new threat is introduced by this phase.
 | A4 | The estimate of ~85–100 net-new cases and ~13,000 final lines | Combined phase estimate | An underestimate would stretch the phase; the numbers are extrapolated from `add.test.ts`'s 47 lines/case, which is itself a composition-heavy owner |
 | A5 | Deleting the five Class-B `never`-typed default arms type-checks cleanly without a `noImplicitReturns` complaint in `blockToMarketplaceMessage` | Reachability Audit, Class B | If wrong, the `import/execute.ts` arm needs the status-narrowing edit (which the recommendation already includes) rather than a bare deletion |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Do `PR #51` references belong in test titles?**
+1. **Do `PR #51` references belong in test titles?** — **RESOLVED:** moot. 115-05 Task 2 retitles all 14 for the independent CASE-02 violation.
    - What we know: `.claude/rules/typescript-comments.md` explicitly **allows** "GitHub
      issue/PR references like `#2916`" in comments and test titles.
      `.claude/rules/typescript-unit-testing.md` says "A durable requirement ID may appear;
@@ -1598,7 +1598,7 @@ No new threat is introduced by this phase.
      rather than public behavior. Leave the `S6` / `S8` / `Y3` decision anchors in *comments*,
      where both rules agree they are fine. Do not touch production comments.
 
-2. **What becomes of the eight source-text pins in `apply.test.ts`?**
+2. **What becomes of the eight source-text pins in `apply.test.ts`?** — **RESOLVED:** 115-05 Task 2 triages each pin, then deletes; any survivor becomes a planting test under `tests/architecture/`.
    - What we know: all eight assert `assert.match` over production source; seven target
      modules other than `apply.ts`.
    - What's unclear: whether any encodes a rule that is not otherwise gated.
@@ -1607,7 +1607,7 @@ No new threat is introduced by this phase.
      surviving rule moves to `tests/architecture/` as a planting test, and the rest are
      deleted. Budget one task for the triage.
 
-3. **Is `reconcile/README.md` drift worth fixing?**
+3. **Is `reconcile/README.md` drift worth fixing?** — **RESOLVED:** deferred to Phase 117 with the other repository-wide gates; out of scope for Phase 115.
    - What we know: `extensions/pi-claude-marketplace/orchestrators/reconcile/README.md:24`
      describes `buildReconcilePreviewNotification` and a `preview.ts`; the shipped names are
      `buildReconcilePendingNotification` and `pending.ts`.
@@ -1615,7 +1615,7 @@ No new threat is introduced by this phase.
    - Recommendation: out of scope for Phase 115 (it is not a pair). Capture it for Phase 117's
      repository-wide gates.
 
-4. **`assert.deepEqual` or `assert.deepStrictEqual`?**
+4. **`assert.deepEqual` or `assert.deepStrictEqual`?** — **RESOLVED:** `deepStrictEqual` throughout, as every plan specifies.
    - What we know: under `node:assert/strict` they are the same function. Completed owners
      use both (`plan.test.ts` 14/0, `install.test.ts` 137/52).
    - Recommendation: prefer `deepStrictEqual` for explicitness — it is what the rule's
