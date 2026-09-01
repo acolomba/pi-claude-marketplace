@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,9 +33,14 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ReinstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 
@@ -1533,12 +1540,11 @@ test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifica
 });
 
 test("GAP-09: reinstallPlugin render=none success with bridgeWarnings returns annotated notes", async () => {
-  // render='none' success path: when bridgeWarnings or maintenanceWarnings
-  // are non-empty, the outcome is returned with notes prefixed 'warning: '.
-  // The 'notes.length === 0' branch returns the bare locked.outcome.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-warn-"));
+    const locations = locationsFor("project", cwd);
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1547,6 +1553,7 @@ test("GAP-09: reinstallPlugin render=none success with bridgeWarnings returns an
       });
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1556,14 +1563,22 @@ test("GAP-09: reinstallPlugin render=none success with bridgeWarnings returns an
         plugin: "hello",
         render: "none",
         __deps: {
-          dropMarketplaceCache: () => Promise.reject(new Error("cache-fail")),
+          stateTransaction: {
+            saveState: async (extensionRoot, state) => {
+              await saveState(extensionRoot, state);
+              await chmod(locations.skillsStagingDir, 0o000);
+            },
+          },
         },
       });
+      await chmod(locations.skillsStagingDir, 0o700);
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
-      assert.ok(outcome.notes?.some((n) => n.startsWith("warning: ")));
-      assert.ok(outcome.notes?.some((n) => n.includes("cache-fail")));
+      assert.ok(outcome.notes?.some((note) => note.startsWith("warning: skills: ")));
+      assert.ok(outcome.notes?.some((note) => note.includes("replacement backup directory")));
     } finally {
+      await chmod(locations.skillsStagingDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -1792,12 +1807,11 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
 });
 
 test("GAP-16: reinstallPlugin saveState failure with non-empty replacements wraps as ManualRecoveryError", async () => {
-  // After successful replaceAll, if saveState throws, rollbackReplacements
-  // produces leaks from the reversed rollback. errorWithManualRecovery with
-  // non-empty leaks wraps the error as a ManualRecoveryError.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-save-nonempty-leaks-"));
+    const locations = locationsFor("project", cwd);
     try {
+      // arrange
       const seeded = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1810,6 +1824,7 @@ test("GAP-16: reinstallPlugin saveState failure with non-empty replacements wrap
       });
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1819,19 +1834,21 @@ test("GAP-16: reinstallPlugin saveState failure with non-empty replacements wrap
         plugin: "hello",
         __deps: {
           stateTransaction: {
-            saveState: () => Promise.reject(new Error("save-failure")),
+            saveState: async () => {
+              await chmod(locations.skillsStagingDir, 0o000);
+              throw new Error("save-failure");
+            },
           },
         },
       });
+      await chmod(locations.skillsStagingDir, 0o700);
 
+      // assert
       assert.equal(outcome.partition, "failed");
-      const note = outcome.notes?.[0] ?? "";
-      // The error message from save failure is "save-failure". After
-      // rollbackReplacements the MANUAL_RECOVERY_REQUIRED sentinel may or
-      // may not be present depending on whether rollback produces leaks.
-      // Either way the note includes the save-failure message.
-      assert.ok(note.includes("save-failure"), `expected cause in: ${note}`);
+      assert.equal(outcome.failureClass, "manual-recovery");
+      assert.ok(outcome.notes[0]?.includes("save-failure"));
     } finally {
+      await chmod(locations.skillsStagingDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -2466,9 +2483,20 @@ test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records instal
 // ───────────────────────────────────────────────────────────────────────────
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+const DEVICE_CODE = {
+  device_code: "MOCK_DEVICE_CODE",
+  user_code: "ABCD-1234",
+  verification_uri: "https://github.com/login/device",
+  expires_in: 900,
+  interval: 0,
+} as const;
 const REINSTALL_REMOTE_URLS = [
-  "https://example.com/org/repo.git",
   "https://example.com/org/mono.git",
+  "https://example.com/org/repo.git",
+  "https://github.com/org/one.git",
+  "https://github.com/org/repo.git",
+  "https://github.com/org/two.git",
+  "https://gitlab.example.com/o/r.git",
 ] as const;
 
 function makeMockGitOps(
@@ -2546,6 +2574,24 @@ function reinstallSeamWith(gitOps: GitOps): ReinstallCloneCacheSeam {
   };
 }
 
+function capturingReinstallSeam(gitOps: GitOps): {
+  readonly seam: ReinstallCloneCacheSeam;
+  readonly captured: { auth: GitAuthBundle | undefined; count: number };
+} {
+  const captured: { auth: GitAuthBundle | undefined; count: number } = {
+    auth: undefined,
+    count: 0,
+  };
+  const seam: ReinstallCloneCacheSeam = {
+    materializePluginClone: (args) => {
+      captured.auth = args.auth;
+      captured.count += 1;
+      return materializePluginClone({ ...args, gitOps });
+    },
+  };
+  return { seam, captured };
+}
+
 /**
  * Build a git plugin fixture tree on disk (the "repo" the mock clone copies),
  * seed a marketplace whose manifest entry carries a git-object source, then
@@ -2614,6 +2660,283 @@ async function seedInstalledGitSourcePlugin(opts: {
     cloneCacheSeam: installSeamWith(gitOps),
   });
 }
+
+test("a clone-cache seam non-Error rejection becomes a complete failed outcome", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-string-failure-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      const cloneRoot = await locations.pluginCloneDir(
+        pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+      );
+      await rm(cloneRoot, { recursive: true, force: true });
+      const { ctx, pi, notifications } = makeCtx();
+      const rejectNonError = Promise.reject.bind(Promise);
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        __deps: {
+          cloneCacheSeam: {
+            materializePluginClone: () => rejectNonError("clone-cache string failure"),
+          },
+        },
+      });
+
+      // assert
+      assert.deepEqual(outcome, {
+        partition: "failed",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["clone-cache string failure\n\ncause: clone-cache string failure"],
+      });
+      assert.deepEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("plugin reinstall authentication: a cold GitHub cache threads one provider bundle", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-cold-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      const cloneRoot = await locations.pluginCloneDir(
+        pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+      );
+      await rm(cloneRoot, { recursive: true, force: true });
+      const { gitOps, state: gitState } = makeMockGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture"),
+      });
+      const { seam, captured } = capturingReinstallSeam(gitOps);
+      const { credentialOps, calls: credentialCalls } = createCredentialOpsFake({
+        boundary: "memory",
+      });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        credentialOps,
+        deviceFlowHttp: deviceFlow.http,
+        __deps: { cloneCacheSeam: seam },
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(captured.count, 1);
+      assert.equal(captured.auth?.host, "github.com");
+      assert.equal(gitState.cloneCalls.length, 1);
+      assert.deepEqual(credentialCalls, { approve: [], fill: [], reject: [] });
+      assert.deepEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("plugin reinstall authentication: a non-provider host threads no auth bundle", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-no-provider-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: {
+          source: "url",
+          url: "https://gitlab.example.com/o/r",
+          sha: GIT_SOURCE_SHA,
+        },
+      });
+      const locations = locationsFor("project", cwd);
+      const cloneRoot = await locations.pluginCloneDir(
+        pluginCloneKey("https://gitlab.example.com/o/r", GIT_SOURCE_SHA),
+      );
+      await rm(cloneRoot, { recursive: true, force: true });
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { seam, captured } = capturingReinstallSeam(gitOps);
+      const { credentialOps, calls: credentialCalls } = createCredentialOpsFake({
+        boundary: "memory",
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        credentialOps,
+        __deps: { cloneCacheSeam: seam },
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(captured.count, 1);
+      assert.equal(captured.auth, undefined);
+      assert.deepEqual(credentialCalls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("plugin reinstall authentication: a bulk cold-cache sweep shares one host memo", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-memo-"));
+    try {
+      // arrange
+      const secondSha = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "unused", version: "9.9.9" }),
+      );
+      const skillDir = path.join(fixtureRepoDir, "skills", "greet");
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: greet\n---\n\nHi.\n");
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "gh1", source: { source: "github", repo: "org/one", sha: GIT_SOURCE_SHA } },
+            { name: "gh2", source: { source: "github", repo: "org/two", sha: secondSha } },
+          ],
+        }),
+      );
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const makeRecord = async (repo: string, sha: string) => ({
+        version: `sha-${sha.slice(0, 12)}`,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        enabled: true,
+        compatibility: {
+          installable: true,
+          notes: [] as string[],
+          supported: [] as string[],
+          unsupported: [] as string[],
+        },
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        resolvedSource: await locations.pluginCloneDir(
+          pluginCloneKey(`https://github.com/${repo}`, sha),
+        ),
+        resolvedSha: sha,
+      });
+      await saveState(locations.extensionRoot, {
+        schemaVersion: 2,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./mp-src"),
+            addedFromCwd: cwd,
+            manifestPath,
+            marketplaceRoot,
+            plugins: {
+              gh1: await makeRecord("org/one", GIT_SOURCE_SHA),
+              gh2: await makeRecord("org/two", secondSha),
+            },
+          },
+        },
+      });
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const bundles: (GitAuthBundle | undefined)[] = [];
+      const seam: ReinstallCloneCacheSeam = {
+        materializePluginClone: (args) => {
+          bundles.push(args.auth);
+          return materializePluginClone({ ...args, gitOps });
+        },
+      };
+      const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+        pollResponses: [
+          { kind: "success", accessToken: "tok-abc", tokenType: "bearer", scope: "repo" },
+        ],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        credentialOps,
+        deviceFlowHttp: deviceFlow.http,
+        __deps: { cloneCacheSeam: seam },
+      });
+      const firstBundle = bundles[0];
+      const secondBundle = bundles[1];
+      if (firstBundle === undefined || secondBundle === undefined) {
+        throw new Error("expected one auth bundle for each cold-cache reinstall");
+      }
+
+      await firstBundle.onAuthRequired();
+      await secondBundle.onAuthRequired();
+
+      // assert
+      assert.deepEqual(
+        outcomes.map(({ name, partition }) => ({ name, partition })),
+        [
+          { name: "gh1", partition: "reinstalled" },
+          { name: "gh2", partition: "reinstalled" },
+        ],
+      );
+      assert.equal(bundles.length, 2);
+      assert.equal(deviceFlow.calls.requestCode.length, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("a url-source reinstall completes on a warm cache with clone and resolveRemoteRef both throwing (offline)", async () => {
   await withHermeticHome(async () => {
@@ -3225,6 +3548,46 @@ test("WR-04: a reinstall whose source frontmatter no longer parses reports the d
       assert.equal(outcome.partition, "reinstalled");
       assert.ok(outcome.partition === "reinstalled");
       assert.deepEqual([...(outcome.degradedKinds ?? [])], ["skill"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-04: a reinstall whose command frontmatter no longer parses reports the command degrade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr04-command-degraded-"));
+    try {
+      // arrange
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command" },
+        install: true,
+      });
+      await writeFile(
+        path.join(seeded.pluginRoot, "commands", "deploy.md"),
+        "---\ntitle: A: B: C\n---\nRun it.\n",
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.ok(outcome.partition === "reinstalled");
+      assert.deepEqual([...(outcome.degradedKinds ?? [])], ["command"]);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "warning");
+      assert.match(notifications[0]?.message ?? "", /\{malformed command\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4135,6 +4498,700 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
         ),
         `agents warning leaked to standalone: ${JSON.stringify(standalone.notifications)}`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a malformed state file renders one bulk enumeration failure without mutating bytes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-enumeration-failure-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const malformedState = "{ not json";
+      await writeFile(locations.stateJsonPath, malformedState, "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+      });
+
+      // assert
+      assert.deepEqual(outcomes, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), malformedState);
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /\(reinstall\).*failed/s);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a bare marketplace reinstall preserves a non-absence scope-resolution failure", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-scope-resolution-failure-"));
+    try {
+      // arrange
+      const userLocations = locationsFor("user", cwd);
+      await mkdir(userLocations.extensionRoot, { recursive: true });
+      const malformedState = "{ malformed user state";
+      await writeFile(userLocations.stateJsonPath, malformedState, "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(outcomes, []);
+      assert.equal(await readFile(userLocations.stateJsonPath, "utf8"), malformedState);
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /\(reinstall\).*failed/s);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a marketplace removed between scope resolution and enumeration reports not added", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-concurrent-marketplace-removal-"));
+    let stateMonitor: ReturnType<typeof spawn> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await writeFile(
+        locations.stateJsonPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: pathSource("./mp-src"),
+              addedFromCwd: cwd,
+              plugins: {},
+            },
+          },
+        }),
+        "utf8",
+      );
+      const userLocations = locationsFor("user", cwd);
+      await mkdir(userLocations.extensionRoot, { recursive: true });
+      await writeFile(
+        userLocations.stateJsonPath,
+        JSON.stringify({
+          schemaVersion: 2,
+          marketplaces: {},
+          padding: "x".repeat(16 * 1024 * 1024),
+        }),
+        "utf8",
+      );
+      const removedStatePath = path.join(locations.extensionRoot, "state-removed.json");
+      const quarantinedStatePath = path.join(locations.extensionRoot, "state-migration.tmp");
+      await writeFile(
+        removedStatePath,
+        JSON.stringify({ schemaVersion: 2, marketplaces: {} }),
+        "utf8",
+      );
+      const monitorSource = `
+        import { renameSync, watch } from "node:fs";
+        import path from "node:path";
+
+        const directory = process.env.REINSTALL_RACE_DIRECTORY;
+        const statePath = process.env.REINSTALL_RACE_STATE;
+        const removedPath = process.env.REINSTALL_RACE_REMOVED;
+        const quarantinedPath = process.env.REINSTALL_RACE_QUARANTINED;
+        if (!directory || !statePath || !removedPath || !quarantinedPath) {
+          throw new Error("missing reinstall race paths");
+        }
+
+        const timeout = setTimeout(() => {
+          process.exitCode = 2;
+          process.send?.("timeout", () => process.disconnect?.());
+        }, 5_000);
+        const watcher = watch(directory, (_event, filename) => {
+          if (filename === null || !filename.startsWith("state.json.")) {
+            return;
+          }
+
+          try {
+            renameSync(path.join(directory, filename), quarantinedPath);
+            renameSync(removedPath, statePath);
+            clearTimeout(timeout);
+            watcher.close();
+            process.send?.("replaced", () => process.disconnect?.());
+          } catch (error) {
+            clearTimeout(timeout);
+            watcher.close();
+            process.exitCode = 3;
+            process.send?.(
+              \`failure: \${error instanceof Error ? error.message : String(error)}\`,
+              () => process.disconnect?.(),
+            );
+          }
+        });
+        process.send?.("ready");
+      `;
+      const monitor = spawn(process.execPath, ["--input-type=module", "--eval", monitorSource], {
+        env: {
+          ...process.env,
+          REINSTALL_RACE_DIRECTORY: locations.extensionRoot,
+          REINSTALL_RACE_QUARANTINED: quarantinedStatePath,
+          REINSTALL_RACE_REMOVED: removedStatePath,
+          REINSTALL_RACE_STATE: locations.stateJsonPath,
+        },
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+      });
+      stateMonitor = monitor;
+      const monitorStderrStream = monitor.stderr;
+      assert.ok(monitorStderrStream !== null);
+      let monitorStderr = "";
+      const monitorMessages: unknown[] = [];
+      const monitorComplete = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+        (resolve, reject) => {
+          monitor.once("error", reject);
+          monitor.once("exit", (code, signal) => {
+            resolve({ code, signal });
+          });
+        },
+      );
+      const ready = new Promise<void>((resolve, reject) => {
+        const readyTimeout = setTimeout(() => {
+          reject(new Error(`state monitor readiness timed out: ${monitorStderr}`));
+        }, 6_000);
+        monitor.once("error", reject);
+        monitorStderrStream.setEncoding("utf8");
+        monitorStderrStream.on("data", (chunk: string) => {
+          monitorStderr += chunk;
+        });
+        monitor.on("message", (message) => {
+          monitorMessages.push(message);
+          if (message === "ready") {
+            clearTimeout(readyTimeout);
+            resolve();
+          } else if (typeof message === "string" && message.startsWith("failure:")) {
+            clearTimeout(readyTimeout);
+            reject(new Error(message));
+          }
+        });
+        monitor.once("exit", (code) => {
+          if (!monitorMessages.includes("ready")) {
+            clearTimeout(readyTimeout);
+            reject(new Error(`state monitor exited before readiness (${code}): ${monitorStderr}`));
+          }
+        });
+      });
+      await ready;
+      const warningMock = t.mock.method(console, "warn", () => undefined);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+      const monitorResult = await monitorComplete;
+
+      // assert
+      assert.deepEqual(monitorMessages, ["ready", "replaced"]);
+      assert.deepEqual(monitorResult, { code: 0, signal: null });
+      assert.equal(monitorStderr, "");
+      assert.equal(warningMock.mock.callCount(), 1);
+      assert.deepEqual(outcomes, []);
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message,
+        "A marketplace operation has failed.\n\n⊘ mp (failed) {not added}",
+      );
+    } finally {
+      if (stateMonitor?.exitCode === null && stateMonitor.signalCode === null) {
+        stateMonitor.kill("SIGTERM");
+      }
+
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { title, failure, reasons } of [
+  {
+    title: "maps a permission-denied state read to its typed reason",
+    failure: () => Object.assign(new Error("state denied"), { code: "EACCES" }),
+    reasons: ["permission denied"] as const,
+  },
+  {
+    title: "maps a missing state read to its typed reason",
+    failure: () => Object.assign(new Error("state missing"), { code: "ENOENT" }),
+    reasons: ["source missing"] as const,
+  },
+  {
+    title: "leaves an unclassified state read failure without a forged typed reason",
+    failure: () => new Error("unexpected state read failure"),
+    reasons: undefined,
+  },
+] as const) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-state-read-"));
+      try {
+        // arrange
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await reinstallPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          __deps: {
+            stateTransaction: {
+              loadState: () => {
+                throw failure();
+              },
+            },
+          },
+        });
+
+        // assert
+        assert.equal(outcome.partition, "failed");
+        assert.deepEqual(outcome.reasons, reasons);
+        assert.equal(notifications.length, 1);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("a replacement failure aborts every prepared bridge and preserves foreign content", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-replace-abort-"));
+    try {
+      // arrange
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { agent: "old agent", command: "old command", mcp: true, skill: "old skill" },
+        install: true,
+      });
+      const freshSkillDir = path.join(seeded.pluginRoot, "skills", "fresh");
+      await mkdir(freshSkillDir, { recursive: true });
+      await writeFile(path.join(freshSkillDir, "SKILL.md"), "---\nname: fresh\n---\n\nFresh.\n");
+      const locations = locationsFor("project", cwd);
+      const foreignTarget = path.join(locations.skillsTargetDir, "hello-fresh");
+      await mkdir(foreignTarget, { recursive: true });
+      await writeFile(path.join(foreignTarget, "foreign.txt"), "foreign\n");
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.equal(await readFile(path.join(foreignTarget, "foreign.txt"), "utf8"), "foreign\n");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a post-save hook-cache read failure leaves the committed reinstall successful", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-post-save-hook-cache-"));
+    try {
+      // arrange
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          hooksJson: {
+            hooks: {
+              PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] }],
+            },
+          },
+        },
+        install: true,
+      });
+      const sourceHooksPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
+      const locations = locationsFor("project", cwd);
+      const stateBefore = await loadState(locations.extensionRoot);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+        __deps: {
+          stateTransaction: {
+            saveState: async (extensionRoot, state) => {
+              await saveState(extensionRoot, state);
+              await rm(sourceHooksPath);
+            },
+          },
+        },
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      const stateAfter = await loadState(locations.extensionRoot);
+      assert.equal(stateAfter.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");
+      assert.notDeepEqual(stateAfter, stateBefore);
+      assert.equal(await pathExists(sourceHooksPath), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a hooks source changed after resolve fails before state persistence", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hooks-toctou-"));
+    let sourceWatcher: ReturnType<typeof watch> | undefined;
+    try {
+      // arrange
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          skill: "old skill",
+          hooksJson: {
+            hooks: {
+              PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] }],
+            },
+          },
+        },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const sourceHooksPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const installedHooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
+      const installedHooksBefore = await readFile(installedHooksPath, "utf8");
+      let sourceChanged = false;
+      sourceWatcher = watch(locations.skillsStagingDir, () => {
+        if (!sourceChanged) {
+          sourceChanged = true;
+          writeFileSync(sourceHooksPath, "{ invalid hooks", "utf8");
+        }
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.equal(sourceChanged, true);
+      assert.equal(outcome.partition, "failed");
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.equal(await readFile(installedHooksPath, "utf8"), installedHooksBefore);
+    } finally {
+      sourceWatcher?.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an abort cleanup failure reports manual recovery through the exported workflow", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-abort-cleanup-leak-"));
+    let commandsWatcher: ReturnType<typeof watch> | undefined;
+    let protectedSkillsStagingRoot: string | undefined;
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      commandsWatcher = watch(locations.commandsStagingDir, () => {
+        if (protectedSkillsStagingRoot !== undefined) {
+          return;
+        }
+
+        const [stagingName] = readdirSync(locations.skillsStagingDir);
+        if (stagingName !== undefined) {
+          protectedSkillsStagingRoot = path.join(locations.skillsStagingDir, stagingName);
+          chmodSync(protectedSkillsStagingRoot, 0o000);
+        }
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+      if (protectedSkillsStagingRoot !== undefined) {
+        chmodSync(protectedSkillsStagingRoot, 0o700);
+      }
+
+      // assert
+      assert.notEqual(protectedSkillsStagingRoot, undefined);
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, "manual-recovery");
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      commandsWatcher?.close();
+      if (protectedSkillsStagingRoot !== undefined) {
+        chmodSync(protectedSkillsStagingRoot, 0o700);
+      }
+
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a local single reinstall names the invalid local config after a successful replacement", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-invalid-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      await writeFile(locations.configLocalJsonPath, "{ invalid", "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(notifications.length, 2);
+      assert.match(notifications[1]?.message ?? "", /claude-plugins\.local\.json/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a bulk local reinstall writes only the local configuration", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-local-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const baseConfigBefore = await readFile(locations.configJsonPath, "utf8");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
+        local: true,
+      });
+
+      // assert
+      assert.equal(outcomes[0]?.partition, "reinstalled");
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseConfigBefore);
+      assert.equal(await pathExists(locations.configLocalJsonPath), true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an unpinned git-subdir reinstall repairs from the warm mirror without external calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-mirror-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/mono";
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const pluginRoot = path.join(mirrorRoot, "packages", "gp");
+      await writeMirrorTree(mirrorRoot, pluginRoot, "gp", MIRROR_HEAD_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        cloneUrl,
+        resolvedSource: pluginRoot,
+        resolvedSha: MIRROR_HEAD_SHA,
+        source: { source: "git-subdir", url: cloneUrl, path: "packages/gp" },
+      });
+      const { gitOps, state: gitState } = makeMockGitOps({
+        cloneThrows: new Error("unexpected clone"),
+        resolveRemoteRefThrows: new Error("unexpected remote resolution"),
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        __deps: { cloneCacheSeam: reinstallSeamWith(gitOps) },
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepEqual(gitState.cloneCalls, []);
+      assert.deepEqual(gitState.resolveRemoteRefCalls, []);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSource, pluginRoot);
+      assert.equal(record?.resolvedSha, MIRROR_HEAD_SHA);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an unpinned git-subdir reinstall reports a missing mirror subdirectory without cloning", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-mirror-missing-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/mono";
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      await writeMirrorTree(mirrorRoot, mirrorRoot, "gp", MIRROR_HEAD_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        cloneUrl,
+        resolvedSource: mirrorRoot,
+        resolvedSha: MIRROR_HEAD_SHA,
+        source: { source: "git-subdir", url: cloneUrl, path: "packages/missing" },
+      });
+      const { gitOps, state: gitState } = makeMockGitOps({
+        cloneThrows: new Error("unexpected clone"),
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        __deps: { cloneCacheSeam: reinstallSeamWith(gitOps) },
+      });
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(gitState.cloneCalls, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a pinned git-subdir reinstall reports a missing cached subdirectory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-pinned-missing-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/mono";
+      const locations = locationsFor("project", cwd);
+      const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, GIT_SOURCE_SHA));
+      await writeMirrorTree(cloneRoot, cloneRoot, "gp", GIT_SOURCE_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        cloneUrl,
+        resolvedSource: cloneRoot,
+        resolvedSha: GIT_SOURCE_SHA,
+        source: {
+          source: "git-subdir",
+          url: cloneUrl,
+          path: "packages/missing",
+          sha: GIT_SOURCE_SHA,
+        },
+      });
+      const { gitOps, state: gitState } = makeMockGitOps({
+        cloneThrows: new Error("unexpected clone"),
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        __deps: { cloneCacheSeam: reinstallSeamWith(gitOps) },
+      });
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(gitState.cloneCalls, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
