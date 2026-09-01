@@ -522,7 +522,7 @@ assert.deepStrictEqual(result, expected);
 
 ### Test layout
 
-Structure every case as Arrange, Act, Assert, and mark each phase with a comment:
+Structure every case as arrange, act, assert, and mark each phase with a comment:
 
 - `// arrange`: build values, create doubles, state promised interactions, create the module under test.
 - `// act`: invoke the exported behavior and keep its result.

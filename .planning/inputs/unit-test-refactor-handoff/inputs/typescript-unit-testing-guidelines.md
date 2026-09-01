@@ -512,7 +512,7 @@ assert.deepStrictEqual(result, expected)
 
 ### Test layout
 
-Structure every case as Arrange, Act, Assert, and mark each phase with a comment:
+Structure every case as arrange, act, assert, and mark each phase with a comment:
 
 - `// arrange`: build values, create doubles, state promised interactions, create the module under test.
 - `// act`: invoke the exported behavior and keep its result.
@@ -883,8 +883,14 @@ for (const { lines, total } of [
   },
 ]) {
   test(`totals ${lines.length} line(s) as ${total}`, () => {
-    // act & assert
-    assert.strictEqual(cartTotal(lines), total)
+    // arrange
+    const expectedTotal = total
+
+    // act
+    const calculatedTotal = cartTotal(lines)
+
+    // assert
+    assert.strictEqual(calculatedTotal, expectedTotal)
   })
 }
 ```
@@ -893,9 +899,15 @@ for (const { lines, total } of [
 
 ```ts
 test('totals the lines', () => {
-  // act & assert
   for (const { lines, total } of rows) {
-    assert.strictEqual(cartTotal(lines), total)
+    // arrange
+    const expectedTotal = total
+
+    // act
+    const calculatedTotal = cartTotal(lines)
+
+    // assert
+    assert.strictEqual(calculatedTotal, expectedTotal)
   }
 })
 ```
@@ -1183,8 +1195,11 @@ test('reads the orders directory from ORDERS_DIR', async (t) => {
   })
   process.env.ORDERS_DIR = '/srv/orders'
 
-  // act & assert
-  assert.deepStrictEqual(loadOrdersConfig(), { directory: '/srv/orders' })
+  // act
+  const config = loadOrdersConfig()
+
+  // assert
+  assert.deepStrictEqual(config, { directory: '/srv/orders' })
 })
 ```
 

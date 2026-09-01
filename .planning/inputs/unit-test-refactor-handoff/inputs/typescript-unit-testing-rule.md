@@ -39,7 +39,7 @@ Do not add another runner, assertion library, or mocking library. Do not import 
 - Each case gets fresh state and dependencies. Prefer construction inside the case. `beforeEach()` may create new per-case instances; do not use `before()` for shared state. Only a stateless stub (a fixed `clock`) may live at module scope.
 - Do not commit `test.only()`, `test.skip()`, or `test.todo()`.
 - Title each case with a short sentence stating public behavior: `'rejects an unknown order'`, not `'works'`, `'happy path'`, or `'cancel test'`. A durable requirement ID may appear; plan, phase, or ticket references may not.
-- Mark phases with lowercase `// arrange`, `// act`, `// assert` comments, in that order, separated by a blank line. When act and assertion are one expression (`assert.rejects()`, `assert.throws()`, a data row), use `// act & assert`. Add no other comments unless setup is not obvious.
+- Mark phases with lowercase `// arrange`, `// act`, `// assert` comments, in that order, separated by a blank line. Use `// act & assert` only when one `assert.rejects()` or `assert.throws()` expression performs both the action and assertion. Data rows still use separate phases. Add no other comments unless setup is not obvious.
 
 ## Naming values
 
@@ -167,8 +167,14 @@ for (const { lines, total } of [
   { lines: [{ sku: 'sku-a', quantity: 2, unitPrice: 10 }], total: 20 },
 ]) {
   test(`totals ${lines.length} line(s) as ${total}`, () => {
-    // act & assert
-    assert.strictEqual(cartTotal(lines), total)
+    // arrange
+    const expectedTotal = total
+
+    // act
+    const calculatedTotal = cartTotal(lines)
+
+    // assert
+    assert.strictEqual(calculatedTotal, expectedTotal)
   })
 }
 ```
@@ -232,7 +238,7 @@ A unit-test change is complete when:
 - [ ] Each test uses exported production behavior only; no export, reset hook, mutator, or state reader was added for testing.
 - [ ] Any production refactor created a coherent module, an explicit dependency, a narrow port, or removed hidden global state.
 - [ ] Tests use independent `node:test` cases and `node:assert/strict`, with no `only`, `skip`, or `todo`.
-- [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert` (or `// act & assert`).
+- [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert`; `// act & assert` appears only for one throwing/rejection expression.
 - [ ] Any `describe()` is top-level, names an exported entrypoint, and owns no shared mutable state; each stateful case gets fresh dependencies.
 - [ ] Case titles state public behavior; values and doubles are named after their production role.
 - [ ] Fakes, stubs, spies, and mocks are chosen and asserted by role; plain data is a literal; logging is not verified outside a logging module.
