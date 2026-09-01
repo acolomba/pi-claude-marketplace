@@ -137,6 +137,31 @@ restated here. The load-bearing ones for this phase:
   entry (proving the remainder is still processed and earlier commits stay intact) for
   each orchestrator.
 
+### Producer contract for the reconcile cascade
+
+- **D-115-10:** Give `addMarketplace`, `removeMarketplace`, and `uninstallPlugin` the
+  mode-discriminated overload that `setPluginEnabled` already carries
+  (`orchestrators/plugin/enable-disable.ts:570-575`), then delete the three now-impossible
+  `if (result === undefined)` guards at `orchestrators/reconcile/apply.ts:204`, `:312`,
+  and `:369`. That is what lets P115-05 reach 100 percent branch coverage.
+  — **Reversibility:** costly — the overload is added to three production modules whose
+  pairs are already complete; reverting means restoring both the signatures and the
+  guards.
+
+  Why the overload rather than deleting the guards alone: `result.status` is read
+  immediately after each guard, so removing a guard without narrowing the producer's
+  return type requires a non-null assertion, which silences the type system exactly where
+  the producer contract needs enforcing. `enable-disable.ts:565` records the same
+  reasoning for the same problem — the overload "makes that branch a compile error so the
+  cascade always materialises a row."
+
+  Scope note: this is a deliberate, operator-approved exception to DEL-03 ("supporting
+  edits stay within the owning concern and do not change a second production pair").
+  Overloads are type-level only, so runtime behavior does not change and the completed
+  Phase 114 owner tests for `add.ts`, `remove.ts`, and `uninstall.ts` are expected to pass
+  unmodified. Confirm that expectation rather than assuming it; if any of those three
+  owner suites needs a change, stop and report instead of editing it silently.
+
 ### Claude's Discretion
 
 - Case names, concern-local factories, and the exact fixture shapes.
