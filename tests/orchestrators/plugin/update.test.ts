@@ -521,22 +521,29 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
 
 // ─── PUP-4: skipped, no longer installable ─────────────────────────────────────
 
-test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skipped' with 'is no longer installable'", async () => {
+test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped' with 'is no longer installable'", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup4-"));
     try {
       await seedPathMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
-        // MM-3 / PR-2: github-source plugin entry is not installable.
+        // MM-3 / PR-2: npm-source plugin entry is not installable.
         manifestPlugins: {
-          hello: { version: "1.1.0", hasSkill: true, rawSourceOverride: "github:owner/repo" },
+          hello: {
+            version: "1.1.0",
+            hasSkill: true,
+            rawSourceOverride: { source: "npm", package: "some-pkg" },
+          },
         },
         installedVersions: { hello: "1.0.0" },
       });
 
       const { ctx, pi, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         pi,
@@ -545,6 +552,7 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
       // V2 byte form. `(skipped) {no longer
@@ -1478,19 +1486,24 @@ test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the force 
   });
 });
 
-test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- a github-source (`unavailable`) candidate still returns partition='skipped' {no longer installable}", async () => {
+test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- an npm-source (`unavailable`) candidate still returns partition='skipped' {no longer installable}", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-unavail-"));
     try {
       await seedPathMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
-        // MM-3 / PR-2: a github-source entry from a path marketplace is
+        // MM-3 / PR-2: an npm-source entry from a path marketplace is
         // structurally `unavailable` -- `requireForceInstallable` blocks it even
         // on the force path (force degrades `unsupported`, never `unavailable`).
         manifestPlugins: {
-          hello: { version: "1.1.0", hasSkill: true, rawSourceOverride: "github:owner/repo" },
+          hello: {
+            version: "1.1.0",
+            hasSkill: true,
+            rawSourceOverride: { source: "npm", package: "some-pkg" },
+          },
         },
         installedVersions: { hello: "1.0.0" },
       });
@@ -1498,7 +1511,10 @@ test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- a 
       const prevCwd = process.cwd();
       process.chdir(cwd);
       try {
+        // act
         const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+        // assert
         assert.equal(outcome.partition, "skipped");
         if (outcome.partition !== "skipped") {
           throw new Error("unreachable: narrowed above");
@@ -4898,6 +4914,7 @@ test("FORCE-04: the force-degrade update path emits no warning severity and no `
 
 test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-unavail-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4905,15 +4922,21 @@ test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
-        // A github-flavored source resolves `unavailable` (non-path source),
+        // An npm source resolves `unavailable` (non-path source),
         // which `requireForceInstallable` still rejects.
         manifestPlugins: {
-          hello: { version: "1.1.0", hasSkill: true, rawSourceOverride: "github:owner/repo" },
+          hello: {
+            version: "1.1.0",
+            hasSkill: true,
+            rawSourceOverride: { source: "npm", package: "some-pkg" },
+          },
         },
         installedVersions: { hello: "1.0.0" },
       });
 
       const { ctx, pi, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         pi,
@@ -4923,6 +4946,7 @@ test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate
         partial: true,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
       assert.match(body, /\(skipped\) \{no longer installable\}/);
