@@ -456,18 +456,26 @@ function retryTargetBridge(dirs: RetryScheduleDirs, target: string): RetryBridge
  * filesystem primitives each bridge issues, and optionally refuse one bridge's
  * staging removal so an abort or rollback leak becomes deterministic.
  *
- *   prepare:<bridge>  mkdir of `<stagingDir>/<uuid>`
- *   replace:<bridge>  mkdir of `<stagingDir>/backup-<uuid>`
- *   rollback:<bridge> removal of a replaced target, or restore of a backup
- *   abort:<bridge>    removal of a staging root that never reached replace
- *   finalize:<bridge> removal of a backup root that never rolled back
- *   commit:hooks      mkdir of `<hooksDir>/<plugin>` by the atomic hooks write
- *   remove:hooks      removal of `<hooksDir>/<plugin>`
+ *   prepare:<bridge>    mkdir of `<stagingDir>/<uuid>`
+ *   replace:<bridge>    mkdir of `<stagingDir>/backup-<uuid>`
+ *   rollback:<bridge>   removal of a replaced target, or restore of a backup
+ *   staging-rm:<bridge> removal of `<stagingDir>/<uuid>`
+ *   backup-rm:<bridge>  removal of `<stagingDir>/backup-<uuid>`
+ *   commit:hooks        mkdir of `<hooksDir>/<plugin>` by the atomic hooks write
+ *   remove:hooks        removal of `<hooksDir>/<plugin>`
  *
- * Every event is recorded unconditionally, so a repeated or extra operation
- * moves the schedule. Unwinding one bridge that reached `replace:` therefore
- * emits `rollback:<bridge>` twice -- once for the removal of the replacement,
- * once for the restore of the backup.
+ * Every event is recorded unconditionally and describes only the primitive
+ * that was issued, so a repeated, extra, or out-of-order operation moves the
+ * schedule. Unwinding one bridge that reached `replace:` therefore emits
+ * `rollback:<bridge>` twice -- once for the removal of the replacement, once
+ * for the restore of the backup.
+ *
+ * The derived vocabulary lives in each case's literal, not here: a
+ * `staging-rm:` with no `replace:` for that bridge before it is an abort, one
+ * that follows `replace:` is a finalize sweep, and a `backup-rm:` with no
+ * `rollback:` for that bridge before it is a finalize of an accepted
+ * replacement. Deciding that inside the observer would have let an
+ * out-of-order cleanup be relabelled or dropped instead of failing.
  */
 function observeReinstallSchedule(
   t: TestContext,
@@ -524,11 +532,7 @@ function observeReinstallSchedule(
 
     const slot = retryStagingSlot(dirs, target);
     if (slot !== undefined) {
-      const phase = slot.backup ? "finalize" : "abort";
-      const suppressor = slot.backup ? `rollback:${slot.bridge}` : `replace:${slot.bridge}`;
-      if (!schedule.current.includes(suppressor)) {
-        record(`${phase}:${slot.bridge}`);
-      }
+      record(`${slot.backup ? "backup-rm" : "staging-rm"}:${slot.bridge}`);
 
       if (
         stagingRmFault?.enabled === true &&
@@ -5621,8 +5625,10 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -5763,7 +5769,11 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
       assert.equal(firstSkill, oldSkill);
-      assert.deepStrictEqual(firstSchedule, ["prepare:skills", "prepare:commands", "abort:skills"]);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "staging-rm:skills",
+      ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
         "prepare:commands",
@@ -5771,8 +5781,10 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -5902,7 +5914,11 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         },
       ]);
       assert.equal(firstStateBytes, stateBytes);
-      assert.deepStrictEqual(firstSchedule, ["prepare:skills", "prepare:commands", "abort:skills"]);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "staging-rm:skills",
+      ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
         "prepare:commands",
@@ -5910,8 +5926,10 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -6059,9 +6077,9 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "prepare:skills",
         "prepare:commands",
         "prepare:agents",
-        "abort:agents",
-        "abort:commands",
-        "abort:skills",
+        "staging-rm:agents",
+        "staging-rm:commands",
+        "staging-rm:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
@@ -6072,9 +6090,12 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "replace:agents",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
-        "finalize:agents",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
+        "backup-rm:agents",
+        "staging-rm:agents",
         "drop:cache",
         "remove:data",
       ]);
@@ -6216,7 +6237,10 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         "prepare:commands",
         "replace:skills",
         "rollback:skills",
-        "abort:commands",
+        "staging-rm:skills",
+        "backup-rm:skills",
+        "staging-rm:commands",
+        "staging-rm:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
@@ -6225,8 +6249,10 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -6375,8 +6401,14 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "replace:commands",
         "rollback:commands",
         "rollback:commands",
+        "staging-rm:commands",
+        "backup-rm:commands",
         "rollback:skills",
         "rollback:skills",
+        "staging-rm:skills",
+        "backup-rm:skills",
+        "staging-rm:commands",
+        "staging-rm:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
@@ -6385,8 +6417,10 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -6528,13 +6562,16 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         "save:state",
         "rollback:skills",
         "rollback:skills",
+        "staging-rm:skills",
+        "backup-rm:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
         "replace:skills",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
+        "backup-rm:skills",
+        "staging-rm:skills",
         "drop:cache",
         "remove:data",
       ]);
@@ -6671,10 +6708,16 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "save:state",
         "rollback:agents",
         "rollback:agents",
+        "staging-rm:agents",
+        "backup-rm:agents",
         "rollback:commands",
         "rollback:commands",
+        "staging-rm:commands",
+        "backup-rm:commands",
         "rollback:skills",
         "rollback:skills",
+        "staging-rm:skills",
+        "backup-rm:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
@@ -6685,9 +6728,12 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "replace:agents",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
-        "finalize:agents",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
+        "backup-rm:agents",
+        "staging-rm:agents",
         "drop:cache",
         "remove:data",
       ]);
@@ -6847,8 +6893,12 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         "remove:hooks",
         "rollback:commands",
         "rollback:commands",
+        "staging-rm:commands",
+        "backup-rm:commands",
         "rollback:skills",
         "rollback:skills",
+        "staging-rm:skills",
+        "backup-rm:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
@@ -6857,8 +6907,10 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -6996,8 +7048,10 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         "replace:commands",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
-        "finalize:commands",
+        "backup-rm:skills",
+        "staging-rm:skills",
+        "backup-rm:commands",
+        "staging-rm:commands",
         "drop:cache",
         "remove:data",
       ]);
@@ -7230,7 +7284,8 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         "replace:skills",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
+        "backup-rm:skills",
+        "staging-rm:skills",
         "drop:cache",
         "remove:data",
       ]);
@@ -7332,7 +7387,8 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         "replace:skills",
         "remove:hooks",
         "save:state",
-        "finalize:skills",
+        "backup-rm:skills",
+        "staging-rm:skills",
         "drop:cache",
         "remove:data",
       ]);
