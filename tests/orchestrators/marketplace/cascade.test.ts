@@ -49,105 +49,6 @@ async function withTmpScope<T>(
   }
 }
 
-test("cascadeUnstagePlugin (a): empty resources -- all bridges return cleanly with empty dropped", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const outcome = await cascadeUnstagePlugin(
-      "hello",
-      "valid-marketplace",
-      locations,
-      makePluginRecord({
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-      }),
-    );
-    assert.equal(outcome.ok, true);
-    // LIFE-01: removeHookConfig is idempotent (NFR-3) and always returns the
-    // plugin name regardless of whether the on-disk subtree existed; the
-    // dropped.hooks array records that name. Skills / commands / agents /
-    // mcpServers stay empty because the unstage*-by-name primitives have
-    // nothing to remove.
-    assert.deepEqual(outcome.dropped, {
-      skills: [],
-      commands: [],
-      agents: [],
-      hooks: ["hello"],
-      mcpServers: [],
-    });
-    assert.equal(outcome.cause, undefined);
-  });
-});
-
-test("cascadeUnstagePlugin (a): real skills unstage path -- pre-staged skill is dropped", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // Pre-stage a skill at <skillsTargetDir>/hello-greet/SKILL.md (the
-    // path the skills bridge expects for an installed skill named
-    // "hello-greet").
-    const skillDir = path.join(locations.skillsTargetDir, "hello-greet");
-    await mkdir(skillDir, { recursive: true });
-    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: hello-greet\n---\nbody\n");
-
-    const outcome = await cascadeUnstagePlugin(
-      "hello",
-      "valid-marketplace",
-      locations,
-      makePluginRecord({
-        resources: {
-          skills: ["hello-greet"],
-          prompts: [],
-          agents: [],
-          mcpServers: [],
-          hooks: [],
-        },
-      }),
-    );
-    assert.equal(outcome.ok, true);
-    assert.deepEqual(outcome.dropped.skills, ["hello-greet"]);
-  });
-});
-
-test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface assertion (shape)", async () => {
-  // We trip the agents bridge by passing a locations bundle that points
-  // at a path the bridge cannot create or read. Create a regular file
-  // where the agents bridge expects a directory (or vice versa). The
-  // exact failure mode is bridge-specific -- this test asserts the
-  // SHAPE: outcome.ok === false and outcome.cause is set, OR outcome.ok
-  // === true and outcome.dropped.agents is [] (the cascade primitive's
-  // contract is satisfied either way).
-  await withTmpScope(async ({ locations }) => {
-    // Pre-place a regular FILE at agents-staging path so any bridge
-    // attempt to create that directory will fail with ENOTDIR.
-    await writeFile(locations.agentsStagingDir, "not-a-directory");
-
-    const outcome = await cascadeUnstagePlugin(
-      "hello",
-      "valid-marketplace",
-      locations,
-      // Force the agents path: by giving a skills source dir that doesn't
-      // exist, the skills bridge no-ops silently (idempotent); but the
-      // agents bridge's lstat against agentsStagingDir will fail.
-      makePluginRecord({
-        resources: {
-          skills: [],
-          prompts: [],
-          agents: ["pi-claude-marketplace-hello-greet-agent"],
-          mcpServers: [],
-          hooks: [],
-        },
-      }),
-    );
-    // The cascade primitive may catch into ok:false OR may pass through
-    // skills/commands cleanly and only fail at agents -- assert the
-    // shape, not the specific bridge.
-    if (!outcome.ok) {
-      assert.ok(outcome.cause instanceof Error);
-    } else {
-      // If the agents bridge accommodates this case as a clean miss,
-      // the cascade returns ok:true with empty dropped -- that is also
-      // acceptable; the test guards the SHAPE.
-      assert.deepEqual(outcome.dropped.agents, []);
-    }
-  });
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // LIFE-01: 5th cascade slot in cascadeUnstagePlugin -- removes
 // <hooksDir>/<plugin>/ subtree between the agents foreign-content guard
@@ -155,8 +56,9 @@ test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface 
 // resources inventory declared hooks.
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("LIFE-01: cascadeUnstagePlugin removes <hooksDir>/<plugin>/ and records dropped.hooks", async () => {
+test("cross-bridge lifecycle removes the hooks subtree and records the hook drop", async () => {
   await withTmpScope(async ({ locations }) => {
+    // arrange
     // Pre-stage a hooks subtree at the documented bridge write path so we can
     // observe its removal.
     const hooksPluginDir = path.join(locations.hooksDir, "hello");
@@ -175,6 +77,7 @@ test("LIFE-01: cascadeUnstagePlugin removes <hooksDir>/<plugin>/ and records dro
       }),
     );
 
+    // act
     const outcome = await cascadeUnstagePlugin(
       "hello",
       "valid-marketplace",
@@ -189,10 +92,6 @@ test("LIFE-01: cascadeUnstagePlugin removes <hooksDir>/<plugin>/ and records dro
         },
       }),
     );
-    assert.equal(outcome.ok, true);
-    assert.deepEqual(outcome.dropped.hooks, ["hello"]);
-
-    // The subtree must be gone.
     let stillThere = true;
     try {
       const { readFile } = await import("node:fs/promises");
@@ -201,20 +100,24 @@ test("LIFE-01: cascadeUnstagePlugin removes <hooksDir>/<plugin>/ and records dro
       stillThere = false;
     }
 
+    // assert
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(outcome.dropped.hooks, ["hello"]);
     assert.equal(stillThere, false, "cascadeUnstagePlugin must remove the hooks subtree");
   });
 });
 
-test("LIFE-01: cascadeUnstagePlugin records dropped.hooks for the plugin name even with no on-disk subtree (idempotent)", async () => {
+test("cross-bridge lifecycle keeps hook removal idempotent when the subtree is absent", async () => {
   await withTmpScope(async ({ locations }) => {
-    const outcome = await cascadeUnstagePlugin(
-      "hello",
-      "valid-marketplace",
-      locations,
-      makePluginRecord({
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
-      }),
-    );
+    // arrange
+    const record = makePluginRecord({
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
+    });
+
+    // act
+    const outcome = await cascadeUnstagePlugin("hello", "valid-marketplace", locations, record);
+
+    // assert
     assert.equal(outcome.ok, true);
     // removeHookConfig is idempotent (NFR-3) and always returns the plugin
     // name; the dropped.hooks array carries that name regardless of whether

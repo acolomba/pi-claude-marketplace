@@ -149,9 +149,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   // code change is required -- the bound function references already accept
   // the widened opts shape.
   clone: defaultGit.clone,
-  fetch: async (o): Promise<void> => {
-    await defaultGit.fetch(o);
-  },
+  fetch: defaultGit.fetch,
   forceUpdateRef: defaultGit.forceUpdateRef,
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,
@@ -436,7 +434,7 @@ export function classifyAutoupdateFlip(
       throw new MarketplaceNotFoundError(name, []);
     }
 
-    const legacy = record as unknown as Record<string, unknown>;
+    const legacy = record as { readonly autoupdate?: unknown };
     if ((legacy.autoupdate === true) === enable) {
       unchanged.push(name);
     } else {
@@ -447,7 +445,7 @@ export function classifyAutoupdateFlip(
   }
 
   for (const [mp, record] of Object.entries(state.marketplaces)) {
-    const legacy = record as unknown as Record<string, unknown>;
+    const legacy = record as { readonly autoupdate?: unknown };
     if ((legacy.autoupdate === true) === enable) {
       unchanged.push(mp);
     } else {

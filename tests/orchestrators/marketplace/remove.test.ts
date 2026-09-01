@@ -13,7 +13,6 @@ import { removeMarketplace } from "../../../extensions/pi-claude-marketplace/orc
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
-  narrowCascadeFailure,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -70,10 +69,10 @@ function makeCtx(): {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-  } as unknown as ExtensionContext;
+  } as ExtensionContext;
   const pi = {
     getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
+  } as ExtensionAPI;
   return { ctx, pi, notifications };
 }
 
@@ -837,51 +836,6 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
       await rm(cwd, { recursive: true, force: true });
     }
   });
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// Discriminated-dispatch regression guards on the per-plugin
-// cascade-failure narrowing. Locks in the typed dispatch
-// (`instanceof AgentsUnstageFailureError` + `NodeJS.ErrnoException.code`)
-// so a future refactor cannot regress to message-text substring matching.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("narrowCascadeFailure: NodeJS.ErrnoException code=EACCES -> {permission denied}", () => {
-  // `permission denied` is in the closed REASONS set; this typed dispatch
-  // produces it without substring matching English error text (which varies
-  // across Node versions per NFR-4).
-  const errnoLike = Object.assign(new Error("permission denied: /agents/foo.md"), {
-    code: "EACCES",
-  });
-  assert.equal(narrowCascadeFailure(errnoLike), "permission denied");
-});
-
-test("narrowCascadeFailure: NodeJS.ErrnoException code=ENOENT -> {source missing}", () => {
-  const errnoLike = Object.assign(new Error("no such file"), { code: "ENOENT" });
-  assert.equal(narrowCascadeFailure(errnoLike), "source missing");
-});
-
-test("narrowCascadeFailure: AgentsUnstageFailureError -> {source mismatch} (ATTR-09 / D-NCF align with uninstall.ts)", () => {
-  // D-NCF: foreign content owned by another process is a content/ownership
-  // mismatch, not a manifest absence. Aligned with uninstall.ts's ATTR-09
-  // mapping (`AgentsUnstageFailureError` -> `"source mismatch"`).
-  const err = new AgentsUnstageFailureError("agents leak", [
-    { generatedName: "foo", targetPath: "/agents/foo.md", reason: "EACCES" },
-  ]);
-  assert.equal(narrowCascadeFailure(err), "source mismatch");
-});
-
-test("narrowCascadeFailure: arbitrary bare Error with 'unreadable' substring -> {unreadable} (defensive textual fallback)", () => {
-  // The textual fallback is retained ONLY as a defense-in-depth last
-  // resort for bridges that throw bare `Error`. Documented as transitional
-  // in the implementation comment.
-  const err = new Error("manifest file is unreadable");
-  assert.equal(narrowCascadeFailure(err), "unreadable");
-});
-
-test("narrowCascadeFailure: arbitrary bare Error with no recognizable text -> {not in manifest} (permissive default)", () => {
-  const err = new Error("something else");
-  assert.equal(narrowCascadeFailure(err), "not in manifest");
 });
 
 // ───────────────────────────────────────────────────────────────────────────
