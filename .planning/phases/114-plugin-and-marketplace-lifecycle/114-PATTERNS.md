@@ -273,7 +273,7 @@ Every owner task also needs:
 - owner-only test execution and exact test count;
 - global typecheck after the owner is frozen;
 - targeted ESLint and Prettier checks for the owned source/test and any owned supplemental relocation/deletion;
-- scans for uppercase AAA, `anyTimes()`, impossible casts, coverage ignores, source-text oracles, test-only exports/seams, focused/skipped tests, and live network/process fallbacks;
+- scans for uppercase AAA, `anyTimes()`, impossible casts, coverage ignores, source-text oracles, test-only exports/seams, both `test.*` and callback-context `t.*` focused/skipped/todo calls, and live network/process fallbacks;
 - a diff/scope check proving only the pair and explicitly assigned supplemental paths changed;
 - exact mock verification and a no-leaked handles/process/temp-state check where collaborators or temporary roots are used;
 - retained integration execution after relocation, separately from direct coverage;

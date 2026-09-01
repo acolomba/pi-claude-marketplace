@@ -461,7 +461,7 @@ Each case must receive fresh state and dependencies:
 - Do not keep a mutable fake, store, or production graph in module scope. A stateless stub such as `clock` in the sample may live at module scope.
 - If a case needs graph state, use a test harness to construct a fresh real production graph. The harness may assemble production objects, but it must not require test-only hooks in those objects.
 
-Do not commit `test.only()`, `test.skip()`, or `test.todo()`. A skipped or pending case hides a coverage gap.
+Do not commit `test.only()`, `test.skip()`, `test.todo()`, or callback-context forms such as `t.skip()` and `t.todo()`. A focused, skipped, or pending case hides a coverage gap. Static gates must scan both call forms with `(?:test|t)\.(?:only|skip|todo)\(` (or an equivalent alias-aware pattern), not only the imported `test.*` spelling.
 
 ### Naming cases
 
@@ -1374,7 +1374,7 @@ A unit-test change is complete when:
 - [ ] Each test uses exported production behavior only.
 - [ ] No production export, reset hook, mutator, or state reader was added for testing.
 - [ ] Any production refactor created a coherent module, an explicit dependency, a narrow port, or removed hidden global state.
-- [ ] Tests use independent `node:test` cases and `node:assert/strict`, with no `only`, `skip`, or `todo`.
+- [ ] Tests use independent `node:test` cases and `node:assert/strict`, with no `only`, `skip`, or `todo` through either the imported test function or a callback context.
 - [ ] Every case marks its phases with `// arrange`, `// act`, and `// assert`; `// act & assert` appears only for one throwing/rejection expression.
 - [ ] Any `describe()` block is top-level, names an exported entrypoint, and owns no shared mutable state.
 - [ ] Each stateful case gets fresh dependencies and fresh graph state.

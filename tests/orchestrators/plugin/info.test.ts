@@ -29,7 +29,8 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -65,6 +66,43 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+type FaultableFsPromiseMethod = "readFile" | "readdir";
+
+async function withFsPromiseFault<T>(
+  method: FaultableFsPromiseMethod,
+  targetPath: string,
+  error: NodeJS.ErrnoException,
+  action: () => Promise<T>,
+): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(fs.promises, method);
+  assert.ok(descriptor !== undefined, `expected fs.promises.${method} descriptor`);
+  const original = fs.promises[method];
+  let faultRaised = false;
+
+  Object.defineProperty(fs.promises, method, {
+    ...descriptor,
+    value: async (...args: unknown[]) => {
+      if (args[0] === targetPath) {
+        faultRaised = true;
+        throw error;
+      }
+
+      const result: unknown = await Reflect.apply(original, fs.promises, args);
+      return result;
+    },
+  });
+  syncBuiltinESMExports();
+
+  try {
+    const result = await action();
+    assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
+    return result;
+  } finally {
+    Object.defineProperty(fs.promises, method, descriptor);
+    syncBuiltinESMExports();
+  }
+}
 
 function makeMockCredentialOps() {
   const credentials = createCredentialOpsFake({ boundary: "memory" });
@@ -1347,16 +1385,11 @@ test("BOUND-01: a manifest READ FAILURE with an installed record present still r
 // EIO, ...) propagates so the row builder can classify via
 // `narrowProbeError`. Locks the row catch arms that prevent a
 // permission-denied component dir from silently rendering as
-// "no components". POSIX-only -- chmod-based fault injection does not
-// reproduce on Windows.
+// "no components". The case-owned fs fault runs through the exported
+// orchestrator without depending on host permission semantics.
 // ---------------------------------------------------------------------------
 
-test("readdir EACCES on installed plugin's skills dir surfaces `{permission denied}` (POSIX)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
+test("readdir EACCES on installed plugin's skills dir surfaces `{permission denied}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1382,37 +1415,28 @@ test("readdir EACCES on installed plugin's skills dir surfaces `{permission deni
       componentDirs: { p: ["skills/s1"] },
     });
 
-    // chmod 000 the skills dir so readdir raises EACCES. Component
-    // discovery propagates the throw up through composeResolvedComponents
-    // into buildInstalledRow's outer catch, which classifies via
-    // narrowProbeError.
-    const { chmod } = await import("node:fs/promises");
     const skillsDir = path.join(mpRoot, "p", "skills");
-    await chmod(skillsDir, 0o000);
+    const permissionError = Object.assign(new Error("case-owned readdir failure"), {
+      code: "EACCES",
+    });
+    const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      // act
+    // act
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
-      // assert
-      assert.equal(notifications.length, 1);
-      const msg = notifications[0]!.message;
-      assert.match(msg, /\(installed\) \{permission denied\}/);
-      // Anti-regression: row must NOT render byte-identically to a
-      // deliberate INFO-05 external-source defer (no reason brace).
-      assert.doesNotMatch(msg, /\(installed\)\n {4}components: not resolved$/);
-    } finally {
-      await chmod(skillsDir, 0o755).catch(() => undefined);
-    }
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(installed\) \{permission denied\}/);
+    // Anti-regression: row must NOT render byte-identically to a
+    // deliberate INFO-05 external-source defer (no reason brace).
+    assert.doesNotMatch(msg, /\(installed\)\n {4}components: not resolved$/);
   });
 });
 
-test("readdir EACCES on available plugin's skills dir surfaces `{permission denied}` (POSIX)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
+test("readdir EACCES on available plugin's skills dir surfaces `{permission denied}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1426,28 +1450,26 @@ test("readdir EACCES on available plugin's skills dir surfaces `{permission deni
         plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "skills" }],
       },
       // Not installed -> goes through buildNotInstalledRow ->
-      // buildAvailableRow (resolvable: true) -> composeResolvedComponents
-      // throws EACCES on the chmod'd skills dir -> buildAvailableRow's
-      // catch fires and surfaces `{permission denied}`.
+      // buildAvailableRow (resolvable: true) -> composeResolvedComponents.
       installablePluginDirs: ["p"],
       componentDirs: { p: ["skills/s1"] },
     });
 
-    const { chmod } = await import("node:fs/promises");
     const skillsDir = path.join(mpRoot, "p", "skills");
-    await chmod(skillsDir, 0o000);
+    const permissionError = Object.assign(new Error("case-owned readdir failure"), {
+      code: "EACCES",
+    });
+    const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      // act
+    // act
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
-      // assert
-      assert.equal(notifications.length, 1);
-      const msg = notifications[0]!.message;
-      assert.match(msg, /\(available\) \{permission denied\}/);
-    } finally {
-      await chmod(skillsDir, 0o755).catch(() => undefined);
-    }
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(available\) \{permission denied\}/);
   });
 });
 
@@ -2446,17 +2468,7 @@ test("plugin info manifest absent: NFR-10: a refused traversal hooks slug is nam
   });
 });
 
-test("plugin info manifest absent: D-96-03: an unreadable materialized hooks config reports `permission denied` (POSIX-only)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("POSIX-only chmod 0 unreadable file path");
-    return;
-  }
-
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    t.skip("running as root -- chmod 0 does not block read");
-    return;
-  }
-
+test("plugin info manifest absent: D-96-03: an unreadable materialized hooks config reports `permission denied`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -2474,28 +2486,27 @@ test("plugin info manifest absent: D-96-03: an unreadable materialized hooks con
       "alpha",
       JSON.stringify({ Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }] }),
     );
-    await chmod(file, 0o000);
+    const permissionError = Object.assign(new Error("case-owned read failure"), {
+      code: "EACCES",
+    });
+    const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      // act
+    // act
+    await withFsPromiseFault("readFile", file, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    });
 
-      // assert
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]!.severity, undefined);
-      assert.equal(
-        notifications[0]!.message,
-        [
-          "● mp [user] <no autoupdate>",
-          "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
-          "    skills: alpha-skill",
-        ].join("\n"),
-      );
-    } finally {
-      // Restore the mode so the hermetic-HOME teardown can remove the tree.
-      await chmod(file, 0o644);
-    }
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
   });
 });
 
@@ -4332,12 +4343,7 @@ test("INFO-05: not-installed npm-source plugin still emits `components: not reso
   });
 });
 
-test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back to `componentsResolved: false` with merged reasons (POSIX)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
+test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back to `componentsResolved: false` with merged reasons", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -4361,42 +4367,37 @@ test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back
       componentDirs: { legacy: ["skills/s1"] },
     });
 
-    // Malformed hooks.json flips installable: false; then chmod 000 on the
-    // skills dir makes the on-disk discovery throw EACCES. The throw must
+    // Malformed hooks.json flips installable: false. The case-owned skills-dir
+    // read fault makes on-disk discovery throw EACCES. The throw must
     // propagate up to the unavailable-arm catch and fall back to
     // `componentsResolved: false` with the merged reasons brace.
     const pluginDir = path.join(mpRoot, "legacy");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { chmod } = await import("node:fs/promises");
     const skillsDir = path.join(pluginDir, "skills");
-    await chmod(skillsDir, 0o000);
+    const permissionError = Object.assign(new Error("case-owned readdir failure"), {
+      code: "EACCES",
+    });
+    const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      // act
+    // act
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
-      // assert
-      assert.equal(notifications.length, 1);
-      const msg = notifications[0]!.message;
-      // Both reasons surface in the brace; order follows the
-      // composeReasons join (resolver notes first, then probe error).
-      assert.match(msg, /\(unavailable\) \{unsupported hooks, permission denied\}/);
-      assert.match(msg, /components: not resolved/);
-      assert.doesNotMatch(msg, /skills:/);
-    } finally {
-      await chmod(skillsDir, 0o755).catch(() => undefined);
-    }
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // Both reasons surface in the brace; order follows the
+    // composeReasons join (resolver notes first, then probe error).
+    assert.match(msg, /\(unavailable\) \{unsupported hooks, permission denied\}/);
+    assert.match(msg, /components: not resolved/);
+    assert.doesNotMatch(msg, /skills:/);
   });
 });
 
-test("INFO-05: composeResolvedComponents throw on the installed arm falls back to `componentsResolved: false` with merged reasons (POSIX)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
+test("INFO-05: composeResolvedComponents throw on the installed arm falls back to `componentsResolved: false` with merged reasons", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -4421,8 +4422,8 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
       componentDirs: { legacy: ["skills/s1"] },
     });
 
-    // Malformed hooks.json flips installable: false; chmod 000 on the
-    // skills dir makes the on-disk discovery throw EACCES. Symmetric to
+    // Malformed hooks.json flips installable: false. The case-owned skills-dir
+    // read fault makes on-disk discovery throw EACCES. Symmetric to
     // the unavailable-arm test above -- the throw propagates to
     // buildNotInstallablePathRowFields' narrowed catch and merges the
     // resolver `unsupported hooks` note with the probe-classified
@@ -4432,23 +4433,23 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { chmod } = await import("node:fs/promises");
     const skillsDir = path.join(pluginDir, "skills");
-    await chmod(skillsDir, 0o000);
+    const permissionError = Object.assign(new Error("case-owned readdir failure"), {
+      code: "EACCES",
+    });
+    const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      // act
+    // act
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
-      // assert
-      assert.equal(notifications.length, 1);
-      const msg = notifications[0]!.message;
-      assert.match(msg, /\(installed\) \{unsupported hooks, permission denied\}/);
-      assert.match(msg, /components: not resolved/);
-      assert.doesNotMatch(msg, /skills:/);
-    } finally {
-      await chmod(skillsDir, 0o755).catch(() => undefined);
-    }
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(installed\) \{unsupported hooks, permission denied\}/);
+    assert.match(msg, /components: not resolved/);
+    assert.doesNotMatch(msg, /skills:/);
   });
 });
 
@@ -6686,13 +6687,8 @@ test("a warm unavailable git plugin lists conventional component directories exa
   });
 });
 
-test("a warm partially available git plugin folds a component read failure exactly", async (t) => {
+test("a warm partially available git plugin folds a component read failure exactly", async () => {
   // arrange
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
   await withHermeticHome(async ({ home, cwd }) => {
     const cloneUrl = "https://example.com/partial-unreadable";
     await seedPathMarketplace({
@@ -6721,36 +6717,31 @@ test("a warm partially available git plugin folds a component read failure exact
     });
     const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
     const skillsDir = path.join(mirrorDir, "skills");
-    await chmod(skillsDir, 0o000);
+    const permissionError = Object.assign(new Error("case-owned readdir failure"), {
+      code: "EACCES",
+    });
     const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      // act
+    // act
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    });
 
-      // assert
-      assert.deepEqual(notifications, [
-        {
-          message:
-            "● mp [user] <no autoupdate>\n" +
-            "  ⊖ alpha v1.0.0 (partially-available) {lsp, permission denied}\n" +
-            "    Partial warm plugin.\n" +
-            "    components: not resolved",
-        },
-      ]);
-    } finally {
-      await chmod(skillsDir, 0o755);
-    }
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ⊖ alpha v1.0.0 (partially-available) {lsp, permission denied}\n" +
+          "    Partial warm plugin.\n" +
+          "    components: not resolved",
+      },
+    ]);
   });
 });
 
-test("a warm installable git plugin folds a component read failure to remote exactly", async (t) => {
+test("a warm installable git plugin folds a component read failure to remote exactly", async () => {
   // arrange
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
   await withHermeticHome(async ({ home, cwd }) => {
     const cloneUrl = "https://example.com/available-unreadable";
     await seedPathMarketplace({
@@ -6779,26 +6770,26 @@ test("a warm installable git plugin folds a component read failure to remote exa
     });
     const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
     const skillsDir = path.join(mirrorDir, "skills");
-    await chmod(skillsDir, 0o000);
+    const permissionError = Object.assign(new Error("case-owned readdir failure"), {
+      code: "EACCES",
+    });
     const { ctx, pi, notifications } = makeCtx();
 
-    try {
-      // act
+    // act
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    });
 
-      // assert
-      assert.deepEqual(notifications, [
-        {
-          message:
-            "● mp [user] <no autoupdate>\n" +
-            "  ○ alpha v1.0.0 (available) {permission denied}\n" +
-            "    Alpha plugin\n" +
-            "    components: not resolved",
-        },
-      ]);
-    } finally {
-      await chmod(skillsDir, 0o755);
-    }
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ○ alpha v1.0.0 (available) {permission denied}\n" +
+          "    Alpha plugin\n" +
+          "    components: not resolved",
+      },
+    ]);
   });
 });
 
