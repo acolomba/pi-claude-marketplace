@@ -3695,6 +3695,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
     const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
     let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
     try {
+      // arrange
       resetCompletionCache();
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplaceWithPlugin({
@@ -3804,6 +3805,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
     const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
     let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -3836,6 +3838,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
 
       const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
+
       // act
       const first = await installPlugin({
         ctx,
