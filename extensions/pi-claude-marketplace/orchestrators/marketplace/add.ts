@@ -351,9 +351,9 @@ async function runAddInGuard(args: {
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
   const configBasename = path.basename(targetConfigPath);
 
-  let recordedName: string | undefined;
-  await withLockedStateTransaction(locations, async (tx) => {
+  return withLockedStateTransaction(locations, async (tx) => {
     const state = tx.state;
+    let recordedName: string;
 
     // CFG-03 (T-56-02-05): abort BEFORE any state mutation. The
     // basename-only error message prevents an absolute-path information leak.
@@ -438,14 +438,9 @@ async function runAddInGuard(args: {
 
       throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
     }
+
+    return recordedName;
   });
-
-  if (recordedName === undefined) {
-    // Defensive: the guard always sets it on success.
-    throw new Error("addMarketplace: internal error -- guard returned without recording a name");
-  }
-
-  return recordedName;
 }
 
 /**
