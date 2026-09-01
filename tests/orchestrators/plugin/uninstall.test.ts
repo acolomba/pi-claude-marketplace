@@ -30,6 +30,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
@@ -4225,6 +4226,9 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       await writeFile(path.join(escape, "outside.txt"), "outside");
       await mkdir(path.dirname(targets.dataDir), { recursive: true });
       await symlink(escape, targets.dataDir);
+      const expectedRefusal =
+        `pluginDataDir(mp, hello) contains symlink ${targets.dataDir} -> ${escape} ` +
+        `(parent: ${locations.dataRoot}, target: ${targets.dataDir}).`;
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -4257,8 +4261,13 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       });
 
       // assert
-      assert.ok(firstError instanceof Error);
-      assert.match(`${firstError.name} ${firstError.message}`, /symlink|contain/i);
+      assert.ok(firstError instanceof SymlinkRefusedError);
+      assert.strictEqual(firstError.name, "SymlinkRefusedError");
+      assert.strictEqual(firstError.parent, locations.dataRoot);
+      assert.strictEqual(firstError.child, targets.dataDir);
+      assert.strictEqual(firstError.linkPath, targets.dataDir);
+      assert.strictEqual(firstError.linkTarget, escape);
+      assert.strictEqual(firstError.message, expectedRefusal);
       assert.equal(second, undefined);
       assert.deepStrictEqual(firstNotifications, []);
       assert.deepStrictEqual(notifications, [

@@ -38,6 +38,7 @@ import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -9114,6 +9115,9 @@ test("retry proof: install: containment failure preserves the refused residue an
       const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await symlink("/tmp/retry-proof-decoy", skillTarget);
+      const expectedRefusal =
+        `skill target destination contains symlink ${skillTarget} -> ` +
+        `/tmp/retry-proof-decoy (parent: ${locations.skillsTargetDir}, target: ${skillTarget}).`;
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -9154,9 +9158,14 @@ test("retry proof: install: containment failure preserves the refused residue an
       // assert
       assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
       assert.strictEqual(first.status, "failed");
-      assert.ok(first.error instanceof Error);
-      assert.match(first.error.message, /contains symlink|escapes/);
-      assert.strictEqual(first.cause?.includes("rollback partial"), false);
+      assert.ok(first.error instanceof SymlinkRefusedError);
+      assert.strictEqual(first.error.name, "SymlinkRefusedError");
+      assert.strictEqual(first.error.parent, locations.skillsTargetDir);
+      assert.strictEqual(first.error.child, skillTarget);
+      assert.strictEqual(first.error.linkPath, skillTarget);
+      assert.strictEqual(first.error.linkTarget, "/tmp/retry-proof-decoy");
+      assert.strictEqual(first.error.message, expectedRefusal);
+      assert.strictEqual(first.cause, `${expectedRefusal}\n\ncause: ${expectedRefusal}`);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -9170,7 +9179,7 @@ test("retry proof: install: containment failure preserves the refused residue an
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ retryable v0.0.1 (failed)\n" +
-            `    cause: ${first.error.message}`,
+            `    cause: ${expectedRefusal}`,
           severity: "error",
         },
         {
