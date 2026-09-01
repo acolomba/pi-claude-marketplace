@@ -27,7 +27,7 @@ import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { appendLeakToError } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 import {
   DEFAULT_GIT_OPS,
@@ -90,7 +90,7 @@ async function promoteStagingToClone(
     }
 
     const wrapped = appendLeakToError(err, leak);
-    throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
+    throw wrapped;
   }
 }
 
