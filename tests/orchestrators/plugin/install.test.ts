@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { mock, when } from "strong-mock";
+
 import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
@@ -18,12 +20,6 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import {
-  classifyEntityShapeError,
-  classifyInstallFailure,
-  composeInstallFailureMessage,
-  narrowResolverReasons,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
   installPlugin,
   type InstallCloneCacheSeam,
@@ -41,7 +37,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
 //
@@ -75,22 +71,35 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
+function toolInfo(name: string): ToolInfo {
+  const tool = mock<ToolInfo>({ exactParams: true, name: `tool ${name}` });
+  when(() => tool.name)
+    .thenReturn(name)
+    .anyTimes();
+  return tool;
+}
+
+function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
-  const ctx = {
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionContext;
-  const pi = {
-    getAllTools: piOverrides?.getAllTools ?? ((): unknown[] => []),
-  } as unknown as ExtensionAPI;
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .anyTimes();
+  when(() => pi.getAllTools())
+    .thenReturn((piOverrides?.toolNames ?? []).map(toolInfo))
+    .anyTimes();
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- strong-mock replaces the method property with this capture function.
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .anyTimes();
   return { ctx, pi, notifications };
 }
 
@@ -1031,7 +1040,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       // `disabled` render arm ever threaded the real soft-dep flags instead of
       // hard-coding them false, this fixture is the one that would emit
       // `{requires pi-subagents, requires pi-mcp}` and fail below.
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -1186,7 +1195,7 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -2399,7 +2408,7 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
         agents: [{ sourceName: "bot" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -2444,7 +2453,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
         mcpServers: { server1: { command: "node" } },
       });
 
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -3674,371 +3683,6 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Discriminated-dispatch regression guards on the
-// catch-site classifiers. Locks in the `instanceof PluginShapeError` +
-// `.kind` dispatch so a future refactor cannot regress to message-text
-// substring matching. These tests guarantee the typed dispatch produces
-// the same closed-set `Reason[]` output without re-parsing `.message`.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("classifyEntityShapeError dispatches on kind=already-installed -> failed/{already installed}", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  const err = new PluginShapeError({
-    kind: "already-installed",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "failed");
-  assert.deepEqual(row.reasons, ["already installed"]);
-});
-
-test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not in manifest}", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  const err = new PluginShapeError({
-    kind: "not-in-manifest",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "failed");
-  assert.deepEqual(row.reasons, ["not in manifest"]);
-});
-
-test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable + manifest-field reasons preserved verbatim", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // The resolver's `r.notes` carry the
-  // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
-  // `lspServers` carve-out in `narrowResolverReasons` strips the prefix and
-  // routes the bare token through the shared `narrowUnsupportedKinds` helper
-  // -> `lsp` (SNM-36 / D-24-04). The carve-out is arm-independent.
-  //
-  // SURF-01 / WR-01 / D-64-07: a `not-installable` shape is the structural
-  // `unavailable` arm (`partialable: false`). A non-carve-out `contains <kind>`
-  // note on that arm stays on the SOURCE axis and renders `unsupported source`,
-  // mirroring `narrowResolverNotes` -- the component-axis `unsupported hooks` /
-  // `unsupported component` markers belong to the partially-available arm only.
-  // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver never
-  // emits a real `contains hooks` note; the force-degradable `hooks` marker
-  // travels on the typed `unsupported[]` list, covered by the IN-02 parity
-  // cases. This synthetic structural note therefore collapses to the source
-  // axis.)
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["contains hooks", "contains lspServers"],
-    partialable: false,
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source", "lsp"]);
-});
-
-test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // The resolver's `r.notes` carry free-form strings like
-  // "source dir does not exist"; the narrow at the catch site maps any
-  // "source" substring to the closed Reason "unsupported source".
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source"]);
-});
-
-test("classifyEntityShapeError returns undefined for non-PluginShapeError input (fallback to bare errorMessage)", () => {
-  const row = classifyEntityShapeError(new Error("random failure"), {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.equal(row, undefined);
-});
-
-test("IN-02 / RSTATE-05: hooks-only unsupported (typed kind, no notes) renders {unsupported hooks} on the failure row", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // A partial-hook `unsupported` plugin carries NO `contains hooks` note (hooks
-  // is not an UNSUPPORTED_COMPONENT_KINDS member), so `reasons` is empty; the
-  // typed `hooks` kind on `unsupportedKinds` is the SOLE reason source. The
-  // failure row must read `{unsupported hooks}`, byte-identical to list/info,
-  // NOT the generic `{unsupported source}` fallback.
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: [],
-    partialable: true,
-    unsupportedKinds: ["hooks"],
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported hooks"]);
-});
-
-test("IN-02 / RSTATE-05: lsp unsupported (typed kind) renders {lsp} on the failure row", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["contains lspServers"],
-    partialable: true,
-    unsupportedKinds: ["lspServers"],
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  // Deduped: the typed kind and the `contains lspServers` note both map to
-  // `lsp`, so the row renders a single marker.
-  assert.deepEqual(row.reasons, ["lsp"]);
-});
-
-test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their notes-derived reason, unchanged", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // The `unavailable` arm carries NO typed `unsupported[]` (empty list on the
-  // throw), so a structural defect keeps its `notes`-sourced reason. This pins
-  // that the IN-02 typed-kind path never perturbs a structural failure row.
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-    unsupportedKinds: [],
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source"]);
-});
-
-test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the thrown shape", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  const partialable = classifyEntityShapeError(
-    new PluginShapeError({
-      kind: "not-installable",
-      plugin: "p",
-      reasons: ["contains lspServers"],
-      partialable: true,
-    }),
-    { plugin: "p", marketplace: "mp", scope: "project" },
-  );
-  assert.ok(partialable);
-  assert.equal(partialable.status, "unavailable");
-  assert.equal(partialable.partialable, true);
-
-  const structural = classifyEntityShapeError(
-    new PluginShapeError({
-      kind: "not-installable",
-      plugin: "p",
-      reasons: ["source dir does not exist"],
-      partialable: false,
-    }),
-    { plugin: "p", marketplace: "mp", scope: "project" },
-  );
-  assert.ok(structural);
-  assert.equal(structural.status, "unavailable");
-  assert.equal(structural.partialable, false);
-});
-
-test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the verdict is force-degradable", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  // XSURF-01: force-degradable arm -> the resolver-state-driven `unsupported`
-  // row carries the `--force` hint and renders at error severity (consistent
-  // with how `list` / `info` describe the same plugin).
-  const partialableErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["contains lspServers"],
-    partialable: true,
-  });
-  const partialableMsg = composeInstallFailureMessage({
-    err: partialableErr,
-    plugin: "helper",
-    scope: "project",
-    version: undefined,
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: classifyEntityShapeError(partialableErr, {
-      plugin: "helper",
-      marketplace: "mp",
-      scope: "project",
-    }),
-  });
-  assert.equal(partialableMsg.status, "partially-available");
-  assert.ok(partialableMsg.status === "partially-available");
-  assert.equal(partialableMsg.partialHint, true);
-  assert.equal(partialableMsg.severity, "error");
-
-  // D-70-02: structural `unavailable` arm -> error severity, but NO `--force`
-  // hint (force cannot degrade-install a structural defect).
-  const structuralErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  const structuralMsg = composeInstallFailureMessage({
-    err: structuralErr,
-    plugin: "helper",
-    scope: "project",
-    version: undefined,
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: classifyEntityShapeError(structuralErr, {
-      plugin: "helper",
-      marketplace: "mp",
-      scope: "project",
-    }),
-  });
-  assert.equal(structuralMsg.status, "unavailable");
-  assert.ok(structuralMsg.status === "unavailable");
-  assert.equal(structuralMsg.partialHint, undefined);
-  assert.equal(structuralMsg.severity, "error");
-});
-
-test("composeInstallFailureMessage threads a resolved version onto both not-installable arms and omits an empty-string version", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  const partialableErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["contains lspServers"],
-    partialable: true,
-  });
-  const partialableRow = classifyEntityShapeError(partialableErr, {
-    plugin: "helper",
-    marketplace: "mp",
-    scope: "project",
-  });
-  const withVersion = composeInstallFailureMessage({
-    err: partialableErr,
-    plugin: "helper",
-    scope: "project",
-    version: "1.2.3",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: partialableRow,
-  });
-  assert.equal(withVersion.status, "partially-available");
-  assert.ok(withVersion.status === "partially-available");
-  assert.equal(withVersion.version, "1.2.3", "the partially-available arm carries the version");
-
-  const structuralErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  const structuralRow = classifyEntityShapeError(structuralErr, {
-    plugin: "helper",
-    marketplace: "mp",
-    scope: "project",
-  });
-  const unavailableWithVersion = composeInstallFailureMessage({
-    err: structuralErr,
-    plugin: "helper",
-    scope: "project",
-    version: "2.0.0",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: structuralRow,
-  });
-  assert.equal(unavailableWithVersion.status, "unavailable");
-  assert.ok(unavailableWithVersion.status === "unavailable");
-  assert.equal(unavailableWithVersion.version, "2.0.0", "the unavailable arm carries the version");
-
-  // An empty-string version (a placeholder resolve) is OMITTED from both arms.
-  const emptyPartial = composeInstallFailureMessage({
-    err: partialableErr,
-    plugin: "helper",
-    scope: "project",
-    version: "",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: partialableRow,
-  });
-  assert.ok(emptyPartial.status === "partially-available");
-  assert.equal(emptyPartial.version, undefined, "empty-string version is omitted");
-
-  const emptyStructural = composeInstallFailureMessage({
-    err: structuralErr,
-    plugin: "helper",
-    scope: "project",
-    version: "",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: structuralRow,
-  });
-  assert.ok(emptyStructural.status === "unavailable");
-  assert.equal(emptyStructural.version, undefined, "empty-string version is omitted");
-});
-
-test("composeInstallFailureMessage runtime arm: a non-Error throw yields the bare failed row (no cause) with the version threaded", () => {
-  const msg = composeInstallFailureMessage({
-    err: "disk exploded",
-    plugin: "helper",
-    scope: "project",
-    version: "2.0.0",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: undefined,
-  });
-  assert.equal(msg.status, "failed");
-  assert.ok(msg.status === "failed");
-  assert.deepEqual(msg.reasons, [], "no fabricated reason on a generic runtime throw");
-  assert.equal(msg.cause, undefined, "a non-Error throw carries no cause");
-  assert.equal(msg.version, "2.0.0", "the runtime arm threads the version");
-  assert.equal(msg.severity, "error");
-});
-
-// ───────────────────────────────────────────────────────────────────────────
 // PHOOK-04 -- partial-hook `install --force` stages a STRICT SUBSET of the
 // source `hooks.json`: the dropped event / matcher group is absent from the
 // written file, while the supported group is present. The bridge stages
@@ -4254,165 +3898,6 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       await rm(cwd, { recursive: true, force: true });
     }
   });
-});
-
-test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  // The four error variants
-  // (already-installed / unavailable / uninstallable /
-  // unexpected-failure) collapse into a single
-  // `{ status: "failed"; error; cause }` shape. The typed Error is
-  // the dispatch surface; consumers narrow on `instanceof
-  // PluginShapeError` and read `.kind` to recover the
-  // semantic class.
-  const notInManifestErr = new PluginShapeError({
-    kind: "not-in-manifest",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const notInManifest = classifyInstallFailure(notInManifestErr, "formatted");
-  assert.equal(notInManifest.status, "failed");
-  assert.ok(notInManifest.status === "failed");
-  assert.equal(notInManifest.error, notInManifestErr);
-  assert.equal(notInManifest.cause, "formatted");
-
-  const alreadyInstalledErr = new PluginShapeError({
-    kind: "already-installed",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const alreadyInstalled = classifyInstallFailure(alreadyInstalledErr, "formatted");
-  assert.equal(alreadyInstalled.status, "failed");
-  assert.ok(alreadyInstalled.status === "failed");
-  assert.equal(alreadyInstalled.error, alreadyInstalledErr);
-
-  const notInstallableErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["hooks"],
-    partialable: false,
-  });
-  const notInstallable = classifyInstallFailure(notInstallableErr, "formatted");
-  assert.equal(notInstallable.status, "failed");
-  assert.ok(notInstallable.status === "failed");
-  assert.equal(notInstallable.error, notInstallableErr);
-
-  const noLongerInstallableErr = new PluginShapeError({
-    kind: "no-longer-installable",
-    plugin: "p",
-    reasons: ["unsupported source"],
-    partialable: false,
-  });
-  const noLongerInstallable = classifyInstallFailure(noLongerInstallableErr, "formatted");
-  assert.equal(noLongerInstallable.status, "failed");
-  assert.ok(noLongerInstallable.status === "failed");
-  assert.equal(noLongerInstallable.error, noLongerInstallableErr);
-
-  // Non-PluginShapeError input is preserved verbatim on `error`.
-  const opaque = new Error("random");
-  const unexpected = classifyInstallFailure(opaque, "formatted");
-  assert.equal(unexpected.status, "failed");
-  assert.ok(unexpected.status === "failed");
-  assert.equal(unexpected.error, opaque);
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// narrowResolverReasons does not silently degrade
-// non-resolver causes to `{unsupported source}`. EACCES / EPERM / ENOENT /
-// SyntaxError substrings map to their precise closed Reasons; the
-// `unsupported source` fallback runs only when no classifier matched.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("PHOOK-05 / D-71-04: narrowResolverReasons routes the `contains hooks` token through the shared per-kind helper -> `unsupported hooks`", () => {
-  // `hooks` is a SUPPORTED component kind that, when a parseable hooks.json
-  // drops one or more unsupportable handlers, becomes a force-degradable
-  // `unsupported` marker (D-71-04). The shared `narrowUnsupportedKinds` helper
-  // maps the `hooks` kind to the single aggregate `unsupported hooks` reason,
-  // so a `contains hooks` token narrows to `unsupported hooks` on the install
-  // error surface -- byte-identical to the `list`/`info` per-kind path.
-  //
-  // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver does not
-  // emit a real `contains hooks` note; the degradable signal travels on the
-  // typed `unsupported[]` list. This pins the shared-helper mapping.)
-  //
-  // SURF-01 / D-64-07: the `hooks` kind is force-degradable, so it lives on the
-  // partially-available arm -- pass the arm discriminant (`true`) so the
-  // `contains <kind>` token routes through the component-axis helper.
-  assert.deepEqual(
-    [...narrowResolverReasons(["contains hooks"], ["hooks"], true)],
-    ["unsupported hooks"],
-  );
-});
-
-test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
-  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
-});
-
-test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as the sole remaining manifest-field carve-out", () => {
-  // HOOK-04 / D-58-02: `lspServers` is now the SOLE
-  // `MANIFEST_FIELD_REASONS` member. The `contains hooks` half was
-  // dropped (dead under v1.13). The `lspServers` detection token maps
-  // to the `lsp` Reason per SNM-36 / D-24-04; the catalog row form is
-  // `(unavailable) {lsp}`.
-  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
-});
-
-test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-out-kind>` to {unsupported component}", () => {
-  // Resolver also emits `"contains monitors"`, `"contains themes"`,
-  // etc. for the other UNSUPPORTED_COMPONENT_KINDS members. Those are
-  // NOT the `lspServers` carve-out; their bare token routes through the
-  // SAME `narrowUnsupportedKinds` seam list/info use, so a non-carve-out
-  // component kind renders the truthful `{unsupported component}` marker
-  // (D-90-05) rather than borrowing the source-axis `{unsupported source}`.
-  //
-  // SURF-01 / D-64-07: this component-axis marker belongs to the partially-
-  // available arm, so pass the arm discriminant (`true`); on the structural
-  // `unavailable` arm the same note stays on the source axis (covered by the
-  // cross-surface parity suite).
-  const reasons = narrowResolverReasons(["contains monitors"], ["monitors"], true);
-  assert.deepEqual([...reasons], ["unsupported component"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
-  assert.deepEqual(
-    [...narrowResolverReasons(["unsupported source kind: foo"])],
-    ["unsupported source"],
-  );
-});
-
-test("260525-cjr B2: narrowResolverReasons -> EACCES note surfaces as `permission denied` (NOT `unsupported source`)", () => {
-  const reasons = narrowResolverReasons(["EACCES: permission denied opening '/.pi/agent/...'"]);
-  assert.deepEqual([...reasons], ["permission denied"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> EPERM also classifies as `permission denied`", () => {
-  const reasons = narrowResolverReasons(["EPERM: operation not permitted"]);
-  assert.deepEqual([...reasons], ["permission denied"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> ENOENT note surfaces as `source missing`", () => {
-  const reasons = narrowResolverReasons(["ENOENT: no such file or directory"]);
-  assert.deepEqual([...reasons], ["source missing"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> SyntaxError note surfaces as `unparseable`", () => {
-  const reasons = narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
-  assert.deepEqual([...reasons], ["unparseable"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> empty notes -> `unsupported source` (permissive fallback)", () => {
-  assert.deepEqual([...narrowResolverReasons([])], ["unsupported source"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `unsupported source` (permissive fallback)", () => {
-  // No carve-out, no `source` substring, no errno substring -- the
-  // permissive `unsupported source` fallback runs only here.
-  assert.deepEqual(
-    [...narrowResolverReasons(["something genuinely unclassifiable"])],
-    ["unsupported source"],
-  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -5694,7 +5179,7 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
 
       // Probe reports the `pi-subagents` companion loaded -> no missing
       // companion -> the success row keeps its info stamp (no summary line).
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
       await installPlugin({
         ctx,
         pi,

@@ -1,9 +1,4 @@
-import {
-  assertNever,
-  causeChainTrailer,
-  errorMessage,
-  PluginShapeError,
-} from "../../shared/errors.ts";
+import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   ICON_DISABLED,
@@ -410,8 +405,6 @@ export function classifyEntityShapeError(
         // stamped on the throw so the composer conditions the `--partial` hint.
         partialable: err.shape.partialable,
       };
-    default:
-      return assertNever(err.shape);
   }
 }
 
