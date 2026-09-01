@@ -334,6 +334,14 @@ function errorNotifications(notifications: readonly NotifyRecord[]): readonly No
 
 const retryRequire = createRequire(import.meta.url);
 const retryFs = retryRequire("node:fs/promises") as typeof import("node:fs/promises");
+/**
+ * Snapshot taken before any case installs a mock, so a case's own repair step
+ * between the two calls never lands in the observed schedule. A repair that
+ * removes a fault fixture under a bridge's target dir is indistinguishable
+ * from a production rollback at the `rm` boundary, so it has to bypass the
+ * observer rather than be filtered by it.
+ */
+const retryRepairRm = retryFs.rm.bind(retryFs);
 
 async function retryPathExists(target: string): Promise<boolean> {
   try {
@@ -455,6 +463,11 @@ function retryTargetBridge(dirs: RetryScheduleDirs, target: string): RetryBridge
  *   finalize:<bridge> removal of a backup root that never rolled back
  *   commit:hooks      mkdir of `<hooksDir>/<plugin>` by the atomic hooks write
  *   remove:hooks      removal of `<hooksDir>/<plugin>`
+ *
+ * Every event is recorded unconditionally, so a repeated or extra operation
+ * moves the schedule. Unwinding one bridge that reached `replace:` therefore
+ * emits `rollback:<bridge>` twice -- once for the removal of the replacement,
+ * once for the restore of the backup.
  */
 function observeReinstallSchedule(
   t: TestContext,
@@ -466,9 +479,7 @@ function observeReinstallSchedule(
   const originalRename = retryFs.rename.bind(retryFs);
   const originalRm = retryFs.rm.bind(retryFs);
   const record = (event: string): void => {
-    if (!schedule.current.includes(event)) {
-      schedule.current.push(event);
-    }
+    schedule.current.push(event);
   };
 
   const mkdirMock = t.mock.method(
@@ -6169,7 +6180,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstSkill = await readSkill(cwd);
       const firstForeign = await readFile(path.join(foreignSkillDir, "foreign.md"), "utf8");
-      await rm(foreignSkillDir, { force: true, recursive: true });
+      await retryRepairRm(foreignSkillDir, { force: true, recursive: true });
       activeSchedule.current = secondSchedule;
       const second = await reinstallPlugin({
         __deps: deps,
@@ -6328,7 +6339,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       const firstSkill = await readSkill(cwd);
       const firstCommand = await readCommand(cwd);
       const firstForeign = await readFile(foreignCommandPath, "utf8");
-      await rm(foreignCommandPath, { force: true });
+      await retryRepairRm(foreignCommandPath, { force: true });
       activeSchedule.current = secondSchedule;
       const second = await reinstallPlugin({
         __deps: deps,
@@ -6363,6 +6374,8 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "replace:skills",
         "replace:commands",
         "rollback:commands",
+        "rollback:commands",
+        "rollback:skills",
         "rollback:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
@@ -6514,6 +6527,7 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         "remove:hooks",
         "save:state",
         "rollback:skills",
+        "rollback:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
@@ -6656,7 +6670,10 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "remove:hooks",
         "save:state",
         "rollback:agents",
+        "rollback:agents",
         "rollback:commands",
+        "rollback:commands",
+        "rollback:skills",
         "rollback:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
@@ -6829,6 +6846,8 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         "replace:commands",
         "remove:hooks",
         "rollback:commands",
+        "rollback:commands",
+        "rollback:skills",
         "rollback:skills",
       ]);
       assert.deepStrictEqual(secondSchedule, [
