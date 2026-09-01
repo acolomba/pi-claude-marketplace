@@ -3649,12 +3649,12 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
 // ───────────────────────────────────────────────────────────────────────────
 
 test("retry proof: install: completion-cache maintenance failure stays installed and retry is idempotent", async (t) => {
-  // Gap: dropMarketplaceCache try/catch in orchestrated mode -- EISDIR from
-  // the unlink call is re-thrown by dropMarketplaceCache (not ENOENT), so the
-  // catch appends the 'completion cache refresh deferred' string to
-  // postCommitWarnings instead of firing notifyWarning.
+  // The injected `unlink` refusal is not ENOENT, so dropMarketplaceCache
+  // re-throws and the orchestrator appends the deferral to postCommitWarnings
+  // instead of firing notifyWarning. Cache eviction is optimization-only, so
+  // the install stays committed and the retry is the already-installed arm.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-cache-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-cache-"));
     const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
     let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
     try {
@@ -3767,7 +3767,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
   // 'data dir creation deferred' to postCommitWarnings instead of calling
   // notifyWarning directly.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-data-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-data-"));
     const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
     let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
     try {
