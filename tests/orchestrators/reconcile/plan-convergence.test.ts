@@ -1,83 +1,149 @@
+// tests/orchestrators/reconcile/plan-convergence.test.ts
+//
+// Cross-module fixed-point integration: state-to-config migration, scope merge,
+// and reconcile planning compose to a complete no-op for populated state.
+
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { test } from "node:test";
 
 import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
-import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { buildConfigFromState } from "../../../extensions/pi-claude-marketplace/persistence/migrate-config.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-/**
- * Deferred SC#4 -- the PLANNER-LEVEL convergence proof.
- *
- *   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope)
- *     deepEqual emptyReconcilePlan(scope)
- *
- * for any populated state. The data-level surrogate (key-set + provenance
- * equality) lives in `tests/persistence/migrate-config.test.ts` Section D;
- * this file owns the planner-level no-op proof.
- */
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_PATH = path.resolve(
-  HERE,
-  "../../persistence/fixtures/legacy/state-populated-mixed.json",
-);
-
-/**
- * Mirror of `loadPopulatedState` from `tests/persistence/migrate-config.test.ts`
- * -- load the populated fixture and normalise its `source` strings to
- * `ParsedSource` objects, matching the post-`loadState` in-memory shape.
- * Re-implemented inline here (rather than re-exported across test trees) so
- * this convergence file stays self-contained and the Section D
- * surrogate's helper is not load-bearing for the planner-level proof.
- */
-async function loadPopulatedState(): Promise<ExtensionState> {
-  const raw = JSON.parse(await readFile(FIXTURE_PATH, "utf8")) as {
-    marketplaces: Record<string, Record<string, unknown>>;
+function populatedMixedState(): ExtensionState {
+  return {
+    schemaVersion: 2,
+    marketplaces: {
+      "mp-path": {
+        name: "mp-path",
+        scope: "user",
+        source: pathSource("./mp-path-local"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/mp-path/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/mp-path",
+        plugins: {
+          "code-reviewer": {
+            version: "1.0.0",
+            resolvedSource: "/marketplaces/mp-path/code-reviewer",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["review-skill"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          "soft-degraded": {
+            version: "0.1.0",
+            resolvedSource: "/marketplaces/mp-path/soft-degraded",
+            compatibility: {
+              installable: false,
+              notes: ["missing companion"],
+              supported: [],
+              unsupported: ["agents"],
+            },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+      "mp-github": {
+        name: "mp-github",
+        scope: "project",
+        source: githubSource("acme/tools"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/mp-github/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/mp-github",
+        plugins: {
+          formatter: {
+            version: "2.0.0",
+            resolvedSource: "/marketplaces/mp-github/formatter",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["prompts"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: ["format"],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-02T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+      },
+    },
   };
-
-  for (const mp of Object.values(raw.marketplaces)) {
-    const src = mp["source"];
-    if (typeof src === "string") {
-      if (
-        src.startsWith("./") ||
-        src.startsWith("../") ||
-        src.startsWith("/") ||
-        src === "~" ||
-        src.startsWith("~/")
-      ) {
-        mp["source"] = pathSource(src);
-      } else {
-        mp["source"] = githubSource(src);
-      }
-    }
-  }
-
-  return { schemaVersion: 1, ...raw } as unknown as ExtensionState;
 }
 
-function assertConvergesForScope(state: ExtensionState, scope: Scope): void {
-  const merged = mergeScopeConfigs(buildConfigFromState(state), {});
-  const plan = planReconcile(merged, state, scope);
-  assert.deepEqual(plan, emptyReconcilePlan(scope));
-}
+test("config migration, merge, and planning converge populated state for project scope", () => {
+  // arrange
+  const state = populatedMixedState();
+  const config = buildConfigFromState(state);
+  const merged = mergeScopeConfigs(config, {});
 
-test("SC#4 (project): build-from-state + merge + plan = empty (deepEqual)", async () => {
-  const state = await loadPopulatedState();
-  assertConvergesForScope(state, "project");
+  // act
+  const result = planReconcile(merged, state, "project");
+
+  // assert
+  assert.deepStrictEqual(result, {
+    scope: "project",
+    marketplacesToAdd: [],
+    marketplacesToRemove: [],
+    pluginsToInstall: [],
+    pluginsToUninstall: [],
+    pluginsToEnable: [],
+    pluginsToDisable: [],
+    sourceMismatches: [],
+  });
 });
 
-test("SC#4 (user): build-from-state + merge + plan = empty (deepEqual)", async () => {
-  const state = await loadPopulatedState();
-  assertConvergesForScope(state, "user");
+test("config migration, merge, and planning converge populated state for user scope", () => {
+  // arrange
+  const state = populatedMixedState();
+  const config = buildConfigFromState(state);
+  const merged = mergeScopeConfigs(config, {});
+
+  // act
+  const result = planReconcile(merged, state, "user");
+
+  // assert
+  assert.deepStrictEqual(result, {
+    scope: "user",
+    marketplacesToAdd: [],
+    marketplacesToRemove: [],
+    pluginsToInstall: [],
+    pluginsToUninstall: [],
+    pluginsToEnable: [],
+    pluginsToDisable: [],
+    sourceMismatches: [],
+  });
 });
