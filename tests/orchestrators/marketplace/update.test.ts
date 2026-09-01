@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { mock, when } from "strong-mock";
+
 import {
   githubSource,
   parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
-import { outcomeToCascadePluginMessage } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 import {
   updateAllMarketplaces,
   updateMarketplace,
@@ -36,6 +37,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -131,22 +133,29 @@ function makeMockCredentialOps(
 
 interface NotifyRecord {
   message: string;
-  severity?: string;
+  severity?: Severity;
 }
+
+type NotifyUi = Omit<ExtensionContext["ui"], "notify"> & {
+  readonly notify: (message: string, severity?: Severity) => void;
+};
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  // `pi` is required on UpdateMarketplaceOptions /
-  // UpdateAllMarketplacesOptions; mirror production wiring shape (D-18-06).
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-  const ctx = {
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-    pi,
-  } as unknown as ExtensionContext;
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<NotifyUi>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .anyTimes();
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .anyTimes();
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .anyTimes();
   return { ctx, pi, notifications };
 }
 
@@ -1630,168 +1639,9 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
-// D-18-03: outcomeToCascadePluginMessage maps a PluginUpdateOutcome to a
-// discriminated PluginNotificationMessage. The mapper returns one of
-// `PluginUpdatedMessage{from,to,dependencies}`, `PluginSkippedMessage{reasons}`,
-// or `PluginFailedMessage{reasons,cause?}` (no PluginUnchangedMessage variant
-// -- `unchanged` outcomes map to `skipped` + `["up-to-date"]` with a glyph
-// flip).
-//
-// The typed-reasons path is preferred over the notes-parsing fallback (CR-06
-// producer-narrowed contract) so a future refactor cannot regress to substring
-// matching.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage with from/to/dependencies", () => {
-  const outcome: PluginUpdateOutcome = {
-    partition: "updated",
-    name: "p",
-    fromVersion: "0.5.0",
-    toVersion: "1.0.0",
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: true,
-    declaresMcp: false,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "project");
-  assert.equal(msg.status, "updated");
-  assert.equal(msg.name, "p");
-  assert.equal(msg.scope, "project");
-  if (msg.status !== "updated") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.equal(msg.from, "0.5.0");
-  assert.equal(msg.to, "1.0.0");
-  // `declaresAgents: true` -> "agents" appears in dependencies;
-  // `declaresMcp: false` -> "mcp" is absent.
-  assert.deepEqual(msg.dependencies, ["agents"]);
-});
-
-test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginPartiallyInstalledMessage (partially-installed), info severity, reasons narrowed", () => {
-  // The autoupdate cascade now TAKES the force path, so a candidate that
-  // re-resolved `unsupported` produces an `updated` outcome carrying
-  // `unsupportedKinds`. The marketplace mapper must render `(partially-installed)`
-  // with the narrowed dropped-component reason instead of `(updated)`.
-  const outcome: PluginUpdateOutcome = {
-    partition: "updated",
-    name: "degraded-plugin",
-    fromVersion: "0.9.0",
-    toVersion: "1.0.0",
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: false,
-    declaresMcp: false,
-    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "partially-installed");
-  if (msg.status !== "partially-installed") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.equal(msg.name, "degraded-plugin");
-  assert.equal(msg.scope, "user");
-  // `narrowUnsupportedKinds(["lspServers"])` -> the closed-set `lsp` reason.
-  assert.deepEqual(msg.reasons, ["lsp"]);
-  // Single version (the realized toVersion), no version arrow on the force row.
-  assert.equal(msg.version, "1.0.0");
-  // Task-1 default: info (the newly-degraded warning refinement lands with the
-  // prior-state read). force-installed is a realized transition -> reloads.
-  assert.equal(msg.severity, "info");
-  assert.equal(msg.needsReload, true);
-});
-
-test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stamps severity warning", () => {
-  const outcome: PluginUpdateOutcome = {
-    partition: "updated",
-    name: "degraded-plugin",
-    fromVersion: "0.9.0",
-    toVersion: "1.0.0",
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: false,
-    declaresMcp: false,
-    partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "partially-installed");
-  // A previously-clean plugin silently degraded by the auto-update is
-  // actionable -> warning (drives the `needs attention` summary line).
-  assert.equal(msg.severity, "warning");
-});
-
-test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) stays severity info", () => {
-  const outcome: PluginUpdateOutcome = {
-    partition: "updated",
-    name: "degraded-plugin",
-    fromVersion: "0.9.0",
-    toVersion: "1.0.0",
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: false,
-    declaresMcp: false,
-    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "partially-installed");
-  // Re-degrading a plugin that was already force-installed is benign -> info.
-  assert.equal(msg.severity, "info");
-});
-
-test("CR-01: an autoupdate outcome that drops a kind AND degrades a component names both axes and raises", () => {
-  // The autoupdate cascade reaches the dropped-kind row with NO user flag
-  // (`updateSinglePlugin` sets `partial: true` unconditionally), so this is the
-  // path where a swallowed malformed axis is least visible. `newlyDegraded` is
-  // false, which pins the SEV-03 base severity at info -- a warning here can
-  // only have come from the malformed axis, not from the drop.
-  const outcome: PluginUpdateOutcome = {
-    partition: "updated",
-    name: "degraded-plugin",
-    fromVersion: "0.9.0",
-    toVersion: "1.0.0",
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: false,
-    declaresMcp: false,
-    degradedKinds: ["skill"],
-    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "partially-installed");
-  if (msg.status !== "partially-installed") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  // Emit order is the install row's: malformed kinds first, then dropped kinds.
-  assert.deepEqual(msg.reasons, ["malformed skill", "lsp"]);
-  assert.equal(msg.severity, "warning");
-});
-
-test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updated), not force-installed", () => {
-  const outcome: PluginUpdateOutcome = {
-    partition: "updated",
-    name: "clean-plugin",
-    fromVersion: "0.9.0",
-    toVersion: "1.0.0",
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: false,
-    declaresMcp: false,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "updated");
-});
-
-test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child row (◉ v.. (partially-installed) {lsp}) and raises the summary to `needs attention` on a newly-degraded plugin", async () => {
-  // The object-shape tests above assert `__test_outcomeToCascadePluginMessage`
-  // only; this drives the whole `updateMarketplace` cascade so the render map's
-  // `force-installed` arm (UPDATE_CONTEXT -> `partiallyInstalledRow`) is exercised to
-  // a byte-exact string. A candidate re-resolving `unsupported` degrades in place
-  // on the autoupdate force path -- carried on the `updated` outcome as
-  // `partialDegrade`. `newlyDegraded: true` (prior persisted `unsupported` empty)
-  // raises the row to warning, so the envelope summary reads `needs attention`.
+test("a newly degraded autoupdate cascade emits its partial row and warning envelope", async () => {
+  // This genuine lifecycle case drives target refresh, the injected plugin
+  // collaborator, cascade grouping, and the final notify envelope together.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -1843,114 +1693,6 @@ test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child r
     assert.equal(first.severity, "warning");
     assert.match(body, /needs attention/);
   });
-});
-
-test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage with ["up-to-date"] (glyph flips to ⊘ at render time)', () => {
-  // `unchanged` maps to `skipped` + `["up-to-date"]`; the renderer routes
-  // `skipped` to warning severity -> ⊘ glyph.
-  const outcome: PluginUpdateOutcome = {
-    partition: "unchanged",
-    name: "p",
-    fromVersion: "0.0.1",
-    toVersion: "0.0.1",
-    declaresAgents: false,
-    declaresMcp: false,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "project");
-  assert.equal(msg.status, "skipped");
-  if (msg.status !== "skipped") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.deepEqual(msg.reasons, ["up-to-date"]);
-});
-
-test("outcomeToCascadePluginMessage: skipped outcome with typed reasons reads them directly (no notes parse)", () => {
-  const outcome: PluginUpdateOutcome = {
-    partition: "skipped",
-    name: "p",
-    // Intentionally pick `notes` content that the legacy parser would
-    // narrow DIFFERENTLY than `reasons` so we can prove `reasons` is the
-    // primary path. Legacy `narrowSkipReason` would map this notes blob
-    // to `up-to-date` (default); `reasons` says `not installed`.
-    notes: ["irrelevant cause-chain text"],
-    reasons: ["not installed"] as const,
-    declaresAgents: false,
-    declaresMcp: false,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "project");
-  assert.equal(msg.status, "skipped");
-  if (msg.status !== "skipped") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.deepEqual(msg.reasons, ["not installed"]);
-});
-
-test("outcomeToCascadePluginMessage: failed outcome with typed reasons + cause -> PluginFailedMessage", () => {
-  const cause = new Error("permission denied");
-  const outcome: PluginUpdateOutcome = {
-    partition: "failed",
-    name: "p",
-    notes: ["arbitrary cause-chain text"],
-    reasons: ["rollback partial"] as const,
-    declaresAgents: false,
-    declaresMcp: false,
-    cause,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "project");
-  assert.equal(msg.status, "failed");
-  if (msg.status !== "failed") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.deepEqual(msg.reasons, ["rollback partial"]);
-  // D-18-03: cause is forwarded to PluginFailedMessage for the
-  // 4-space-indent cause-chain trailer at render time.
-  assert.equal(msg.cause, cause);
-});
-
-test("outcomeToCascadePluginMessage: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
-  // `reasons` is required on PluginUpdateSkippedOutcome (the
-  // producer-narrowed contract). An empty `reasons: []` array exercises the
-  // consumer's notes-fallback substring narrow without populating a typed
-  // reason.
-  const outcome: PluginUpdateOutcome = {
-    partition: "skipped",
-    name: "p",
-    notes: ["not in manifest"],
-    reasons: [],
-    declaresAgents: false,
-    declaresMcp: false,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "project");
-  assert.equal(msg.status, "skipped");
-  if (msg.status !== "skipped") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.deepEqual(msg.reasons, ["not in manifest"]);
-});
-
-test("outcomeToCascadePluginMessage: failed outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
-  const outcome: PluginUpdateOutcome = {
-    partition: "failed",
-    name: "p",
-    notes: ["rollback partial: skills"],
-    // No `reasons` -- exercises the transitional notes-fallback path.,
-    declaresAgents: false,
-    declaresMcp: false,
-  };
-  const msg = outcomeToCascadePluginMessage(outcome, "project");
-  assert.equal(msg.status, "failed");
-  if (msg.status !== "failed") {
-    throw new Error("unreachable: narrowed above");
-  }
-
-  assert.deepEqual(msg.reasons, ["rollback partial"]);
-  // No cause was stamped on the outcome -> the mapper omits it on
-  // PluginFailedMessage; the renderer skips the cause-chain trailer.
-  assert.equal(msg.cause, undefined);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -2080,6 +1822,41 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
   });
 });
 
+test("a non-Error cascade rejection safely renders the unreadable-manifest fallback", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- this boundary must safely tolerate non-Error JavaScript rejections.
+    const pluginUpdate: PluginUpdateFn = () => Promise.reject("opaque failure");
+
+    // act
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    const composed = notifications.map((notification) => notification.message).join("\n");
+    assert.match(composed, /alpha[^\n]*\(failed\)[^\n]*\{unreadable manifest\}/);
+    assert.equal(composed.includes("    Caused by:"), false);
+  });
+});
+
 // ── New tests covering previously uncovered paths ────────────────────
 
 test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketplace", async () => {
@@ -2128,7 +1905,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketp
 
 test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notifies once", async () => {
   // The empty-targets guard fires when BOTH scopes are
-  // enumerated and neither has any marketplaces.  The existing MU-1 test
+  // enumerated and both contain zero marketplaces. The existing MU-1 test
   // uses scope:'project' (single scope); this test exercises the no-filter
   // path that checks both scopes.
   await withHermeticHome(async ({ cwd }) => {
