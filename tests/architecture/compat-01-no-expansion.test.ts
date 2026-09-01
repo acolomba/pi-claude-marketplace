@@ -124,161 +124,194 @@ type InstalledOutcome = Extract<InstallPluginOutcome, { status: "installed" }>;
 type InstallSignalKey = keyof InstalledOutcome & keyof LedgerDegradationSignals;
 
 test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
+  // arrange
+  const expected = [
+    "up-to-date",
+    "not found",
+    "already installed",
+    "not installed",
+    "not in manifest",
+    "invalid manifest",
+    "no longer installable",
+    "unsupported source",
+    "unsupported component",
+    "unsupported hooks",
+    "lsp",
+    "requires pi-subagents",
+    "requires pi-mcp",
+    "rollback partial",
+    "unreadable",
+    "unparseable",
+    "unreadable manifest",
+    "source mismatch",
+    "plugins remain",
+    "concurrently uninstalled",
+    "concurrently updated",
+    "stale clone",
+    "duplicate name",
+    "lock held",
+    "already autoupdate",
+    "already no autoupdate",
+    "already enabled",
+    "already disabled",
+    "permission denied",
+    "source missing",
+    "network unreachable",
+    "not added",
+    "orphan rewake",
+    "authentication required",
+    "dangling reference",
+    "malformed mcp",
+    "malformed skill",
+    "malformed command",
+    "installs disabled",
+  ];
+
+  // act
+  const actual = [...REASONS];
+
+  // assert
   assert.deepEqual(
-    [...REASONS],
-    [
-      "up-to-date",
-      "not found",
-      "already installed",
-      "not installed",
-      "not in manifest",
-      "invalid manifest",
-      "no longer installable",
-      "unsupported source",
-      "unsupported component",
-      "unsupported hooks",
-      "lsp",
-      "requires pi-subagents",
-      "requires pi-mcp",
-      "rollback partial",
-      "unreadable",
-      "unparseable",
-      "unreadable manifest",
-      "source mismatch",
-      "plugins remain",
-      "concurrently uninstalled",
-      "concurrently updated",
-      "stale clone",
-      "duplicate name",
-      "lock held",
-      "already autoupdate",
-      "already no autoupdate",
-      "already enabled",
-      "already disabled",
-      "permission denied",
-      "source missing",
-      "network unreachable",
-      "not added",
-      "orphan rewake",
-      "authentication required",
-      "dangling reference",
-      "malformed mcp",
-      "malformed skill",
-      "malformed command",
-      "installs disabled",
-    ],
+    actual,
+    expected,
     "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
   );
 });
 
 test("COMPAT-01: STATUS_TOKENS holds exactly its inherited members, in order", () => {
+  // arrange
+  const expected = [
+    "installed",
+    "updated",
+    "reinstalled",
+    "uninstalled",
+    "added",
+    "removed",
+    "available",
+    "unavailable",
+    "upgradable",
+    "skipped",
+    "failed",
+    "rollback failed",
+    "manual recovery",
+    "no marketplaces",
+    "no plugins",
+    "will install",
+    "will uninstall",
+    "will enable",
+    "will disable",
+    "disabled",
+    "partially-installed",
+    "partially-upgradable",
+    "partially-available",
+    "remote",
+  ];
+
+  // act
+  const actual = [...STATUS_TOKENS];
+
+  // assert
   assert.deepEqual(
-    [...STATUS_TOKENS],
-    [
-      "installed",
-      "updated",
-      "reinstalled",
-      "uninstalled",
-      "added",
-      "removed",
-      "available",
-      "unavailable",
-      "upgradable",
-      "skipped",
-      "failed",
-      "rollback failed",
-      "manual recovery",
-      "no marketplaces",
-      "no plugins",
-      "will install",
-      "will uninstall",
-      "will enable",
-      "will disable",
-      "disabled",
-      "partially-installed",
-      "partially-upgradable",
-      "partially-available",
-      "remote",
-    ],
+    actual,
+    expected,
     "COMPAT-01: no status token may be added, removed, or renamed. The four head-of-tuple state-change tokens drive the reload hint, so their positions are contractual.",
   );
 });
 
 test("COMPAT-01: PLUGIN_STATUSES holds exactly its inherited members, in order", () => {
+  // arrange
+  const expected = [
+    "installed",
+    "updated",
+    "reinstalled",
+    "uninstalled",
+    "available",
+    "unavailable",
+    "upgradable",
+    "failed",
+    "skipped",
+    "manual recovery",
+    "will install",
+    "will uninstall",
+    "will enable",
+    "will disable",
+    "disabled",
+    "partially-installed",
+    "partially-upgradable",
+    "partially-available",
+    "remote",
+  ];
+
+  // act
+  const actual = [...PLUGIN_STATUSES];
+
+  // assert
   assert.deepEqual(
-    [...PLUGIN_STATUSES],
-    [
-      "installed",
-      "updated",
-      "reinstalled",
-      "uninstalled",
-      "available",
-      "unavailable",
-      "upgradable",
-      "failed",
-      "skipped",
-      "manual recovery",
-      "will install",
-      "will uninstall",
-      "will enable",
-      "will disable",
-      "disabled",
-      "partially-installed",
-      "partially-upgradable",
-      "partially-available",
-      "remote",
-    ],
+    actual,
+    expected,
     "COMPAT-01: no plugin status may be added, removed, or renamed. Row composers derive their status field from this tuple via Extract<PluginStatus, ...>.",
   );
 });
 
 test("COMPAT-01: MARKETPLACE_STATUSES holds exactly its inherited members, in order", () => {
+  // arrange
+  const expected = [
+    "added",
+    "removed",
+    "updated",
+    "failed",
+    "autoupdate enabled",
+    "autoupdate disabled",
+    "skipped",
+  ];
+
+  // act
+  const actual = [...MARKETPLACE_STATUSES];
+
+  // assert
   assert.deepEqual(
-    [...MARKETPLACE_STATUSES],
-    [
-      "added",
-      "removed",
-      "updated",
-      "failed",
-      "autoupdate enabled",
-      "autoupdate disabled",
-      "skipped",
-    ],
+    actual,
+    expected,
     "COMPAT-01: no marketplace status may be added, removed, or renamed.",
   );
 });
 
 test("COMPAT-01: every glyph constant holds its inherited code point", () => {
+  // arrange
   // Escapes rather than the characters themselves: the pin IS the code point,
   // and several of these render near-identically at a glance.
-  assert.equal(ICON_INSTALLED, "\u25CF", "COMPAT-01: ICON_INSTALLED is BLACK CIRCLE");
-  assert.equal(ICON_AVAILABLE, "\u25CB", "COMPAT-01: ICON_AVAILABLE is WHITE CIRCLE");
-  assert.equal(
-    ICON_UNINSTALLABLE,
-    "\u2298",
-    "COMPAT-01: ICON_UNINSTALLABLE is CIRCLED DIVISION SLASH",
-  );
-  assert.equal(ICON_DISABLED, "\u25CD", "COMPAT-01: ICON_DISABLED is CIRCLE WITH VERTICAL FILL");
-  assert.equal(ICON_REMOTE, "\u25CC", "COMPAT-01: ICON_REMOTE is DOTTED CIRCLE");
-  assert.equal(
-    ICON_PARTIALLY_INSTALLED,
-    "\u25C9",
-    "COMPAT-01: ICON_PARTIALLY_INSTALLED is FISHEYE",
-  );
-  assert.equal(
+  const expected = {
+    ICON_AVAILABLE: "\u25CB",
+    ICON_DISABLED: "\u25CD",
+    ICON_INSTALLED: "\u25CF",
+    ICON_PARTIALLY_AVAILABLE: "\u2296",
+    ICON_PARTIALLY_INSTALLED: "\u25C9",
+    ICON_REMOTE: "\u25CC",
+    ICON_UNINSTALLABLE: "\u2298",
+  };
+
+  // act
+  const actual = {
+    ICON_AVAILABLE,
+    ICON_DISABLED,
+    ICON_INSTALLED,
     ICON_PARTIALLY_AVAILABLE,
-    "\u2296",
-    "COMPAT-01: ICON_PARTIALLY_AVAILABLE is CIRCLED MINUS",
-  );
+    ICON_PARTIALLY_INSTALLED,
+    ICON_REMOTE,
+    ICON_UNINSTALLABLE,
+  };
+
+  // assert
+  assert.deepEqual(actual, expected, "COMPAT-01: every exported glyph keeps its named code point");
 });
 
 test("COMPAT-01: the catalog names each glyph the way the code-point pins above name it", async () => {
+  // arrange
   // WR-08: the catalog called `◉` "bullseye" (BULLSEYE is U+25CE, a character
   // the codebase does not use) and gave `◉`'s real name, fisheye, to `◍` two
   // rows below -- while the pins above named both correctly. A reader
   // reconciling the two documents had no way to tell which was wrong. The
   // catalog keeps its descriptive register; what is pinned is the pairing.
-  const catalog = await readFile(path.join(REPO_ROOT, "docs/output-catalog.md"), "utf8");
   const expected: ReadonlyArray<readonly [string, string]> = [
     [ICON_INSTALLED, "filled circle"],
     [ICON_AVAILABLE, "empty circle"],
@@ -288,10 +321,14 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
     [ICON_REMOTE, "dotted circle"],
     [ICON_DISABLED, "circle with vertical fill"],
   ];
+
+  // act
+  const catalog = await readFile(path.join(REPO_ROOT, "docs/output-catalog.md"), "utf8");
   const mismatches = expected
     .filter(([glyph, name]) => !catalog.includes(`- \`${glyph}\` -- ${name}`))
     .map(([glyph, name]) => `${glyph} is not named "${name}" in the catalog's Glyphs section`);
 
+  // assert
   assert.deepEqual(
     mismatches,
     [],
@@ -300,6 +337,7 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
 });
 
 test("COMPAT-01: the notify module declares no eighth glyph export", async () => {
+  // arrange
   // The one clause here that scans source: an eighth glyph export cannot be
   // caught by comparing runtime constants, because the glyphs are seven
   // separate exports with no collection to compare against.
@@ -310,16 +348,21 @@ test("COMPAT-01: the notify module declares no eighth glyph export", async () =>
   // written `export const ICON_EIGHTH: string = "..."` -- or pushed off the line
   // start by comment stripping -- slipped past the one clause this file calls
   // load-bearing.
+  const expectedCount = 7;
+
+  // act
   const declarations = (await readStrippedSource(NOTIFY_REL)).match(GLYPH_DECLARATIONS);
 
+  // assert
   assert.equal(
     declarations?.length,
-    7,
+    expectedCount,
     "COMPAT-01: the glyph vocabulary is closed at seven. A new glyph is a rendered-vocabulary expansion and needs its catalog row and renderer arm in the same change.",
   );
 });
 
 test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph export can take", () => {
+  // arrange
   // WR-07: the clause above asserts an ABSENCE, so a pattern that matched
   // nothing would pass it just as quietly as a correct one. Pin what the pattern
   // is required to see, including the two spellings that used to slip past.
@@ -328,37 +371,47 @@ test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph
     'export const ICON_EIGHTH: string = "◎";',
     '/** doc */ export const ICON_EIGHTH = "◎";',
   ];
-  for (const spelling of spellings) {
-    assert.match(spelling, GLYPH_DECLARATION, `the pattern must match: ${spelling}`);
-  }
-
   // And what it must NOT see: a reference is not a declaration.
-  assert.equal(
-    GLYPH_DECLARATION.test("return `${ICON_EIGHTH} ${name}`;"),
-    false,
-    "a glyph USE must not count as a declaration",
-  );
+  const reference = "return `${ICON_EIGHTH} ${name}`;";
+
+  // act
+  const declarationMatches = spellings.map((spelling) => GLYPH_DECLARATION.test(spelling));
+  const referenceMatches = GLYPH_DECLARATION.test(reference);
+
+  // assert
+  assert.deepEqual(declarationMatches, [true, true, true]);
+  assert.equal(referenceMatches, false, "a glyph USE must not count as a declaration");
 });
 
 test("COMPAT-01: the persisted install record holds exactly its inherited key set", () => {
+  // arrange
+  const expected = [
+    "compatibility",
+    "enabled",
+    "hookEntries",
+    "installedAt",
+    "resolvedSha",
+    "resolvedSource",
+    "resources",
+    "updatedAt",
+    "version",
+  ];
+
+  // act
+  const actual = Object.keys(PLUGIN_INSTALL_RECORD_SCHEMA.properties).sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  // assert
   assert.deepEqual(
-    Object.keys(PLUGIN_INSTALL_RECORD_SCHEMA.properties).sort((a, b) => a.localeCompare(b)),
-    [
-      "compatibility",
-      "enabled",
-      "hookEntries",
-      "installedAt",
-      "resolvedSha",
-      "resolvedSource",
-      "resources",
-      "updatedAt",
-      "version",
-    ],
+    actual,
+    expected,
     "COMPAT-01: this is the pinned key set of the persisted install record. A key may join it only as an OPTIONAL additive field that needs no schemaVersion bump and no migrate fill (the resolvedSha / hookEntries precedent); removing one is a migration. Either way the change lands here deliberately, alongside the sibling clause that forbids manifest-snapshot and orphan fields outright.",
   );
 });
 
 test("COMPAT-01: the install outcome inherits exactly the signals installPlugin populates", () => {
+  // arrange
   // WR-11: the `installed` arm inherits the shared ledger-signal shape MINUS the
   // two staged-count verdicts. `Omit` is an EXCLUSION, so a sixth signal added
   // to that shape widens this arm AUTOMATICALLY with a field `installPlugin`
@@ -375,19 +428,25 @@ test("COMPAT-01: the install outcome inherits exactly the signals installPlugin 
     orphanRewake: true,
     degradedKinds: true,
   };
+  const expectedCount = 3;
 
+  // act
   // The gate is the object literal's TYPE; this runtime clause reports it. The
   // member names are deliberately not restated as string literals: the D-75-01
   // vocabulary guard forbids the quoted dropped-component key anywhere under
   // tests/architecture, and a derived expected list would be a tautology.
+  const actualCount = Object.keys(populated).length;
+
+  // assert
   assert.equal(
-    Object.keys(populated).length,
-    3,
+    actualCount,
+    expectedCount,
     "COMPAT-01 / WR-11: the install outcome carries exactly the three ledger signals installPlugin writes.",
   );
 });
 
 test("COMPAT-01: no manifest-snapshot or orphan field reached the install record", () => {
+  // arrange
   // Named explicitly rather than left to the key-set clause: these are the two
   // shapes the manifest-independent work could plausibly have persisted, and a
   // reader looking for that promise should find it stated, not inferred.
@@ -400,10 +459,13 @@ test("COMPAT-01: no manifest-snapshot or orphan field reached the install record
     "orphanRewake",
     "orphaned",
   ];
+
+  // act
   const present = shapes.filter((key) =>
     Object.hasOwn(PLUGIN_INSTALL_RECORD_SCHEMA.properties, key),
   );
 
+  // assert
   assert.deepEqual(
     present,
     [],
@@ -412,34 +474,53 @@ test("COMPAT-01: no manifest-snapshot or orphan field reached the install record
 });
 
 test("COMPAT-01: the state schema version union is unchanged", () => {
+  // arrange
+  const expected = [1, 2];
+
+  // act
+  const actual = STATE_SCHEMA.properties.schemaVersion.anyOf.map((member) => member.const);
+
+  // assert
   assert.deepEqual(
-    STATE_SCHEMA.properties.schemaVersion.anyOf.map((member) => member.const),
-    [1, 2],
+    actual,
+    expected,
     "COMPAT-01: no state-schema migration was introduced. A third version means an on-disk migration, which this work promised not to require.",
   );
 });
 
 test("COMPAT-01: the default state still declares the current schema version", () => {
+  // arrange
+  const expected = 2;
+
+  // act
+  const actual = DEFAULT_STATE.schemaVersion;
+
+  // assert
   assert.equal(
-    DEFAULT_STATE.schemaVersion,
-    2,
+    actual,
+    expected,
     "COMPAT-01: a first-load state.json is written at the version this work inherited -- no bump.",
   );
 });
 
 test("COMPAT-01: the network clause is covered by the orchestrator-network gate", async () => {
+  // arrange
   // DELEGATION (D-98-09): the NFR-5 gate runs the actual assertion. This clause
   // only proves the two info surfaces are still in its target list, so removing
   // one there fails here rather than silently uncovering the clause. WR-06: that
   // the named files still EXIST is the shared scanner's job -- it fails on a
   // missing target rather than skipping it, so a rename cannot leave both gates
   // green over a file neither read.
-  const src = await readStrippedSource(NETWORK_GATE_REL);
-  const missing = [
+  const requiredTargets = [
     "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
     "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-  ].filter((rel) => !src.includes(`"${rel}"`));
+  ];
 
+  // act
+  const src = await readStrippedSource(NETWORK_GATE_REL);
+  const missing = requiredTargets.filter((rel) => !src.includes(`"${rel}"`));
+
+  // assert
   assert.deepEqual(
     missing,
     [],
