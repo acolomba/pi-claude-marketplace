@@ -1,29 +1,10 @@
-// tests/orchestrators/marketplace/info.test.ts
-//
-// Integration tests for the read-only `getMarketplaceInfo` orchestrator.
-// Hermetic HOME + tmp cwd + saveState fixtures; the orchestrator is the
-// SOLE site that projects local marketplace state into the info-message
-// variants.
-//
-// Coverage:
-//   (a) single-scope github + autoupdate + lastUpdatedAt + description
-//   (a2) single-scope url source with ref + lastUpdatedAt (D-76-09 / D-76-10)
-//   (a3) single-scope url source without ref (MURL-05)
-//   (b) single-scope github no `ref`
-//   (c) single-scope path source (no last_updated, no description)
-//   (d) single-scope marketplace.json without `description`
-//   (e) both-scopes fan-out (project-first per MSG-GR-3 / INFO-03)
-//   (f) `--scope` mismatch in project only, requested user
-//   (g) `--scope` mismatch in user only, requested project
-//   (h) absent from both scopes, no `--scope` -> bare row, no [scope]
-//   (i) NFR-5 grep-gate: no `platform/git` / `DEFAULT_GIT_OPS` /
-//       `refreshGitHubClone` imports in `info.ts`
-
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+
+import { mock, verify, when } from "strong-mock";
 
 import {
   githubSource,
@@ -36,12 +17,117 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// SPLIT-01: autoupdate read-path routes through MergedConfig
-// (claude-plugins.json). Seed the autoupdate truth on the config side; the
-// state-side autoupdate field is no longer the source of truth (D-13 scrubs
-// it on next loadState once the config exists).
+interface NotificationExpectation {
+  readonly message: string;
+  readonly severity?: "error" | "info" | "warning";
+}
+
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
+interface TreeEntry {
+  readonly contents?: string;
+  readonly kind: "directory" | "file";
+  readonly relativePath: string;
+}
+
+function marketplaceRecord(
+  values: Pick<
+    MarketplaceRecord,
+    "addedFromCwd" | "manifestPath" | "marketplaceRoot" | "name" | "scope" | "source"
+  > &
+    Partial<Pick<MarketplaceRecord, "lastUpdatedAt">>,
+): MarketplaceRecord {
+  return { ...values, plugins: {} };
+}
+
+function notificationBoundary(expectation?: NotificationExpectation): {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  verifyAll(): void;
+} {
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  if (expectation !== undefined) {
+    when(() => ctx.ui)
+      .thenReturn(ui)
+      .once();
+    when(() => pi.getAllTools())
+      .thenReturn([])
+      .twice();
+    if (expectation.severity === undefined) {
+      when(() => {
+        ui.notify(expectation.message);
+      }).thenReturn(undefined);
+    } else {
+      when(() => {
+        ui.notify(expectation.message, expectation.severity);
+      }).thenReturn(undefined);
+    }
+  }
+
+  return {
+    ctx,
+    pi,
+    verifyAll(): void {
+      verify(ctx);
+      verify(pi);
+      verify(ui);
+    },
+  };
+}
+
+function multiNotificationBoundary(expectations: readonly NotificationExpectation[]): {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  verifyAll(): void;
+} {
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(expectations.length);
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .times(expectations.length * 2);
+  for (const expectation of expectations) {
+    if (expectation.severity === undefined) {
+      when(() => {
+        ui.notify(expectation.message);
+      }).thenReturn(undefined);
+    } else {
+      when(() => {
+        ui.notify(expectation.message, expectation.severity);
+      }).thenReturn(undefined);
+    }
+  }
+
+  return {
+    ctx,
+    pi,
+    verifyAll(): void {
+      verify(ctx);
+      verify(pi);
+      verify(ui);
+    },
+  };
+}
+
+async function saveMarketplace(
+  locations: ScopedLocations,
+  record: MarketplaceRecord,
+): Promise<void> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: { [record.name]: record },
+  });
+}
+
 async function seedConfigAutoupdate(
   locations: ScopedLocations,
   name: string,
@@ -50,52 +136,57 @@ async function seedConfigAutoupdate(
 ): Promise<void> {
   await saveConfig(
     locations.configJsonPath,
-    {
-      schemaVersion: 1,
-      marketplaces: { [name]: { source, autoupdate } },
-    },
+    { schemaVersion: 1, marketplaces: { [name]: { source, autoupdate } } },
     locations.scopeRoot,
   );
 }
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+async function snapshotTree(root: string): Promise<readonly TreeEntry[]> {
+  const entries: TreeEntry[] = [];
+  async function visit(directory: string): Promise<void> {
+    const children = await readdir(directory, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const absolutePath = path.join(directory, child.name);
+      const relativePath = path.relative(root, absolutePath);
+      if (child.isDirectory()) {
+        entries.push({ kind: "directory", relativePath });
+        await visit(absolutePath);
+      } else {
+        entries.push({
+          contents: await readFile(absolutePath, "utf8"),
+          kind: "file",
+          relativePath,
+        });
+      }
+    }
+  }
+
+  await visit(root);
+  return entries;
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-  const ctx = {
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-    pi,
-  } as unknown as ExtensionContext;
-  return { ctx, pi, notifications };
+async function snapshotEnvironment(
+  home: string,
+  cwd: string,
+): Promise<{
+  readonly cwd: readonly TreeEntry[];
+  readonly home: readonly TreeEntry[];
+}> {
+  return { cwd: await snapshotTree(cwd), home: await snapshotTree(home) };
 }
 
-/**
- * Run a callback with HOME pointing at a tmp dir so user-scope state
- * is hermetic. Restores HOME after.
- */
 async function withHermeticHome<T>(
-  fn: (env: { home: string; cwd: string }) => Promise<T>,
+  fn: (environment: { readonly cwd: string; readonly home: string }) => Promise<T>,
 ): Promise<T> {
   const originalHome = process.env.HOME;
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "mp-info-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "mp-info-cwd-"));
   process.env.HOME = home;
-  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
-  // to homedir(). Clear it so the hermetic HOME above actually governs the
-  // user scope -- otherwise a developer/CI env that sets the variable would
-  // make these tests read AND write the real Pi agent dir.
   delete process.env.PI_CODING_AGENT_DIR;
   try {
-    return await fn({ home, cwd });
+    return await fn({ cwd, home });
   } finally {
     if (originalHome === undefined) {
       delete process.env.HOME;
@@ -114,521 +205,709 @@ async function withHermeticHome<T>(
   }
 }
 
-/**
- * Write a minimal `marketplace.json` at the given path. Optional
- * `description` is appended as a top-level field (the schema permits
- * additional properties per the info-surface conventions).
- */
 async function writeMarketplaceJson(
   manifestPath: string,
   name: string,
   description?: string,
 ): Promise<void> {
   await mkdir(path.dirname(manifestPath), { recursive: true });
-  const obj: Record<string, unknown> = { name, plugins: [] };
+  const manifest: Record<string, unknown> = { name, plugins: [] };
   if (description !== undefined) {
-    obj.description = description;
+    manifest.description = description;
   }
 
-  await writeFile(manifestPath, JSON.stringify(obj));
+  await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
 }
 
-test("INFO-01: single-scope github source with autoupdate + lastUpdatedAt + description renders the 4-line body", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "claude-plugins-official.json");
+test("INFO-01: an explicit user github source renders all optional fields", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "official.json");
     await writeMarketplaceJson(
       manifestPath,
       "claude-plugins-official",
-      "Official Claude marketplace",
+      "Official Claude plugin marketplace.",
     );
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "claude-plugins-official": {
-          name: "claude-plugins-official",
-          scope: "user",
-          source: githubSource("https://github.com/anthropics/claude-plugins-official#main"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: cwd,
-          plugins: {},
-          lastUpdatedAt: "2026-06-03T00:00:00Z",
-        },
-      },
-    });
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        lastUpdatedAt: "2026-06-03T00:00:00Z",
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/claude-plugins-official",
+        name: "claude-plugins-official",
+        scope: "user",
+        source: githubSource("https://github.com/anthropics/claude-plugins-official#main"),
+      }),
+    );
     await seedConfigAutoupdate(
-      userLocations,
+      locations,
       "claude-plugins-official",
       "anthropics/claude-plugins-official",
       true,
     );
-
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "claude-plugins-official", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
         "● claude-plugins-official [user] <autoupdate>",
         "github: anthropics/claude-plugins-official#main",
         "last_updated: 2026-06-03T00:00:00Z",
-        "description: Official Claude marketplace",
+        "description: Official Claude plugin marketplace.",
       ].join("\n"),
-    );
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "claude-plugins-official",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("MURL-05: single-scope url source with ref + lastUpdatedAt renders `url: <url>#<ref>` and `last_updated:`", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "url-mp.json");
-    await writeMarketplaceJson(manifestPath, "url-mp", "A URL-sourced marketplace");
+test("INFO-01: an explicit user github source omits absent optional fields", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "community.json");
+    await writeMarketplaceJson(manifestPath, "community-mp");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/community-mp",
+        name: "community-mp",
+        scope: "user",
+        source: githubSource("https://github.com/someuser/community-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "● community-mp [user] <no autoupdate>\ngithub: someuser/community-mp",
+    });
 
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "url-mp": {
-          name: "url-mp",
-          scope: "user",
-          // D-76-09: url sources project a `url:` line, NOT a `path:` line
-          // (the clone dir would be wrong). D-76-10: last_updated renders
-          // for git-backed kinds (github + url).
-          source: parsePluginSource("https://gitlab.com/acme/mp#main"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/abs/clone/url-mp",
-          plugins: {},
-          lastUpdatedAt: "2026-06-03T00:00:00Z",
-        },
-      },
-    } as unknown as Parameters<typeof saveState>[1]);
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "community-mp",
+      scope: "user",
+      cwd,
+    });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "url-mp", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● url-mp [user] <no autoupdate>",
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("MURL-05: an explicit user URL source renders all optional fields", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "acme.json");
+    await writeMarketplaceJson(manifestPath, "acme-mp", "An ACME marketplace hosted on GitLab.");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        lastUpdatedAt: "2026-06-03T00:00:00Z",
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/acme-mp",
+        name: "acme-mp",
+        scope: "user",
+        source: parsePluginSource("https://gitlab.com/acme/mp#main"),
+      }),
+    );
+    await seedConfigAutoupdate(locations, "acme-mp", "https://gitlab.com/acme/mp#main", true);
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
+        "● acme-mp [user] <autoupdate>",
         "url: https://gitlab.com/acme/mp#main",
         "last_updated: 2026-06-03T00:00:00Z",
-        "description: A URL-sourced marketplace",
+        "description: An ACME marketplace hosted on GitLab.",
       ].join("\n"),
-    );
-    // D-76-09: never a `path:` line for a url source.
-    assert.ok(
-      !notifications[0]!.message.includes("path:"),
-      "a url source must not render a `path:` line",
-    );
-  });
-});
-
-test("MURL-05: single-scope url source without ref drops the #<ref> suffix from the `url:` line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "url-noref.json");
-    await writeMarketplaceJson(manifestPath, "url-noref");
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "url-noref": {
-          name: "url-noref",
-          scope: "user",
-          source: parsePluginSource("https://gitlab.com/acme/mp"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/abs/clone/url-noref",
-          plugins: {},
-        },
-      },
-    } as unknown as Parameters<typeof saveState>[1]);
-
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "url-noref", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    // No `#<ref>` suffix; no lastUpdatedAt so no `last_updated:` line either.
-    assert.equal(
-      notifications[0]!.message,
-      ["● url-noref [user] <no autoupdate>", "url: https://gitlab.com/acme/mp"].join("\n"),
-    );
-  });
-});
-
-test("INFO-01: single-scope github source with NO ref drops the #<ref> suffix from the `github:` line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "mp.json");
-    await writeMarketplaceJson(manifestPath, "mp");
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "user",
-          source: githubSource("https://github.com/owner/repo"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: cwd,
-          plugins: {},
-        },
-      },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "mp", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    // No `#<ref>` suffix; autoupdate defaults to false on the info surface.
-    assert.equal(
-      notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "github: owner/repo"].join("\n"),
-    );
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "acme-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("INFO-01: single-scope path source renders `path: <abs>`; NO `last_updated:`; NO `description:`", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const projectLocations = locationsFor("project", cwd);
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(projectLocations.extensionRoot, "local-mp.json");
+test("MURL-05: an explicit user URL source omits absent optional fields", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "acme.json");
+    await writeMarketplaceJson(manifestPath, "acme-mp");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/acme-mp",
+        name: "acme-mp",
+        scope: "user",
+        source: parsePluginSource("https://gitlab.com/acme/mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "● acme-mp [user] <no autoupdate>\nurl: https://gitlab.com/acme/mp",
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "acme-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("INFO-01: an explicit project path source renders its minimal block", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "local.json");
     await writeMarketplaceJson(manifestPath, "local-mp");
-
-    await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "local-mp": {
-          name: "local-mp",
-          scope: "project",
-          source: pathSource("/abs/path/to/mp"),
-          addedFromCwd: cwd,
-          manifestPath,
-          // NOTE: `marketplaceRoot` is what the renderer emits on the
-          // `path:` line per the orchestrator's path-source projection.
-          marketplaceRoot: "/abs/path/to/mp",
-          plugins: {},
-        },
-      },
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/local-mp",
+        name: "local-mp",
+        scope: "project",
+        source: pathSource("/home/user/marketplaces/local-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "● local-mp [project] <no autoupdate>\npath: /home/user/marketplaces/local-mp",
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "local-mp", scope: "project", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      ["● local-mp [project] <no autoupdate>", "path: /abs/path/to/mp"].join("\n"),
-    );
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "local-mp",
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("INFO-01: single-scope github source with marketplace.json missing description renders WITHOUT a description line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "no-desc.json");
-    // No `description` field on the manifest -> renderer omits the line.
-    await writeMarketplaceJson(manifestPath, "no-desc");
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "no-desc": {
-          name: "no-desc",
-          scope: "user",
-          source: githubSource("https://github.com/o/no-desc"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: cwd,
-          plugins: {},
-        },
-      },
+test("INFO-01: a user path source renders description independently of source kind", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "dev.json");
+    await writeMarketplaceJson(
+      manifestPath,
+      "dev-mp",
+      "Local development marketplace; experimental plugins.",
+    );
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        lastUpdatedAt: "2026-06-03T00:00:00Z",
+        manifestPath,
+        marketplaceRoot: "/home/user/src/dev-mp",
+        name: "dev-mp",
+        scope: "user",
+        source: pathSource("/home/user/src/dev-mp"),
+      }),
+    );
+    await seedConfigAutoupdate(locations, "dev-mp", "/home/user/src/dev-mp", true);
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
+        "● dev-mp [user] <autoupdate>",
+        "path: /home/user/src/dev-mp",
+        "description: Local development marketplace; experimental plugins.",
+      ].join("\n"),
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "no-desc", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.ok(
-      !notifications[0]!.message.includes("description:"),
-      "body must not carry a `description:` line when marketplace.json lacks one",
-    );
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "dev-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, user block SECOND, joined by one blank line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
+test("NFR-12: an unknown stored source falls back to the recorded marketplace root", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "future.json");
+    await writeMarketplaceJson(manifestPath, "future-mp");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/future-mp",
+        name: "future-mp",
+        scope: "user",
+        source: { kind: "unknown", raw: "npm:future-mp@1", reason: "future source" },
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "● future-mp [user] <no autoupdate>\npath: /home/user/marketplaces/future-mp",
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "future-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("INFO-03: implicit scope renders project then user in one notification", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const projectLocations = locationsFor("project", cwd);
     const userLocations = locationsFor("user", cwd);
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const projectManifest = path.join(projectLocations.extensionRoot, "my-mp.json");
-    const userManifest = path.join(userLocations.extensionRoot, "my-mp.json");
-    await writeMarketplaceJson(projectManifest, "my-mp");
-    await writeMarketplaceJson(userManifest, "my-mp");
-
-    await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "my-mp": {
-          name: "my-mp",
-          scope: "project",
-          source: pathSource("/repo/path/my-mp"),
-          addedFromCwd: cwd,
-          manifestPath: projectManifest,
-          marketplaceRoot: "/repo/path/my-mp",
-          plugins: {},
-        },
-      },
-    });
+    const projectManifestPath = path.join(projectLocations.extensionRoot, "my-mp.json");
+    const userManifestPath = path.join(userLocations.extensionRoot, "my-mp.json");
+    await writeMarketplaceJson(projectManifestPath, "my-mp");
+    await writeMarketplaceJson(userManifestPath, "my-mp");
+    await saveMarketplace(
+      projectLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: projectManifestPath,
+        marketplaceRoot: "/repo/path/my-mp",
+        name: "my-mp",
+        scope: "project",
+        source: pathSource("/repo/path/my-mp"),
+      }),
+    );
     await seedConfigAutoupdate(projectLocations, "my-mp", "/repo/path/my-mp", true);
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "my-mp": {
-          name: "my-mp",
-          scope: "user",
-          source: githubSource("https://github.com/someuser/my-mp"),
-          addedFromCwd: cwd,
-          manifestPath: userManifest,
-          marketplaceRoot: cwd,
-          plugins: {},
-        },
-      },
-    });
-
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "my-mp", cwd });
-    assert.equal(notifications.length, 1, "IL-2: exactly one ctx.ui.notify call");
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
+    await saveMarketplace(
+      userLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: userManifestPath,
+        marketplaceRoot: "/home/user/marketplaces/my-mp",
+        name: "my-mp",
+        scope: "user",
+        source: githubSource("https://github.com/someuser/my-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
         "● my-mp [project] <autoupdate>",
         "path: /repo/path/my-mp",
         "",
         "● my-mp [user] <no autoupdate>",
         "github: someuser/my-mp",
       ].join("\n"),
-    );
-  });
-});
-
-test("INFO-04: --scope user mismatch (mp only in project) emits bare `{not added}` row with severity error", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const projectLocations = locationsFor("project", cwd);
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(projectLocations.extensionRoot, "p-only.json");
-    await writeMarketplaceJson(manifestPath, "p-only");
-
-    await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "p-only": {
-          name: "p-only",
-          scope: "project",
-          source: pathSource("/p"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/p",
-          plugins: {},
-        },
-      },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "p-only", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {not added}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
-  });
-});
-
-test("INFO-04: --scope project mismatch (mp only in user) emits bare `{not added}` row with severity error", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "u-only.json");
-    await writeMarketplaceJson(manifestPath, "u-only");
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "u-only": {
-          name: "u-only",
-          scope: "user",
-          source: pathSource("/u"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/u",
-          plugins: {},
-        },
-      },
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "my-mp",
+      cwd,
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "u-only", scope: "project", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ u-only [project] (failed) {not added}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added}` WITHOUT any [scope] bracket", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "ghost-mp", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
+test("INFO-04: explicit user scope ignores a project-only marketplace", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "my-mp.json");
+    await writeMarketplaceJson(manifestPath, "my-mp");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/repo/path/my-mp",
+        name: "my-mp",
+        scope: "project",
+        source: pathSource("/repo/path/my-mp"),
+      }),
     );
-    assert.equal(notifications[0]!.severity, "error");
-    assert.ok(
-      !notifications[0]!.message.includes("[user]") &&
-        !notifications[0]!.message.includes("[project]"),
-      "absent-from-both must NOT carry a [scope] bracket (D-03)",
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Source-coerce fallback (NFR-12 forward-compat): non-projected source kinds
-// (`git-subdir`, `npm`, `unknown`) coerce to the `path` arm with
-// `record.marketplaceRoot` as the absolute path. `url` is projected to its own
-// `url:` arm (D-76-09) and NO LONGER falls through to `path`.
-// ---------------------------------------------------------------------------
-
-test('NFR-12: forward-compat `kind: "unknown"` source coerces to the `path:` arm with marketplaceRoot', async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "unknown-mp.json");
-    await writeMarketplaceJson(manifestPath, "unknown-mp");
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "unknown-mp": {
-          name: "unknown-mp",
-          scope: "user",
-          // Forward-compat tail: `normalizeStoredSource` accepts
-          // `kind: "unknown"` records verbatim. The orchestrator must
-          // coerce non-github discriminators to the `path:` arm so a
-          // future source kind still renders rather than silently
-          // throwing on a missing discriminator branch.
-          source: { kind: "unknown", raw: "npm:foo@1.0.0", reason: "future kind" },
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/abs/path/to/unknown-mp",
-          plugins: {},
-        },
-      },
-    } as unknown as Parameters<typeof saveState>[1]);
-
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "unknown-mp", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /^path: \/abs\/path\/to\/unknown-mp$/m);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Manifest read/parse failures surface as `(failed) {<reason>}` rows
-// instead of silently swallowing to `description: undefined`. Mirrors
-// the `plugin/info.ts` discipline.
-// ---------------------------------------------------------------------------
-
-test("Manifest missing on disk surfaces `(failed) {source missing}` row, not silent success", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "missing-mp.json");
-    // Intentionally do NOT write the manifest -- ENOENT on read.
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "missing-mp": {
-          name: "missing-mp",
-          scope: "user",
-          source: pathSource("./missing-src"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/abs/missing-mp",
-          plugins: {},
-        },
-      },
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
+      severity: "error",
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "missing-mp", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    // ENOENT classifier -> `source missing`.
-    assert.match(notifications[0]!.message, /\(failed\) \{source missing\}/);
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "my-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("Manifest with malformed JSON surfaces `(failed) {unparseable}` row, not silent success", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    const manifestPath = path.join(userLocations.extensionRoot, "bad-mp.json");
+test("INFO-04: explicit project scope ignores a user-only marketplace", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "my-mp.json");
+    await writeMarketplaceJson(manifestPath, "my-mp");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/my-mp",
+        name: "my-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/my-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {not added}",
+      severity: "error",
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "my-mp",
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("D-03: implicit scope renders an absent marketplace without a scope bracket", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
+      severity: "error",
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "ghost-mp",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("manifest absence renders the complete source-missing failure envelope", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "missing-mp.json");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/missing-mp",
+        name: "missing-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/missing-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● missing-mp [user] <no autoupdate>",
+        "  ⊘ missing-mp (failed) {source missing}",
+        "    components: not resolved",
+      ].join("\n"),
+      severity: "error",
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "missing-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("malformed manifest JSON renders the complete unparseable failure envelope", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "bad-mp.json");
     await mkdir(path.dirname(manifestPath), { recursive: true });
     await writeFile(manifestPath, "{ not valid json", "utf8");
-
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "bad-mp": {
-          name: "bad-mp",
-          scope: "user",
-          source: pathSource("./bad-src"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: "/abs/bad-mp",
-          plugins: {},
-        },
-      },
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/bad-mp",
+        name: "bad-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/bad-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● bad-mp [user] <no autoupdate>",
+        "  ⊘ bad-mp (failed) {unparseable}",
+        "    components: not resolved",
+      ].join("\n"),
+      severity: "error",
     });
 
-    const { ctx, pi, notifications } = makeCtx();
-    await getMarketplaceInfo({ ctx, pi, name: "bad-mp", scope: "user", cwd });
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /\(failed\) \{unparseable\}/);
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "bad-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
   });
 });
 
-test("NFR-5: info.ts has zero imports from platform/git, DEFAULT_GIT_OPS, or refreshGitHubClone", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-    "utf8",
-  );
-  // Strip comments before grep so the explanatory header that mentions
-  // forbidden symbols in PROSE does not produce false positives.
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.equal(code.includes("platform/git"), false, "info.ts must not import platform/git");
-  assert.equal(
-    code.includes("DEFAULT_GIT_OPS"),
-    false,
-    "info.ts must not reference DEFAULT_GIT_OPS",
-  );
-  assert.equal(
-    code.includes("refreshGitHubClone"),
-    false,
-    "info.ts must not reference refreshGitHubClone",
-  );
+test("schema-invalid manifest JSON renders the catalog invalid-manifest envelope", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "bad-mp.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ name: "bad-mp", plugins: "not-an-array" }),
+      "utf8",
+    );
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/bad-mp",
+        name: "bad-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/bad-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● bad-mp [user] <no autoupdate>",
+        "  ⊘ bad-mp (failed) {invalid manifest}",
+        "    components: not resolved",
+      ].join("\n"),
+      severity: "error",
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "bad-mp",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("implicit scope emits a healthy project block before a failed user block", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    const projectManifestPath = path.join(projectLocations.extensionRoot, "mixed.json");
+    const userManifestPath = path.join(userLocations.extensionRoot, "mixed.json");
+    await writeMarketplaceJson(projectManifestPath, "mixed-mp");
+    await saveMarketplace(
+      projectLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: projectManifestPath,
+        marketplaceRoot: "/repo/path/mixed-mp",
+        name: "mixed-mp",
+        scope: "project",
+        source: pathSource("/repo/path/mixed-mp"),
+      }),
+    );
+    await saveMarketplace(
+      userLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: userManifestPath,
+        marketplaceRoot: "/home/user/marketplaces/mixed-mp",
+        name: "mixed-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/mixed-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = multiNotificationBoundary([
+      {
+        message: "● mixed-mp [project] <no autoupdate>\npath: /repo/path/mixed-mp",
+      },
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [user] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mixed-mp",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("a malformed stored marketplace record rejects without notifying or mutating files", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      path.join(locations.extensionRoot, "state.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        marketplaces: {
+          "broken-mp": {
+            addedFromCwd: cwd,
+            manifestPath: path.join(locations.extensionRoot, "broken-mp.json"),
+            marketplaceRoot: "/repo/path/broken-mp",
+            name: "broken-mp",
+            plugins: {},
+            scope: "project",
+            source: {},
+          },
+        },
+      }),
+      "utf8",
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary();
+
+    // act
+    const result = getMarketplaceInfo({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "broken-mp",
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    await assert.rejects(
+      result,
+      new Error(
+        'state.json marketplace "broken-mp" has malformed source object (missing kind/raw)',
+      ),
+    );
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
 });
