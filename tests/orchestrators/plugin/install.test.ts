@@ -3769,7 +3769,19 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(firstSchedule, ["post-commit:completion-cache:failed"]);
-      assert.strictEqual(firstTree.includes("pi-claude-marketplace/data/mp/hello/"), true);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
@@ -3862,7 +3874,16 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(firstSchedule, ["post-commit:data-dir:failed"]);
-      assert.strictEqual(firstTree.includes("pi-claude-marketplace/data/mp/hello/"), false);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
     } finally {
       mkdirMock?.mock.restore();
@@ -7599,11 +7620,30 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
-      assert.strictEqual(
-        firstTree.filter((entry) =>
-          /(?:skills|commands|agents)-staging\/[0-9a-f-]{36}\//.test(entry),
-        ).length,
-        3,
+      const isLeakedStagingEntry = (entry: string): boolean =>
+        /^pi-claude-marketplace\/(?:agents|commands|skills)-staging\/[0-9a-f-]{36}\/$/.test(entry);
+      assert.strictEqual(firstTree.filter(isLeakedStagingEntry).length, 3);
+      assert.deepStrictEqual(
+        firstTree.filter((entry) => !isLeakedStagingEntry(entry)),
+        [
+          "agents/",
+          `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
+          "pi-claude-marketplace/",
+          "pi-claude-marketplace/agents-index.json",
+          "pi-claude-marketplace/agents-staging/",
+          "pi-claude-marketplace/commands-staging/",
+          "pi-claude-marketplace/data/",
+          "pi-claude-marketplace/data/mp/",
+          "pi-claude-marketplace/data/mp/complete/",
+          "pi-claude-marketplace/resources/",
+          "pi-claude-marketplace/resources/prompts/",
+          "pi-claude-marketplace/resources/prompts/complete:deploy.md",
+          "pi-claude-marketplace/resources/skills/",
+          "pi-claude-marketplace/resources/skills/complete-audit/",
+          "pi-claude-marketplace/resources/skills/complete-audit/SKILL.md",
+          "pi-claude-marketplace/skills-staging/",
+          "pi-claude-marketplace/state.json",
+        ],
       );
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
@@ -7836,6 +7876,16 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hooky/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/hooks/hooky/",
+        "pi-claude-marketplace/hooks/hooky/hooks.json",
+        "pi-claude-marketplace/state.json",
+      ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
         { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
@@ -7962,6 +8012,13 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       assert.strictEqual(firstConfigBytes, await readFile(locations.configJsonPath, "utf8"));
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "mcp.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/state.json",
+      ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
         { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
