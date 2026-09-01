@@ -10,10 +10,15 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import lockfile from "proper-lockfile";
+import { Type } from "typebox";
+
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
@@ -21,11 +26,16 @@ import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orches
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 
+import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+
+const require = createRequire(import.meta.url);
+const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
 
 interface NotifyRecord {
   message: string;
@@ -45,9 +55,23 @@ function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRec
   return { ctx, notifications };
 }
 
-function makePi(): ExtensionAPI {
+function toolInfo(name: string): ToolInfo {
   return {
-    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
+    name,
+    description: `test tool ${name}`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      origin: "top-level",
+      path: `/test/tools/${name}.ts`,
+      scope: "temporary",
+      source: "test",
+    },
+  } satisfies ToolInfo;
+}
+
+function makePi(toolNames: readonly string[] = []): ExtensionAPI {
+  return {
+    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => toolNames.map(toolInfo),
   } as ExtensionAPI;
 }
 
@@ -58,9 +82,7 @@ function makePi(): ExtensionAPI {
  * makes a row with a staged agent take the soft-dep marker.
  */
 function makePiWithSubagents(): ExtensionAPI {
-  return {
-    getAllTools: () => [{ name: "subagent" } as ToolInfo],
-  } as ExtensionAPI;
+  return makePi(["subagent"]);
 }
 
 async function withHermeticHome<T>(
@@ -93,6 +115,8 @@ async function writeUserState(
     pluginName: string;
     disabled: boolean;
     version?: string;
+    scope?: "project" | "user";
+    cwd?: string;
     // D-63-04: when true, seed an ENABLED hooks-only record
     // (resources.hooks populated, every other axis empty) -- the
     // production shape of a hooks-only installed plugin. Ignored when
@@ -105,7 +129,11 @@ async function writeUserState(
     unsupported?: readonly string[];
   },
 ): Promise<{ statePath: string; configPath: string; configLocalPath: string; scopeRoot: string }> {
-  const scopeRoot = path.join(home, ".pi", "agent");
+  const scope = opts.scope ?? "user";
+  const scopeRoot =
+    scope === "user"
+      ? path.join(home, ".pi", "agent")
+      : locationsFor("project", opts.cwd ?? home).scopeRoot;
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extRoot, { recursive: true });
   const statePath = path.join(extRoot, "state.json");
@@ -132,7 +160,7 @@ async function writeUserState(
     marketplaces: {
       [opts.marketplaceName]: {
         name: opts.marketplaceName,
-        scope: "user",
+        scope,
         source: {
           kind: "path" as const,
           raw: "/tmp/dummy-mp",
@@ -176,6 +204,13 @@ async function fileExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Build a rejected promise for defensive unknown-rejection partitions. */
+function rejectUnknown(reason: unknown): Promise<never> {
+  return new Promise<never>((_resolve, reject) => {
+    Reflect.apply(reject, undefined, [reason]);
+  });
 }
 
 /**
@@ -249,6 +284,10 @@ async function seedRealDisabledMarketplace(
      * one, which is what makes the row declare the `pi-subagents` companion.
      */
     withAgent?: boolean;
+    /** Give the plugin a real hooks declaration for hook/cache and rewake cases. */
+    hooksJson?: Record<string, unknown>;
+    /** Give the plugin real MCP server declarations for companion/cascade cases. */
+    mcpServers?: Record<string, unknown>;
     /**
      * DFEN-07: spread `defaultEnabled` onto the plugin's MARKETPLACE ENTRY.
      * The entry is the side that WINS the resolution (`resolveDefaultEnabled`
@@ -306,6 +345,19 @@ async function seedRealDisabledMarketplace(
     await writeFile(
       path.join(agentsDir, "helper.md"),
       "---\nname: helper\ntools: Read,Grep\n---\n\nBody.\n",
+    );
+  }
+
+  if (opts.hooksJson !== undefined) {
+    const hooksDir = path.join(pluginRoot, "hooks");
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
+  }
+
+  if (opts.mcpServers !== undefined) {
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: opts.mcpServers }),
     );
   }
 
@@ -400,12 +452,14 @@ async function seedRealDisabledMarketplace(
 
 test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { configPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
     const { ctx } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -417,6 +471,7 @@ test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", asyn
     });
     const cfg = await readConfig(configPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
+    // assert
     assert.equal(plugins["foo@mp"]?.enabled, false, "config entry should carry enabled:false");
   });
 });
@@ -424,6 +479,7 @@ test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", asyn
 test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (base unchanged)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Reset state to populated (so disable is a fresh transition).
+    // arrange
     const { configPath, configLocalPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -433,6 +489,7 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
     // Verify base does NOT exist at start.
     const baseExistsPre = await fileExists(configPath);
     const { ctx } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -446,6 +503,7 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
 
     // Base file should still not exist.
     const baseExistsPost = await fileExists(configPath);
+    // assert
     assert.equal(baseExistsPost, baseExistsPre, "base file mtime/existence must be unchanged");
 
     // Local file should exist with enabled:false.
@@ -457,6 +515,7 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
 
 test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin writes the LOCAL file and moves the merged view", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
     const configPath = path.join(scopeRoot, "claude-plugins.json");
     const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
@@ -478,6 +537,7 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
     );
 
     const { ctx } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -494,6 +554,7 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
     const localCfg = (await readConfig(configLocalPath)) as {
       plugins?: Record<string, unknown>;
     };
+    // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
     // The shadowed file was not touched. It did not exist and still does not.
     assert.equal(await fileExists(configPath), false, "base file must stay absent");
@@ -520,6 +581,7 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
 
 test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes the base file, local absent", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
     const configPath = path.join(scopeRoot, "claude-plugins.json");
     const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
@@ -543,6 +605,7 @@ test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes t
     );
 
     const { ctx } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -554,6 +617,7 @@ test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes t
     });
 
     const baseCfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    // assert
     assert.deepEqual(baseCfg.plugins?.["foo@mp"], { enabled: true });
     assert.equal(await fileExists(configLocalPath), false, "local file must stay absent");
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
@@ -565,6 +629,7 @@ test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes t
 
 test("UAT-05 / D-103-13: a typed --local still targets the local file even when the declaration is in base", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
     const configPath = path.join(scopeRoot, "claude-plugins.json");
     const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
@@ -581,6 +646,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
     await writeFile(configPath, baseBytes, "utf8");
 
     const { ctx } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -599,6 +665,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
     // NOT answer; it does not overrule the one they did. Contrast the case
     // directly above, which is the same fixture with the flag dropped.
     const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
+    // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
     // The base declaration keeps its pre-call value, byte for byte.
     assert.equal(await readFile(configPath, "utf8"), baseBytes);
@@ -612,6 +679,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
 
 test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rather than aiming the write at the shadowed base file", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
     const configPath = path.join(scopeRoot, "claude-plugins.json");
     const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
@@ -640,6 +708,7 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
     const mtimePre = (await stat(statePath)).mtimeMs;
 
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -650,6 +719,7 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
       scope: "user",
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.match(notifications[0]!.message, /\(failed\) \{invalid manifest\}/);
     // The row names the file that could not be read -- the one the user has to
@@ -678,6 +748,7 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
 
 test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's resource inventory", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -685,6 +756,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
       version: "9.9.9",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -702,6 +774,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
     // fires via the fresh `(disabled)` row's `needsReload: true` stamp (RLD-02
     // OR-reduce), not a cascade kind (the row's artifacts were unstaged --
     // SNM-33).
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
     assert.equal(
@@ -762,6 +835,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
 // predicate never consulted the arrays (state-io.ts), so nothing misclassifies.
 test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but retains resources.hooks", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath, scopeRoot } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -785,6 +859,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
       "utf8",
     );
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -797,6 +872,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
 
     // Same catalog disable-fresh byte form as ENBL-02 above; the disable
     // path does not branch on which resources axis was populated.
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
     assert.equal(
@@ -847,12 +923,14 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
 
 test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace (single lock, catalog enable-fresh byte form, state re-populated)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath, configPath } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -868,6 +946,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     // belongs to `marketplace add`) + `(installed)` row + `/reload` trailer.
     // A nested withStateGuard would instead produce a `(failed)` row with a
     // StateLockHeldError cause (the CR-01 regression this test pins).
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "fresh enable routes to info severity");
     assert.equal(
@@ -934,6 +1013,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
 // and every such enable fails with CrossPluginConflictError.
 test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inventory does not self-conflict", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
@@ -948,11 +1028,13 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
     };
 
     // 1. First enable: materializes the skill and records its generated name.
+    // act
     await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
 
     // 2. Disable: ENBL-18 keeps the inventory on the record.
     await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
 
+    // assert
     const readSkills = async (): Promise<string[]> => {
       const state = JSON.parse(await readFile(statePath, "utf8")) as {
         marketplaces: Record<
@@ -995,6 +1077,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
 
 test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial gate, restoring the CURRENT manifest's supported set (D-68-02 repair/promotion stance)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo-plugin",
@@ -1002,6 +1085,7 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
       unsupportedKind: "lspServers",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1022,6 +1106,7 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
     // carrying `installable: false` + that same unsupported list, so a clean
     // `(installed)` row here would contradict the `(partially-installed)` row
     // `list` renders for the very same record (catalog `enable-partial`).
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.severity,
@@ -1074,6 +1159,7 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
     // re-enable produced a clean materialization while the ledger that produced
     // it recorded a degrade -- the same row-contradicts-ledger class ENBL-07
     // closed for DROPPED kinds, left open for degraded ones.
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo-plugin",
@@ -1081,6 +1167,7 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
       malformedSkill: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1091,6 +1178,7 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
       scope: "user",
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     // WARN-01: a degraded component is carried out but short of ideal, so the
     // row takes the same info -> warning raise install.ts::successSeverity
@@ -1119,6 +1207,7 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
 
 test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires pi-subagents} at warning severity when the companion is unloaded", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
@@ -1126,6 +1215,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
       withAgent: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1140,6 +1230,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
     // companion. With the companion unloaded the re-enable is silently
     // degraded -- the same fact, the same marker and the same info -> warning
     // raise the install row takes for the identical ledger run.
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "warning");
     assert.equal(
@@ -1158,6 +1249,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
 
 test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no marker and stays info", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
@@ -1165,6 +1257,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
       withAgent: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePiWithSubagents(),
@@ -1178,6 +1271,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
     // A declared companion that IS loaded degrades nothing: the marker is a
     // probe result, not a property of the plugin, so the row falls back to the
     // clean `enable-fresh` byte form.
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
     assert.equal(
@@ -1198,6 +1292,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
     // component is `warning` whatever the companion probe says, and a missing
     // companion is `warning` whatever degraded. Taking the stronger of the two
     // is what keeps either rule from silently replacing the other.
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
@@ -1206,6 +1301,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
       malformedSkill: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1216,6 +1312,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
       scope: "user",
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "warning");
     // MSG-GR-4: the typed reasons and the soft-dep markers share ONE brace,
@@ -1238,12 +1335,14 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
   await withHermeticHome(async ({ cwd, home }) => {
     // The regression guard for the derivation: a skill-only plugin declares no
     // companion, so an unloaded probe must produce no marker and no raise.
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1254,6 +1353,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
       scope: "user",
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
     assert.ok(!notifications[0]!.message.includes("requires"));
@@ -1271,6 +1371,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
 
 test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clean -- nothing materialized, record stays disabled", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo-plugin",
@@ -1279,6 +1380,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
       omitFromManifest: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1293,6 +1395,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
     // the PI-3 manifest lookup throws BEFORE any ledger phase, so
     // `narrowEnableFailure` yields no closed-set reason and the renderer
     // suppresses the brace, surfacing the cause via the 4-space trailer.
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
@@ -1356,6 +1459,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
 
 test("WR-02: an enable whose persisted installable gate is stale names the dropped kinds and points at update --partial", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo-plugin",
@@ -1364,6 +1468,7 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
       staleInstallableGate: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1374,6 +1479,7 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
       scope: "user",
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     // The row names the dropped kind through the same `narrowUnsupportedKinds`
@@ -1398,12 +1504,14 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
 
 test("WR-02: an enable that fails for an unrelated reason keeps its bare failed row -- no remediation trailer", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1414,6 +1522,7 @@ test("WR-02: an enable that fails for an unrelated reason keeps its bare failed 
       scope: "user",
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /\(failed\) \{source missing\}/);
@@ -1425,11 +1534,13 @@ test("WR-02: an enable that fails for an unrelated reason keeps its bare failed 
 });
 
 test("WR-02: a failed plugin row from another surface renders byte-identically -- the widened trailer gate is inert without the hint", () => {
+  // arrange
   const { ctx, notifications: emitted } = makeCtx("/tmp");
 
   // The catalog `failure-runtime-with-cause` row: a failed row that stamps no
   // `partialHint`. Widening the trailer gate to admit the `failed` status must
   // leave it byte-for-byte where it was.
+  // act
   notify(ctx, makePi(), {
     marketplaces: [
       {
@@ -1449,6 +1560,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
     ],
   });
 
+  // assert
   assert.equal(emitted.length, 1);
   assert.equal(
     emitted[0]!.message,
@@ -1468,12 +1580,14 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
 
 test("ENBL-03: missing cached clone aborts with (failed) {source missing}", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1483,6 +1597,7 @@ test("ENBL-03: missing cached clone aborts with (failed) {source missing}", asyn
       enable: true,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     // WR-06: pin the FULL brace byte form. A bare /\(failed\)/ assertion
@@ -1505,12 +1620,14 @@ test("ENBL-03: missing cached clone aborts with (failed) {source missing}", asyn
 
 test("Idempotency: enable on already-enabled plugin renders (skipped) {already enabled} at info severity", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1520,6 +1637,7 @@ test("Idempotency: enable on already-enabled plugin renders (skipped) {already e
       enable: true,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     // benign reason -> info severity (no severity arg).
     assert.equal(notifications[0]!.severity, undefined, "benign idempotent skip routes to info");
@@ -1529,6 +1647,7 @@ test("Idempotency: enable on already-enabled plugin renders (skipped) {already e
 
 test("Idempotency: disable on already-disabled plugin renders (skipped) {already disabled} at info severity", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1536,6 +1655,7 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
     });
     const statePre = await readFile(statePath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1545,6 +1665,7 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
       enable: false,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "benign idempotent skip routes to info");
     assert.match(notifications[0]!.message, /\(skipped\) \{already disabled\}/);
@@ -1557,12 +1678,14 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
 
 test("ENBL-04 byte-lock: disable-already-disabled renders `⊘ foo (skipped) {already disabled}` (no version, info severity)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1572,6 +1695,7 @@ test("ENBL-04 byte-lock: disable-already-disabled renders `⊘ foo (skipped) {al
       enable: false,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     // Full-message byte-lock -- the existing regex-match test at
     // `Idempotency: disable on already-disabled` does not pin the
@@ -1589,6 +1713,7 @@ test("ENBL-04 byte-lock: disable-already-disabled renders `⊘ foo (skipped) {al
 
 test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL renders the same skipped row and leaves state.json bytes unchanged", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1597,6 +1722,7 @@ test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL render
     });
     const statePre = await readFile(statePath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1610,6 +1736,7 @@ test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL render
     // Idempotency now covers the PARTIAL shape: the degraded availability
     // axis is orthogonal to the disabled marker (ENBL-05), so the row is
     // byte-identical to the canonical already-disabled skip.
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
@@ -1625,6 +1752,7 @@ test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL render
 
 test("WR-03: enable on state-enabled plugin with config enabled:false lands the config-side truth (promotion, state untouched)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath, configPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1645,6 +1773,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
     );
     const statePre = await readFile(statePath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1658,6 +1787,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
     const cfg = (await readConfig(configPath)) as {
       plugins?: Record<string, { enabled?: boolean }>;
     };
+    // assert
     assert.equal(cfg.plugins?.["foo@mp"]?.enabled, true);
     // State untouched -- the promotion arm writes config ONLY (no tx.save()).
     const statePost = await readFile(statePath, "utf8");
@@ -1670,6 +1800,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
 
 test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declaring file and moves the merged view", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath, configPath, configLocalPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1694,6 +1825,7 @@ test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declari
     const statePre = await readFile(statePath, "utf8");
 
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1705,6 +1837,7 @@ test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declari
     });
 
     const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
+    // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
     assert.equal(await fileExists(configPath), false, "base file must stay absent");
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
@@ -1727,6 +1860,7 @@ test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declari
 
 test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-unchanged (path.basename containment, T-54-02-02)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { statePath, configPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1737,6 +1871,7 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
     const statePre = await readFile(statePath, "utf8");
     const mtimePre = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1746,6 +1881,7 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
       enable: false,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /\(failed\) \{invalid manifest\}/);
@@ -1778,12 +1914,14 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
 test("WR-03: enable on a present marketplace whose plugin row is absent renders (skipped) {not installed} at warning severity", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Seed state with the marketplace container but a DIFFERENT plugin row.
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "other-plugin",
       disabled: false,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1793,6 +1931,7 @@ test("WR-03: enable on a present marketplace whose plugin row is absent renders 
       enable: true,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     // `not installed` is NOT benign -> warning severity (D-28-03), and the
     // taxonomy must NOT misuse `{not in manifest}` (reserved for "plugin
@@ -1812,7 +1951,9 @@ test("WR-03: enable on a present marketplace whose plugin row is absent renders 
 
 test("Marketplace not added: explicit --scope emits standalone marketplace-not-added row", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1822,6 +1963,7 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
       enable: false,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /⊘ ghost-mp \[user\] \(failed\) \{not added\}/);
@@ -1834,6 +1976,7 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
 
 test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'disabled', name, version } with ZERO notify calls", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1841,6 +1984,7 @@ test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'di
       version: "1.2.3",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1852,6 +1996,7 @@ test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'di
       notifications: { mode: "orchestrated" },
     });
 
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
     assert.ok(outcome);
     assert.equal(outcome.status, "disabled");
@@ -1864,6 +2009,7 @@ test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'di
 
 test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-disabled returns { status: 'skipped', reason: 'already disabled' } no notify", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1871,6 +2017,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-di
       version: "1.2.3",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1882,6 +2029,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-di
       notifications: { mode: "orchestrated" },
     });
 
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
     assert.ok(outcome);
     assert.equal(outcome.status, "skipped");
@@ -1893,6 +2041,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-di
 
 test("ENBL-07 / RECON-03: orchestrated disable on an already-disabled PARTIAL returns { status: 'skipped', reason: 'already disabled' } no notify", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1901,6 +2050,7 @@ test("ENBL-07 / RECON-03: orchestrated disable on an already-disabled PARTIAL re
       unsupported: ["lspServers"],
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1912,6 +2062,7 @@ test("ENBL-07 / RECON-03: orchestrated disable on an already-disabled PARTIAL re
       notifications: { mode: "orchestrated" },
     });
 
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
     assert.ok(outcome);
     assert.equal(outcome.status, "skipped");
@@ -1923,6 +2074,7 @@ test("ENBL-07 / RECON-03: orchestrated disable on an already-disabled PARTIAL re
 
 test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-enabled returns { status: 'skipped', reason: 'already enabled' }", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -1930,6 +2082,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
       version: "1.2.3",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1941,6 +2094,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
       notifications: { mode: "orchestrated" },
     });
 
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
     assert.ok(outcome);
     assert.equal(outcome.status, "skipped");
@@ -1952,7 +2106,9 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
 
 test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1964,6 +2120,7 @@ test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns {
       notifications: { mode: "orchestrated" },
     });
 
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
     assert.ok(outcome);
     assert.equal(outcome.status, "failed");
@@ -1976,7 +2133,9 @@ test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns {
 
 test("RECON-03 enable-disable standalone-default mode -- omitted notifications option remains byte-identical to today (regression guard)", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -1986,6 +2145,7 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
       enable: false,
       scope: "user",
     });
+    // assert
     assert.equal(outcome, undefined, "standalone (omitted) returns undefined");
     assert.equal(notifications.length, 1);
     assert.match(notifications[0]!.message, /⊘ ghost-mp-byte \[user\] \(failed\) \{not added\}/);
@@ -1998,6 +2158,7 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
 
 test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY the plugin entry to local; merged autoupdate from base survives", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const { configPath, configLocalPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -2026,6 +2187,7 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
     );
 
     const { ctx } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2042,6 +2204,7 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
       plugins?: Record<string, { enabled?: boolean }>;
     };
     // The flip landed in local...
+    // assert
     assert.equal(localCfg.plugins?.["foo@mp"]?.enabled, true);
     // ...WITHOUT a marketplace re-declaration (CFG-02 shadowing guard).
     assert.equal(
@@ -2077,6 +2240,7 @@ test("C1: corrupt state.json in the requested scope renders a (failed) row (no t
     // Seed a CORRUPT state.json in the user scope so resolveCrossScopePluginTarget's
     // loadState call throws on parse. The doc on setPluginEnabled at the entry
     // promises "never re-throws" -- the throw must surface through notify().
+    // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
     const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
     await mkdir(extRoot, { recursive: true });
@@ -2085,6 +2249,7 @@ test("C1: corrupt state.json in the requested scope renders a (failed) row (no t
 
     const { ctx, notifications } = makeCtx(cwd);
     // No throw -- the never-re-throws contract holds.
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2094,6 +2259,7 @@ test("C1: corrupt state.json in the requested scope renders a (failed) row (no t
       enable: true,
       scope: "user",
     });
+    // assert
     assert.equal(outcome, undefined, "standalone mode returns undefined");
 
     // Exactly one notify call (IL-2 single chokepoint) at error severity.
@@ -2116,12 +2282,14 @@ test("C1: corrupt state.json in the requested scope renders a (failed) row (no t
 
 test("C1: orchestrated mode -- corrupt state.json returns { status: 'failed' } typed outcome; ZERO notify calls", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
     const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
     await mkdir(extRoot, { recursive: true });
     await writeFile(path.join(extRoot, "state.json"), "{ not json ", "utf8");
 
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2132,6 +2300,7 @@ test("C1: orchestrated mode -- corrupt state.json returns { status: 'failed' } t
       scope: "user",
       notifications: { mode: "orchestrated" },
     });
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode never fires notify()");
     assert.ok(outcome);
     assert.equal(outcome.status, "failed");
@@ -2159,6 +2328,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
     // the cascade returns ok:false with non-empty dropped.skills /
     // dropped.commands. The (now-folded) state record must drop only the
     // axes whose bridge actually removed something on disk.
+    // arrange
     const { statePath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -2209,6 +2379,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
     await mkdir(agentsIndexPath, { recursive: true });
 
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2220,6 +2391,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
     });
 
     // Exactly one notify; failed row.
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /\(failed\)/);
@@ -2261,12 +2433,14 @@ test("I4: enable branch threads InstallFailureCapture into runInstallLedger (reg
     // catalog `(failed) {source missing}` byte form (regression-pin for the
     // I4 thread: providing the capture argument must not alter the
     // pre-commit failure shape).
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: true,
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2276,6 +2450,7 @@ test("I4: enable branch threads InstallFailureCapture into runInstallLedger (reg
       enable: true,
       scope: "user",
     });
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     // Empty rollbackPartials must NOT promote the reason to `rollback partial`.
@@ -2298,6 +2473,7 @@ test("I4: enable branch threads InstallFailureCapture into runInstallLedger (reg
 
 test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefined) -- typecheck pin", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -2310,6 +2486,7 @@ test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefin
     // would fail typecheck (TS2322 -- `Outcome | undefined` not assignable to
     // `Outcome`). Post-Y3 the overload narrows the return so the assignment
     // succeeds without a non-null assertion or runtime guard.
+    // act
     const outcome: EnableDisablePluginOutcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2320,16 +2497,19 @@ test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefin
       scope: "user",
       notifications: { mode: "orchestrated" },
     });
+    // assert
     assert.equal(outcome.status, "disabled");
   });
 });
 
 test("Y3: standalone overload still returns | undefined -- typecheck pin", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const { ctx } = makeCtx(cwd);
     // The standalone arm fires its own notify() and the caller has nothing to
     // consume; the overload pair preserves that shape so existing callers
     // (edge handlers) keep their current contract.
+    // act
     const outcome: EnableDisablePluginOutcome | undefined = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2339,6 +2519,7 @@ test("Y3: standalone overload still returns | undefined -- typecheck pin", async
       enable: false,
       scope: "user",
     });
+    // assert
     // @ts-expect-error -- standalone arm DOES carry `| undefined`; assigning
     // to a non-undefined type must remain a TS error so a regression that
     // widens the standalone arm to non-undefined (or narrows it the same way
@@ -2359,12 +2540,14 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
   // outcome (with the version pin preserved) and fires ZERO notifications
   // (the apply-cascade is the sole projection seam in orchestrated mode).
   await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
     const { ctx, notifications } = makeCtx(cwd);
+    // act
     const outcome = await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -2376,6 +2559,7 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
       notifications: { mode: "orchestrated" },
     });
 
+    // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
     assert.equal(outcome.status, "enabled");
     if (outcome.status === "enabled") {
@@ -2388,142 +2572,961 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
   });
 });
 
+test("orchestrated enable returns every live degradation and companion signal without writing config", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath, statePath } = await seedRealDisabledMarketplace(home, {
+      hooksJson: {
+        PreToolUse: [
+          {
+            hooks: [{ command: "echo orphan", rewakeMessage: "wake me", type: "command" }],
+            matcher: "",
+          },
+        ],
+      },
+      malformedSkill: true,
+      marketplaceName: "mp",
+      mcpServers: { server: { args: ["server.js"], command: "node" } },
+      pluginName: "foo",
+      unsupportedKind: "lspServers",
+      version: "1.2.3",
+      withAgent: true,
+    });
+    const beforeState = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(["mcp", "subagent"]),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      degradedKinds: ["skill"],
+      name: "foo",
+      orphanRewake: true,
+      stagedAgents: true,
+      stagedMcpServers: true,
+      status: "enabled",
+      unsupported: ["lspServers"],
+      version: "1.2.3",
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.equal(await fileExists(configPath), false);
+    assert.notStrictEqual(await readFile(statePath, "utf8"), beforeState);
+  });
+});
+
+test("standalone enable renders the exact orphan-rewake byte form", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      hooksJson: {
+        PreToolUse: [
+          {
+            hooks: [{ command: "echo orphan", rewakeMessage: "wake me", type: "command" }],
+            matcher: "",
+          },
+        ],
+      },
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user]\n  ● foo v1.2.3 (installed) {orphan rewake}\n\n/reload to pick up changes",
+      },
+    ]);
+  });
+});
+
+test("orchestrated invalid local config returns an exact typed failure and leaves state unchanged", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configLocalPath, statePath } = await writeUserState(home, {
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    await writeFile(configLocalPath, "{ invalid", "utf8");
+    const beforeState = await readFile(statePath, "utf8");
+    const expectedError = new Error(
+      'Config file "claude-plugins.local.json" failed schema validation.',
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: false,
+      local: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      cause: expectedError.message,
+      error: expectedError,
+      reason: "invalid manifest",
+      status: "failed",
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(statePath, "utf8"), beforeState);
+  });
+});
+
+test("orchestrated missing installed row returns an exact skipped outcome", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "seed",
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { plugins: Record<string, unknown> } };
+    };
+    delete state.marketplaces.mp.plugins.seed;
+    await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+    const beforeState = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { name: "foo", reason: "not installed", status: "skipped" });
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(statePath, "utf8"), beforeState);
+  });
+});
+
+test("orchestrated enable failure returns the exact source classification and permits a clean retry", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { manifestPath, statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      omitFromManifest: true,
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const beforeState = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const failure = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [{ name: "foo", source: "./plugins/foo", version: "1.2.3" }],
+      }),
+    );
+    const retry = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(failure.status, "failed");
+    if (failure.status === "failed") {
+      assert.deepStrictEqual(
+        { cause: failure.cause, reason: failure.reason },
+        {
+          cause: 'Plugin "foo" not found in marketplace "mp".',
+          reason: "unreadable",
+        },
+      );
+    }
+
+    assert.notStrictEqual(await readFile(statePath, "utf8"), beforeState);
+    assert.deepStrictEqual(retry, { name: "foo", status: "enabled", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("an explicit user request reports not-added when the plugin exists only in project scope", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await writeUserState(home, {
+      cwd,
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      scope: "project",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a held project lock returns lock-held in orchestrated mode and succeeds after release", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      cwd,
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      scope: "project",
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await readFile(statePath, "utf8");
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+      stale: 10_000,
+      update: 2_000,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const blocked = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "project",
+    });
+    const afterBlocked = await readFile(statePath, "utf8");
+    await release();
+    const retry = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "project",
+    });
+
+    // assert
+    assert.equal(blocked.status, "failed");
+    if (blocked.status === "failed") {
+      assert.equal(blocked.reason, "lock held");
+    }
+
+    assert.strictEqual(afterBlocked, beforeState);
+    assert.deepStrictEqual(retry, { name: "foo", status: "disabled", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const { configPath, scopeRoot, statePath } = await writeUserState(home, {
+        disabled: false,
+        marketplaceName: "mp",
+        pluginName: "foo",
+      });
+      const beforeState = await readFile(statePath, "utf8");
+      const writeError = Object.assign(new Error("config directory denied"), { code: "EACCES" });
+      let failureValue: Error | string = writeError;
+      let failingDirectory = scopeRoot;
+      mkdirMock = t.mock.method(
+        filesystemPromises,
+        "mkdir",
+        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+          if (args[0] === failingDirectory) {
+            return rejectUnknown(failureValue);
+          }
+
+          return originalMkdir(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const first = makeCtx(cwd);
+
+      // act
+      const failure = await setPluginEnabled({
+        ctx: first.ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      const afterFailure = await readFile(statePath, "utf8");
+      failingDirectory = locationsFor("user", cwd).extensionRoot;
+      const typedFailure = await setPluginEnabled({
+        ctx: first.ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      failureValue = "lock directory denied";
+      const nonErrorFailure = await setPluginEnabled({
+        ctx: first.ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      mkdirMock.mock.restore();
+      mkdirMock = undefined;
+      syncBuiltinESMExports();
+      const second = makeCtx(cwd);
+      const retry = await setPluginEnabled({
+        ctx: second.ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+
+      // assert
+      assert.equal(failure, undefined);
+      assert.deepStrictEqual(first.notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [user]\n  ⊘ foo (failed)\n    cause: config directory denied",
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(afterFailure, beforeState);
+      assert.deepStrictEqual(typedFailure, {
+        cause: writeError.message,
+        error: writeError,
+        reason: "permission denied",
+        status: "failed",
+      });
+      assert.deepStrictEqual(nonErrorFailure, {
+        cause: "lock directory denied",
+        error: new Error("lock directory denied"),
+        reason: "unreadable",
+        status: "failed",
+      });
+      assert.equal(retry, undefined);
+      assert.deepStrictEqual(second.notifications, [
+        {
+          message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await readConfig(configPath), {
+        marketplaces: { mp: { source: "/tmp/dummy-mp" } },
+        plugins: { "foo@mp": { enabled: false } },
+        schemaVersion: 1,
+      });
+    } finally {
+      mkdirMock?.mock.restore();
+      syncBuiltinESMExports();
+    }
+  });
+});
+
+test("a source-normalization failure without a path uses the disable context and default user scope", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { source: { kind: string; raw: string } } };
+    };
+    state.marketplaces.mp.source = { kind: "broken", raw: "opaque" };
+    await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+    });
+
+    // assert
+    assert.equal(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'A plugin operation has failed.\n\n● mp [user]\n  ⊘ foo (failed) {unreadable}\n    cause: state.json marketplace "mp" has malformed source object (missing kind/raw)',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a non-Error state normalization failure is contained as a typed unreadable outcome", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await writeUserState(home, {
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    const originalParse: (text: string) => unknown = JSON.parse;
+    const parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
+      const parsed = originalParse(text);
+      if (typeof parsed === "object" && parsed !== null && "marketplaces" in parsed) {
+        const marketplaces = Reflect.get(parsed, "marketplaces");
+        if (typeof marketplaces === "object" && marketplaces !== null && "mp" in marketplaces) {
+          const marketplace = Reflect.get(marketplaces, "mp");
+          if (typeof marketplace === "object" && marketplace !== null) {
+            Object.defineProperty(marketplace, "source", {
+              configurable: true,
+              enumerable: true,
+              get() {
+                // eslint-disable-next-line @typescript-eslint/only-throw-error
+                throw "source normalization denied";
+              },
+            });
+          }
+        }
+      }
+
+      return parsed;
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      cause: "source normalization denied",
+      error: new Error("source normalization denied"),
+      reason: "unreadable",
+      status: "failed",
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.equal(parseMock.mock.callCount(), 1);
+  });
+});
+
+test("orchestrated enable normalizes a non-Error manifest read rejection and retries cleanly", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let readMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const { manifestPath, statePath } = await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const beforeState = await readFile(statePath, "utf8");
+      readMock = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === manifestPath) {
+            return rejectUnknown("manifest read denied");
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      const failure = await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: true,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      const afterFailure = await originalReadFile(statePath, "utf8");
+      readMock.mock.restore();
+      readMock = undefined;
+      syncBuiltinESMExports();
+      await writeFile(manifestPath, `${manifestBytes}\n`, "utf8");
+      const retry = await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: true,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(failure, {
+        cause: "manifest read denied",
+        error: new Error("manifest read denied"),
+        reason: "unreadable",
+        status: "failed",
+      });
+      assert.strictEqual(afterFailure, beforeState);
+      assert.deepStrictEqual(retry, { name: "foo", status: "enabled", version: "1.2.3" });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      readMock?.mock.restore();
+      syncBuiltinESMExports();
+    }
+  });
+});
+
+test("orchestrated partial disable folds a removed hook after MCP cleanup fails", async (t) => {
+  const { resetRoutingState, setParsedConfig } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  await withHermeticHome(async ({ cwd, home }) => {
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let readMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const { statePath } = await writeUserState(home, {
+        disabled: false,
+        hooksOnly: true,
+        marketplaceName: "mp",
+        pluginName: "foo",
+      });
+      const locations = locationsFor("user", cwd);
+      const state = JSON.parse(await readFile(statePath, "utf8")) as {
+        marketplaces: {
+          mp: { plugins: { foo: { resources: { hooks: string[]; mcpServers: string[] } } } };
+        };
+      };
+      state.marketplaces.mp.plugins.foo.resources.mcpServers = ["server"];
+      await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+      await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
+      await writeFile(
+        path.join(locations.hooksDir, "foo", "hooks.json"),
+        JSON.stringify({ PreToolUse: [] }),
+      );
+      await writeFile(
+        locations.mcpJsonPath,
+        JSON.stringify({ mcpServers: { server: { command: "node" } } }),
+      );
+      const poison: CacheEntry = {
+        get config(): CacheEntry["config"] {
+          throw new Error("routing rebuild denied");
+        },
+        ifPredicates: new Map(),
+        marketplace: "poison-marketplace",
+        pluginId: "poison-plugin",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "project",
+      };
+      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const mcpError = new Error("mcp cleanup denied");
+      readMock = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === locations.mcpJsonPath) {
+            throw mcpError;
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      const fallbackOutcome = await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      Object.assign(mcpError, { code: "EACCES" });
+      const classifiedOutcome = await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(fallbackOutcome, {
+        cause: mcpError.message,
+        error: mcpError,
+        reason: "unreadable",
+        status: "failed",
+      });
+      assert.deepStrictEqual(classifiedOutcome, {
+        cause: mcpError.message,
+        error: mcpError,
+        reason: "permission denied",
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
+        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+      );
+      await assert.rejects(stat(path.join(locations.hooksDir, "foo", "hooks.json")), /ENOENT/);
+    } finally {
+      readMock?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+    }
+  });
+});
+
+test("a clean disable remains successful when the hooks cache rebuild throws", async () => {
+  const { resetRoutingState, setParsedConfig } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  await withHermeticHome(async ({ cwd, home }) => {
+    try {
+      // arrange
+      resetRoutingState();
+      const { statePath } = await writeUserState(home, {
+        disabled: false,
+        marketplaceName: "mp",
+        pluginName: "foo",
+      });
+      const poison: CacheEntry = {
+        get config(): CacheEntry["config"] {
+          throw new Error("routing rebuild denied");
+        },
+        ifPredicates: new Map(),
+        marketplace: "poison-marketplace",
+        pluginId: "poison-plugin",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "project",
+      };
+      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      const outcome = await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { name: "foo", status: "disabled", version: "1.2.3" });
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(
+        (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.foo
+          ?.enabled,
+        false,
+      );
+      assert.notEqual(await readFile(statePath, "utf8"), "");
+    } finally {
+      resetRoutingState();
+    }
+  });
+});
+
+test("standalone enable exposes ordered rollback partials and retries without duplicate artifacts", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    let readMock: ReturnType<typeof t.mock.method> | undefined;
+    let rmMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const { statePath } = await seedRealDisabledMarketplace(home, {
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo hook", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        mcpServers: { server: { command: "node" } },
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      const locations = locationsFor("user", cwd);
+      const hookTarget = path.join(locations.hooksDir, "foo");
+      const beforeState = await readFile(statePath, "utf8");
+      const mcpFailure = new Error("mcp staging denied");
+      const hookRollbackFailure = new Error("hook rollback denied");
+      readMock = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === locations.mcpJsonPath) {
+            throw mcpFailure;
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      rmMock = t.mock.method(
+        filesystemPromises,
+        "rm",
+        async (...args: Parameters<typeof filesystemPromises.rm>) => {
+          const target = typeof args[0] === "string" ? args[0] : "";
+          if (target === hookTarget) {
+            throw hookRollbackFailure;
+          }
+
+          if (target.startsWith(`${locations.skillsTargetDir}${path.sep}`)) {
+            return rejectUnknown("skill rollback denied");
+          }
+
+          return originalRm(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const first = makeCtx(cwd);
+
+      // act
+      const failure = await setPluginEnabled({
+        ctx: first.ctx,
+        cwd,
+        enable: true,
+        marketplace: "mp",
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      const afterFailure = await readFile(statePath, "utf8");
+      const typedFailure = await setPluginEnabled({
+        ctx: first.ctx,
+        cwd,
+        enable: true,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+      readMock.mock.restore();
+      readMock = undefined;
+      rmMock.mock.restore();
+      rmMock = undefined;
+      syncBuiltinESMExports();
+      const second = makeCtx(cwd);
+      const retry = await setPluginEnabled({
+        ctx: second.ctx,
+        cwd,
+        enable: true,
+        marketplace: "mp",
+        pi: makePi(["mcp"]),
+        plugin: "foo",
+        scope: "user",
+      });
+
+      // assert
+      assert.equal(failure, undefined);
+      assert.strictEqual(afterFailure, beforeState);
+      assert.equal(first.notifications.length, 1);
+      assert.equal(first.notifications[0]?.severity, "error");
+      assert.equal(
+        first.notifications[0]?.message,
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo v1.2.3 (failed) {rollback partial}",
+          "    cause: mcp staging denied",
+          "    [hooks] (rollback failed)",
+          "      cause: hook rollback denied",
+          "    [skills] (rollback failed)",
+        ].join("\n"),
+      );
+      assert.equal(typedFailure.status, "failed");
+      if (typedFailure.status === "failed") {
+        assert.deepStrictEqual(
+          { cause: typedFailure.cause, reason: typedFailure.reason },
+          { cause: "skill rollback denied", reason: "rollback partial" },
+        );
+      }
+
+      assert.equal(retry, undefined);
+      assert.deepStrictEqual(second.notifications, [
+        {
+          message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.foo?.resources, {
+        agents: [],
+        hooks: ["foo"],
+        mcpServers: ["server"],
+        prompts: [],
+        skills: ["foo-s1"],
+      });
+      assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
+    } finally {
+      readMock?.mock.restore();
+      rmMock?.mock.restore();
+      syncBuiltinESMExports();
+    }
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // DFEN-07 / D-103-10 / D-103-11: an explicit enable outlives the lifecycle
 // ──────────────────────────────────────────────────────────────────────────
 
-/** One leg's expectation. The leg name lands in every assertion message. */
-interface ChainLeg {
-  readonly leg: string;
-  readonly version: string;
-  readonly declaringSource: "base" | "local";
-}
-
-/**
- * The invariant every leg of the chain restates: the record is enabled AND the
- * declaration the next reload reads agrees. Asserting only the record would
- * pass on a config the next reload immediately reverses, which is the failure
- * mode the chain exists to catch.
- */
-async function assertStaysEnabled(
-  env: { readonly cwd: string; readonly statePath: string },
-  leg: ChainLeg,
-): Promise<void> {
-  const state = JSON.parse(await readFile(env.statePath, "utf8")) as {
-    marketplaces: Record<
-      string,
-      { plugins: Record<string, { version: string; enabled: boolean }> }
-    >;
-  };
-  const record = state.marketplaces["mp"]?.plugins["foo"];
-  assert.equal(record?.enabled, true, `${leg.leg}: the record must still be enabled`);
-  assert.equal(record?.version, leg.version, `${leg.leg}: recorded version`);
-  assert.deepEqual(
-    await readMergedUserPluginEntry(env.cwd, "foo@mp"),
-    { source: leg.declaringSource, declaredEnabled: true },
-    `${leg.leg}: the merged view the next reload reads`,
-  );
-}
-
-/**
- * The converse of this milestone's main claim, run end to end against real
- * on-disk artifacts. The milestone closes a reload that turns a plugin ON
- * against the user's word; this asserts the same reload cannot turn one OFF
- * against it. Both are one rule: the merged config is the desired state, and
- * the commands the user runs must move it.
- *
- * The plugin's author shipped it off (`defaultEnabled: false` on the
- * marketplace entry) and the user turned it on with no flag. It must stay on
- * across a reload, a release that flips nothing in the user's favor, and a
- * repair -- whichever physical file the declaration lives in.
- */
-async function runConverseEnableChain(declarationFile: "base" | "local"): Promise<void> {
+test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugin survives reload, update and reinstall", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const { statePath, configPath, configLocalPath, manifestPath, mpRoot } =
-      await seedRealDisabledMarketplace(home, {
-        marketplaceName: "mp",
-        pluginName: "foo",
-        version: "1.0.0",
-        defaultEnabled: false,
-        configSeed: { file: declarationFile, entry: { enabled: false } },
-      });
-    const declaringPath = declarationFile === "local" ? configLocalPath : configPath;
-    const pi = makePi();
-    const skillsTargetDir = locationsFor("user", cwd).skillsTargetDir;
-
-    // 1. START: the install-disabled steady state. Asserted so a mis-seeded
-    // fixture cannot make the rest of the chain pass vacuously.
-    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
-      source: declarationFile,
-      declaredEnabled: false,
+    // arrange
+    const { configPath, manifestPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+      configSeed: { entry: { enabled: false }, file: "base" },
+      defaultEnabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.0.0",
     });
-    const seeded = JSON.parse(await readFile(statePath, "utf8")) as {
-      marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
+    const locations = locationsFor("user", cwd);
+    const pi = makePi();
+    const observe = async (): Promise<{
+      enabled: boolean | undefined;
+      merged: { source: "base" | "local"; declaredEnabled: boolean } | undefined;
+      skills: string[];
+      version: string | undefined;
+    }> => {
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.foo;
+      return {
+        enabled: record?.enabled,
+        merged: await readMergedUserPluginEntry(cwd, "foo@mp"),
+        skills: await readdir(locations.skillsTargetDir),
+        version: record?.version,
+      };
     };
-    assert.equal(seeded.marketplaces["mp"]?.plugins["foo"]?.enabled, false);
 
-    // 2. ENABLE, with no flag.
+    const initialState = await loadState(locations.extensionRoot);
+    const initialMerged = await readMergedUserPluginEntry(cwd, "foo@mp");
+    const enableContext = makeCtx(cwd);
+    const firstReload = makeCtx(cwd);
+    const updateContext = makeCtx(cwd);
+    const reinstallContext = makeCtx(cwd);
+    const secondReload = makeCtx(cwd);
+
+    // act
     await setPluginEnabled({
-      ctx: makeCtx(cwd).ctx,
-      pi,
+      ctx: enableContext.ctx,
       cwd,
-      marketplace: "mp",
-      plugin: "foo",
       enable: true,
+      marketplace: "mp",
+      pi,
+      plugin: "foo",
       scope: "user",
     });
-    await assertStaysEnabled(
-      { cwd, statePath },
-      { leg: "enable", version: "1.0.0", declaringSource: declarationFile },
-    );
-    assert.deepEqual(
-      ((await readConfig(declaringPath)) as { plugins?: Record<string, unknown> }).plugins?.[
-        "foo@mp"
-      ],
-      { enabled: true },
-      "enable: the DECLARING file carries the flip",
-    );
-    assert.ok((await readdir(skillsTargetDir)).length > 0, "enable: artifacts staged on disk");
-    if (declarationFile === "local") {
-      assert.equal(await fileExists(configPath), false, "enable: the shadowed file stays absent");
-    }
-
-    // 3. RELOAD. This is the leg that failed for the local declaration before
-    // the write target followed the declaration: the merged view still read
-    // `enabled: false`, the planner planned a disable, and this pass rendered
-    // a `(disabled)` row and put the record back.
-    const firstReload = makeCtx(cwd);
-    await applyReconcile({ ctx: firstReload.ctx, pi, cwd, scope: "user" });
-    assert.deepEqual(firstReload.notifications, [], "reload: a converged pass says nothing");
-    await assertStaysEnabled(
-      { cwd, statePath },
-      { leg: "reload", version: "1.0.0", declaringSource: declarationFile },
-    );
-    if (declarationFile === "local") {
-      // The reload's first-run config materialization writes a base file from
-      // recorded state when none exists. Its plugin entry is FIELDLESS, so the
-      // local entry keeps replacing it wholesale (CFG-02) and the merged view
-      // asserted above does not move -- which is why the reload leg converges
-      // instead of planning a disable.
-      assert.deepEqual(
-        ((await readConfig(configPath)) as { plugins?: Record<string, unknown> }).plugins?.[
-          "foo@mp"
-        ],
-        {},
-      );
-    }
-
-    // 4. UPDATE against a manifest whose declaration is STILL false. The
-    // version bump is the control proving the update really ran and really
-    // re-read the manifest, rather than short-circuiting on version equality.
-    // `plugin.json` is the first tier of the version derivation, so a bump
-    // confined to the marketplace entry would never reach the record.
+    const afterEnable = await observe();
+    const declaringConfig = await readConfig(configPath);
+    await applyReconcile({ ctx: firstReload.ctx, cwd, pi, scope: "user" });
+    const afterFirstReload = await observe();
     await writeFile(
       manifestPath,
       JSON.stringify({
         name: "mp",
         plugins: [
-          { name: "foo", source: "./plugins/foo", version: "2.0.0", defaultEnabled: false },
+          { defaultEnabled: false, name: "foo", source: "./plugins/foo", version: "2.0.0" },
         ],
       }),
     );
@@ -2532,67 +3535,191 @@ async function runConverseEnableChain(declarationFile: "base" | "local"): Promis
       JSON.stringify({ name: "foo", version: "2.0.0" }),
     );
     await updatePlugins({
-      ctx: makeCtx(cwd).ctx,
-      pi,
+      ctx: updateContext.ctx,
       cwd,
-      scope: "user",
-      target: { kind: "plugin", plugin: "foo", marketplace: "mp" },
-    });
-    await assertStaysEnabled(
-      { cwd, statePath },
-      { leg: "update", version: "2.0.0", declaringSource: declarationFile },
-    );
-    if (declarationFile === "local") {
-      // The update's post-success write-back is still aimed by the FLAG, so a
-      // flagless update under a local-only declaration writes the shadowed
-      // base file. Pinned rather than glossed: that patch carries no `enabled`
-      // field, so the entry stays fieldless, the local entry keeps replacing
-      // it wholesale, and the merged view asserted immediately above does not
-      // move. Cosmetic, not a reversal -- which is why re-aiming that write is
-      // deliberately outside this change's scope.
-      assert.deepEqual(
-        ((await readConfig(configPath)) as { plugins?: Record<string, unknown> }).plugins?.[
-          "foo@mp"
-        ],
-        {},
-      );
-    }
-
-    // 5. REINSTALL: a repair, never an upgrade.
-    await reinstallPlugin({
-      ctx: makeCtx(cwd).ctx,
       pi,
       scope: "user",
+      target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
+    });
+    const afterUpdate = await observe();
+    await reinstallPlugin({
+      ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",
+      pi,
       plugin: "foo",
+      scope: "user",
     });
-    await assertStaysEnabled(
-      { cwd, statePath },
-      { leg: "reinstall", version: "2.0.0", declaringSource: declarationFile },
-    );
-    assert.ok((await readdir(skillsTargetDir)).length > 0, "reinstall: artifacts on disk");
+    const afterReinstall = await observe();
+    await applyReconcile({ ctx: secondReload.ctx, cwd, pi, scope: "user" });
+    const afterSecondReload = await observe();
 
-    // 6. RELOAD again: the chain ends where it started, in a fixed point
-    // pointed the other way.
-    const secondReload = makeCtx(cwd);
-    await applyReconcile({ ctx: secondReload.ctx, pi, cwd, scope: "user" });
-    assert.deepEqual(secondReload.notifications, [], "reload: still converged");
-    await assertStaysEnabled(
-      { cwd, statePath },
-      { leg: "final reload", version: "2.0.0", declaringSource: declarationFile },
+    // assert
+    assert.deepStrictEqual(
+      {
+        enabled: initialState.marketplaces.mp?.plugins.foo?.enabled,
+        merged: initialMerged,
+      },
+      { enabled: false, merged: { declaredEnabled: false, source: "base" } },
     );
+    assert.deepStrictEqual(afterEnable, {
+      enabled: true,
+      merged: { declaredEnabled: true, source: "base" },
+      skills: ["foo-s1"],
+      version: "1.0.0",
+    });
+    assert.deepStrictEqual(declaringConfig, {
+      marketplaces: { mp: { source: mpRoot } },
+      plugins: { "foo@mp": { enabled: true } },
+      schemaVersion: 1,
+    });
+    assert.deepStrictEqual(firstReload.notifications, []);
+    assert.deepStrictEqual(afterFirstReload, afterEnable);
+    assert.deepStrictEqual(afterUpdate, {
+      enabled: true,
+      merged: { declaredEnabled: true, source: "base" },
+      skills: ["foo-s1"],
+      version: "2.0.0",
+    });
+    assert.deepStrictEqual(afterReinstall, afterUpdate);
+    assert.deepStrictEqual(secondReload.notifications, []);
+    assert.deepStrictEqual(afterSecondReload, afterUpdate);
+    assert.equal(enableContext.notifications.length, 1);
+    assert.equal(updateContext.notifications.length, 1);
+    assert.equal(reinstallContext.notifications.length, 1);
   });
-}
-
-test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugin survives reload, update and reinstall", async () => {
-  await runConverseEnableChain("base");
 });
 
 test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared plugin survives reload, update and reinstall", async () => {
-  // The base variant above passes without the declaring-file write target;
-  // this one does not. Before that fix the enable wrote the base file, the
-  // local entry kept shadowing it wholesale, and the reload leg reversed the
-  // user's command.
-  await runConverseEnableChain("local");
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configLocalPath, configPath, manifestPath, mpRoot } = await seedRealDisabledMarketplace(
+      home,
+      {
+        configSeed: { entry: { enabled: false }, file: "local" },
+        defaultEnabled: false,
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.0.0",
+      },
+    );
+    const locations = locationsFor("user", cwd);
+    const pi = makePi();
+    const observe = async (): Promise<{
+      enabled: boolean | undefined;
+      merged: { source: "base" | "local"; declaredEnabled: boolean } | undefined;
+      skills: string[];
+      version: string | undefined;
+    }> => {
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.foo;
+      return {
+        enabled: record?.enabled,
+        merged: await readMergedUserPluginEntry(cwd, "foo@mp"),
+        skills: await readdir(locations.skillsTargetDir),
+        version: record?.version,
+      };
+    };
+
+    const initialState = await loadState(locations.extensionRoot);
+    const initialMerged = await readMergedUserPluginEntry(cwd, "foo@mp");
+    const enableContext = makeCtx(cwd);
+    const firstReload = makeCtx(cwd);
+    const updateContext = makeCtx(cwd);
+    const reinstallContext = makeCtx(cwd);
+    const secondReload = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx: enableContext.ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      pi,
+      plugin: "foo",
+      scope: "user",
+    });
+    const afterEnable = await observe();
+    const declaringConfig = await readConfig(configLocalPath);
+    const baseExistsAfterEnable = await fileExists(configPath);
+    await applyReconcile({ ctx: firstReload.ctx, cwd, pi, scope: "user" });
+    const afterFirstReload = await observe();
+    const baseAfterReload = await readConfig(configPath);
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { defaultEnabled: false, name: "foo", source: "./plugins/foo", version: "2.0.0" },
+        ],
+      }),
+    );
+    await writeFile(
+      path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo", version: "2.0.0" }),
+    );
+    await updatePlugins({
+      ctx: updateContext.ctx,
+      cwd,
+      pi,
+      scope: "user",
+      target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
+    });
+    const afterUpdate = await observe();
+    const baseAfterUpdate = await readConfig(configPath);
+    await reinstallPlugin({
+      ctx: reinstallContext.ctx,
+      cwd,
+      marketplace: "mp",
+      pi,
+      plugin: "foo",
+      scope: "user",
+    });
+    const afterReinstall = await observe();
+    await applyReconcile({ ctx: secondReload.ctx, cwd, pi, scope: "user" });
+    const afterSecondReload = await observe();
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        enabled: initialState.marketplaces.mp?.plugins.foo?.enabled,
+        merged: initialMerged,
+      },
+      { enabled: false, merged: { declaredEnabled: false, source: "local" } },
+    );
+    assert.deepStrictEqual(afterEnable, {
+      enabled: true,
+      merged: { declaredEnabled: true, source: "local" },
+      skills: ["foo-s1"],
+      version: "1.0.0",
+    });
+    assert.deepStrictEqual(declaringConfig, {
+      marketplaces: { mp: { source: mpRoot } },
+      plugins: { "foo@mp": { enabled: true } },
+      schemaVersion: 1,
+    });
+    assert.equal(baseExistsAfterEnable, false);
+    assert.deepStrictEqual(firstReload.notifications, []);
+    assert.deepStrictEqual(afterFirstReload, afterEnable);
+    assert.deepStrictEqual(
+      (baseAfterReload as { plugins?: Record<string, unknown> }).plugins?.["foo@mp"],
+      {},
+    );
+    assert.deepStrictEqual(afterUpdate, {
+      enabled: true,
+      merged: { declaredEnabled: true, source: "local" },
+      skills: ["foo-s1"],
+      version: "2.0.0",
+    });
+    assert.deepStrictEqual(
+      (baseAfterUpdate as { plugins?: Record<string, unknown> }).plugins?.["foo@mp"],
+      {},
+    );
+    assert.deepStrictEqual(afterReinstall, afterUpdate);
+    assert.deepStrictEqual(secondReload.notifications, []);
+    assert.deepStrictEqual(afterSecondReload, afterUpdate);
+    assert.equal(enableContext.notifications.length, 1);
+    assert.equal(updateContext.notifications.length, 1);
+    assert.equal(reinstallContext.notifications.length, 1);
+  });
 });
