@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,7 +32,10 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  dropMarketplaceCache,
+  resetCompletionCache,
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -41,8 +45,12 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { ReinstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import type {
+  ReinstallCloneCacheSeam,
+  ReinstallPluginDeps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type { TestContext } from "node:test";
 
 interface NotifyRecord {
   message: string;
@@ -313,6 +321,237 @@ async function readCommand(cwd: string): Promise<string> {
 
 function errorNotifications(notifications: readonly NotifyRecord[]): readonly NotifyRecord[] {
   return notifications.filter((n) => n.severity === "error");
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Retry-proof observation helpers (D-13/D-15/D-16)
+//
+// Mechanical observation only: these read filesystem primitives and record
+// the ledger events reinstall's bridges emit. They choose no expected value
+// and derive no assertion -- every retry case authors its own literal
+// schedule, tree, and byte expectations.
+// ──────────────────────────────────────────────────────────────────────────
+
+const retryRequire = createRequire(import.meta.url);
+const retryFs = retryRequire("node:fs/promises") as typeof import("node:fs/promises");
+
+async function retryPathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Complete relative inventory of one scope root. Directories carry a trailing
+ * slash; the advisory lock file is excluded because its presence depends on
+ * lock timing rather than on reinstall's mutation ledger.
+ */
+async function retryTree(root: string): Promise<readonly string[]> {
+  if (!(await retryPathExists(root))) {
+    return [];
+  }
+
+  const entries: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    const children = await retryFs.readdir(directory, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const absolute = path.join(directory, child.name);
+      const relative = path.relative(root, absolute).split(path.sep).join("/");
+      if (relative === "pi-claude-marketplace/.state-lock") {
+        continue;
+      }
+
+      entries.push(child.isDirectory() ? `${relative}/` : relative);
+      if (child.isDirectory()) {
+        await visit(absolute);
+      }
+    }
+  };
+
+  await visit(root);
+  return entries;
+}
+
+interface RetryScheduleDirs {
+  readonly agentsStagingDir: string;
+  readonly agentsTargetDir: string;
+  readonly commandsStagingDir: string;
+  readonly hooksPluginDir: string;
+  readonly promptsTargetDir: string;
+  readonly skillsStagingDir: string;
+  readonly skillsTargetDir: string;
+}
+
+type RetryBridge = "agents" | "commands" | "skills";
+
+/** Toggleable `rm` refusal aimed at one bridge's staging root. */
+interface RetryStagingRmFault {
+  readonly bridge: RetryBridge;
+  enabled: boolean;
+  readonly message: string;
+}
+
+function retryStagingDirOf(dirs: RetryScheduleDirs, bridge: RetryBridge): string {
+  if (bridge === "agents") {
+    return dirs.agentsStagingDir;
+  }
+
+  if (bridge === "commands") {
+    return dirs.commandsStagingDir;
+  }
+
+  return dirs.skillsStagingDir;
+}
+
+function retryStagingSlot(
+  dirs: RetryScheduleDirs,
+  target: string,
+): { readonly backup: boolean; readonly bridge: RetryBridge } | undefined {
+  const parent = path.dirname(target);
+  const bridges: readonly RetryBridge[] = ["agents", "commands", "skills"];
+  for (const bridge of bridges) {
+    if (parent === retryStagingDirOf(dirs, bridge)) {
+      return { backup: path.basename(target).startsWith("backup-"), bridge };
+    }
+  }
+
+  return undefined;
+}
+
+function retryTargetBridge(dirs: RetryScheduleDirs, target: string): RetryBridge | undefined {
+  const parent = path.dirname(target);
+  if (parent === dirs.agentsTargetDir) {
+    return "agents";
+  }
+
+  if (parent === dirs.promptsTargetDir) {
+    return "commands";
+  }
+
+  if (parent === dirs.skillsTargetDir) {
+    return "skills";
+  }
+
+  return undefined;
+}
+
+/**
+ * Record reinstall's prepare/replace/rollback/abort/finalize ledger from the
+ * filesystem primitives each bridge issues, and optionally refuse one bridge's
+ * staging removal so an abort or rollback leak becomes deterministic.
+ *
+ *   prepare:<bridge>  mkdir of `<stagingDir>/<uuid>`
+ *   replace:<bridge>  mkdir of `<stagingDir>/backup-<uuid>`
+ *   rollback:<bridge> removal of a replaced target, or restore of a backup
+ *   abort:<bridge>    removal of a staging root that never reached replace
+ *   finalize:<bridge> removal of a backup root that never rolled back
+ *   commit:hooks      mkdir of `<hooksDir>/<plugin>` by the atomic hooks write
+ *   remove:hooks      removal of `<hooksDir>/<plugin>`
+ */
+function observeReinstallSchedule(
+  t: TestContext,
+  dirs: RetryScheduleDirs,
+  schedule: { current: string[] },
+  stagingRmFault?: RetryStagingRmFault,
+): () => void {
+  const originalMkdir = retryFs.mkdir.bind(retryFs);
+  const originalRename = retryFs.rename.bind(retryFs);
+  const originalRm = retryFs.rm.bind(retryFs);
+  const record = (event: string): void => {
+    if (!schedule.current.includes(event)) {
+      schedule.current.push(event);
+    }
+  };
+
+  const mkdirMock = t.mock.method(
+    retryFs,
+    "mkdir",
+    async (...args: Parameters<typeof retryFs.mkdir>) => {
+      const target = String(args[0]);
+      if (target === dirs.hooksPluginDir) {
+        record("commit:hooks");
+      }
+
+      const slot = retryStagingSlot(dirs, target);
+      if (slot !== undefined) {
+        record(`${slot.backup ? "replace" : "prepare"}:${slot.bridge}`);
+      }
+
+      return originalMkdir(...args);
+    },
+  );
+  const renameMock = t.mock.method(
+    retryFs,
+    "rename",
+    async (...args: Parameters<typeof retryFs.rename>) => {
+      const restored = retryStagingSlot(dirs, path.dirname(String(args[0])));
+      if (restored?.backup === true) {
+        record(`rollback:${restored.bridge}`);
+      }
+
+      return originalRename(...args);
+    },
+  );
+  const rmMock = t.mock.method(retryFs, "rm", async (...args: Parameters<typeof retryFs.rm>) => {
+    const target = String(args[0]);
+    if (target === dirs.hooksPluginDir) {
+      record("remove:hooks");
+    }
+
+    const replaced = retryTargetBridge(dirs, target);
+    if (replaced !== undefined) {
+      record(`rollback:${replaced}`);
+    }
+
+    const slot = retryStagingSlot(dirs, target);
+    if (slot !== undefined) {
+      const phase = slot.backup ? "finalize" : "abort";
+      const suppressor = slot.backup ? `rollback:${slot.bridge}` : `replace:${slot.bridge}`;
+      if (!schedule.current.includes(suppressor)) {
+        record(`${phase}:${slot.bridge}`);
+      }
+
+      if (
+        stagingRmFault?.enabled === true &&
+        !slot.backup &&
+        slot.bridge === stagingRmFault.bridge
+      ) {
+        throw new Error(stagingRmFault.message);
+      }
+    }
+
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+
+  return () => {
+    rmMock.mock.restore();
+    renameMock.mock.restore();
+    mkdirMock.mock.restore();
+    syncBuiltinESMExports();
+  };
+}
+
+/** Case-local `ScopedLocations` projection the schedule observer consumes. */
+function retryScheduleDirs(cwd: string, plugin: string): RetryScheduleDirs {
+  const locations = locationsFor("project", cwd);
+  return {
+    agentsStagingDir: locations.agentsStagingDir,
+    agentsTargetDir: locations.agentsDir,
+    commandsStagingDir: locations.commandsStagingDir,
+    hooksPluginDir: path.join(locations.hooksDir, plugin),
+    promptsTargetDir: locations.promptsTargetDir,
+    skillsStagingDir: locations.skillsStagingDir,
+    skillsTargetDir: locations.skillsTargetDir,
+  };
 }
 
 test("PRL-06: absent installed record returns skipped and does not mutate state or disk", async () => {
@@ -5194,6 +5433,2075 @@ test("a pinned git-subdir reinstall reports a missing cached subdirectory", asyn
       assert.deepEqual(gitState.cloneCalls, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Fresh maintenance/persistence collaborator set for one retry case. Each
+ * call returns new closures bound to that case's schedule and fault cells;
+ * nothing is shared between cases.
+ */
+function observeRetryDeps(
+  schedule: { current: string[] },
+  faults?: {
+    readonly cache?: { enabled: boolean; readonly message: string };
+    readonly data?: { enabled: boolean; readonly message: string };
+    readonly persistence?: { enabled: boolean; readonly message: string };
+  },
+  loadStateOverride?: typeof loadState,
+): ReinstallPluginDeps {
+  return {
+    dropMarketplaceCache: async (cachePath, scope, marketplace) => {
+      schedule.current.push("drop:cache");
+      if (faults?.cache?.enabled === true) {
+        throw new Error(faults.cache.message);
+      }
+
+      await dropMarketplaceCache(cachePath, scope, marketplace);
+    },
+    removeDataDir: async (target, options) => {
+      schedule.current.push("remove:data");
+      if (faults?.data?.enabled === true) {
+        throw new Error(faults.data.message);
+      }
+
+      await rm(target, options);
+    },
+    stateTransaction: {
+      ...(loadStateOverride !== undefined && { loadState: loadStateOverride }),
+      saveState: async (extensionRoot, state) => {
+        schedule.current.push("save:state");
+        if (faults?.persistence?.enabled === true) {
+          throw new Error(faults.persistence.message);
+        }
+
+        await saveState(extensionRoot, state);
+      },
+    },
+  };
+}
+
+/** The doubled `<message>\n\ncause: <message>` shape reinstall folds onto `notes`. */
+function retryCauseChain(message: string): string {
+  return `${message}\n\ncause: ${message}`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-13/D-15/D-16 failure-then-retry proof.
+//
+// Every case below calls the SAME exported reinstall entrypoint twice inside
+// one test, over one case-owned root, in one mode, against one target or
+// ordered target set. Between the two calls it repairs only the injected
+// collaborator or the case-owned fault fixture -- never the bytes, tree, or
+// residue the first call left behind.
+//
+// The mcp and hooks bridges write through `write-file-atomic`, so their
+// commits carry no observable `node:fs/promises` signature; those two are
+// proven by the authoritative bytes and the owned-tree inventory instead of
+// by a schedule entry.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("retry proof: reinstall: skills prepare failure with no prepared handles converges on the same root", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-skills-prepare-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const manifestBytes = await readFile(seeded.manifestPath, "utf8");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const configBytes = await readFile(locations.configJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const oldCommand = await readCommand(cwd);
+      await rm(locations.skillsStagingDir, { force: true, recursive: true });
+      await writeFile(locations.skillsStagingDir, "fault: skills staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      const firstCommand = await readCommand(cwd);
+      await rm(locations.skillsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.deepStrictEqual(Object.keys(first).sort(), [
+        "marketplace",
+        "name",
+        "notes",
+        "partition",
+        "reasons",
+        "scope",
+      ]);
+      assert.deepStrictEqual(first.reasons, ["source missing"]);
+      assert.match(
+        first.notes[0] ?? "",
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.skillsStagingDir}/[0-9a-f-]+'\\n\\ncause: ENOTDIR: not a directory, mkdir '${locations.skillsStagingDir}/[0-9a-f-]+'$`,
+        ),
+      );
+      assert.equal(first.notes.length, 1);
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        marketplace: "mp",
+        name: "hello",
+        partition: "reinstalled",
+        resourcesChanged: true,
+        scope: "project",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        version: "1.0.0",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
+      assert.equal(firstSkill, oldSkill);
+      assert.equal(firstCommand, oldCommand);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["hello:deploy"],
+          skills: ["hello-tool"],
+        },
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: commands prepare failure aborts the one prepared handle and converges", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-commands-prepare-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const manifestBytes = await readFile(seeded.manifestPath, "utf8");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      await rm(locations.commandsStagingDir, { force: true, recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.reasons, ["source missing"]);
+      assert.match(
+        first.notes[0] ?? "",
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.commandsStagingDir}/[0-9a-f-]+'\\n\\ncause: `,
+        ),
+      );
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        marketplace: "mp",
+        name: "hello",
+        partition: "reinstalled",
+        resourcesChanged: true,
+        scope: "project",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        version: "1.0.0",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
+      assert.equal(firstSkill, oldSkill);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills", "prepare:commands", "abort:skills"]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: an abort cleanup leak reports manual recovery and the leak survives the retry", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-abort-leak-"));
+    let restoreSchedule: (() => void) | undefined;
+    const stagingRmFault = {
+      bridge: "skills" as const,
+      enabled: true,
+      message: "skills staging removal refused",
+    };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.commandsStagingDir, { force: true, recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+        stagingRmFault,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstNotifications = [...notifications];
+      stagingRmFault.enabled = false;
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, "manual-recovery");
+      assert.deepStrictEqual(first.reasons, ["rollback partial"]);
+      assert.equal(firstNotifications.length, 1);
+      assert.equal(firstNotifications[0]?.severity, "warning");
+      assert.match(
+        firstNotifications[0]?.message ?? "",
+        /^A plugin operation needs attention\.\n\n● mp \[project\]\n {2}⊘ hello \(manual recovery\) \{rollback partial\}\n {4}cause: ENOTDIR/,
+      );
+      assert.match(
+        firstNotifications[0]?.message ?? "",
+        new RegExp(
+          `\\n {4}leaked: skills: failed to clean up skills staging directory at ${locations.skillsStagingDir}/[0-9a-f-]+: skills staging removal refused$`,
+        ),
+      );
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(notifications.slice(1), [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills", "prepare:commands", "abort:skills"]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      const isLeakedStagingEntry = (entry: string): boolean =>
+        entry.startsWith("pi-claude-marketplace/skills-staging/") &&
+        entry !== "pi-claude-marketplace/skills-staging/";
+      assert.equal(
+        firstTree.filter((entry) =>
+          /^pi-claude-marketplace\/skills-staging\/[0-9a-f-]+\/$/.test(entry),
+        ).length,
+        1,
+      );
+      assert.deepStrictEqual(
+        firstTree.filter((entry) => !isLeakedStagingEntry(entry)),
+        [
+          "claude-plugins.json",
+          "pi-claude-marketplace/",
+          "pi-claude-marketplace/commands-staging",
+          "pi-claude-marketplace/data/",
+          "pi-claude-marketplace/data/mp/",
+          "pi-claude-marketplace/data/mp/hello/",
+          "pi-claude-marketplace/resources/",
+          "pi-claude-marketplace/resources/prompts/",
+          "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+          "pi-claude-marketplace/resources/skills/",
+          "pi-claude-marketplace/resources/skills/hello-tool/",
+          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/skills-staging/",
+          "pi-claude-marketplace/state.json",
+        ],
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.deepStrictEqual(
+        finalTree.filter(isLeakedStagingEntry),
+        firstTree.filter(isLeakedStagingEntry),
+      );
+      assert.deepStrictEqual(
+        finalTree.filter((entry) => !isLeakedStagingEntry(entry)),
+        [
+          "claude-plugins.json",
+          "pi-claude-marketplace/",
+          "pi-claude-marketplace/commands-staging/",
+          "pi-claude-marketplace/data/",
+          "pi-claude-marketplace/data/mp/",
+          "pi-claude-marketplace/resources/",
+          "pi-claude-marketplace/resources/prompts/",
+          "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+          "pi-claude-marketplace/resources/skills/",
+          "pi-claude-marketplace/resources/skills/hello-tool/",
+          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/skills-staging/",
+          "pi-claude-marketplace/state.json",
+        ],
+      );
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      stagingRmFault.enabled = false;
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: MCP prepare failure aborts three prepared handles newest first", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-mcp-prepare-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { agent: "old agent", command: "old command", mcp: true, skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        agent: "new agent",
+        command: "new command",
+        mcp: true,
+        skill: "new skill",
+      });
+      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const oldAgent = await readFile(agentPath, "utf8");
+      await rm(locations.mcpJsonPath, { force: true });
+      await mkdir(locations.mcpJsonPath, { recursive: true });
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstAgent = await readFile(agentPath, "utf8");
+      await rm(locations.mcpJsonPath, { force: true, recursive: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.equal(first.reasons, undefined);
+      assert.deepStrictEqual(first.notes, [
+        retryCauseChain("EISDIR: illegal operation on a directory, read"),
+      ]);
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second.stagedMcpServerNames, ["server1"]);
+      assert.deepStrictEqual(second.stagedAgentNames, [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.equal(second.version, "1.0.0");
+      assert.deepStrictEqual(second.notes, [
+        "warning: [bot] source description was missing or empty -- using fallback",
+      ]);
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstAgent, oldAgent);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "abort:agents",
+        "abort:commands",
+        "abort:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "finalize:agents",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "agents/",
+        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "claude-plugins.json",
+        "mcp.json/",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "agents/",
+        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "claude-plugins.json",
+        "mcp.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.equal(await readFile(locations.mcpJsonPath, "utf8"), mcpBytes);
+      assert.match(await readFile(agentPath, "utf8"), /new agent/);
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: skills replacement refusal leaves an empty replacement ledger and converges", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-skills-replace-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      const freshSkillSource = path.join(seeded.pluginRoot, "skills", "fresh");
+      await mkdir(freshSkillSource, { recursive: true });
+      await writeFile(
+        path.join(freshSkillSource, "SKILL.md"),
+        "---\nname: fresh\n---\n\nfresh skill\n",
+      );
+      const foreignSkillDir = path.join(locations.skillsTargetDir, "hello-fresh");
+      await mkdir(foreignSkillDir, { recursive: true });
+      await writeFile(path.join(foreignSkillDir, "foreign.md"), "foreign bytes\n");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(seeded.manifestPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      const firstForeign = await readFile(path.join(foreignSkillDir, "foreign.md"), "utf8");
+      await rm(foreignSkillDir, { force: true, recursive: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.equal(first.reasons, undefined);
+      assert.deepStrictEqual(first.notes, [
+        retryCauseChain(
+          `Cannot replace skill target with non-previous content at ${foreignSkillDir}`,
+        ),
+      ]);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.version, "1.0.0");
+      assert.equal(second.resourcesChanged, true);
+      assert.equal(second.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
+      assert.equal(firstSkill, oldSkill);
+      assert.equal(firstForeign, "foreign bytes\n");
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "rollback:skills",
+        "abort:commands",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-fresh/",
+        "pi-claude-marketplace/resources/skills/hello-fresh/foreign.md",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-fresh/",
+        "pi-claude-marketplace/resources/skills/hello-fresh/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["hello:deploy"],
+          skills: ["hello-fresh", "hello-tool"],
+        },
+      );
+      assert.match(
+        await readFile(path.join(locations.skillsTargetDir, "hello-fresh", "SKILL.md"), "utf8"),
+        /fresh skill/,
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: commands replacement refusal unwinds the committed skills replacement in reverse", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-commands-replace-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      await writeFile(
+        path.join(seeded.pluginRoot, "commands", "fresh.md"),
+        "# fresh\n\nfresh command\n",
+      );
+      const foreignCommandPath = path.join(locations.promptsTargetDir, "hello:fresh.md");
+      await writeFile(foreignCommandPath, "foreign command bytes\n");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const oldCommand = await readCommand(cwd);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      const firstCommand = await readCommand(cwd);
+      const firstForeign = await readFile(foreignCommandPath, "utf8");
+      await rm(foreignCommandPath, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.notes, [
+        retryCauseChain(
+          `Cannot replace command target with non-previous content at ${foreignCommandPath}`,
+        ),
+      ]);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.version, "1.0.0");
+      assert.equal(second.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstSkill, oldSkill);
+      assert.equal(firstCommand, oldCommand);
+      assert.equal(firstForeign, "foreign command bytes\n");
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "rollback:commands",
+        "rollback:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/prompts/hello:fresh.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/prompts/hello:fresh.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+      assert.match(await readFile(foreignCommandPath, "utf8"), /fresh command/);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["hello:deploy", "hello:fresh"],
+          skills: ["hello-tool"],
+        },
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a persistence failure after hooks removal leaves the unrestorable hooks window and the retry converges the record", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-hooks-window-"));
+    let restoreSchedule: (() => void) | undefined;
+    const persistenceFault = { enabled: true, message: "state persistence refused" };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          hooksJson: {
+            hooks: {
+              PreToolUse: [{ hooks: [{ command: "echo ok", type: "command" }], matcher: "Bash" }],
+            },
+          },
+          skill: "old skill",
+        },
+        install: true,
+      });
+      await rm(path.join(seeded.pluginRoot, "hooks"), { force: true, recursive: true });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      const firstSkill = await readSkill(cwd);
+      persistenceFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.notes, [retryCauseChain("state persistence refused")]);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.version, "1.0.0");
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstSkill, oldSkill);
+      // WR-05: the hooks write is not on the replacement ledger, so the removed
+      // subtree cannot be restored. The record still claims the hook.
+      assert.deepStrictEqual(firstRecord?.resources.hooks, ["hello"]);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "replace:skills",
+        "remove:hooks",
+        "save:state",
+        "rollback:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "replace:skills",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+      );
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      persistenceFault.enabled = false;
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a persistence failure after four committed replacements unwinds them all in reverse", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-persistence-"));
+    let restoreSchedule: (() => void) | undefined;
+    const persistenceFault = { enabled: true, message: "state persistence refused" };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { agent: "old agent", command: "old command", mcp: true, skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        agent: "new agent",
+        command: "new command",
+        mcp: true,
+        skill: "new skill",
+      });
+      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const oldAgent = await readFile(agentPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const oldCommand = await readCommand(cwd);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstMcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const firstAgent = await readFile(agentPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      const firstCommand = await readCommand(cwd);
+      persistenceFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.notes, [retryCauseChain("state persistence refused")]);
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second.stagedMcpServerNames, ["server1"]);
+      assert.deepStrictEqual(second.notes, [
+        "warning: [bot] source description was missing or empty -- using fallback",
+      ]);
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstMcpBytes, mcpBytes);
+      assert.equal(firstAgent, oldAgent);
+      assert.equal(firstSkill, oldSkill);
+      assert.equal(firstCommand, oldCommand);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "save:state",
+        "rollback:agents",
+        "rollback:commands",
+        "rollback:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "finalize:agents",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "agents/",
+        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "claude-plugins.json",
+        "mcp.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "agents/",
+        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "claude-plugins.json",
+        "mcp.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readFile(agentPath, "utf8"), /new agent/);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+    } finally {
+      persistenceFault.enabled = false;
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a concurrently removed record unwinds before any save and the retry persists once", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-concurrent-removal-"));
+    let restoreSchedule: (() => void) | undefined;
+    const removalFault = { enabled: true, observed: false };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule, undefined, async (extensionRoot) => {
+        const state = await loadState(extensionRoot);
+        const mp = state.marketplaces["mp"];
+        if (mp === undefined || !removalFault.enabled) {
+          return state;
+        }
+
+        // The record is present for the entry guard and gone by the time the
+        // ledger writes it back -- the real concurrent-removal window.
+        const plugins = new Proxy(mp.plugins, {
+          get(target: typeof mp.plugins, key: string | symbol): unknown {
+            if (key !== "hello") {
+              return Reflect.get(target, key);
+            }
+
+            if (removalFault.observed) {
+              return undefined;
+            }
+
+            removalFault.observed = true;
+            return Reflect.get(target, key);
+          },
+        });
+        (state.marketplaces as Record<string, unknown>)["mp"] = { ...mp, plugins };
+        return state;
+      });
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      removalFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(removalFault.observed, true);
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.notes, [
+        retryCauseChain('Plugin "hello" was concurrently removed from marketplace "mp".'),
+      ]);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.version, "1.0.0");
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstSkill, oldSkill);
+      // The guard fires before `tx.save()`, so no persistence attempt appears.
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "rollback:commands",
+        "rollback:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.deepStrictEqual(
+        Object.keys((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+        ["hello"],
+      );
+    } finally {
+      removalFault.enabled = false;
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: an invalid config write-back is reported beside the success and the retry writes the entry", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-config-write-back-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      await writeFile(locations.configJsonPath, "{ not json ", "utf8");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule);
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      const firstNotifications = [...notifications];
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      await rm(locations.configJsonPath, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "reinstalled");
+      assert.equal(first.version, "1.0.0");
+      assert.equal(first.notes, undefined);
+      assert.deepStrictEqual(firstNotifications, [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {invalid manifest}\n    cause: Config file "claude-plugins.json" failed schema validation.',
+          severity: "error",
+        },
+      ]);
+      assert.equal(firstConfigBytes, "{ not json ");
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(notifications.slice(2), [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n',
+      );
+      assert.equal(firstRecord?.version, "1.0.0");
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "replace:skills",
+        "replace:commands",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(secondSchedule, firstSchedule);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]
+          ?.installedAt,
+        firstRecord?.installedAt,
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a post-save hook-cache read failure stays silent and the retry re-materializes once", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-post-save-hooks-"));
+    let restoreRead: (() => void) | undefined;
+    const hookReadFault = { enabled: true, reads: 0 };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          hooksJson: {
+            hooks: {
+              PreToolUse: [{ hooks: [{ command: "echo ok", type: "command" }], matcher: "Bash" }],
+            },
+          },
+          skill: "old skill",
+        },
+        install: true,
+      });
+      const sourceHooksPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
+      const installedHooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
+      const installedHooksBytes = await readFile(installedHooksPath, "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        hooksJson: {
+          hooks: {
+            PreToolUse: [{ hooks: [{ command: "echo ok", type: "command" }], matcher: "Bash" }],
+          },
+        },
+        skill: "new skill",
+      });
+      const originalReadFile = retryFs.readFile.bind(retryFs);
+      const readMock = t.mock.method(
+        retryFs,
+        "readFile",
+        async (...args: Parameters<typeof retryFs.readFile>) => {
+          const [target] = args;
+          if (typeof target !== "string" || target !== sourceHooksPath) {
+            return originalReadFile(...args);
+          }
+
+          hookReadFault.reads += 1;
+          // Reads 1 and 2 are the resolve and the hooks commit; read 3 is the
+          // post-save cache hydration this case refuses.
+          if (hookReadFault.enabled && hookReadFault.reads === 3) {
+            throw new Error("hooks source read refused");
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+
+      syncBuiltinESMExports();
+      restoreRead = (): void => {
+        readMock.mock.restore();
+        syncBuiltinESMExports();
+      };
+
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstReads = hookReadFault.reads;
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      hookReadFault.enabled = false;
+      const second = await reinstallPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "reinstalled");
+      assert.equal(first.version, "1.0.0");
+      // The post-save hook-cache failure is debug-only: no note, no warning.
+      assert.equal(first.notes, undefined);
+      assert.equal(firstReads, 3);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.notes, undefined);
+      assert.equal(hookReadFault.reads, 6);
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(firstRecord?.resources.hooks, ["hello"]);
+      assert.deepStrictEqual(firstRecord.hookEntries, [{ event: "PreToolUse", matcher: "Bash" }]);
+      assert.equal(await readFile(installedHooksPath, "utf8"), installedHooksBytes);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/hooks/hello/",
+        "pi-claude-marketplace/hooks/hello/hooks.json",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.equal(finalRecord?.installedAt, firstRecord.installedAt);
+      assert.equal(finalRecord.version, "1.0.0");
+      assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      hookReadFault.enabled = false;
+      restoreRead?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a completion-cache maintenance failure notes the deferral and the retry clears it", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-cache-maintenance-"));
+    let restoreSchedule: (() => void) | undefined;
+    const cacheFault = { enabled: true, message: "completion cache refresh refused" };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule, { cache: cacheFault });
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      cacheFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "reinstalled");
+      assert.deepStrictEqual(first.notes, [
+        'warning: Plugin "hello" reinstalled; completion cache refresh deferred: completion cache refresh refused',
+      ]);
+      assert.equal(first.discoveryWarnings, undefined);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
+      // The data cleanup still runs, so the deferral is cache-only.
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "replace:skills",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(secondSchedule, firstSchedule);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(finalRecord !== undefined);
+      assert.equal(finalRecord.installedAt, firstRecord?.installedAt);
+      assert.equal(finalRecord.version, "1.0.0");
+      assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
+    } finally {
+      cacheFault.enabled = false;
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the directory and the retry removes it", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-data-maintenance-"));
+    let restoreSchedule: (() => void) | undefined;
+    const dataFault = { enabled: true, message: "data directory removal refused" };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeReinstallSchedule(
+        t,
+        retryScheduleDirs(cwd, "hello"),
+        activeSchedule,
+      );
+      const deps = observeRetryDeps(activeSchedule, { data: dataFault });
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      dataFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstallPlugin({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "reinstalled");
+      assert.deepStrictEqual(first.notes, [
+        `warning: Plugin "hello" reinstalled; data cleanup deferred at ${dataDir}: data directory removal refused`,
+      ]);
+      assert.equal(first.discoveryWarnings, undefined);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "replace:skills",
+        "remove:hooks",
+        "save:state",
+        "finalize:skills",
+        "drop:cache",
+        "remove:data",
+      ]);
+      assert.deepStrictEqual(secondSchedule, firstSchedule);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(finalRecord !== undefined);
+      assert.equal(finalRecord.installedAt, firstRecord?.installedAt);
+      assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
+    } finally {
+      dataFault.enabled = false;
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a bulk cascade keeps the earlier committed target and the retry reinstalls the ordered set once", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-bulk-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const alpha = await seedMarketplace({
+        cwd,
+        install: true,
+        marketplaceRoot,
+        pluginName: "alpha",
+        resources: { skill: "old alpha" },
+      });
+      const beta = await seedMarketplace({
+        cwd,
+        install: true,
+        marketplaceRoot,
+        pluginName: "beta",
+        resources: { skill: "old beta" },
+      });
+      await writePluginTree(alpha.pluginRoot, "alpha", { skill: "new alpha" });
+      await writePluginTree(beta.pluginRoot, "beta", { skill: "new beta" });
+      const extraBetaSkill = path.join(beta.pluginRoot, "skills", "extra");
+      await mkdir(extraBetaSkill, { recursive: true });
+      await writeFile(
+        path.join(extraBetaSkill, "SKILL.md"),
+        "---\nname: extra\n---\n\nextra beta skill\n",
+      );
+      const foreignBetaTarget = path.join(locations.skillsTargetDir, "beta-extra");
+      await mkdir(foreignBetaTarget, { recursive: true });
+      await writeFile(path.join(foreignBetaTarget, "foreign.md"), "foreign bytes\n");
+      const betaRecordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]
+        ?.plugins["beta"];
+      const maintenance: string[] = [];
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const deps: ReinstallPluginDeps = {
+        removeDataDir: async (target, options) => {
+          maintenance.push(`remove:data:${path.basename(target)}`);
+          await rm(target, options);
+        },
+      };
+
+      // act
+      const first = await reinstallPlugins({
+        __deps: deps,
+        ctx,
+        cwd,
+        pi,
+        scope: "project",
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstMaintenance = [...maintenance];
+      const firstNotifications = [...notifications];
+      const firstBetaRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]
+        ?.plugins["beta"];
+      await rm(foreignBetaTarget, { force: true, recursive: true });
+      const second = await reinstallPlugins({
+        __deps: deps,
+        ctx,
+        cwd,
+        pi,
+        scope: "project",
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        first.map((outcome) => `${outcome.name}:${outcome.partition}`),
+        ["alpha:reinstalled", "beta:failed"],
+      );
+      assert.deepStrictEqual(
+        second.map((outcome) => `${outcome.name}:${outcome.partition}`),
+        ["alpha:reinstalled", "beta:reinstalled"],
+      );
+      // Target-local continuation: only the committed target ran maintenance.
+      assert.deepStrictEqual(firstMaintenance, ["remove:data:alpha"]);
+      assert.deepStrictEqual(maintenance.slice(1), ["remove:data:alpha", "remove:data:beta"]);
+      assert.deepStrictEqual(firstNotifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n  ⊘ beta (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(notifications.slice(1), [
+        {
+          message:
+            "● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n  ● beta v1.0.0 (reinstalled)\n\nPlugin reinstall: 2 successes\n\n/reload to pick up changes",
+        },
+      ]);
+      // No batch-wide rollback: beta's record is exactly its pre-call record.
+      assert.deepStrictEqual(firstBetaRecord, betaRecordBefore);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/beta/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/alpha-tool/",
+        "pi-claude-marketplace/resources/skills/alpha-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/beta-extra/",
+        "pi-claude-marketplace/resources/skills/beta-extra/foreign.md",
+        "pi-claude-marketplace/resources/skills/beta-tool/",
+        "pi-claude-marketplace/resources/skills/beta-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/alpha-tool/",
+        "pi-claude-marketplace/resources/skills/alpha-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/beta-extra/",
+        "pi-claude-marketplace/resources/skills/beta-extra/SKILL.md",
+        "pi-claude-marketplace/resources/skills/beta-tool/",
+        "pi-claude-marketplace/resources/skills/beta-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      const finalState = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(Object.keys(finalState.marketplaces["mp"]?.plugins ?? {}), [
+        "alpha",
+        "beta",
+      ]);
+      assert.deepStrictEqual(finalState.marketplaces["mp"]?.plugins["alpha"]?.resources.skills, [
+        "alpha-tool",
+      ]);
+      assert.deepStrictEqual(finalState.marketplaces["mp"]?.plugins["beta"]?.resources.skills, [
+        "beta-extra",
+        "beta-tool",
+      ]);
+      assert.equal(
+        finalState.marketplaces["mp"]?.plugins["beta"]?.installedAt,
+        betaRecordBefore?.installedAt,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
     }
   });
 });
