@@ -618,7 +618,7 @@ export async function uninstallPlugin(
   } catch (err) {
     // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
     // saved (guard contract); the plugin record stays intact for retry.
-    const cause = err instanceof Error ? err : new Error(String(err));
+    const cause = err as Error;
     return emitCascadeFailure({
       ctx,
       pi,

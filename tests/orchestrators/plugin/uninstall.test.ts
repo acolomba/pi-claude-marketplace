@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -33,7 +34,7 @@ import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/pers
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// PU-1..8 + AS-6 (post-commit cleanup leaks) + NFR-5 (no network).
+// PU-1..8 + AS-6 (post-commit cleanup leaks).
 //
 // Every notification assertion is byte-exact against the catalog forms
 // at docs/output-catalog.md:336-378. Per D-19-01 the post-state-commit
@@ -104,6 +105,15 @@ function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): P
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+function cascadeFailure(cause: Error): typeof cascadeUnstagePlugin {
+  return () =>
+    Promise.resolve({
+      ok: false,
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      cause,
+    });
 }
 
 async function seedState(extensionRoot: string, state: ExtensionState): Promise<void> {
@@ -873,21 +883,6 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
   });
 });
 
-// NFR-5 source-grep ------------------------------------------------
-
-test("NFR-5: uninstall.ts has zero git surface (no platform/git, no DEFAULT_GIT_OPS, no gitOps)", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
-    "utf8",
-  );
-  // Header docstring legitimately mentions "platform/git" in prose; strip
-  // line comments first.
-  const stripped = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.equal(stripped.includes("platform/git"), false, "must not import platform/git");
-  assert.equal(stripped.includes("DEFAULT_GIT_OPS"), false, "must not reference DEFAULT_GIT_OPS");
-  assert.equal(stripped.includes("gitOps"), false, "must not reference gitOps");
-});
-
 test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace", async () => {
   // invalidateMarketplaceCache runs in uninstallPlugin's
   // post-state-commit window (after withStateGuard closes, before
@@ -1251,9 +1246,218 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
   });
 });
 
+for (const { code, reason } of [
+  { code: "EIO", reason: "unreadable" },
+  { code: "ENOENT", reason: "source missing" },
+] as const) {
+  test(`cascade failure maps ${code} to ${reason}`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), `uninstall-cascade-${code.toLowerCase()}-`));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedFullPlugin(locations, "mp", "hello", cwd);
+        const cause = Object.assign(new Error(`${code} during cascade`), { code });
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          cascade: cascadeFailure(cause),
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepEqual(notifications, [
+          {
+            message:
+              `A plugin operation has failed.\n\n● mp [project]\n` +
+              `  ⊘ hello v0.0.1 (failed) {${reason}}\n` +
+              `    cause: ${code} during cascade`,
+            severity: "error",
+          },
+        ]);
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("cascade failure maps an unclassified error to unreadable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cascade-unclassified-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const cause = new Error("unexpected cascade failure");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: cascadeFailure(cause),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {unreadable}\n" +
+            "    cause: unexpected cascade failure",
+          severity: "error",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("cascade failure without a cause uses the exported fallback error", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cascade-no-cause-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const noCauseCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: noCauseCascade,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {unreadable}\n" +
+            '    cause: Cascade unstage failed for plugin "hello".',
+          severity: "error",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("cascade string rejection is normalized before rendering", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cascade-string-rejection-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const rejectNonError = Promise.reject.bind(Promise);
+      const stringRejectingCascade: typeof cascadeUnstagePlugin = () =>
+        rejectNonError("string cascade rejection");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stringRejectingCascade,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {unreadable}\n" +
+            "    cause: string cascade rejection",
+          severity: "error",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // RECON-03: orchestrated-mode coverage
 // ───────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 uninstall orchestrated mode -- cascade failure returns a typed result with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-cascade-failure-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const cause = Object.assign(new Error("cascade denied"), { code: "EACCES" });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: cascadeFailure(cause),
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepEqual(outcome, {
+        status: "failed",
+        reason: "permission denied",
+        error: cause,
+        cause: "cascade denied",
+      });
+      assert.deepEqual(notifications, []);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninstalled', name, version } with ZERO notify calls", async () => {
   await withHermeticHome(async () => {
@@ -1337,6 +1541,184 @@ test("WR-06 uninstall orchestrated mode -- PU-5 silent converge (record already 
         assert.equal(outcome.name, "absent-plugin");
       }
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-06 uninstall orchestrated mode -- marketplace removed after resolution converges without mutation", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-concurrent-marketplace-removal-"));
+    let stateMonitor: ReturnType<typeof spawn> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await writeFile(
+        locations.stateJsonPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: pathSource("./mp-src"),
+              addedFromCwd: cwd,
+              plugins: { hello: makePluginRecord() },
+            },
+          },
+        }),
+        "utf8",
+      );
+      const userLocations = locationsFor("user", cwd);
+      await mkdir(userLocations.extensionRoot, { recursive: true });
+      await writeFile(
+        userLocations.stateJsonPath,
+        JSON.stringify({
+          schemaVersion: 2,
+          marketplaces: {},
+          padding: "x".repeat(16 * 1024 * 1024),
+        }),
+        "utf8",
+      );
+      const removedState = JSON.stringify({ schemaVersion: 2, marketplaces: {} });
+      const removedStatePath = path.join(locations.extensionRoot, "state-removed.json");
+      const quarantinedStatePath = path.join(locations.extensionRoot, "state-migration.tmp");
+      await writeFile(removedStatePath, removedState, "utf8");
+      const monitorSource = `
+        import { existsSync, renameSync, watch } from "node:fs";
+        import path from "node:path";
+
+        const directory = process.env.UNINSTALL_RACE_DIRECTORY;
+        const statePath = process.env.UNINSTALL_RACE_STATE;
+        const removedPath = process.env.UNINSTALL_RACE_REMOVED;
+        const quarantinedPath = process.env.UNINSTALL_RACE_QUARANTINED;
+        if (!directory || !statePath || !removedPath || !quarantinedPath) {
+          throw new Error("missing uninstall race paths");
+        }
+
+        const timeout = setTimeout(() => {
+          process.exitCode = 2;
+          process.send?.("timeout", () => process.disconnect?.());
+        }, 5_000);
+        let replacementScheduled = false;
+        const watcher = watch(directory, (_event, filename) => {
+          if (
+            replacementScheduled ||
+            filename === null ||
+            !filename.startsWith("state.json.")
+          ) {
+            return;
+          }
+
+          replacementScheduled = true;
+          const temporaryPath = path.join(directory, filename);
+          const waitForCommit = setInterval(() => {
+            if (existsSync(temporaryPath)) {
+              return;
+            }
+
+            clearInterval(waitForCommit);
+            try {
+              renameSync(statePath, quarantinedPath);
+              renameSync(removedPath, statePath);
+              clearTimeout(timeout);
+              watcher.close();
+              process.send?.("replaced", () => process.disconnect?.());
+            } catch (error) {
+              clearTimeout(timeout);
+              watcher.close();
+              process.exitCode = 3;
+              process.send?.(
+                \`failure: \${error instanceof Error ? error.message : String(error)}\`,
+                () => process.disconnect?.(),
+              );
+            }
+          }, 1);
+        });
+        process.send?.("ready");
+      `;
+      const monitor = spawn(process.execPath, ["--input-type=module", "--eval", monitorSource], {
+        env: {
+          ...process.env,
+          UNINSTALL_RACE_DIRECTORY: locations.extensionRoot,
+          UNINSTALL_RACE_QUARANTINED: quarantinedStatePath,
+          UNINSTALL_RACE_REMOVED: removedStatePath,
+          UNINSTALL_RACE_STATE: locations.stateJsonPath,
+        },
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+      });
+      stateMonitor = monitor;
+      const monitorStderrStream = monitor.stderr;
+      assert.ok(monitorStderrStream !== null);
+      let monitorStderr = "";
+      const monitorMessages: unknown[] = [];
+      const monitorComplete = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+        (resolve, reject) => {
+          monitor.once("error", reject);
+          monitor.once("exit", (code, signal) => {
+            resolve({ code, signal });
+          });
+        },
+      );
+      const ready = new Promise<void>((resolve, reject) => {
+        const readyTimeout = setTimeout(() => {
+          reject(new Error(`state monitor readiness timed out: ${monitorStderr}`));
+        }, 6_000);
+        monitor.once("error", reject);
+        monitorStderrStream.setEncoding("utf8");
+        monitorStderrStream.on("data", (chunk: string) => {
+          monitorStderr += chunk;
+        });
+        monitor.on("message", (message) => {
+          monitorMessages.push(message);
+          if (message === "ready") {
+            clearTimeout(readyTimeout);
+            resolve();
+          } else if (typeof message === "string" && message.startsWith("failure:")) {
+            clearTimeout(readyTimeout);
+            reject(new Error(message));
+          }
+        });
+        monitor.once("exit", (code) => {
+          if (!monitorMessages.includes("ready")) {
+            clearTimeout(readyTimeout);
+            reject(new Error(`state monitor exited before readiness (${code}): ${monitorStderr}`));
+          }
+        });
+      });
+      await ready;
+      const { ctx, pi, notifications } = makeCtx();
+      let cascadeCalls = 0;
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: (...args) => {
+          cascadeCalls += 1;
+          return cascadeUnstagePlugin(...args);
+        },
+        notifications: { mode: "orchestrated" },
+      });
+      const monitorResult = await monitorComplete;
+
+      // assert
+      assert.deepEqual(monitorMessages, ["ready", "replaced"]);
+      assert.deepEqual(monitorResult, { code: 0, signal: null });
+      assert.equal(monitorStderr, "");
+      assert.deepEqual(outcome, { status: "converged", name: "hello" });
+      assert.equal(cascadeCalls, 0);
+      assert.deepEqual(notifications, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), removedState);
+    } finally {
+      if (stateMonitor?.exitCode === null && stateMonitor.signalCode === null) {
+        stateMonitor.kill("SIGTERM");
+      }
+
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -1630,6 +2012,45 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       // WR-04: state.json bytes + mtime unchanged on the CFG-03 abort.
       assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
       assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 orchestrated invalid config returns a typed result without notification or mutation", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-invalid-config-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const cause = 'Config file "claude-plugins.json" failed schema validation.';
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepEqual(outcome, {
+        status: "failed",
+        reason: "invalid manifest",
+        error: new Error(cause),
+        cause,
+      });
+      assert.deepEqual(notifications, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -35,10 +35,10 @@ function makeCtx(): {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-  } as unknown as ExtensionContext;
+  } as ExtensionContext;
   const pi = {
     getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
+  } as ExtensionAPI;
   return { ctx, pi, notifications };
 }
 
@@ -134,6 +134,7 @@ async function fileExists(p: string): Promise<boolean> {
 }
 
 test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall all wire the hooks slot end-to-end", async () => {
+  // arrange
   const { resetRoutingState } =
     await import("../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
@@ -156,7 +157,6 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         },
       };
 
-      // (a) Install -- the hooks bridge file lands on disk.
       const seed = await seedHooksPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -165,6 +165,8 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
 
       {
         const { ctx, pi, notifications } = makeCtx();
+
+        // act
         await installPlugin({
           ctx,
           pi,
@@ -173,6 +175,8 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
           marketplace: "mp",
           plugin: "hello",
         });
+
+        // assert
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `install: expected clean; got: ${summary}`);
         assert.deepEqual(JSON.parse(await readFile(hooksPath, "utf8")), v1Hooks.hooks);
@@ -187,7 +191,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         );
       }
 
-      // (b) Update to v2 with NEW hooks payload.
+      // arrange
       const v2Hooks = {
         hooks: {
           PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo v2" }] }],
@@ -208,6 +212,8 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
 
       {
         const { ctx, pi, notifications } = makeCtx();
+
+        // act
         await updatePlugins({
           ctx,
           pi,
@@ -215,6 +221,8 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         });
+
+        // assert
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `update: expected clean; got: ${summary}`);
         assert.deepEqual(
@@ -224,13 +232,16 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         );
       }
 
-      // (c) Reinstall -- the hooks bridge file is rewritten from the
+      // arrange
+      // The hooks bridge file is rewritten from the
       // resolved manifest. Corrupt the on-disk file first so the test
       // detects an actual write rather than passive carryover.
       await writeFile(hooksPath, JSON.stringify({ corrupted: true }));
 
       {
         const { ctx, pi, notifications } = makeCtx();
+
+        // act
         const outcome = await reinstallPlugin({
           ctx,
           pi,
@@ -239,6 +250,8 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
           marketplace: "mp",
           plugin: "hello",
         });
+
+        // assert
         assert.equal(outcome.partition, "reinstalled");
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `reinstall: expected clean; got: ${summary}`);
@@ -249,9 +262,11 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         );
       }
 
-      // (d) Uninstall -- the hooks subtree is removed.
       {
+        // arrange
         const { ctx, pi, notifications } = makeCtx();
+
+        // act
         await uninstallPlugin({
           ctx,
           pi,
@@ -260,6 +275,8 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
           marketplace: "mp",
           plugin: "hello",
         });
+
+        // assert
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `uninstall: expected clean; got: ${summary}`);
         assert.equal(
