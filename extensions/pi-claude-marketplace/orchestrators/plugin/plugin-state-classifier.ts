@@ -15,7 +15,6 @@
 // (tests/architecture/no-orchestrator-network.test.ts) enforces it.
 
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
-import { assertNever } from "../../shared/errors.ts";
 
 import type { ResolvedPlugin } from "../../domain/resolver.ts";
 
@@ -173,8 +172,9 @@ export function classifyInstalledRecord(
  * Classify a not-installed manifest entry's resolution. D-64-01: `installable`
  * is the only `available` arm; both `partially-available` and structural `unavailable`
  * are distinct here (the render collapse to a single `(unavailable)` token is a
- * caller concern, not a classification one). The exhaustive `switch` +
- * `assertNever` makes a future fourth `ResolvedPlugin` arm a compile-time error.
+ * caller concern, not a classification one). The exhaustive `switch`
+ * deliberately has no runtime default: under `noImplicitReturns`, a future
+ * fourth `ResolvedPlugin` arm makes this function fail typecheck.
  *
  * Return type EXCLUDES `remote` (RSTA-01 / NFR-7): `remote` is derived at the
  * classification layer from fs-only clone/mirror presence
@@ -191,7 +191,5 @@ export function classifyManifestEntry(
       return "partially-available";
     case "unavailable":
       return "unavailable";
-    default:
-      return assertNever(resolved);
   }
 }
