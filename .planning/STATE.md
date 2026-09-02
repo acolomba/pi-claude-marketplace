@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-30-PLAN.md
-last_updated: "2026-09-02T18:16:44.332Z"
+stopped_at: Completed 116-12-PLAN.md
+last_updated: "2026-09-02T18:36:10.708Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: d9a3d996f4870ac3805037928aeb2c3b7345b5f1
+state_head: ccec62c5b74a276bd58a30a407fae9566428be98
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 183
+  completed_plans: 184
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 6 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-30)
-Status: Executing wave 2 of 8
-Last activity: 2026-09-02 — 116-30 complete; edge dependency bundle owned as a type-only pair
+Plan: 7 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-30)
+Status: Executing wave 3 of 8
+Last activity: 2026-09-02 — 116-12 complete; the single-name marketplace helper owns its injected run delegate with exact arguments
 
 Progress: [████████░░] 80%
 
@@ -160,6 +160,7 @@ evidence.
 | Phase 116 P04 | 25 min | 1 tasks | 1 files |
 | Phase 116 P06 | 65 min | 1 tasks | 3 files |
 | Phase 116 P30 | 40 min | 1 tasks | 1 files |
+| Phase 116 P12 | 45 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -317,6 +318,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-06: where an architecture gate already pins a data table exactly, the mirrored owner proves the derivation shape (filter, order, key presence, exclusion) and asserts nothing about the table contents
 - [Phase 116]: 116-30: the type-only owner pins EdgeDeps required-versus-optional split only; enumerating the member set or asserting the export surface would restate what the compiler and fallow dead-code already enforce
 - [Phase 116]: 116-30: a clean tsc is itself proof that every ts-expect-error in a file binds, because an unattached directive raises TS2578; the moved-marker plant showed the multi-line satisfies diagnostic landing on the closing line
+- [Phase 116]: The closed-over-API case builds two distinct Pi values instead of one shared value: a same-instance case only repeats the delegation case and cannot discriminate.
 
 ### Pending Todos
 
@@ -342,8 +344,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T18:16:30.383Z
-Stopped at: Completed 116-30-PLAN.md
+Last session: 2026-09-02T18:35:54.303Z
+Stopped at: Completed 116-12-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
