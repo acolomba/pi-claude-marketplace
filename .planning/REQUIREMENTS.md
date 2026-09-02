@@ -122,7 +122,7 @@ brownfield input and do not prove compliance for later phases.
 - [ ] **MOD-07**: All 14 plugin and marketplace lifecycle pairs complete the pair
       contract.
 
-- [ ] **MOD-08**: All eight composition orchestrator pairs complete the pair
+- [x] **MOD-08**: All eight composition orchestrator pairs complete the pair
       contract.
 
 - [ ] **MOD-09**: All 30 edge-surface pairs complete the pair contract.
@@ -498,7 +498,7 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | MOD-05      | Phase 112 | Complete |
 | MOD-06      | Phase 113 | Complete |
 | MOD-07      | Phase 114 | Pending  |
-| MOD-08      | Phase 115 | Pending  |
+| MOD-08      | Phase 115 | Complete |
 | MOD-09      | Phase 116 | Pending  |
 | MOD-10      | Phase 117 | Pending  |
 | PRES-01     | Phase 117 | Pending  |

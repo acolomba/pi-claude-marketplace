@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 115
 current_phase_name: Composition Orchestrators
 status: executing
-stopped_at: Completed 115-02-PLAN.md; 115-05 remains
-last_updated: "2026-09-02T03:05:24.650Z"
+stopped_at: Completed 115-05-PLAN.md
+last_updated: "2026-09-02T04:37:15.426Z"
 last_activity: 2026-09-02
-last_activity_desc: Phase 115 plan 02 landed at full direct coverage
-state_head: 6324939a0f684e0b9ecff1be54bd6a735d3b43b1
+last_activity_desc: Phase 115 plan 05 landed; all eight composition-orchestrator pairs complete
+state_head: 3b45c6e05e77328184bdd6455bedd5130bfaa334
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 177
-  completed_plans: 176
+  completed_plans: 177
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 115 (Composition Orchestrators) — EXECUTING
-Plan: 7 of 8 executed
-Status: Executing. 115-02 landed; 115-05 remains
-Last activity: 2026-09-02 — Phase 115 execution resumed from pause
+Plan: 8 of 8 executed
+Status: All eight plans landed; the phase is ready for verification
+Last activity: 2026-09-02 — Phase 115 plan 05 landed
 
 Progress: [███████░░░] 70%
 
-One hundred sixty-six of 204 source-test pairs are complete. The remaining 38 are open.
+One hundred sixty-seven of 204 source-test pairs are complete. The remaining 37 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -153,6 +153,7 @@ evidence.
 | Phase 112 P07 | 34 min   | 2 tasks | 3 files |
 | Phase 112 P14 | 16 min   | 2 tasks | 1 file  |
 | Phase 115 P02 | 96 min | 3 tasks | 2 files |
+| Phase 115 P05 | 90min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -299,6 +300,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 115]: Removed five structurally unreachable arms from the import cascade after a caller trace, narrowing two private types so a wrong token is a compile error rather than a runtime signal.
 - [Phase 115]: Deleted the last c8 ignore in the extensions tree by running the entrypoint twice with no dependency bundle, so the production default state loader's own answer is what changes the second outcome.
 - [Phase 115]: A defensive guard can be reached and still not be discriminating; the repair builder's undeclared-source guard is redundant with the already-declared merge check and is reported rather than removed.
+- [Phase 115]: D-115-10 delivered: the three reconcile producers carry the mode-discriminated overload, so a dropped cascade row is a gate failure rather than a silent continue.
+- [Phase 115]: Removed the marketplace-add, plugin-install and plugin-toggle catch clauses as unreachable; kept and proved the removal and uninstall clauses with a competing-writer race.
+- [Phase 115]: Deleted all eight source-text pins outright; none encoded a rule that is not already gated by its own owner, so nothing was re-homed under tests/architecture/.
 
 ### Pending Todos
 
@@ -322,8 +326,8 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-09-02T03:05:22.971Z
-Stopped at: Completed 115-02-PLAN.md; 115-05 remains
+Last session: 2026-09-02T04:37:13.527Z
+Stopped at: Completed 115-05-PLAN.md
 115-07 (wave 1) and 115-06, 115-08 (wave 2). Remaining: 115-02, which is
 unblocked, then 115-05, which waits on it and must also close WINDOWS.md
 entry 6. Both carry the exhaustive matrices and an instruction to stop and
