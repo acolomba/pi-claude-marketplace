@@ -46,7 +46,7 @@ metrics:
 actuals:
   tokens: 3000
   tasks: 1
-  commits: 2
+  commits: 3
 ---
 
 # Phase 116 Plan 01: args-schema Owner Summary
