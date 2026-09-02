@@ -101,6 +101,41 @@ function populatedMixedState(): ExtensionState {
   };
 }
 
+/**
+ * The declared config `buildConfigFromState` must project from
+ * `populatedMixedState()`, authored here rather than derived. The two
+ * convergence cases below feed the migration's own output into the planner, so
+ * without this anchor any field the migration stops emitting AND the planner
+ * stops reading would keep both of them green -- the `enabled` flag among
+ * others. Pinning the intermediate gives the round trip an independent end.
+ */
+function declaredConfigForMixedState(): ReturnType<typeof buildConfigFromState> {
+  return {
+    schemaVersion: 1,
+    marketplaces: {
+      "mp-github": { source: "acme/tools" },
+      "mp-path": { source: "./mp-path-local" },
+    },
+    plugins: {
+      "code-reviewer@mp-path": {},
+      "formatter@mp-github": {},
+      "soft-degraded@mp-path": {},
+    },
+  };
+}
+
+test("migrates populated state to the declared marketplace and plugin config", () => {
+  // arrange
+  const state = populatedMixedState();
+  const expectedConfig = declaredConfigForMixedState();
+
+  // act
+  const config = buildConfigFromState(state);
+
+  // assert
+  assert.deepStrictEqual(config, expectedConfig);
+});
+
 test("config migration, merge, and planning converge populated state for project scope", () => {
   // arrange
   const state = populatedMixedState();
