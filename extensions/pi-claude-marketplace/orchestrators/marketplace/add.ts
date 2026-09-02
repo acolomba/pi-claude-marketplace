@@ -506,7 +506,21 @@ function handleAddFailure(
  * `undefined` in standalone mode (after firing the standalone notify()).
  * Callers in orchestrated mode know the outcome is defined; standalone
  * callers ignore the return.
+ *
+ * D-115-10: the overload pair narrows the orchestrated-mode return to
+ * `Promise<AddMarketplaceOutcome>` (no `| undefined`), mirroring
+ * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
+ * outcome is now a compile error rather than a silent `continue`, so every
+ * driven add always materialises a row. The wide overload stays last so a
+ * caller holding the entrypoint in a single-signature variable -- the import
+ * cascade's collaborator resolver -- keeps its `undefined` arm.
  */
+export function addMarketplace(
+  opts: AddMarketplaceOptions & { notifications: { mode: "orchestrated" } },
+): Promise<AddMarketplaceOutcome>;
+export function addMarketplace(
+  opts: AddMarketplaceOptions,
+): Promise<AddMarketplaceOutcome | undefined>;
 export async function addMarketplace(
   opts: AddMarketplaceOptions,
 ): Promise<AddMarketplaceOutcome | undefined> {

@@ -480,7 +480,21 @@ function emitAlreadyGone(args: {
 /**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
+ *
+ * D-115-10: the overload pair narrows the orchestrated-mode return to
+ * `Promise<UninstallPluginOutcome>` (no `| undefined`), mirroring
+ * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
+ * outcome is now a compile error rather than a silent `continue`, so every
+ * driven uninstall always materialises a row (or the deliberate PU-5
+ * `converged` drop). The wide overload stays last so a caller holding the
+ * entrypoint in a single-signature variable keeps its `undefined` arm.
  */
+export function uninstallPlugin(
+  opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
+): Promise<UninstallPluginOutcome>;
+export function uninstallPlugin(
+  opts: UninstallPluginOptions,
+): Promise<UninstallPluginOutcome | undefined>;
 export async function uninstallPlugin(
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {

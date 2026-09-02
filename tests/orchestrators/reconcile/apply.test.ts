@@ -1092,27 +1092,6 @@ test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) at
   });
 });
 
-test("S6 / PR #51: the three non-toggle orchestrated loops in apply.ts adopt the fail-loud 'returned no outcome in orchestrated mode' pattern", async () => {
-  // Pre-fix three loops in apply.ts (applyMarketplaceRemoves,
-  // applyMarketplaceAdds, applyPluginUninstalls) silently `continue`d when
-  // an orchestrated call returned undefined -- the row vanished from the
-  // cascade with no operator-visible signal. After the fix all three loops
-  // mirror import/execute.ts:613's wording so a future Y3-tracked toggle
-  // loop fix converges on identical text. The fourth toggle loop
-  // (applyPluginToggles) is Y3's scope -- once that lands the count moves
-  // from 3 to 4.
-  const { readFile } = await import("node:fs/promises");
-  const applySource = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
-    "utf8",
-  );
-  const matches = applySource.match(/returned no outcome in orchestrated mode/g) ?? [];
-  assert.ok(
-    matches.length >= 3,
-    `S6: expected the fail-loud wording at >= 3 loops in apply.ts; got ${matches.length.toString()} occurrences`,
-  );
-});
-
 test("S4 / PR #51: synthesizeUndeclaredMarketplaceSource undefined-return is decision-anchored at every call site", async () => {
   // Pre-fix the two call sites of synthesizeAdoptedMarketplaceSource
   // (install.ts and enable-disable.ts) silently elided the marketplace

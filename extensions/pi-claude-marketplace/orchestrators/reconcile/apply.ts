@@ -201,25 +201,6 @@ async function applyMarketplaceRemoves(
         cwd: opts.cwd,
         notifications: { mode: "orchestrated" },
       });
-      if (result === undefined) {
-        // S6 / PR #51: a silent continue would drop the row from the
-        // cascade and hide a producer-contract violation
-        // (orchestrated mode is supposed to ALWAYS return an outcome).
-        // Mirror import/execute.ts:613's "returned no outcome in
-        // orchestrated mode" wording so the three apply.ts loops
-        // converge with the import path -- and with the fourth
-        // (toggle) loop once Y3 lands.
-        outcomes.push({
-          kind: "mp-remove-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          reason: classifyOrchestratorThrow(
-            new Error("removeMarketplace returned no outcome in orchestrated mode"),
-          ),
-        });
-        continue;
-      }
-
       foldRemoveOutcome(result, op.scope, op.marketplace, outcomes);
     } catch (err) {
       outcomes.push({
@@ -309,21 +290,6 @@ async function applyMarketplaceAdds(
         notifications: { mode: "orchestrated" },
         ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
       });
-      if (result === undefined) {
-        // S6 / PR #51: fail-loud row instead of silent continue
-        // -- mirrors import/execute.ts:613's
-        // "returned no outcome in orchestrated mode" wording.
-        outcomes.push({
-          kind: "mp-add-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          reason: classifyOrchestratorThrow(
-            new Error("addMarketplace returned no outcome in orchestrated mode"),
-          ),
-        });
-        continue;
-      }
-
       if (result.status === "added") {
         // CR-01: render the row on the name the record was actually created
         // under (`result.name` is the MANIFEST-derived name, which the
@@ -366,22 +332,6 @@ async function applyPluginUninstalls(
         plugin: op.plugin,
         notifications: { mode: "orchestrated" },
       });
-      if (result === undefined) {
-        // S6 / PR #51: fail-loud row instead of silent continue
-        // -- mirrors import/execute.ts:613's
-        // "returned no outcome in orchestrated mode" wording.
-        outcomes.push({
-          kind: "plugin-uninstall-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          reason: classifyOrchestratorThrow(
-            new Error("uninstallPlugin returned no outcome in orchestrated mode"),
-          ),
-        });
-        continue;
-      }
-
       // WR-06: the PU-5 silent converge (record already gone -- another
       // process won the race or there was never an install) renders NO row;
       // reporting it would claim work this reconcile did not perform.

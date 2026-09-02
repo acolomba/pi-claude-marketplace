@@ -628,7 +628,21 @@ async function runPostRemoveCleanup(args: {
 /**
  * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
  * `undefined` in standalone mode.
+ *
+ * D-115-10: the overload pair narrows the orchestrated-mode return to
+ * `Promise<RemoveMarketplaceOutcome>` (no `| undefined`), mirroring
+ * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
+ * outcome is now a compile error rather than a silent `continue`, so every
+ * driven removal always materialises a row. The wide overload stays last so a
+ * caller holding the entrypoint in a single-signature variable keeps its
+ * `undefined` arm.
  */
+export function removeMarketplace(
+  opts: RemoveMarketplaceOptions & { notifications: { mode: "orchestrated" } },
+): Promise<RemoveMarketplaceOutcome>;
+export function removeMarketplace(
+  opts: RemoveMarketplaceOptions,
+): Promise<RemoveMarketplaceOutcome | undefined>;
 export async function removeMarketplace(
   opts: RemoveMarketplaceOptions,
 ): Promise<RemoveMarketplaceOutcome | undefined> {
