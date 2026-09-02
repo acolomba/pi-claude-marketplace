@@ -336,7 +336,11 @@ were fixed, including converting four void-returning switches to value-returning
 so a missing arm raises TS2366 at the edit site. WR-02 was accepted as recorded by
 operator decision and stays open as WINDOWS.md entry 9.
 
-Next: Phase 116 (Edge Surface), 30 pairs. No CONTEXT.md yet, so discuss runs first.
+Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
+D-116-14 locked, so discuss is done and planning runs first. Pass --skip-ui to plan-phase:
+the phase is backend but its vocabulary trips the UI gate's keyword match. Blocking
+constraints and the full anti-pattern table live in
+.planning/phases/116-edge-surface/.continue-here.md.
 
 Standing environment debts, all still true: npm run check short-circuits at format:check
 on untracked operator files and never runs the tests, so run npm test and
