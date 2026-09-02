@@ -17,7 +17,7 @@
 import type {
   ClaudeImportExecutionResult,
   ImportClaudeSettingsOptions,
-} from "../orchestrators/import/execute.ts";
+} from "../orchestrators/import/index.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
 import type { PluginUpdateFn } from "../orchestrators/types.ts";
 
