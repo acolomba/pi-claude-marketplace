@@ -42,6 +42,7 @@ To update a skill:
 
 ```bash
 npx skills@latest update <name> -p -y
+npx skills@latest remove <name> -a pi -y
 ```
 
-The installer copies the skill directory only, and some upstream repositories keep the license at the repository root. After an update, check that the `LICENSE` file is still in place, delete the `.pi/skills/` symlinks the installer creates, and record the new version and commit in `THIRD_PARTY_NOTICES.md`.
+The installer copies the skill directory only, and some upstream repositories keep the license at the repository root. The `update` command links every agent whose directory exists, so it creates a `.pi/skills/` symlink. The `remove -a pi` command deletes only that link. After an update, check that the `LICENSE` file is still in place, and record the new version and commit in `THIRD_PARTY_NOTICES.md`.
