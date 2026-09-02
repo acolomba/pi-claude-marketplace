@@ -897,6 +897,49 @@ describe("registerListPluginsTool", () => {
     verifyBoundary();
   });
 
+  test("forwards the absence reason of an installed record the manifest omits", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "manifest-absent");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "absent-mp",
+        plugins: [{ name: "alpha", inManifest: false, installed: { version: "1.0.0" } }],
+      },
+    ]);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+      value: scope.cwd,
+      reads: 1,
+    });
+    const expectedResult = {
+      content: [
+        {
+          type: "text",
+          text: "Marketplace absent-mp (project)\n  [installed] alpha  1.0.0  (not in manifest)",
+        },
+      ],
+      details: {
+        plugins: [
+          {
+            marketplace: "absent-mp",
+            scope: "project",
+            name: "alpha",
+            status: "installed",
+            version: "1.0.0",
+            reasons: ["not in manifest"],
+          },
+        ],
+      },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    verifyBoundary();
+  });
+
   test("renders the no-plugins body for a marketplace that declares none", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "no-plugins");

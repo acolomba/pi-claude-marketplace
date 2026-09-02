@@ -38,6 +38,7 @@ import Type from "typebox";
 import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { isScopeBearingListRow } from "../../shared/notify.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
@@ -358,47 +359,38 @@ function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefi
 }
 
 /**
- * Read `p.version` defensively. The `updated` variant has REQUIRED
- * `from`/`to` instead of `version`; every other variant carries an
- * OPTIONAL `version` (D-15-04). On the list surface only the
- * installed / upgradable / available / unavailable subset is reachable.
+ * One plugin row of the payload `loadPluginListPayload` returns: its awaited
+ * result, that array's element, the element's `plugins` slot, and that slot's
+ * element. Deriving the row union from the producer rather than naming it means
+ * a change to what the list surface can emit arrives here as a compile error
+ * instead of silent drift.
  */
-function pluginVersion(p: PluginNotificationMessage): string | undefined {
+type ToolPluginRow = Awaited<ReturnType<typeof loadPluginListPayload>>[number]["plugins"][number];
+
+/**
+ * Read `p.version` off a list-surface row. D-15-04: every list-surface variant
+ * carries the same optional `version?` slot, so every arm returns the same field
+ * and the switch computes nothing.
+ *
+ * D-116-14: the switch stays anyway, and must not be collapsed into a single
+ * expression. Its job is the missing-arm gate -- `noImplicitReturns` makes the
+ * end of this function reachable the moment a list-surface status goes unnamed,
+ * so a status added to the row union is a compile error here rather than a row
+ * that silently loses its version.
+ */
+function pluginVersion(p: ToolPluginRow): string | undefined {
   switch (p.status) {
-    // D-15-04: the `installed` inventory row carries `version?: string` like
-    // every other optional-version variant; only `updated` differs, with its
-    // required `from` / `to` pair.
     case "installed":
     case "upgradable":
     case "available":
     case "remote":
     case "unavailable":
     case "partially-available":
-    case "reinstalled":
-    case "uninstalled":
     case "failed":
-    case "skipped":
-    case "manual recovery":
     case "disabled":
     case "partially-installed":
     case "partially-upgradable":
-      // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
-      // recorded state record preserves the pinned version (ENBL-02). FSTAT-02 /
-      // FSTAT-04 / D-66-03: the derived partial states carry the same optional
-      // `version?` slot as the other list-surface inventory variants. USTAT-01:
-      // the `partially-available` row carries the same optional `version?` slot.
       return p.version;
-    case "updated":
-      // The updated variant has `from`/`to` instead of a single `version`;
-      // synthesize the post-update version for downstream callers.
-      return p.to;
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      // DIFF-02 pending-list rows carry no version slot (the variant has no
-      // `version` field). Unreachable on the list surface.
-      return undefined;
   }
 }
 
@@ -487,12 +479,15 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         payload = await loadToolPluginPayload(pi, params, ctx, buckets);
       } catch (err) {
         // TC-9: state.json error propagates as a tool error surface (the
-        // agent should see a clear failure rather than an empty list).
+        // agent should see a clear failure rather than an empty list). The
+        // non-Error narrowing is `shared/errors.ts`'s, not a second copy here:
+        // no seeded payload load can throw a non-Error, so a local copy would
+        // be a branch this module's own surface cannot reach.
         return {
           content: [
             {
               type: "text",
-              text: `Failed to load plugin list: ${err instanceof Error ? err.message : String(err)}`,
+              text: `Failed to load plugin list: ${errorMessage(err)}`,
             },
           ],
           isError: true,
