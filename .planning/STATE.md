@@ -4,7 +4,7 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-07-PLAN.md
+stopped_at: Completed 116-08-PLAN.md
 last_updated: "2026-09-02T22:51:22.583Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 15 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: the DAG-recomputed wave 4 is open — 116-07 is done; 116-05, 116-08, 116-09 and 116-11 remain before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
-Last activity: 2026-09-02 — 116-07 rewrote the marketplace add owner and established the phase's port-forwarding proof: a url source on a provider-less host puts the injected git port on the clone path authless, and the whole clone recorder is compared as one value with the `randomUUID()` staging leaf replaced by a token ONLY under the expected scope root, so a wrong scope still fails on the raw directory. Scope and the scope-target flag are observed as an on-disk footprint rather than an options bag. Coverage held at branches 8/8, functions 2/2, lines 48/48 — no D-116-01a claim here. Five plants, all RED, all reverted; the forward sites were COUNTED first (one real site, one comment hit). Five plan deviations: `must_haves` truths 4 and 5 are false against this module (a surplus positional is DROPPED, and a scope flag plus the scope-target flag are NOT mutually exclusive), the clone recorder cannot hold a hand-authored directory literal, the two flag-diagnostic cases were narrowed off sibling owners, and the rejection plant needed two variants
+Plan: 16 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-08, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: the DAG-recomputed wave 4 is open — 116-07 and 116-08 are done; 116-05, 116-09 and 116-11 remain before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
+Last activity: 2026-09-02 — 116-08 rewrote the dual-form marketplace autoupdate owner and established the phase's normative Group-C no-seam negative-delegation case: boundary sized at one emission and zero probes with `cwd` OMITTED, both scopes seeded, the whole notification list compared, `verifyBoundary()` last, plus an on-disk negative. It also CORRECTED 116-10's correction — `setMarketplaceAutoupdate` catches the unstated-`cwd` failure and notifies, so the negative fires on the emission count here, not in `path.join`. The durable rule is "the first unstated boundary member the workflow reaches AFTER its own error handling"; no Group-C plan may promise its plant's diagnostic before running it. Delegation is observed as the config footprint (SPLIT-01: a flip never writes state.json). Coverage rose from branches 13/14, functions 3/4, lines 58/61 to 15/15, 4/4, 61/61 — no D-116-01a claim. Eight plants, all RED, all reverted. Four plan deviations: `must_haves` truths 3 and 4 are false against this module (a single OPTIONAL positional DROPS surplus tokens, and `--scope` beside the scope-target flag is ACCEPTED — the fourth distinct `--local` outcome measured), the negative plant needed two further variants, and three specified cases were folded or narrowed off sibling owners
 
 Progress: [████████░░] 80%
 

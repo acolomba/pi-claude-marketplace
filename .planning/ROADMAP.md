@@ -618,6 +618,6 @@ and commit still owns one pair.
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
-| 116. Edge Surface                        |          15/31 | In Progress     | -          |
+| 116. Edge Surface                        |          16/31 | In Progress     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
 | **Total**                                |    **173/204** | **In Progress** | **-**      |
