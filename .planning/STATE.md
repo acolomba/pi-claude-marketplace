@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-10-PLAN.md
-last_updated: "2026-09-02T21:35:14.866Z"
+stopped_at: Completed 116-13-PLAN.md
+last_updated: "2026-09-02T22:01:43.747Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 8a139f36b50ebce51ec5a039febe33ea53ae10ba
+state_head: 2faa968518feb6a8ae05ef2772a37def718343e7
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 189
+  completed_plans: 191
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 13 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-10, 116-12, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); 116-03 and 116-10 have run in the DAG-recomputed wave 3; 116-13 closes it, then wave 4 (116-05, 116-07, 116-08, 116-09, 116-11)
-Last activity: 2026-09-02 — 116-10 complete; the marketplace listing owner reaches 100 percent direct branches, functions, and lines, establishes the normative Group-C negative-delegation shape for the twelve seamless handlers that follow, and corrects two `must_haves` truths that are false against the module (an empty positional schema DROPS a surplus token rather than rejecting it, and the scope-target flag is swallowed as a positional rather than refused)
+Plan: 14 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); the DAG-recomputed wave 3 is closed (116-03, 116-10, 116-13); next is wave 4 (116-05, 116-07, 116-08, 116-09, 116-11)
+Last activity: 2026-09-02 — 116-13 complete; the marketplace update owner proves both arity-selected workflows and both injected port forwards per arm, and reports a sixth D-116-01a-class unreachable branch (the usage-string collapse arm at `edge/handlers/marketplace/update.ts:41`, dead because the sole positional is optional) rather than pinning or excepting the resulting branches 11/12
 
 Progress: [████████░░] 80%
 
@@ -167,6 +167,7 @@ evidence.
 | Phase 116 P29 | 20 min | 1 tasks | 1 files |
 | Phase 116 P03 | 45 min | 1 tasks | 1 files |
 | Phase 116 P10 | 45 min | 1 tasks | 1 files |
+| Phase 116 P13 | 50 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -344,6 +345,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-10: `marketplace/list.ts` never calls `extractLocalFlag`, so the scope-target flag reaches the tokenizer as a positional and is swallowed; supplying it beside `--scope` is accepted, not rejected, and the phase-wide mutually-exclusive-selectors truth has no target on this handler
 - [Phase 116]: 116-10: the Group-C negative fires on the FIRST unstated boundary read, not on the emission count — a handler that forwards `ctx.cwd` dies in `path.join` on strong-mock's pending-call proxy before it can emit, so the G5 excerpt's stated "second `ctx.ui` access past its `times(1)` count" mechanism is only the fallback for handlers that read no `cwd`
 - [Phase 116]: 116-10: a Group-C rejecting case seeds BOTH scopes so the workflow it must not reach would have rows to emit; an unseeded tree makes the negative weaker because the unreached workflow would emit only the empty-state sentinel
+- [Phase 116]: The marketplace update handler's usage-string collapse arm is unreachable through its exports, so the pair stands at branches 11/12 and the shortfall is reported, not pinned or excepted — parseCommandArgs passes the usage string to the callback only for a REQUIRED positional; this schema declares its sole positional optional. Proven by construction, by a 170-shape brute force, by a plant that stayed GREEN, and by an inverted-condition plant that went RED. 116-13 is not a D-116-01a claimant and both production licences are spent, so the reversible default applies. Identity: BRDA:41,11,0,0 in the pair's own lcov.
+- [Phase 116]: An injected port forwarded from two call sites needs one plant per site; a single-site plant leaves the sibling arm's claim unproven — Removing the all-marketplaces arm's pluginUpdate forward left both named-marketplace rows GREEN; removing the single-marketplace arm's forward left the bare and scope-narrowed cases GREEN. Applies to 116-07, 116-14 and 116-17, the remaining injected-port owners.
 
 ### Pending Todos
 
@@ -369,8 +372,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T21:35:12.715Z
-Stopped at: Completed 116-10-PLAN.md
+Last session: 2026-09-02T22:01:41.332Z
+Stopped at: Completed 116-13-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
