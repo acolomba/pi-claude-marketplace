@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 9
+open_count: 10
 waived_count: 0
 fixed_count: 5
-total_count: 14
-last_updated: 2026-09-02T06:22:47.283Z
+total_count: 15
+last_updated: 2026-09-02T22:03:02.310Z
 ---
 
 # Broken Windows Ledger
@@ -29,6 +29,7 @@ last_updated: 2026-09-02T06:22:47.283Z
 | 12 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts |  | WR-03: three default assertNever arms were removed from applyMarketplaceOutcomeToBlock, applyPluginOutcomeToBlock and applyOutcomeToBlock on the ground that the narrowed Extract parameter makes each switch exhaustive. The union was narrow but the CHECK was absent: all three returned void, so a newly-added PerEntryOutcome kind compiled clean at all three sites and silently produced no row. FIXED: each applier now answers with the block it mutated, restoring TS2366 at the edit site. Verified by planting a PerEntryOutcome kind (no diagnostic before; after, TS2366 at the dispatcher and at each inner applier once the planted kind is routed into its narrowed parameter). | fixed |  | 2026-09-02T06:22:29.544Z | 2026-09-02T06:22:29.869Z |
 | 13 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts |  | WR-01: the D-115-10 mode-discriminated overloads on addMarketplace, removeMarketplace, uninstallPlugin and setPluginEnabled are unchecked assertions, not compile-time proofs. TypeScript accepts a narrower overload return against a wider implementation with no diagnostic, and never verifies the body honours it; confirmed against this repository's compiler by making addMarketplace's orchestrated success arm return undefined, which typechecks clean at exit 0. Three runtime guards in reconcile/apply.ts were deleted on the strength of that narrowing, so the assertion was relocated from the consumer to the producer's signature rather than removed. Every orchestrated arm of all four producers returns a defined outcome today and the reconcile owner suite pins the exercised paths behaviourally; an arm that suite does not reach is covered by neither. The reviewer's structural fix (split each entrypoint so the narrow overload delegates to a helper whose DECLARED return type is Promise<TOutcome>) was not applied: it restructures three production modules whose Phase 114 owner suites are complete and closed to edits. Doc comments at all four sites now state that the narrowing is asserted, not proved. | open |  | 2026-09-02T06:22:46.935Z |  |
 | 14 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/import/execute.ts |  | WR-04: buildImportNotificationMarketplaces iterates the header map byMp and looks plugin rows up in the sibling rowsByMp map, so any row whose (scope, marketplace) key carries no header is never visited and vanishes without trace behind the ?? [] fallback. Making MarketplaceBlock.status required prevents a STATUSLESS HEADER; it does not prevent a HEADERLESS ROW. What rules that out is an invariant spanning four functions: every pushMarketplaceRow site is reachable only for a plugin that passed the blockedMarketplaces gate, and scopedPlan derives pluginsToInstall and marketplacesToEnsure from the same refs set under one scope. No structural gate was added because the check would be an arm no input can reach, which breaks the 100 percent direct-branch-coverage requirement for this pair. The overstated doc comment was corrected to describe the invariant instead of implying the type enforces it. WR-06's fix removed the one concrete near-miss (the unknown-stored branch now assigns a status). | open |  | 2026-09-02T06:22:47.283Z |  |
+| 15 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts | 41 | Usage-string collapse arm is unreachable through the module exports, so the 116-13 pair stands at direct branches 11/12; reported, not pinned or excepted | open |  | 2026-09-02T22:03:02.310Z |  |
 
 ````json
 [
@@ -198,6 +199,18 @@ last_updated: 2026-09-02T06:22:47.283Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-02T06:22:47.283Z",
+    "resolved_at": null
+  },
+  {
+    "id": 15,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts",
+    "line": 41,
+    "description": "Usage-string collapse arm is unreachable through the module exports, so the 116-13 pair stands at direct branches 11/12; reported, not pinned or excepted",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T22:03:02.310Z",
     "resolved_at": null
   }
 ]
