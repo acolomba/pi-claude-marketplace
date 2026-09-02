@@ -1,243 +1,475 @@
-// marketplace add handler shim tests.
+// Owner for edge/handlers/marketplace/add.ts (MOD-09).
 //
-// The shim takes `deps: EdgeDeps` carrying `gitOps`. We use the
-// `makeMockGitOps` helper to build a stub git surface and a no-op
-// `pluginUpdate`. The shim should:
-//   - reject missing positional with USAGE.
-//   - delegate to `addMarketplace` with the deps.gitOps threaded through.
+// D-116-05 (O3) places this handler in the injected-port group: `deps.gitOps`
+// is a declared member of `EdgeDeps` and the shim forwards it into the add
+// workflow's options bag. That forward is the exact-argument proof this tier can
+// give, so every delegating case drives a url source the workflow MUST clone and
+// compares the whole clone recorder of `createGitOpsFake`. Only the identical
+// port object the handler was constructed with can produce that recording.
 //
-// Since the orchestrator's clone path actually invokes the mock, we can
-// verify deps.gitOps was passed through by triggering a github source and
-// asserting the mock's call log records a clone.
+// The shim forwards `deps.gitOps` from exactly ONE call site, so one plant
+// covers the forward. It forwards its private USAGE string to TWO consumers --
+// the flag scan and the positional parse -- so two rejection cases are needed to
+// prove both received it, one per consumer.
+//
+// Every seeded source is `https://gitlab.example.com/team/alpha#main`, a url on a
+// host with no registered auth provider. That is the shape that puts the git port
+// on the clone path at all (a path source never reaches git) AND keeps the clone
+// options structured-clonable: a github source resolves the GitHub provider and
+// attaches a credential bundle whose functions make the fake's `structuredClone`
+// recorder throw.
+//
+// The staging directory carries a `randomUUID()` leaf, so the recorded `dir`
+// cannot be a hand-authored literal. The recorder is still compared as one whole
+// value: a leaf that is a UUID under the EXPECTED scope's staging root is
+// substituted for a stable token, and any other directory is compared verbatim,
+// so a wrong scope fails on the directory rather than passing silently.
+//
+// What this owner proves about scope is where the command LANDED, not an
+// argument list it has no injection point against: the scope member reaches the
+// workflow inside an options bag, so each delegating case reads back which
+// scope's `state.json` and which config file exist on disk. The scope-target flag
+// is observable the same way -- it switches the config write-back from
+// `claude-plugins.json` to `claude-plugins.local.json` -- which is what makes
+// "present only when supplied" provable rather than asserted.
+//
+// The `pluginUpdate` port is a strict mock with NO expectation stated, so a green
+// case is the proof that this handler never touches it. An expectation of zero
+// calls would not be, because strong-mock treats that count as no limit.
+//
+// Arity: the schema declares ONE REQUIRED positional. Zero positionals is
+// rejected with the collapsed missing-argument sentence. `parseCommandArgs`
+// iterates `schema.positional.entries()` -- the SCHEMA, not the input -- so a
+// second token is never inspected and is silently DROPPED; one above the accepted
+// arity is not a rejection here, and the row table states the drop.
+//
+// A scope flag and the scope-target flag supplied together are likewise NOT
+// mutually exclusive: `extractLocalFlag` consumes `--scope <value>` as a
+// downstream-owned pair and removes only the scope-target token from the
+// residual, so both members reach the workflow. The case states that observed
+// outcome and proves it by the two effects landing in the same scope root.
+//
+// No exhaustiveness claim: the module holds no switch and no closed-union
+// dispatch, so a missing-arm plant has no target here. No case asserts the
+// absence of direct process output (ESLint and fallow own that). The rejection
+// cases do not restate the flag-scan rule owned by
+// tests/edge/handlers/shared.test.ts, the collapse comparison owned by
+// tests/edge/handlers/marketplace/shared.test.ts, or the tokenizer diagnostics
+// owned by tests/edge/args.test.ts -- what they add is this handler's own usage
+// string reaching each consumer and its early return leaving the workflow, the
+// git port, and the disk untouched. None re-derives the add workflow's outcome,
+// which belongs to tests/orchestrators/marketplace/add.test.ts.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
+
+import { mock, verify } from "strong-mock";
 
 import { makeAddHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts";
+import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
-import type { PluginUpdateOutcome } from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+// Both port shapes are derived from the handler's own dependency object, so a
+// change to either injection seam is a compile error in this suite rather than a
+// silently stale hand-copied type.
+type PluginUpdate = EdgeDeps["pluginUpdate"];
+type GitCloneCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"][number];
+
+/** Written out by hand; never read back off the module under test. */
+const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
+
+const URL_SOURCE = "https://gitlab.example.com/team/alpha#main";
+const CLONE_URL = "https://gitlab.example.com/team/alpha.git";
+
+/** The manifest the cloned staging tree and the path source both carry. */
+const MARKETPLACE_MANIFEST = `{
+  "name": "seeded",
+  "owner": { "name": "seed owner" },
+  "plugins": [{ "name": "hello", "source": "./plugins/hello", "version": "1.0.0" }]
+}
+`;
+
+const USER_ADDED_ROW = "● seeded [user] (added)";
+const PROJECT_ADDED_ROW = "● seeded [project] (added)";
+
+/** Stands in for the `randomUUID()` staging leaf, which cannot be a literal. */
+const STAGED_CLONE_DIR = "<sources-staging>/<uuid>";
+const UUID_LEAF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The single clone a url source pinned to `main` produces, authless. */
+const ALPHA_CLONE: GitCloneCall = {
+  dir: STAGED_CLONE_DIR,
+  url: CLONE_URL,
+  ref: "main",
+  singleBranch: true,
+};
+
+interface ScopeFootprint {
+  readonly state: boolean;
+  readonly config: boolean;
+  readonly localConfig: boolean;
 }
 
-function makeMockGitOps() {
-  const git = createGitOpsFake({
-    boundary: "memory",
-    allowedRemoteUrls: ["https://github.com/owner/repo.git"],
-  });
-  const gitOps: EdgeDeps["gitOps"] = {
-    ...git.gitOps,
-    async clone(cloneOptions) {
-      const { auth: _auth, ...cloneOptionsWithoutCredentials } = cloneOptions;
-      await git.gitOps.clone(cloneOptionsWithoutCredentials);
-    },
-  };
-
-  return {
-    gitOps,
-    state: { cloneCalls: git.state.calls.clone },
-  };
+interface AddFootprint {
+  readonly user: ScopeFootprint;
+  readonly project: ScopeFootprint;
 }
 
-function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  const ctx = {
-    cwd,
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionCommandContext;
-  return { ctx, notifications };
+const NOTHING_WRITTEN: AddFootprint = {
+  user: { state: false, config: false, localConfig: false },
+  project: { state: false, config: false, localConfig: false },
+};
+
+const USER_BASE_CONFIG: AddFootprint = {
+  user: { state: true, config: true, localConfig: false },
+  project: { state: false, config: false, localConfig: false },
+};
+
+const USER_LOCAL_CONFIG: AddFootprint = {
+  user: { state: true, config: false, localConfig: true },
+  project: { state: false, config: false, localConfig: false },
+};
+
+interface HermeticScope {
+  readonly cwd: string;
+  /** A directory carrying a valid marketplace manifest. */
+  readonly sourceTree: string;
+  /** How many times the case reached the replaced process-wide transport. */
+  readonly fetchCallCount: () => number;
 }
 
-// `makeAddHandler(pi, deps)` requires `pi` as first
-// positional arg. Edge shim tests mirror the production wiring shape.
-function makePi(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
+function refuseNetwork(): Promise<Response> {
+  throw new Error("the marketplace add must reach git through the injected port");
 }
 
-function makeDeps(): {
-  deps: EdgeDeps;
-  gitMock: ReturnType<typeof makeMockGitOps>;
-} {
-  const gitMock = makeMockGitOps();
-  const pluginUpdate = (plugin: string): Promise<PluginUpdateOutcome> =>
-    Promise.resolve({
-      partition: "unchanged",
-      name: plugin,
-      fromVersion: "0.0.0",
-      toVersion: "0.0.0",
-      declaresAgents: false,
-      declaresMcp: false,
-    });
-  const deps: EdgeDeps = { gitOps: gitMock.gitOps, pluginUpdate };
-  return { deps, gitMock };
-}
-
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-add-shim-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-add-shim-cwd-"));
-  process.env.HOME = home;
+async function exists(target: string): Promise<boolean> {
   try {
-    return await fn({ cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
+    await stat(target);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-test("shim :: missing source positional emits USAGE; no orchestrator call", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    await handler("", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /Usage: \/claude:plugin marketplace add/);
-    // No git operations -- the orchestrator was never invoked.
-    assert.equal(gitMock.state.cloneCalls.length, 0);
-  });
-});
+async function readScopeFootprint(scope: Scope, cwd: string): Promise<ScopeFootprint> {
+  const locations = locationsFor(scope, cwd);
+  return {
+    state: await exists(locations.stateJsonPath),
+    config: await exists(locations.configJsonPath),
+    localConfig: await exists(locations.configLocalJsonPath),
+  };
+}
 
-test('shim :: valid source calls addMarketplace with { ctx, scope: "user", cwd, rawSource, gitOps: deps.gitOps }', async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    // ATTR-07: a non-existent path source surfaces an ENOENT-class
-    // error from addMarketplace's stat() probe. The orchestrator now routes
-    // that precondition through notify as a structured `(failed) {source
-    // missing}` row instead of throwing past the orchestrator -- so the call
-    // RESOLVES and the handler emits the failed notification (no raw throw).
-    await handler("./nonexistent-marketplace-dir", ctx);
-    const note = notifications[0];
-    assert.ok(note);
-    assert.equal(
-      note.message,
-      "A marketplace operation has failed.\n\n⊘ ./nonexistent-marketplace-dir [user] (failed) {source missing}",
+/** Which scope the command actually landed in, and through which config file. */
+async function readAddFootprint(cwd: string): Promise<AddFootprint> {
+  return {
+    user: await readScopeFootprint("user", cwd),
+    project: await readScopeFootprint("project", cwd),
+  };
+}
+
+function stagingRootFor(scope: Scope, cwd: string): string {
+  return path.join(locationsFor(scope, cwd).extensionRoot, "sources-staging");
+}
+
+/**
+ * Substitute the stable token for a staging leaf that is a UUID under the
+ * expected scope's staging root, so the whole recorder stays comparable and a
+ * clone into the wrong scope root still fails on its directory.
+ */
+function describeClone(call: GitCloneCall, stagingRoot: string): GitCloneCall {
+  const staged = path.dirname(call.dir) === stagingRoot && UUID_LEAF.test(path.basename(call.dir));
+  return { ...call, dir: staged ? STAGED_CLONE_DIR : call.dir };
+}
+
+/**
+ * One temporary working directory, one temporary home, and one source tree per
+ * case, with the agent-directory variable cleared: `getAgentDir()` reads it
+ * before `homedir()`, so an ambient value would defeat a hermetic `HOME` (SC-1).
+ * Removal and both environment restores are registered before the handler runs.
+ */
+async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
+  const cwd = await mkdtemp(path.join(tmpdir(), `mp-add-${label}-cwd-`));
+  const home = await mkdtemp(path.join(tmpdir(), `mp-add-${label}-home-`));
+  const sourceTree = await mkdtemp(path.join(tmpdir(), `mp-add-${label}-source-`));
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  const previousHome = process.env.HOME;
+  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
+    } else {
+      delete process.env.HOME;
+    }
+
+    if (agentDirExisted) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+
+    await rm(cwd, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+    await rm(sourceTree, { recursive: true, force: true });
+  });
+  await mkdir(path.join(sourceTree, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceTree, ".claude-plugin", "marketplace.json"),
+    MARKETPLACE_MANIFEST,
+    "utf8",
+  );
+  process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
+  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
+  return {
+    cwd,
+    sourceTree,
+    fetchCallCount: (): number => fetchSpy.mock.callCount(),
+  };
+}
+
+/** The git port, which only ever admits the one remote a case may reach. */
+function createGitPort(sourceTree: string): ReturnType<typeof createGitOpsFake> {
+  return createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [CLONE_URL],
+    cloneFixture: { boundary: "local", sourceDir: sourceTree },
+  });
+}
+
+for (const { args, arity } of [
+  { args: URL_SOURCE, arity: "at the accepted arity" },
+  { args: `${URL_SOURCE} extra`, arity: "with a surplus positional token dropped" },
+]) {
+  test(`clones through the injected port into the user scope when no scope flag narrows the command ${arity}`, async (t) => {
+    // arrange
+    const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "default-scope");
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: cwd,
+      reads: 1,
+    });
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+    // act
+    await addHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
+    assert.deepStrictEqual(await readAddFootprint(cwd), USER_BASE_CONFIG);
+    assert.deepStrictEqual(
+      git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("user", cwd))),
+      [ALPHA_CLONE],
     );
-    assert.equal(note.severity, "error");
-    // No git operations expected (path source -- NFR-5).
-    assert.equal(gitMock.state.cloneCalls.length, 0);
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
   });
-});
+}
 
-test("shim :: --scope project propagated to addMarketplace", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    // ATTR-07: same path-source ENOENT with --scope project. The shim selecting
-    // project scope is observed in the failed row's `[project]` bracket; the
-    // precondition routes through notify (no raw throw).
-    await handler("./nonexistent-marketplace-dir --scope project", ctx);
-    const note = notifications[0];
-    assert.ok(note);
-    assert.equal(
-      note.message,
-      "A marketplace operation has failed.\n\n⊘ ./nonexistent-marketplace-dir [project] (failed) {source missing}",
+for (const { footprint, row, scope } of [
+  {
+    footprint: USER_BASE_CONFIG,
+    row: USER_ADDED_ROW,
+    scope: "user",
+  },
+  {
+    footprint: {
+      user: { state: false, config: false, localConfig: false },
+      project: { state: true, config: true, localConfig: false },
+    },
+    row: PROJECT_ADDED_ROW,
+    scope: "project",
+  },
+] satisfies readonly {
+  readonly footprint: AddFootprint;
+  readonly row: string;
+  readonly scope: Scope;
+}[]) {
+  test(`clones into the ${scope} scope when --scope ${scope} selects it`, async (t) => {
+    // arrange
+    const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: cwd,
+      reads: 1,
+    });
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+    // act
+    await addHandler(`${URL_SOURCE} --scope ${scope}`, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: row }]);
+    assert.deepStrictEqual(await readAddFootprint(cwd), footprint);
+    assert.deepStrictEqual(
+      git.state.calls.clone.map((call) => describeClone(call, stagingRootFor(scope, cwd))),
+      [ALPHA_CLONE],
     );
-    assert.equal(note.severity, "error");
-    assert.equal(gitMock.state.cloneCalls.length, 0);
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
   });
+}
+
+for (const { args, position } of [
+  { args: `${URL_SOURCE} --local`, position: "after" },
+  { args: `--local ${URL_SOURCE}`, position: "before" },
+]) {
+  test(`records the marketplace in the per-machine config when the scope-target flag is supplied ${position} the source`, async (t) => {
+    // arrange
+    const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, `local-${position}`);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: cwd,
+      reads: 1,
+    });
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+    // act
+    await addHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
+    assert.deepStrictEqual(await readAddFootprint(cwd), USER_LOCAL_CONFIG);
+    assert.deepStrictEqual(
+      git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("user", cwd))),
+      [ALPHA_CLONE],
+    );
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
+  });
+}
+
+test("carries a scope flag and the scope-target flag through together rather than rejecting the pair", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "scope-and-target");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: cwd,
+    reads: 1,
+  });
+  const git = createGitPort(sourceTree);
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+  // act
+  await addHandler(`${URL_SOURCE} --scope project --local`, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: PROJECT_ADDED_ROW }]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), {
+    user: { state: false, config: false, localConfig: false },
+    project: { state: true, config: false, localConfig: true },
+  });
+  assert.deepStrictEqual(
+    git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("project", cwd))),
+    [ALPHA_CLONE],
+  );
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// --local flag scanning at the edge boundary
-// ──────────────────────────────────────────────────────────────────────────
-
-test("USAGE string contains [--local]", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    // Missing source -> the parser fires notifyUsageError carrying USAGE.
-    await handler("", ctx);
-    assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\[--local\]/);
+test("adds a path source without ever reaching the git port it was handed (NFR-5)", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "path-source");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: cwd,
+    reads: 1,
   });
+  const git = createGitPort(sourceTree);
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+  // act
+  await addHandler(sourceTree, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), USER_BASE_CONFIG);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
 
-test("Flag: --local at the trailing position is parsed and routed to the orchestrator", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    // A github source with --local trailing -- exercises the scanner +
-    // residualArgs threading. The mock has no fixture so the orchestrator
-    // surfaces `(failed) {source missing}`; the test just proves the flag
-    // didn't break parsing.
-    await handler("owner/repo --local", ctx);
-    const note = notifications[0];
-    assert.ok(note);
-    assert.match(note.message, /\(failed\) \{source missing\}/);
-  });
+test("collapses the duplicated usage block to one sentence when no source is supplied and adds nothing", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "no-source");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const git = createGitPort(sourceTree);
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+  // act
+  await addHandler("", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: `Missing required argument.\n\n${USAGE}`, severity: "error" },
+  ]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
 
-test("Flag: --local at the leading position parses identically", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    // Leading --local + source: the scanner removes the flag from residual
-    // BEFORE the positional parser runs, so the positional parser sees the
-    // source as the first positional.
-    await handler("--local owner/repo", ctx);
-    const note = notifications[0];
-    assert.ok(note);
-    assert.match(note.message, /\(failed\) \{source missing\}/);
-  });
+test("reports an unknown long flag against the add usage block and adds nothing", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "unknown-flag");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const git = createGitPort(sourceTree);
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+  // act
+  await addHandler(`${URL_SOURCE} --frobnicate`, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: `Unknown flag: "--frobnicate".\n\n${USAGE}`, severity: "error" },
+  ]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
 
-test("Unknown long flag -> USAGE error (no orchestrator call)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    await handler("owner/repo --frobnicate", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
-    assert.equal(gitMock.state.cloneCalls.length, 0);
-  });
-});
+test("shows an unrecognised scope value verbatim against the add usage block and adds nothing", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "invalid-scope");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const git = createGitPort(sourceTree);
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
 
-test("shim :: deps.gitOps is passed through from EdgeDeps", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(makePi(), deps);
-    // A github source triggers the gitOps.clone path. The mock has no fixture
-    // configured, so the cloned staging dir has no `.claude-plugin/
-    // marketplace.json` -- the post-clone read fails ENOENT, now routed through
-    // notify as `(failed) {source missing}` (ATTR-07) rather than thrown. The
-    // clone call is still RECORDED on gitMock.state.cloneCalls, proving
-    // deps.gitOps reached addMarketplace.
-    await handler("owner/repo", ctx);
-    const note = notifications[0];
-    assert.ok(note);
-    assert.equal(note.severity, "error");
-    assert.match(note.message, /\(failed\) \{source missing\}/);
-    assert.equal(gitMock.state.cloneCalls.length, 1);
-  });
+  // act
+  await addHandler(`${URL_SOURCE} --scope bogus`, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: `Invalid --scope value: "bogus". Must be "user" or "project".\n\n${USAGE}`,
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
