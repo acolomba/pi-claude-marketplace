@@ -34,6 +34,27 @@ Phases 108 through 115 locked the contract this phase inherits. It is not reopen
 - **D-116-01:** One owner per source at the mirrored path, passing alone at 100 percent
   direct function, line, and branch coverage, with no coverage exception added. Phase 115
   removed the last `c8 ignore` pragma in the whole `extensions/` tree; none returns.
+- **D-116-01a (operator amendment, 2026-09-02):** D-116-01 admits exactly one shortfall class and
+  no other: a branch that is unreachable at runtime **solely because a compiler setting forces it
+  to exist**. Two settings produce it in this tier. `noUncheckedIndexedAccess`
+  (`tsconfig.json:12`) types every index read as `T | undefined`, so a loop whose bounds already
+  guarantee the read must still carry a guard the loop can never enter. A `catch (err)` binding is
+  typed `unknown`, which cannot be narrowed to `Error` without leaving a residual arm. Removing
+  either guard requires a non-null assertion or a type assertion:
+  `@typescript-eslint/no-non-null-assertion` is an error throughout `extensions/` under
+  `strictTypeChecked` and is relaxed only for `tests/**` (`eslint.config.js:309-312`), and
+  `extensions/` carries none today; `as unknown as` and `as any` are separately banned by this
+  phase's own anti-pattern grep. The only remaining route is a loop or catch rewrite, which is
+  materially more than deletion in a milestone scoped to tests.
+  This amendment does **not** license a coverage-exception pragma. D-116-01's ban on `c8 ignore`
+  and `node:coverage ignore` stands unchanged and applies to this class too. It admits no other
+  kind of miss. A pair claiming it MUST, in its `must_haves`, name the exact line range, state
+  that the branch is unreachable at runtime, name the compiler setting that forces it to exist,
+  and state the exact coverage numbers it therefore lands on — so a verifier reads an argued,
+  scoped shortfall rather than a gap.
+  Four pairs claim it: 116-02 (`edge/args.ts:34-37`), 116-26 (`edge/handlers/shared.ts:53-55`),
+  116-21 (`edge/handlers/plugin/pending.ts:39`), and 116-17
+  (`edge/handlers/plugin/import.ts:31`). No other pair may.
 - **D-116-02:** Runtime cases use separate lowercase `// arrange`, `// act`, and `// assert`
   phases. Lowercase `// act & assert` is reserved for one `assert.throws()` or
   `assert.rejects()` expression. Marker counts equal case **bodies**, not runtime cases — a

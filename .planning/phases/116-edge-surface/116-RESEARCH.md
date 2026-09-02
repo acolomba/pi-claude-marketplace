@@ -16,6 +16,27 @@ Phases 108 through 115 locked the contract this phase inherits. It is not reopen
 - **D-116-01:** One owner per source at the mirrored path, passing alone at 100 percent
   direct function, line, and branch coverage, with no coverage exception added. Phase 115
   removed the last `c8 ignore` pragma in the whole `extensions/` tree; none returns.
+- **D-116-01a (operator amendment, 2026-09-02):** D-116-01 admits exactly one shortfall class and
+  no other: a branch that is unreachable at runtime **solely because a compiler setting forces it
+  to exist**. Two settings produce it in this tier. `noUncheckedIndexedAccess`
+  (`tsconfig.json:12`) types every index read as `T | undefined`, so a loop whose bounds already
+  guarantee the read must still carry a guard the loop can never enter. A `catch (err)` binding is
+  typed `unknown`, which cannot be narrowed to `Error` without leaving a residual arm. Removing
+  either guard requires a non-null assertion or a type assertion:
+  `@typescript-eslint/no-non-null-assertion` is an error throughout `extensions/` under
+  `strictTypeChecked` and is relaxed only for `tests/**` (`eslint.config.js:309-312`), and
+  `extensions/` carries none today; `as unknown as` and `as any` are separately banned by this
+  phase's own anti-pattern grep. The only remaining route is a loop or catch rewrite, which is
+  materially more than deletion in a milestone scoped to tests.
+  This amendment does **not** license a coverage-exception pragma. D-116-01's ban on `c8 ignore`
+  and `node:coverage ignore` stands unchanged and applies to this class too. It admits no other
+  kind of miss. A pair claiming it MUST, in its `must_haves`, name the exact line range, state
+  that the branch is unreachable at runtime, name the compiler setting that forces it to exist,
+  and state the exact coverage numbers it therefore lands on — so a verifier reads an argued,
+  scoped shortfall rather than a gap.
+  Four pairs claim it: 116-02 (`edge/args.ts:34-37`), 116-26 (`edge/handlers/shared.ts:53-55`),
+  116-21 (`edge/handlers/plugin/pending.ts:39`), and 116-17
+  (`edge/handlers/plugin/import.ts:31`). No other pair may.
 - **D-116-02:** Runtime cases use separate lowercase `// arrange`, `// act`, and `// assert`
   phases. Lowercase `// act & assert` is reserved for one `assert.throws()` or
   `assert.rejects()` expression. Marker counts equal case **bodies**, not runtime cases — a
@@ -919,6 +940,28 @@ closed. The planner MUST treat these as locked and MUST NOT reopen them.
   `export { BOOLEAN_FLAGS };`. Removing it would break the passing
   `tests/architecture/flag-catalog-drift.test.ts` gate. Plan 116-20 records it as an observation
   for Phase 117, which owns the repository-wide gates, and takes no action.
+- **Coverage shortfall class (D-116-01a, decided 2026-09-02 during planning).** Direct coverage was
+  re-measured per pair during planning and five pairs were found unable to reach 100 percent branch
+  coverage. Four of the five are compiler artifacts, not dead code: `edge/args.ts:34-37`,
+  `edge/handlers/shared.ts:53-55`, and `edge/handlers/plugin/pending.ts:39` exist only because
+  `noUncheckedIndexedAccess` (`tsconfig.json:12`) types every index read as `T | undefined`, and
+  `edge/handlers/plugin/import.ts:31` is the residual arm of a `catch (err)` binding typed
+  `unknown`. Removing any of them needs a non-null assertion or a type assertion, both barred in
+  `extensions/`. D-116-01 is therefore amended by **D-116-01a**, which admits that one shortfall
+  class and no other, still bans every coverage-exception pragma, and requires each claiming pair
+  to name the line range, the compiler setting, and its exact resulting numbers in `must_haves`.
+  **No production file changes in any of the four.**
+- **`edge/handlers/tools.ts:391-401` is NOT removed, and NOT in the D-116-01a class.** Research
+  predicted that `pluginVersion`, returning `string | undefined`, would let a missing arm compile
+  clean. A compiler repro run during planning with this repository's own settings shows that is
+  **wrong**: `noImplicitReturns` (`tsconfig.json:11`) raises `TS7030: Not all code paths return a
+  value.` for a switch with a deleted arm and no `default`, exactly as for the three
+  TS2366-guarded ones. All four `tools.ts` switches therefore carry a real missing-arm gate — three
+  through TS2366 and this one through TS7030. Deleting the unreachable arms would destroy that
+  gate and, because the same setting then demands a trailing `return`, would trade an uncovered
+  branch for an uncovered line. The arms stay, plan 116-27 makes no production change, and its
+  shortfall is recorded with this argument. **This case is outside D-116-01a as written and awaits
+  operator ratification.**
 - **D-116-14 scope: plan 116-27 only.** Only the four `edge/handlers/tools.ts` switches turn on a
   closed union and carry an exhaustiveness claim. `router.ts` switches on open `string` with a
   `default` arm, so no guarantee exists there to prove or lose. Every other plan states the
