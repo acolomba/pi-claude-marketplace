@@ -4,11 +4,11 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-03-PLAN.md
-last_updated: "2026-09-02T21:15:00.000Z"
+stopped_at: Completed 116-10-PLAN.md
+last_updated: "2026-09-02T21:35:14.866Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 01cd56e6b67bc057f275886d14fbf94344595bd2
+state_head: 8a139f36b50ebce51ec5a039febe33ea53ae10ba
 progress:
   total_phases: 10
   completed_phases: 8
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 12 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-12, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: Wave 3 of 8 complete; 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); 116-03 opened the DAG-recomputed wave 3; 116-10 and 116-13 next
-Last activity: 2026-09-02 — 116-03 complete; the completion data owner reaches 100 percent direct functions and lines through a typed fake of its injected resolver, five false or unsatisfiable plan claims were corrected against the real module, and one branch stands uncovered because no input can reach it
+Plan: 13 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-10, 116-12, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); 116-03 and 116-10 have run in the DAG-recomputed wave 3; 116-13 closes it, then wave 4 (116-05, 116-07, 116-08, 116-09, 116-11)
+Last activity: 2026-09-02 — 116-10 complete; the marketplace listing owner reaches 100 percent direct branches, functions, and lines, establishes the normative Group-C negative-delegation shape for the twelve seamless handlers that follow, and corrects two `must_haves` truths that are false against the module (an empty positional schema DROPS a surplus token rather than rejecting it, and the scope-target flag is swallowed as a positional rather than refused)
 
 Progress: [████████░░] 80%
 
@@ -166,6 +166,7 @@ evidence.
 | Phase 116 P27 | 70 min | 2 tasks | 2 files |
 | Phase 116 P29 | 20 min | 1 tasks | 1 files |
 | Phase 116 P03 | 45 min | 1 tasks | 1 files |
+| Phase 116 P10 | 45 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -339,6 +340,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-03: `tests/architecture/scope-order-drift.test.ts` walks `extensions/` only, so a hand-authored scope literal in a test file is not gated; four existing test files already carry one
 - [Phase 116]: 116-03: a counter exposed on a returned interface must be declared `readonly f: () => number`, not `f(): number` — a method signature makes every destructuring site an unbound-method lint error even though the value is a closure
 - [Phase 116]: 116-03: `data.ts:188`'s `allTokens.at(-1) ?? ""` fallback is a fifth D-116-01a-class unreachable branch, outside the four-claimant list; proved unreachable by construction, by a 65,536-code-point probe, and by a plant that stayed green, and left at 109/110 rather than pinned or excepted
+- [Phase 116]: 116-10: an EMPTY positional schema does not reject a surplus token — `parseCommandArgs` iterates the SCHEMA, not the input, so every extra token is dropped and the handler still delegates; the phase-wide `must_haves` truth that both out-of-range arities are "rejected with a usage error" is false for a zero-positional handler
+- [Phase 116]: 116-10: `marketplace/list.ts` never calls `extractLocalFlag`, so the scope-target flag reaches the tokenizer as a positional and is swallowed; supplying it beside `--scope` is accepted, not rejected, and the phase-wide mutually-exclusive-selectors truth has no target on this handler
+- [Phase 116]: 116-10: the Group-C negative fires on the FIRST unstated boundary read, not on the emission count — a handler that forwards `ctx.cwd` dies in `path.join` on strong-mock's pending-call proxy before it can emit, so the G5 excerpt's stated "second `ctx.ui` access past its `times(1)` count" mechanism is only the fallback for handlers that read no `cwd`
+- [Phase 116]: 116-10: a Group-C rejecting case seeds BOTH scopes so the workflow it must not reach would have rows to emit; an unseeded tree makes the negative weaker because the unreached workflow would emit only the empty-state sentinel
 
 ### Pending Todos
 
@@ -364,8 +369,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T21:15:00.000Z
-Stopped at: Completed 116-03-PLAN.md
+Last session: 2026-09-02T21:35:12.715Z
+Stopped at: Completed 116-10-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
