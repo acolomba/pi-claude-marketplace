@@ -69,9 +69,42 @@ Phases 108 through 115 locked the contract this phase inherits. It is not reopen
   measured. Functions stay pinned at 100 percent. Measured branch numbers are recorded in the
   summary as an observation, never as a gate. A *passing* verdict still fails the link and must be
   reported, never edited away.
-  Four pairs claim it: 116-02 (`edge/args.ts:34-37`), 116-26 (`edge/handlers/shared.ts:53-55`),
-  116-21 (`edge/handlers/plugin/pending.ts:39`), and 116-17
-  (`edge/handlers/plugin/import.ts:31`). No other pair may.
+  Four pairs claimed it at planning time: 116-02 (`edge/args.ts:34-37`), 116-26
+  (`edge/handlers/shared.ts:53-55`), 116-21 (`edge/handlers/plugin/pending.ts:39`), and 116-17
+  (`edge/handlers/plugin/import.ts:31`).
+
+  **The claimant list is open to measurement (operator amendment, 2026-09-02, after 116-13
+  executed).** The four above were the ones a reader could predict from the source. Two more were
+  found only by executing: 116-03 (`edge/completions/data.ts:188`, the right-hand side of
+  `allTokens.at(-1) ?? ""`) and 116-13 (`edge/handlers/marketplace/update.ts:41`, the
+  `message === USAGE` collapse arm). Both were proved unreachable by measurement — by construction,
+  by brute force over the input space, and by a plant that stayed GREEN — not by inspection.
+
+  A fixed claimant list cannot survive that: it forces a pair that MEASURES an unreachable branch to
+  report it as loose prose, and prose is not a gate. Nothing then fails if the shortfall silently
+  changes, or if a later editor "restores" 100 percent by weakening the suite instead of the source.
+
+  So: **any pair that measures an unreachable branch becomes a claimant and MUST pin the shortfall
+  identity**, on the same terms as the original four. Nothing else about D-116-01a moves:
+
+  - The identity pin is unchanged — an `Incomplete direct coverage for <source>:` verdict with
+    branch numbers matched loosely, denominator minus numerator exactly 1, and the exact uncovered
+    line set. **Never an absolute branch pair.** Lines and functions stay pinned as measured.
+  - The `must_haves` entry must still name the exact line range, state that the branch is
+    unreachable at runtime, and give the REASON. Where a compiler setting forces it, name the
+    setting. Where it does not, name the structural reason instead — 116-13's arm is dead because
+    this schema declares its sole positional `required: false`, and is LIVE for the sibling handlers
+    that declare a required one. That distinction is part of the claim.
+  - Proof by measurement is required, not inspection: a plant that stays GREEN, plus at least one
+    independent route (construction, or a brute force over the reachable input space).
+  - **No coverage-exception pragma, ever.** D-116-01's ban on `c8 ignore` and `node:coverage ignore`
+    is untouched and applies to every claimant.
+  - Each claimed shortfall is also filed in `.planning/WINDOWS.md` so the phase boundary can sweep
+    them as one set. 116-13 is entry 15; 116-03 is entry 16.
+
+  This does NOT widen what counts as unreachable. A branch you merely failed to reach is not a
+  claim — it is a gap. The claim is that no input CAN reach it, and the plant is what separates the
+  two.
 - **D-116-02:** Runtime cases use separate lowercase `// arrange`, `// act`, and `// assert`
   phases. Lowercase `// act & assert` is reserved for one `assert.throws()` or
   `assert.rejects()` expression. Marker counts equal case **bodies**, not runtime cases — a
