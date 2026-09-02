@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-00-PLAN.md
-last_updated: "2026-09-02T15:35:46.685Z"
+stopped_at: Completed 116-01-PLAN.md
+last_updated: "2026-09-02T15:53:24.864Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: af7c501f75a0c5a577569b9adb9bbb2570276d37
+state_head: 43b751931cac1b3b13d95f67fb0e9fbb3d2ccf93
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 178
+  completed_plans: 179
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,7 +31,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 2 of 31
+Plan: 3 of 31
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 116 execution started
 
@@ -155,6 +155,7 @@ evidence.
 | Phase 115 P02 | 96 min | 3 tasks | 2 files |
 | Phase 115 P05 | 90min | 3 tasks | 5 files |
 | Phase 116 P00 | 35 min | 2 tasks | 5 files |
+| Phase 116 P01 | 25 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -305,6 +306,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 115]: Removed the marketplace-add, plugin-install and plugin-toggle catch clauses as unreachable; kept and proved the removal and uninstall clauses with a competing-writer race.
 - [Phase 115]: Deleted all eight source-text pins outright; none encoded a rule that is not already gated by its own owner, so nothing was re-homed under tests/architecture/.
 - [Phase 116]: strong-mock times(0) is inert, so the notification boundary omits the expectation entirely when a count is 0
+- [Phase 116]: The args-schema owner records onError with a plain closure asserted as a whole array, never as an interaction mock — The module promise is its return value; a declared callback parameter is not a port, so its call count proves nothing the result does not
+- [Phase 116]: The tokenizer-failure cases declare a required positional the input satisfies, so an undefined result can only mean the early return fired — It proves the short-circuit through the public result instead of observing an internal call, and a plant that removed the short-circuit turned all three cases RED
 
 ### Pending Todos
 
@@ -330,8 +333,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T15:35:44.771Z
-Stopped at: Completed 116-00-PLAN.md
+Last session: 2026-09-02T15:52:51.858Z
+Stopped at: Completed 116-01-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
