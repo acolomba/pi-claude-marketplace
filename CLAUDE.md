@@ -39,7 +39,7 @@ Before editing any file, read it first. Before modifying a function, trace its c
 
   `filesystem` mode scans file contents rather than git history, which is the right question at commit time: do the files being committed contain secrets. `--results=verified,unknown` is deliberately stricter than the hook's `verified`-only setting, because unverifiable candidates still warrant a look. Exit 0 with `verified_secrets: 0` and `unverified_secrets: 0` is the clean result. Committing from the main checkout is unaffected -- the hook works normally there.
 
-- When writing PR descriptions, use the `simple-english` and `humanizer` skills if available.
+- When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
 
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 
