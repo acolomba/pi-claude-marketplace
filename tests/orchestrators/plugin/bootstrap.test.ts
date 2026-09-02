@@ -187,7 +187,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
   const { cwd, locations } = await createHermeticUserScope(t, "clean");
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
   const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
 
   // act
@@ -227,7 +227,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
 test("converges on a second bootstrap without changing the recorded state or the tree", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "repeat");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(3);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(3, 6);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
 
   // act
@@ -263,7 +263,7 @@ test("reports an idempotent autoupdate when the marketplace is already bootstrap
   await seedAddedMarketplace(locations, cwd, true);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
   const seededConfig = await readFile(locations.configJsonPath, "utf8");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
 
   // act
@@ -286,7 +286,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
   const { cwd, locations } = await createHermeticUserScope(t, "half");
   await seedAddedMarketplace(locations, cwd, false);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
 
   // act
@@ -317,7 +317,7 @@ test("writes into the user scope only and leaves the project scope absent", asyn
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "user-only");
   const projectLocations = locationsFor("project", cwd);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4);
   const { gitOps } = createBootstrapGitOps();
 
   // act
@@ -336,7 +336,7 @@ test("writes into the user scope only and leaves the project scope absent", asyn
 test("propagates a clone failure silently and never reaches the autoupdate step", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "clone-failure");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
   const { gitOps, clonedUrls } = createBootstrapGitOps({ cloneError: new Error("network down") });
 
   // act & assert

@@ -159,7 +159,7 @@ function stateBytes(
 test("DIFF-01: reports the zero-action advisory when neither scope has pending work", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "empty");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd });
@@ -182,7 +182,7 @@ test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketpla
     user.configJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd });
@@ -208,7 +208,7 @@ test("an explicit user scope reports the user scope's pending work and never rea
     user.configJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd, scope: "user" });
@@ -229,7 +229,7 @@ test("an explicit project scope reports the project scope's pending work and nev
     user.configJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd, scope: "project" });
@@ -249,7 +249,7 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
   await writeUnder(project.configJsonPath, declaredConfig);
   await writeUnder(project.stateJsonPath, recordedState);
   const expectedNotification = { message: "● mp [project]\n  ○ p1 (will uninstall)" };
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
 
   // act
   await pendingReconcile({ ctx, pi, cwd });
@@ -305,7 +305,7 @@ for (const { reported, files } of invalidConfigRows) {
       await writeUnder(path.join(project.scopeRoot, name), bytes);
     }
 
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
     // act
     await pendingReconcile({ ctx, pi, cwd, scope: "project" });
@@ -345,7 +345,7 @@ for (const { condition, bytes, reason } of stateLoadFailureRows) {
     const { cwd, project } = await createHermeticScopes(t, "state-load-failure");
     await writeUnder(project.configJsonPath, configBytes("mp", "acme/tools", []));
     await writeUnder(project.stateJsonPath, bytes);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
     // act
     await pendingReconcile({ ctx, pi, cwd, scope: "project" });
@@ -369,7 +369,7 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
     user.configJsonPath,
     configBytes("zzz-mp", "acme/z", [{ key: "pp@zzz-mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd });
@@ -396,7 +396,7 @@ test("MIG-01: an absent base configuration plans against the state projection in
       { name: "p1", skills: ["mp-p1-tool"] },
     ]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd, scope: "project" });
@@ -416,7 +416,7 @@ test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes
   ]);
   await writeUnder(project.stateJsonPath, recordedState);
   const expectedNotification = { message: "Pending: next reload will apply 0 actions." };
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
 
   // act
   await pendingReconcile({ ctx, pi, cwd, scope: "project" });
@@ -442,7 +442,7 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
     ]),
   );
   await writeUnder(project.configLocalJsonPath, configBytes("zzz-extra", "acme/extra", []));
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
   // act
   await pendingReconcile({ ctx, pi, cwd, scope: "project" });
@@ -574,7 +574,7 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "planned-install");
     await stage(cwd, project);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
     // act
     await pendingReconcile({ ctx, pi, cwd, scope: "project" });
