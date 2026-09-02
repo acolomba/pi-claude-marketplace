@@ -461,8 +461,9 @@ async function applyPluginInstalls(
         plugin: op.plugin,
         dependencies: dependenciesFromInstall(result),
         // S2 / PR #51: propagate post-commit warnings so the cascade
-        // caller can surface them to the operator (mirrors
-        // import/execute.ts:699-703 pushDiagnostic channel).
+        // caller can surface them to the operator (mirrors the
+        // `pushDiagnostic` channel in
+        // `import/execute.ts::installOnePlannedPlugin`).
         ...(result.postCommitWarnings !== undefined &&
           result.postCommitWarnings.length > 0 && {
             postCommitWarnings: result.postCommitWarnings,
@@ -562,8 +563,9 @@ async function applyPluginToggles(
     // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so the
     // earlier `if (result === undefined) continue` silent-vanish guard is a
     // compile error and has been removed. Closes S6's fourth loop without
-    // duplicating the import/execute.ts:613 fail-loud wording (the type
-    // makes the branch unreachable instead of routing through a row).
+    // duplicating the fail-loud wording in
+    // `import/execute.ts::addOnePlannedMarketplace` (the type makes the
+    // branch unreachable instead of routing through a row).
     const result = await setPluginEnabled({
       ctx: opts.ctx,
       pi: opts.pi,
