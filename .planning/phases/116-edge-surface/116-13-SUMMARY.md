@@ -15,7 +15,7 @@ provides:
   - "the normative injected-port (D-116-05 O3, Group B) shape for the three remaining port-carrying handler owners: `createGitOpsFake` compared as a whole call recorder, plus a per-arm strict interaction mock stated in one `when()` and closed with `verify()`"
   - "the measured finding that a FIXTURE, not an assertion, is what makes a delegation proof discriminating — three seeded marketplaces across two scopes give the all-marketplaces arm three fetches and the single-marketplace arm one, so the recorder tells the two arms apart"
   - "the measured finding that a per-arm plant is required when a handler forwards the same port from two call sites: one edit removes one arm's forward and leaves the other arm's cases green"
-  - "a sixth D-116-01a-class unreachable branch, outside the locked four-claimant list: the usage-string collapse arm at edge/handlers/marketplace/update.ts:41, proven unreachable four ways and reported rather than pinned or excepted"
+  - "a sixth D-116-01a-class unreachable branch at edge/handlers/marketplace/update.ts:41, the usage-string collapse arm: proven unreachable four ways, reported here under the locked four-claimant rule, and pinned by its identity once the operator opened the claimant list to measurement"
 
 affects: []
 
@@ -39,7 +39,7 @@ key-files:
     - tests/edge/handlers/marketplace/update.test.ts
 
 key-decisions:
-  - "FINDING (blocking the plan's own acceptance criterion) — the pair CANNOT reach 100 percent direct branches without a production edit. `Incomplete direct coverage for extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts: branches 11/12`, functions 3/3, lines 72/72 (baseline was branches 7/9, functions 2/3, lines 64/72). The shortfall is exactly 1 and its identity is `BRDA:41,11,0,0` in the pair's own lcov — line 41, the `message === USAGE ? \"Missing required argument.\" : message` collapse arm. 116-13 is NOT a D-116-01a claimant and both production licences are spent, so this is REPORTED, not pinned and not excepted. No coverage pragma was added and no shortfall assertion was written"
+  - "FINDING (blocking the plan's own acceptance criterion) — the pair CANNOT reach 100 percent direct branches without a production edit. `Incomplete direct coverage for extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts: branches 11/12`, functions 3/3, lines 72/72 (baseline was branches 7/9, functions 2/3, lines 64/72). The shortfall is exactly 1 and its identity is `BRDA:41,11,0,0` in the pair's own lcov — line 41, the `message === USAGE ? \"Missing required argument.\" : message` collapse arm. 116-13 was NOT a D-116-01a claimant when this plan ran, so the shortfall was REPORTED rather than pinned; the operator then opened the claimant list to measurement, and the identity is now pinned in the plan verify block and stated in the suite header. No coverage pragma was added at any point"
   - "The collapse arm is unreachable four independent ways. (1) By construction: `parseCommandArgs` calls `onError(schema.usage)` only inside `if (required)`, and this schema declares the sole positional `required: false`, so the callback is only ever reached from `parseArgsOrNotify` with a tokenizer diagnostic. (2) By brute force: 170 argument shapes — empty, whitespace, both quote forms, unbalanced quotes, tabs, newlines, bare `--`, repeated `--scope`, and the usage string itself both bare and quoted — produced zero notifications beginning `Missing required argument.`. (3) Plant C: replacing the arm's literal left all 7 cases GREEN. (4) Plant D: inverting the condition to `message !== USAGE` turned the rejection case RED with the collapsed sentence, proving the pass-through arm is the one that runs"
   - "DEVIATION — the plan's `must_haves` truth 3 promises 'the parse-failure callback collapses the duplicated usage block to the missing-argument sentence and passes any other diagnostic through verbatim'. Only the second half has a reachable target. The plan's `<action>` therefore also asks for 'a diagnostic that is not the usage string reaches the user verbatim … the discriminating case for the collapse rule' — with the collapse arm unreachable, BOTH that case and the unrecognised-scope case take the same else arm, so the second case would have been the first case run twice with a different string, and its diagnostic is already owned by `tests/edge/args.test.ts:176`. Written instead: one rejection case pinning the verbatim pass-through, plus Plants C and D, which state the collapse arm's unreachability as a finding rather than authoring a case that cannot fail"
   - "DEVIATION — the plan's `must_haves` truth 4 ('Each handler owner proves the accepted positional arity, one below it, and one above it … both out-of-range counts are rejected with a usage error before any orchestrator call') is FALSE against this module in two ways, the same class 116-10 recorded. The schema declares ONE OPTIONAL positional, so zero and one are BOTH accepted and there is no count below the accepted range. And `parseCommandArgs` iterates `schema.positional.entries()` — the SCHEMA, not the input — so the second token is never inspected. Measured: `alpha` and `alpha extra` produce byte-identical output. Written instead: a two-row table stating the DROP, both rows carrying the full single-arm delegation proof"
@@ -113,7 +113,7 @@ coverage:
         status: pass
   - deliverable: "The pair reaches 100 percent direct BRANCH coverage"
     human_judgment: true
-    rationale: "NOT achieved and not achievable without a production edit. The pair stands at branches 11/12; the single uncovered branch is the unreachable usage-string collapse arm at update.ts:41. 116-13 is not a D-116-01a claimant and both production licences are spent, so this is reported for an operator decision alongside 116-03's data.ts:188 finding rather than pinned or excepted."
+    rationale: "NOT achieved and not achievable without a production edit. The pair stands at branches 11/12; the single uncovered branch is the unreachable usage-string collapse arm at update.ts:41. RESOLVED: the operator opened the D-116-01a claimant list to measurement, so update.ts:41 is a claimant and 11/12 is the pinned, argued end state rather than an open gap."
 
 duration: 50 min
 completed: 2026-09-02
@@ -123,6 +123,30 @@ completed: 2026-09-02
 
 The marketplace update shim now has one exhaustive, hermetic owner that proves its two-way arity
 selection in both directions and proves both injected ports reach both workflows, per arm.
+
+## RESOLUTION (operator amendment, 2026-09-02) — this pair is now a D-116-01a claimant
+
+The shortfall below was reported under the original rule, which locked D-116-01a to four named
+claimants. The operator has since opened the claimant list to measurement: **any pair that MEASURES
+an unreachable branch becomes a claimant and MUST pin the shortfall identity.**
+
+`update.ts:41` is therefore a claim, not an open item. Two things were added and nothing else moved:
+
+- **The suite states the claim.** `tests/edge/handlers/marketplace/update.test.ts` carries a
+  D-116-01a header paragraph naming the exact line, the runtime unreachability, and the reason. That
+  reason is explicitly NOT a compiler setting: `parseCommandArgs` passes the usage string only for a
+  REQUIRED positional, and this schema declares its sole positional `required: false`, so the arm is
+  dead for THIS module and stays LIVE for the sibling handlers that declare a required positional.
+  D-116-01a as amended requires that distinction to be part of the claim.
+- **The plan's verify block pins the identity.** `116-13-PLAN.md` now asserts, from the same gate
+  output, that an `Incomplete direct coverage for .../edge/handlers/marketplace/update.ts:` verdict is
+  printed with NO `lines` or `functions` clause, and that denominator minus numerator equals exactly
+  1. Branch numbers are matched loosely and never pinned as an absolute pair. A passing verdict still
+  fails the link. The plan's `must_haves` carries the matching truth.
+
+The measured `branches 11/12` is retained throughout this summary as an observation. Neither the
+suite's cases nor any production file changed; the amended verify command was re-run against the
+committed pair and exits 0.
 
 ## What was built
 
@@ -152,7 +176,7 @@ registered before the act (with the agent-directory variable deleted rather than
 installs a context-owned fail-fast replacement for `globalThis.fetch` whose call count is asserted
 zero.
 
-## The coverage shortfall (reported, not pinned)
+## The coverage shortfall (now pinned as a D-116-01a claim)
 
 The pair does **not** reach 100 percent direct branches, and cannot without a production edit:
 
@@ -180,11 +204,13 @@ so that branch never runs. Every other diagnostic arrives from `parseArgsOrNotif
 error, which can never equal the usage string.
 
 This was proven four ways — by construction, by a 170-shape brute force, and by two plants (C and D
-below). **No coverage-exception pragma was added and no shortfall assertion was written**, because
-116-13 is not one of D-116-01a's four claimants and both production licences are spent. It is
-reported here for the same operator decision that 116-03's `completions/data.ts:188` finding is
-awaiting. This one differs in character: it is not a compiler-forced branch but a defensive collapse
-that is live for the sibling handlers which declare a REQUIRED positional and dead for this one.
+below). **No coverage-exception pragma was added**, and none is admitted for this class. When this
+plan ran, 116-13 was not one of D-116-01a's four claimants, so no shortfall assertion was written;
+the amendment recorded in the RESOLUTION section made it one, and the identity pin was added
+afterwards without touching a case or a production file. This claim differs in character from the
+others: it is not a compiler-forced branch but a defensive collapse that is live for the sibling
+handlers which declare a REQUIRED positional and dead for this one — and D-116-01a as amended
+requires that distinction to be stated as part of the claim.
 
 ## Plants (D-116-04)
 
@@ -412,10 +438,11 @@ Every gate run separately, exit code checked individually. `npm run check` was N
 
 ## Issues Encountered
 
-One, carried to the operator: the direct-coverage gate exits 1 at branches 11/12 because of the
-unreachable collapse arm at `update.ts:41`. This is the plan's own acceptance criterion and it cannot
-be met without a production edit that the spent licence forbids. See the shortfall section for the
-four independent unreachability proofs and the `BRDA:41,11,0,0` identity.
+One, since resolved: the direct-coverage gate exits 1 at branches 11/12 because of the unreachable
+collapse arm at `update.ts:41`. This was the plan's own acceptance criterion and it cannot be met
+without a production edit that the spent licence forbids. The operator's amendment made this pair a
+D-116-01a claimant, so the shortfall is now a pinned claim rather than an unmet criterion. See the
+shortfall section for the four independent unreachability proofs and the `BRDA:41,11,0,0` identity.
 
 ## Next Phase Readiness
 

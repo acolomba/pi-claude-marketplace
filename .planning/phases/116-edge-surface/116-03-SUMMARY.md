@@ -15,7 +15,7 @@ provides:
   - "a typed-fake LocationsResolver seeded per case (state records, manifest rows, and per-scope read failures), reusable verbatim by 116-05's completion-provider owner"
   - "the measured correction that the partial option is NOT an install/update-only narrowing: it SHIFTS the install set (drops remote, admits partially-available) and narrows uninstall, reinstall, enable, and disable identically to update"
   - "the measured correction that tests/architecture/scope-order-drift.test.ts walks extensions/ only, so a hand-authored scope literal in a test file is not gated"
-  - "a fifth D-116-01a-class unreachable branch, outside the phase's four-claimant list: the coalesce fallback at data.ts:188"
+  - "a fifth D-116-01a-class unreachable branch at data.ts:188, the coalesce fallback: reported here under the original four-claimant rule, and pinned by its identity once the operator opened the claimant list to measurement"
 affects: []
 
 actuals:
@@ -43,7 +43,7 @@ key-decisions:
   - "DEVIATION — 'all twelve exports have their own top-level group' is not satisfiable. data.ts exports eight runtime values and four types (PluginRefCompletionMode, LocationsResolver, MarketplaceStateRecord, PluginMapOptions); a describe() with no runtime case is not a group. All eight runtime exports have a top-level describe. The four types ride real usage — LocationsResolver as the `satisfies` target of the fake, MarketplaceStateRecord in the seed type, PluginMapOptions on two options literals, PluginRefCompletionMode on the mode row list — rather than being restated, which the 'usage is not a property of a type' rule forbids anyway"
   - "DEVIATION — the plan's stability proof ('two candidates compare equal on the field the module orders by') has no target: the module performs no ordering by any field. It preserves caller order in getMarketplaceCompletions and Map insertion order everywhere else. Reframed to the equivalent falsifiable claim: a name list seeded non-alphabetically WITH a repeated equal element comes back in exactly that order, repeat in place. Plant C confirms a `.sort()` breaks it"
   - "DEVIATION — the plan's 'seed the failure in the first scope in one case and the second in another, so a short-circuit is visible' overstates what getMarketplaceNamesAcrossScopes does. It uses Promise.all over SCOPES.map, so both scope reads are always started; there is no short-circuit to observe. Both cases were kept because they prove a genuinely different thing — the rejection from EITHER scope reaches the caller by identity rather than degrading to a partial union"
-  - "The direct-coverage gate reports 109/110 branches. The single uncovered branch is the right-hand side of `allTokens.at(-1) ?? \"\"` at data.ts:188, which is unreachable through the exports: `splitCompletionInput` has already returned for `input === \"\"` and for any input ending in whitespace, and any other non-empty input has a non-whitespace final character, so `split(/\\s+/).filter(t => t !== \"\")` is never empty. Confirmed three ways — by construction, by a brute-force probe over all 65,536 BMP code points in five shapes (0 hits), and by Plant F, which changed the fallback and left all 66 cases GREEN. 116-03 is not a D-116-01a claimant, so this is reported rather than pinned, and no coverage exception was added"
+  - "The direct-coverage gate reports 109/110 branches. The single uncovered branch is the right-hand side of `allTokens.at(-1) ?? \"\"` at data.ts:188, which is unreachable through the exports: `splitCompletionInput` has already returned for `input === \"\"` and for any input ending in whitespace, and any other non-empty input has a non-whitespace final character, so `split(/\\s+/).filter(t => t !== \"\")` is never empty. Confirmed three ways — by construction, by a brute-force probe over all 65,536 BMP code points in five shapes (0 hits), and by Plant F, which changed the fallback and left all 66 cases GREEN. 116-03 was not a D-116-01a claimant when this plan ran, so the shortfall was reported rather than pinned; the operator then opened the claimant list to measurement, and the identity is now pinned in the plan verify block and stated in the suite header. No coverage exception was added at any point"
   - "No production file was touched. Six plants were applied to extensions/pi-claude-marketplace/edge/completions/data.ts and reverted individually with `git checkout --`; `git status --short` on that path was empty after each. The pinned-path check (`git diff --quiet` over data.ts, the three handler shared.ts files, flag-catalog.ts, and tests/helpers/notification-boundary.ts) exited 0 before staging, and `git log -1 --stat` shows one file changed"
   - "resetCompletionCache() is called on entry to every resolver-backed case and again in the registered teardown. The plugin-index memory map is process-global and keyed by scope plus marketplace name, and several cases reuse the name `official`, so a case that skipped the reset would read a sibling case's rows"
 
@@ -105,7 +105,7 @@ coverage:
         status: pass
   - deliverable: "The paired source reaches 100 percent direct branches"
     human_judgment: true
-    rationale: "NOT achieved. 109/110. The remaining branch is provably unreachable through the module exports and closing it needs a production edit this plan may not make (both production licences are spent). The operator must decide whether data.ts:188 joins the D-116-01a claimant list, is rewritten in a later phase, or is accepted as a standing 109/110"
+    rationale: "NOT achieved. 109/110. The remaining branch is provably unreachable through the module exports and closing it needs a production edit this plan may not make (both production licences are spent). RESOLVED: the operator opened the D-116-01a claimant list to measurement, so data.ts:188 is a claimant and 109/110 is the pinned, argued end state rather than an open gap"
 ---
 
 # Phase 116 Plan 03: Completion Data Owner Summary
@@ -115,6 +115,30 @@ candidate map is seeded with all nine derived plugin-index statuses, compared as
 entry pairs against a hand-authored literal, and proven offline by call count. The paired source moved
 from 493/610 lines, 25/31 functions, and 54/64 branches to **610/610 lines, 31/31 functions, and
 109/110 branches**.
+
+## RESOLUTION (operator amendment, 2026-09-02) — this pair is now a D-116-01a claimant
+
+The finding below was reported under the original rule, which locked D-116-01a to four named
+claimants. The operator has since opened the claimant list to measurement: **any pair that MEASURES
+an unreachable branch becomes a claimant and MUST pin the shortfall identity**, because a fixed list
+forces a measured shortfall to be reported as prose, and prose is not a gate.
+
+`data.ts:188` is therefore a claim, not an open item. Two things were added and nothing else moved:
+
+- **The suite states the claim.** `tests/edge/completions/data.test.ts` carries a D-116-01a header
+  paragraph naming the exact line, the runtime unreachability, the reason (`Array.prototype.at()` is
+  typed `T | undefined` by the standard library — a compiler-forced shortfall), and the fact that no
+  coverage exception is added.
+- **The plan's verify block pins the identity.** `116-03-PLAN.md` now asserts, from the same gate
+  output, that an `Incomplete direct coverage for .../edge/completions/data.ts:` verdict is printed
+  with NO `lines` or `functions` clause (which is how a fully-covered line set is stated in this
+  verdict shape), and that denominator minus numerator equals exactly 1. Branch numbers are matched
+  loosely and never pinned as an absolute pair. A passing verdict still fails the link. The plan's
+  `must_haves` carries the matching truth.
+
+The measured `branches 109/110` is retained throughout this summary as an observation, which is what
+D-116-01a calls for. Neither the suite's cases nor any production file changed; the amended verify
+command was re-run against the committed pair and exits 0.
 
 ## Accomplishments
 
@@ -237,7 +261,7 @@ Mutation: `const current = allTokens.at(-1) ?? "";` → `... ?? "@@unreached@@";
 Result: **GREEN**, `pass 66 fail 0`. No case reaches the fallback because no input can. See the
 finding below.
 
-## Finding: one unreachable branch, outside the D-116-01a claimant list
+## Finding: one unreachable branch, now a D-116-01a claim
 
 `npm run test:coverage:direct` reports `branches 109/110`. The single uncovered branch is
 `BRDA:188,11` — the right-hand side of `allTokens.at(-1) ?? ""` in `splitCompletionInput`.
@@ -256,10 +280,10 @@ Confirmed empirically as well: a brute-force probe over all 65,536 BMP code poin
 direction — changing the fallback leaves every case green.
 
 This is the same compiler-forced shape D-116-01a covers: `at(-1)` is typed `string | undefined`, and
-neither `!` nor `as` is available in `extensions/`, so removing the coalesce means a rewrite. **116-03
-is not a D-116-01a claimant and both production licences are spent**, so no coverage exception was
-added, no pin was written, and no production edit was made. The operator decides whether `data.ts:188`
-joins the claimant list, is rewritten later, or stands at 109/110.
+neither `!` nor `as` is available in `extensions/`, so removing the coalesce means a rewrite. No
+coverage exception was added and no production edit was made. At the time this plan ran, 116-03 was
+not a D-116-01a claimant, so no pin was written; the amendment recorded above made it one, and the
+identity pin was added afterwards without touching a case or a production file.
 
 ## Deviations from Plan
 
@@ -414,8 +438,8 @@ Ready for 116-10. **116-05 (the completion provider) depends on this plan** and 
 counter are all reusable as written. It should not re-prove the candidate-map behavior owned here; its
 own pair owns `pluginRefBranchConfig` and the argument-position dispatch.
 
-One open item for the operator: `data.ts:188` is a fifth D-116-01a-class unreachable branch and this
-plan could not close it. It stands at 109/110.
+`data.ts:188` is a fifth D-116-01a-class unreachable branch. It stands at a pinned 109/110 — see the
+RESOLUTION section above; it is no longer an open item.
 
 ## Self-Check: PASSED
 

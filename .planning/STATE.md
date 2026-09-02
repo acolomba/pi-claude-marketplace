@@ -33,7 +33,7 @@ component as a working Pi artifact.
 Phase: 116 (Edge Surface) — EXECUTING
 Plan: 14 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
 Status: 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); the DAG-recomputed wave 3 is closed (116-03, 116-10, 116-13); next is wave 4 (116-05, 116-07, 116-08, 116-09, 116-11)
-Last activity: 2026-09-02 — 116-13 complete; the marketplace update owner proves both arity-selected workflows and both injected port forwards per arm, and reports a sixth D-116-01a-class unreachable branch (the usage-string collapse arm at `edge/handlers/marketplace/update.ts:41`, dead because the sole positional is optional) rather than pinning or excepting the resulting branches 11/12
+Last activity: 2026-09-02 — D-116-01a amended: the claimant list is open to measurement, so 116-03 and 116-13 were reopened and their measured shortfalls are now pinned by identity rather than reported as prose. `edge/completions/data.ts:188` (compiler-forced: `Array.prototype.at()` is typed `T | undefined`) and `edge/handlers/marketplace/update.ts:41` (structural: the sole positional is `required: false`, so the collapse arm is dead here and live for siblings declaring a required one) each carry a suite-header claim and a verify-block identity pin — an incomplete verdict with no `lines` or `functions` clause and a shortfall of exactly one branch, never an absolute branch pair. No plan completed; the count stays at 14 of 31
 
 Progress: [████████░░] 80%
 

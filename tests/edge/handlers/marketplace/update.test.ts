@@ -39,6 +39,26 @@
 // The reachable half -- a tokenizer diagnostic reaching the user verbatim -- is
 // what the rejection case pins.
 //
+// D-116-01a: this pair lands one branch short of complete. The
+// `message === USAGE` arm at update.ts:41 -- the collapse half of
+// `message === USAGE ? "Missing required argument." : message` -- cannot be
+// entered at runtime through this handler. No compiler setting forces it; it is
+// dead here for a structural reason. `parseCommandArgs` passes the usage string
+// to the callback only for a REQUIRED positional, and this schema declares its
+// sole positional `required: false`, so the callback is only ever reached with a
+// tokenizer diagnostic, which can never equal the usage string. The same arm is
+// LIVE for the sibling handlers that declare a required positional, so the
+// shortfall is a property of this module, not of the collapse expression.
+//
+// The claim is measured, not inspected: 170 argument shapes produced no
+// notification beginning `Missing required argument.`; a plant that replaced the
+// arm's literal left all 7 cases green; and an inverted-condition plant
+// (`message !== USAGE`) turned the rejection case red, proving the pass-through
+// arm is the one that runs. The shortfall is pinned by its identity -- functions
+// and lines complete, and exactly ONE uncovered branch -- never by an absolute
+// branch pair, because the branch denominator tracks suite strength rather than
+// the source. No coverage exception is added and no production file is changed.
+//
 // No exhaustiveness claim: the selection is an `if` over an optional value, not a
 // switch over a closed union, so a missing-arm plant has no target here. No case
 // asserts the absence of direct process output (ESLint and fallow own that), none
