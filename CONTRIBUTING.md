@@ -33,3 +33,7 @@ npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
 pre-commit run --all-files
 ```
+
+## Vendored skills
+
+The skills under `.agents/skills/` and `.claude/skills/` come from other repositories. `skills-lock.json` records their source, and `THIRD_PARTY_NOTICES.md` records their license. When you update a skill, check that its `LICENSE` file is still in place. The skill installer copies the skill directory only, and some upstream repositories keep the license at the repository root.
