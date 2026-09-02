@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-13-PLAN.md
-last_updated: "2026-09-02T22:01:43.747Z"
+stopped_at: Completed 116-07-PLAN.md
+last_updated: "2026-09-02T22:51:22.583Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 2faa968518feb6a8ae05ef2772a37def718343e7
+state_head: 844c9f3d318cc4ff613af9fcde8e798a5e646dad
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 191
+  completed_plans: 192
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 14 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); the DAG-recomputed wave 3 is closed (116-03, 116-10, 116-13); next is wave 4 (116-05, 116-07, 116-08, 116-09, 116-11)
-Last activity: 2026-09-02 — D-116-01a amended: the claimant list is open to measurement, so 116-03 and 116-13 were reopened and their measured shortfalls are now pinned by identity rather than reported as prose. `edge/completions/data.ts:188` (compiler-forced: `Array.prototype.at()` is typed `T | undefined`) and `edge/handlers/marketplace/update.ts:41` (structural: the sole positional is `required: false`, so the collapse arm is dead here and live for siblings declaring a required one) each carry a suite-header claim and a verify-block identity pin — an incomplete verdict with no `lines` or `functions` clause and a shortfall of exactly one branch, never an absolute branch pair. No plan completed; the count stays at 14 of 31
+Plan: 15 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: the DAG-recomputed wave 4 is open — 116-07 is done; 116-05, 116-08, 116-09 and 116-11 remain before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
+Last activity: 2026-09-02 — 116-07 rewrote the marketplace add owner and established the phase's port-forwarding proof: a url source on a provider-less host puts the injected git port on the clone path authless, and the whole clone recorder is compared as one value with the `randomUUID()` staging leaf replaced by a token ONLY under the expected scope root, so a wrong scope still fails on the raw directory. Scope and the scope-target flag are observed as an on-disk footprint rather than an options bag. Coverage held at branches 8/8, functions 2/2, lines 48/48 — no D-116-01a claim here. Five plants, all RED, all reverted; the forward sites were COUNTED first (one real site, one comment hit). Five plan deviations: `must_haves` truths 4 and 5 are false against this module (a surplus positional is DROPPED, and a scope flag plus the scope-target flag are NOT mutually exclusive), the clone recorder cannot hold a hand-authored directory literal, the two flag-diagnostic cases were narrowed off sibling owners, and the rejection plant needed two variants
 
 Progress: [████████░░] 80%
 
@@ -168,6 +168,7 @@ evidence.
 | Phase 116 P03 | 45 min | 1 tasks | 1 files |
 | Phase 116 P10 | 45 min | 1 tasks | 1 files |
 | Phase 116 P13 | 50 min | 1 tasks | 1 files |
+| Phase 116 P07 | 35 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -347,6 +348,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-10: a Group-C rejecting case seeds BOTH scopes so the workflow it must not reach would have rows to emit; an unseeded tree makes the negative weaker because the unreached workflow would emit only the empty-state sentinel
 - [Phase 116]: The marketplace update handler's usage-string collapse arm is unreachable through its exports, so the pair stands at branches 11/12 and the shortfall is reported, not pinned or excepted — parseCommandArgs passes the usage string to the callback only for a REQUIRED positional; this schema declares its sole positional optional. Proven by construction, by a 170-shape brute force, by a plant that stayed GREEN, and by an inverted-condition plant that went RED. 116-13 is not a D-116-01a claimant and both production licences are spent, so the reversible default applies. Identity: BRDA:41,11,0,0 in the pair's own lcov.
 - [Phase 116]: An injected port forwarded from two call sites needs one plant per site; a single-site plant leaves the sibling arm's claim unproven — Removing the all-marketplaces arm's pluginUpdate forward left both named-marketplace rows GREEN; removing the single-marketplace arm's forward left the bare and scope-narrowed cases GREEN. Applies to 116-07, 116-14 and 116-17, the remaining injected-port owners.
+- [Phase 116]: 116-07: the marketplace add owner proves the injected git port by driving a url source on a provider-less host and comparing the whole clone recorder, with the randomUUID staging leaf replaced by a token only under the expected scope root
+- [Phase 116]: 116-07: scope and the scope-target flag are proven as an on-disk footprint (which scope root holds state.json, and whether the write-back landed in claude-plugins.json or claude-plugins.local.json) because the edge tier has no injection point against the options bag
 
 ### Pending Todos
 
@@ -372,14 +375,12 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T22:01:41.332Z
-Stopped at: Completed 116-13-PLAN.md
-canonical verification passed 6 of 6 must-haves with coverage independently re-measured
-per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
-deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
-were fixed, including converting four void-returning switches to value-returning shapes
-so a missing arm raises TS2366 at the edit site. WR-02 was accepted as recorded by
-operator decision and stays open as WINDOWS.md entry 9.
+Last session: 2026-09-02T22:51:47.000Z
+Stopped at: Completed 116-07-PLAN.md
+tests/edge/handlers/marketplace/add.test.ts is the sole mirrored owner for the marketplace add
+shim, at 11 runtime cases from 8 marked bodies and unchanged direct coverage (branches 8/8,
+functions 2/2, lines 48/48). npm test 5047/5047, test:integration 31/31, typecheck/lint/fallow all
+0. Production is byte-identical after five plants.
 
 Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
 D-116-14 locked, so discuss is done and planning runs first. Pass --skip-ui to plan-phase:
