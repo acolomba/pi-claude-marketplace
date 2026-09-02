@@ -14,6 +14,13 @@
 // names nothing about the case's real mistake. `ctx.cwd` is stated the same way,
 // and only by a case whose path forwards it: a handler that rejects its input
 // before delegating never reads `cwd`, and D-116-06 wants that absence provable.
+//
+// A count of 0 states no expectation at all rather than `times(0)`, because
+// `strong-mock` treats `times(0)` as no limit: it installs the stub, serves every
+// call, and verifies clean. A zero written as `times(0)` therefore proves nothing,
+// which is the opposite of what a zero claims. Leaving the member unstated makes
+// the mock serve its pending-call proxy instead, so the first unwanted emission,
+// probe, or `cwd` read fails where it happens.
 
 import { mock, verify, when } from "strong-mock";
 
@@ -72,19 +79,24 @@ export function createNotificationBoundary(
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "extension context" });
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .times(emissions);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(toolProbes);
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .times(emissions);
+  if (emissions > 0) {
+    when(() => ctx.ui)
+      .thenReturn(ui)
+      .times(emissions);
+    when(() => ui.notify)
+      .thenReturn((message, severity) => {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      })
+      .times(emissions);
+  }
 
-  if (cwd !== undefined) {
+  if (toolProbes > 0) {
+    when(() => pi.getAllTools())
+      .thenReturn([])
+      .times(toolProbes);
+  }
+
+  if (cwd !== undefined && cwd.reads > 0) {
     when(() => ctx.cwd)
       .thenReturn(cwd.value)
       .times(cwd.reads);
