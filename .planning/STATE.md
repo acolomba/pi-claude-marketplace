@@ -4,8 +4,8 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-29-PLAN.md
-last_updated: "2026-09-02T20:39:32.000Z"
+stopped_at: Completed 116-03-PLAN.md
+last_updated: "2026-09-02T21:15:00.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
 state_head: 01cd56e6b67bc057f275886d14fbf94344595bd2
@@ -13,7 +13,7 @@ progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 188
+  completed_plans: 189
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 11 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: Wave 3 of 8 complete; 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); wave 4 next
-Last activity: 2026-09-02 — 116-29 complete; the subcommand router owner reaches 100 percent direct functions, lines and branches through an exact-argument mock of its injected handler record, and two plan defects were corrected in place — an anti-shadowing invariant that is false against the real module, and a duplicate-entry assertion the plan's own acceptance criteria forbid writing
+Plan: 12 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-12, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: Wave 3 of 8 complete; 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); 116-03 opened the DAG-recomputed wave 3; 116-10 and 116-13 next
+Last activity: 2026-09-02 — 116-03 complete; the completion data owner reaches 100 percent direct functions and lines through a typed fake of its injected resolver, five false or unsatisfiable plan claims were corrected against the real module, and one branch stands uncovered because no input can reach it
 
 Progress: [████████░░] 80%
 
@@ -165,6 +165,7 @@ evidence.
 | Phase 116 P26 | 45 min | 1 tasks | 1 files |
 | Phase 116 P27 | 70 min | 2 tasks | 2 files |
 | Phase 116 P29 | 20 min | 1 tasks | 1 files |
+| Phase 116 P03 | 45 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -334,6 +335,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-29: the two subcommand vocabularies deliberately overlap on list, ls, info and update, so "no marketplace name is also handled by the top level" is false; the anti-shadowing promise is carried instead by proving the shared token reaches a different handler member per dispatch
 - [Phase 116]: 116-29: alias identity is one case with one expectation at a definite count of 2, driven once by the alias and once by the canonical name; two separate cases prove two dispatches, not one identity
 - [Phase 116]: 116-29: a "no duplicate entries" claim cannot be written by deduplicating the exported constant and comparing it back — that is an expectation transformed from an actual; comparing the export against the hand-authored row table that serves it catches the same defect
+- [Phase 116]: 116-03: the `--partial` option is not an install/update-only narrowing — it SHIFTS the install candidate set (drops `remote`, admits `partially-available`) and narrows uninstall, reinstall, enable and disable identically to update, because it is threaded into the same shared installed-inventory helper
+- [Phase 116]: 116-03: `tests/architecture/scope-order-drift.test.ts` walks `extensions/` only, so a hand-authored scope literal in a test file is not gated; four existing test files already carry one
+- [Phase 116]: 116-03: a counter exposed on a returned interface must be declared `readonly f: () => number`, not `f(): number` — a method signature makes every destructuring site an unbound-method lint error even though the value is a closure
+- [Phase 116]: 116-03: `data.ts:188`'s `allTokens.at(-1) ?? ""` fallback is a fifth D-116-01a-class unreachable branch, outside the four-claimant list; proved unreachable by construction, by a 65,536-code-point probe, and by a plant that stayed green, and left at 109/110 rather than pinned or excepted
 
 ### Pending Todos
 
@@ -359,8 +364,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T20:39:32.000Z
-Stopped at: Completed 116-29-PLAN.md
+Last session: 2026-09-02T21:15:00.000Z
+Stopped at: Completed 116-03-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven

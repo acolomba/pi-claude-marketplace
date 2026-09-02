@@ -531,7 +531,7 @@ Plans:
 - [x] **116-00** (`116-00-PLAN.md`, `P116-00`) - `tests/helpers/notification-boundary.ts` — command-context typed boundary, required probe count, optional stated working directory
 - [x] **116-01** (`116-01-PLAN.md`, `P116-01`) - `extensions/pi-claude-marketplace/edge/args-schema.ts` → `tests/edge/args-schema.test.ts`
 - [x] **116-02** (`116-02-PLAN.md`, `P116-02`) - `extensions/pi-claude-marketplace/edge/args.ts` → `tests/edge/args.test.ts`
-- [ ] **116-03** (`116-03-PLAN.md`, `P116-03`) - `extensions/pi-claude-marketplace/edge/completions/data.ts` → `tests/edge/completions/data.test.ts`
+- [x] **116-03** (`116-03-PLAN.md`, `P116-03`) - `extensions/pi-claude-marketplace/edge/completions/data.ts` → `tests/edge/completions/data.test.ts`
 - [x] **116-04** (`116-04-PLAN.md`, `P116-04`) - `extensions/pi-claude-marketplace/edge/completions/normalize.ts` → `tests/edge/completions/normalize.test.ts`
 - [ ] **116-05** (`116-05-PLAN.md`, `P116-05`) - `extensions/pi-claude-marketplace/edge/completions/provider.ts` → `tests/edge/completions/provider.test.ts`
 - [x] **116-06** (`116-06-PLAN.md`, `P116-06`) - `extensions/pi-claude-marketplace/edge/flag-catalog.ts` → `tests/edge/flag-catalog.test.ts`
@@ -618,6 +618,6 @@ and commit still owns one pair.
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
-| 116. Edge Surface                        |          11/31 | In Progress     | -          |
+| 116. Edge Surface                        |          12/31 | In Progress     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
 | **Total**                                |    **173/204** | **In Progress** | **-**      |
