@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
-status: planning
-stopped_at: Phase 115 complete; Phase 116 needs context before planning
-last_updated: "2026-09-02T04:37:15.426Z"
+status: executing
+stopped_at: Completed 116-00-PLAN.md
+last_updated: "2026-09-02T15:35:46.685Z"
 last_activity: 2026-09-02
-last_activity_desc: Phase 115 closed after review fixes; MOD-08 satisfied
-state_head: 5a0d604d
+last_activity_desc: Phase 116 execution started
+state_head: af7c501f75a0c5a577569b9adb9bbb2570276d37
 progress:
   total_phases: 10
   completed_phases: 8
-  total_plans: 177
-  completed_plans: 177
+  total_plans: 208
+  completed_plans: 178
 milestone_name: Unit Test Refactor
 ---
 
@@ -30,11 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 116 (Edge Surface) — READY TO DISCUSS
-Plan: 0 of 30
-Status: No context gathered; discuss has not started
-Last activity: 2026-09-02 — Phase 115 closed: verification 6/6, code review fixed 11 of
-12 findings, WR-02 accepted as recorded, transition applied
+Phase: 116 (Edge Surface) — EXECUTING
+Plan: 2 of 31
+Status: Ready to execute
+Last activity: 2026-09-02 — Phase 116 execution started
 
 Progress: [████████░░] 80%
 
@@ -155,6 +154,7 @@ evidence.
 | Phase 112 P14 | 16 min   | 2 tasks | 1 file  |
 | Phase 115 P02 | 96 min | 3 tasks | 2 files |
 | Phase 115 P05 | 90min | 3 tasks | 5 files |
+| Phase 116 P00 | 35 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -304,6 +304,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 115]: D-115-10 delivered: the three reconcile producers carry the mode-discriminated overload, so a dropped cascade row is a gate failure rather than a silent continue.
 - [Phase 115]: Removed the marketplace-add, plugin-install and plugin-toggle catch clauses as unreachable; kept and proved the removal and uninstall clauses with a competing-writer race.
 - [Phase 115]: Deleted all eight source-text pins outright; none encoded a rule that is not already gated by its own owner, so nothing was re-homed under tests/architecture/.
+- [Phase 116]: strong-mock times(0) is inert, so the notification boundary omits the expectation entirely when a count is 0
 
 ### Pending Todos
 
@@ -327,8 +328,10 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-09-02T07:40:00.000Z
-Stopped at: Phase 115 closed and transition applied by hand. All eight pairs landed;
+**Resume file:** None
+
+Last session: 2026-09-02T15:35:44.771Z
+Stopped at: Completed 116-00-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
