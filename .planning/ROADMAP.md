@@ -536,7 +536,7 @@ Plans:
 - [ ] **116-05** (`116-05-PLAN.md`, `P116-05`) - `extensions/pi-claude-marketplace/edge/completions/provider.ts` → `tests/edge/completions/provider.test.ts`
 - [x] **116-06** (`116-06-PLAN.md`, `P116-06`) - `extensions/pi-claude-marketplace/edge/flag-catalog.ts` → `tests/edge/flag-catalog.test.ts`
 - [x] **116-07** (`116-07-PLAN.md`, `P116-07`) - `extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts` → `tests/edge/handlers/marketplace/add.test.ts`
-- [ ] **116-08** (`116-08-PLAN.md`, `P116-08`) - `extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts` → `tests/edge/handlers/marketplace/autoupdate.test.ts`
+- [x] **116-08** (`116-08-PLAN.md`, `P116-08`) - `extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts` → `tests/edge/handlers/marketplace/autoupdate.test.ts`
 - [ ] **116-09** (`116-09-PLAN.md`, `P116-09`) - `extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts` → `tests/edge/handlers/marketplace/info.test.ts`
 - [x] **116-10** (`116-10-PLAN.md`, `P116-10`) - `extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts` → `tests/edge/handlers/marketplace/list.test.ts`
 - [ ] **116-11** (`116-11-PLAN.md`, `P116-11`) - `extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts` → `tests/edge/handlers/marketplace/remove.test.ts`
