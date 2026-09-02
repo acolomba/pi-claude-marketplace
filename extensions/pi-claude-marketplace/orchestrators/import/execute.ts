@@ -628,17 +628,33 @@ function reconcileExistingMarketplace(
 }
 
 /**
- * Record the outcome of installing ONE planned plugin.
+ * The import-result bucket ONE planned plugin landed in.
+ *
+ * CR-01: this exists so `installOnePlannedPlugin` can declare a value-returning
+ * signature. TypeScript checks a `switch` for exhaustiveness only when the
+ * declared return type forces a value on every path; a `void` function's switch
+ * with a missing arm compiles clean. Naming the bucket makes the outcome switch
+ * below TS2366-checked.
+ */
+type PlannedPluginBucket = "install-failed" | "installed" | "unexpected-failure";
+
+/**
+ * Record the outcome of installing ONE planned plugin and answer with the
+ * result bucket it was recorded in.
  *
  * WR-02: an unexpected `installPlugin` throw routes to
  * `result.unexpectedPluginFailures` in `dispatchFailedOutcome`'s shape, so the
  * per-scope loop continues and the terminal `notify()` still fires.
+ *
+ * CR-01: the returned bucket is what the caller discards, not what it acts on --
+ * every consumer reads the populated `result` buckets instead. The declared
+ * return type is the mechanism: see `PlannedPluginBucket`.
  */
 async function installOnePlannedPlugin(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
-): Promise<void> {
+): Promise<PlannedPluginBucket> {
   const installPlugin = installPluginFn(opts.deps);
   let outcome: InstallPluginOutcome;
   try {
@@ -661,21 +677,26 @@ async function installOnePlannedPlugin(
       reason: "unexpected-failure",
       cause: errorMessage(err),
     });
-    return;
+    return "unexpected-failure";
   }
 
-  // Switch rather than an `if (failed) ... return` fall-through: a third
-  // `InstallPluginOutcome` arm must become a compile error here, not get
-  // counted as a successful install in the cascade totals. D-05: the union has
-  // exactly the two arms below, so TypeScript proves the switch exhaustive and
-  // the former `default: assertNever(outcome)` was unreachable dead code.
+  // CR-01: a third `InstallPluginOutcome` arm must become a compile error here,
+  // not get counted as a successful install in the cascade totals. The
+  // mechanism is the DECLARED RETURN TYPE, not the switch: TypeScript proves a
+  // switch exhaustive only when the return type forces a value on every path,
+  // so this same switch inside a `void` function would let a third arm fall
+  // through, record the plugin in no bucket, render no cascade row, and
+  // under-count the `Import: N successes` tally with every gate green. D-05:
+  // the union has exactly the two arms below, so the former
+  // `default: assertNever(outcome)` was unreachable dead code -- TS2366 on a
+  // missing arm is what replaces it.
   switch (outcome.status) {
     case "failed":
       // The collapsed `failed` status carries the typed Error directly. Narrow
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
       dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
-      return;
+      return "install-failed";
     case "installed":
       result.installedPlugins.push({
         kind: "plugin-installed",
@@ -693,7 +714,7 @@ async function installOnePlannedPlugin(
         pushDiagnostic(result, plugin.scope, "post-install-warning", w, { ref: refLabel(plugin) });
       }
 
-      return;
+      return "installed";
   }
 }
 
