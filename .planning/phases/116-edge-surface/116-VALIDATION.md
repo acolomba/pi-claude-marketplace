@@ -5,7 +5,7 @@ slug: "edge-surface"
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
 status: draft
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: false  # plan 116-00, executed in wave 1
 created: "2026-09-02"
 ---
 
@@ -47,46 +47,49 @@ run. Run each gate separately and check exit codes.
 
 Seeded at plan granularity — one row per source-test pair, which is what ROADMAP.md fixes before
 planning. Task-level rows (`116-NN-MM`) are added by `/gsd-validate-phase` once PLAN.md files
-exist. Wave numbers are the researcher's recommended ordering; the planner owns the final call.
+exist. Wave numbers below are the planner's final call, and match the `wave` field in each PLAN.md. They
+renumber the researcher's 0-based recommendation to GSD's 1-based waves and split the researcher's
+wave 5 into three, so that no plan shares a wave with a plan it depends on.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|--------|
-| 116-01 | 01 | 1 | MOD-09 | — | N/A | unit | `node --test tests/edge/args-schema.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/args-schema.ts` | ⬜ pending |
-| 116-02 | 02 | 1 | MOD-09 | — | N/A | unit | `node --test tests/edge/args.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/args.ts` | ⬜ pending |
-| 116-03 | 03 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/completions/data.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/completions/data.ts` | ⬜ pending |
-| 116-04 | 04 | 1 | MOD-09 | — | N/A | unit | `node --test tests/edge/completions/normalize.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/completions/normalize.ts` | ⬜ pending |
-| 116-05 | 05 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/completions/provider.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/completions/provider.ts` | ⬜ pending |
-| 116-06 | 06 | 1 | MOD-09 | — | N/A | unit | `node --test tests/edge/flag-catalog.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/flag-catalog.ts` | ⬜ pending |
-| 116-07 | 07 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/add.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts` | ⬜ pending |
-| 116-08 | 08 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/autoupdate.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts` | ⬜ pending |
-| 116-09 | 09 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/info.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts` | ⬜ pending |
-| 116-10 | 10 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/list.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts` | ⬜ pending |
-| 116-11 | 11 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/remove.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts` | ⬜ pending |
-| 116-12 | 12 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/shared.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts` | ⬜ pending |
-| 116-13 | 13 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/update.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts` | ⬜ pending |
-| 116-14 | 14 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/bootstrap.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts` | ⬜ pending |
-| 116-15 | 15 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/enable-disable.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts` | ⬜ pending |
-| 116-16 | 16 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/fetch.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts` | ⬜ pending |
-| 116-17 | 17 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/import.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts` | ⬜ pending |
-| 116-18 | 18 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/info.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts` | ⬜ pending |
-| 116-19 | 19 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/install.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts` | ⬜ pending |
-| 116-20 | 20 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/list.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts` | ⬜ pending |
-| 116-21 | 21 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/pending.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts` | ⬜ pending |
-| 116-22 | 22 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/reinstall.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts` | ⬜ pending |
-| 116-23 | 23 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/shared.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts` | ⬜ pending |
-| 116-24 | 24 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/uninstall.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts` | ⬜ pending |
-| 116-25 | 25 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/update.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts` | ⬜ pending |
-| 116-26 | 26 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/shared.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/shared.ts` | ⬜ pending |
-| 116-27 | 27 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/tools.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/tools.ts` | ⬜ pending |
-| 116-28 | 28 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/register.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/register.ts` | ⬜ pending |
-| 116-29 | 29 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/router.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/router.ts` | ⬜ pending |
-| 116-30 | 30 | 1 | MOD-09 | — | N/A | type-only | `node --test tests/edge/types.test.ts && npm run typecheck` | ⬜ pending |
+| 116-00 | 00 | 1 | MOD-09 | — | N/A | unit | `npm test && npm run test:integration` after the shared boundary helper change (the helper has no owner test of its own; test support needs no meta-test) | ⬜ pending |
+| 116-01 | 01 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/args-schema.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/args-schema.ts` | ⬜ pending |
+| 116-02 | 02 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/args.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/args.ts` | ⬜ pending |
+| 116-03 | 03 | 6 | MOD-09 | — | N/A | unit | `node --test tests/edge/completions/data.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/completions/data.ts` | ⬜ pending |
+| 116-04 | 04 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/completions/normalize.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/completions/normalize.ts` | ⬜ pending |
+| 116-05 | 05 | 7 | MOD-09 | — | N/A | unit | `node --test tests/edge/completions/provider.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/completions/provider.ts` | ⬜ pending |
+| 116-06 | 06 | 2 | MOD-09 | — | N/A | unit | `node --test tests/edge/flag-catalog.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/flag-catalog.ts` | ⬜ pending |
+| 116-07 | 07 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/add.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts` | ⬜ pending |
+| 116-08 | 08 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/autoupdate.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts` | ⬜ pending |
+| 116-09 | 09 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/info.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts` | ⬜ pending |
+| 116-10 | 10 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/list.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts` | ⬜ pending |
+| 116-11 | 11 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/remove.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts` | ⬜ pending |
+| 116-12 | 12 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/shared.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts` | ⬜ pending |
+| 116-13 | 13 | 4 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/marketplace/update.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts` | ⬜ pending |
+| 116-14 | 14 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/bootstrap.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts` | ⬜ pending |
+| 116-15 | 15 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/enable-disable.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts` | ⬜ pending |
+| 116-16 | 16 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/fetch.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts` | ⬜ pending |
+| 116-17 | 17 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/import.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts` | ⬜ pending |
+| 116-18 | 18 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/info.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts` | ⬜ pending |
+| 116-19 | 19 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/install.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts` | ⬜ pending |
+| 116-20 | 20 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/list.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts` | ⬜ pending |
+| 116-21 | 21 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/pending.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts` | ⬜ pending |
+| 116-22 | 22 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/reinstall.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts` | ⬜ pending |
+| 116-23 | 23 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/shared.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts` | ⬜ pending |
+| 116-24 | 24 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/uninstall.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts` | ⬜ pending |
+| 116-25 | 25 | 5 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/plugin/update.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts` | ⬜ pending |
+| 116-26 | 26 | 3 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/shared.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/shared.ts` | ⬜ pending |
+| 116-27 | 27 | 6 | MOD-09 | — | N/A | unit | `node --test tests/edge/handlers/tools.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/tools.ts` | ⬜ pending |
+| 116-28 | 28 | 8 | MOD-09 | — | N/A | unit | `node --test tests/edge/register.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/register.ts` | ⬜ pending |
+| 116-29 | 29 | 6 | MOD-09 | — | N/A | unit | `node --test tests/edge/router.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/router.ts` | ⬜ pending |
+| 116-30 | 30 | 2 | MOD-09 | — | N/A | type-only | `node --test tests/edge/types.test.ts && npm run typecheck` | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
 ---
 
-## Wave 0 Requirements
+## Wave 1 Requirements (plan 116-00)
 
 - [ ] `tests/helpers/notification-boundary.ts` — add an optional `cwd` option (an unstated `ctx.cwd`
       makes the orchestrator die with `The "path" argument must be of type string. Received
@@ -95,7 +98,7 @@ exist. Wave numbers are the researcher's recommended ordering; the planner owns 
       expectation and `verifyBoundary()` fails). Roughly 20 of the 30 plans depend on this.
 - [ ] Re-run every suite that already imports the helper after changing it
       (`grep -rl createNotificationBoundary tests/`)
-- [ ] Wave 0 carries its own negative control: confirm the fixed helper still fails when an
+- [ ] Plan 116-00 carries its own negative control: confirm the fixed helper still fails when an
       unexpected `ctx.ui.notify` call is made, so the D-116-06 proof is discriminating.
 
 ---
@@ -121,7 +124,7 @@ each need `t.mock.method(globalThis, "fetch", refuseNetwork)` with `callCount() 
 
 - [ ] All tasks have `<automated>` verify or Wave 0 dependencies
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
+- [ ] Plan 116-00 covers all MISSING references
 - [ ] No watch-mode flags
 - [ ] Feedback latency < 15s
 - [ ] `nyquist_compliant: true` set in frontmatter
