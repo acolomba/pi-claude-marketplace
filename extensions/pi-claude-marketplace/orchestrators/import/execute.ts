@@ -587,7 +587,23 @@ function reconcileExistingMarketplace(
       // The stored source record is in an unrecognized format (e.g. a
       // hand-edited state.json). Block dependent plugins and emit a clear
       // diagnostic rather than a misleading source-mismatch message.
-      blockedMarketplaces.add(marketplace.marketplace);
+      //
+      // WR-06: the marketplace also takes a `(failed)` header. Diagnostics
+      // have no notification representation, so on their own this arm rendered
+      // `(no marketplaces)` with no severity argument -- info, the token for
+      // "the desired state was reached" -- while a marketplace and every plugin
+      // it declares were skipped over an actionable data problem. Routing
+      // through the shared add-failure bookkeeping reuses the existing
+      // `marketplaceFailures -> setMarketplaceStatus("failed")` path with no new
+      // vocabulary, and silences the dependent plugins' advisory rows the same
+      // way a genuine add failure does.
+      recordMarketplaceAddFailure(
+        result,
+        blockedMarketplaces,
+        scopePlan,
+        marketplace,
+        "unrecognized stored source format",
+      );
       pushDiagnostic(
         result,
         marketplace.scope,

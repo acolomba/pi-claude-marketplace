@@ -930,12 +930,15 @@ for (const { cause, declared, stored, title } of [
   });
 }
 
-test("blocks a recorded marketplace whose stored source is unrecognized and says so in a diagnostic", async (t) => {
+test("fails a recorded marketplace whose stored source is unrecognized and renders its header", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "recorded-unknown");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1);
+  const cause = "unrecognized stored source format";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
+    marketplaceFailures: [addFailed("mp", "user", cause)],
+    warnings: [warned("plugin", "mp", "user", "marketplace-failed", cause)],
     diagnostics: [
       {
         code: "unrecognized-stored-source",
@@ -974,7 +977,15 @@ test("blocks a recorded marketplace whose stored source is unrecognized and says
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n" +
+        "⊘ mp [user] (failed)\n\n" +
+        "Import: 1 failure",
+      severity: "error",
+    },
+  ]);
   verifyBoundary();
 });
 
