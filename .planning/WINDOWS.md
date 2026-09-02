@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 5
 waived_count: 0
 fixed_count: 2
-total_count: 5
-last_updated: 2026-08-31T04:43:40.050Z
+total_count: 7
+last_updated: 2026-09-02T01:30:10.510Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,8 @@ last_updated: 2026-08-31T04:43:40.050Z
 | 3 | 88 | stub | extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts |  | thin StopFailure translator; errorMessage classifier lands in plan 04 (SFAIL-03) | open |  | 2026-07-30T12:26:38.396Z |  |
 | 4 | 109 | deviation | tests/shared/atomic-json.test.ts | 55 | TypeScript inferred a literal-only expected-document set before the Task 2 type check widened it to Set<string>. | fixed |  | 2026-08-29T18:04:33.606Z | 2026-08-29T18:04:45.703Z |
 | 5 | 112 | deviation | .planning/ROADMAP.md |  | Closed the canonical P112-15 row and current activity after the generic progress update left them stale. | fixed |  | 2026-08-31T04:43:18.412Z | 2026-08-31T04:43:40.050Z |
+| 6 | 115 | unmet-truth | tests/orchestrators/reconcile/apply.test.ts |  | Backfill's owner stopped driving applyReconcile, so the apply-tier facts it used to carry (one cascade with a promotion row plus an install row, the rendered (installed)/(failed) row bytes, no reload-hint trailer) now need an owner in reconcile/apply.test.ts (P115-05). | open |  | 2026-09-02T01:30:10.208Z |  |
+| 7 | 115 | deviation | tests/orchestrators/reconcile/backfill.test.ts |  | The two runScopeIsolated cases own no temporary tree; that entrypoint touches no filesystem, HOME or agent directory, so the plan's per-case tree requirement is satisfied vacuously. | open |  | 2026-09-02T01:30:10.510Z |  |
 
 ````json
 [
@@ -82,6 +84,30 @@ last_updated: 2026-08-31T04:43:40.050Z
     "reason": "",
     "recorded_at": "2026-08-31T04:43:18.412Z",
     "resolved_at": "2026-08-31T04:43:40.050Z"
+  },
+  {
+    "id": 6,
+    "kind": "unmet-truth",
+    "phase": "115",
+    "file": "tests/orchestrators/reconcile/apply.test.ts",
+    "line": null,
+    "description": "Backfill's owner stopped driving applyReconcile, so the apply-tier facts it used to carry (one cascade with a promotion row plus an install row, the rendered (installed)/(failed) row bytes, no reload-hint trailer) now need an owner in reconcile/apply.test.ts (P115-05).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T01:30:10.208Z",
+    "resolved_at": null
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "115",
+    "file": "tests/orchestrators/reconcile/backfill.test.ts",
+    "line": null,
+    "description": "The two runScopeIsolated cases own no temporary tree; that entrypoint touches no filesystem, HOME or agent directory, so the plan's per-case tree requirement is satisfied vacuously.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T01:30:10.510Z",
+    "resolved_at": null
   }
 ]
 ````
