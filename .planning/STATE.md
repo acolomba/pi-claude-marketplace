@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 17 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-08, 116-09, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: the DAG-recomputed wave 4 is nearly closed — 116-07, 116-08 and 116-09 are done; 116-05 and 116-11 remain before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
-Last activity: 2026-09-02 — 116-09 rewrote the marketplace info owner, the thinnest shim in the phase, as 7 runtime cases from 5 marked bodies. It copied 116-08's normative Group-C shape and MEASURED a third diagnostic for the same negative: `getMarketplaceInfo` runs no catch, so the unstated-`cwd` failure dies as `ERR_INVALID_ARG_TYPE` inside `locationsFor` (the list.ts family), while the same plant with a literal working directory dies on the emission count as `ctx.ui.notify is not a function`. Both variants recorded. NFR-5 is proven per-owner by call count on a context-owned fail-fast transport — the architecture suite that gates network reach names orchestrator files only and says nothing about the edge tier. Direct coverage held at branches 2/2, functions 1/1, lines 22/22 — no D-116-01a claim. Six plants, all RED, all reverted; no production file touched. One plan deviation: `must_haves` truth 3's "one above the accepted arity is rejected" is FALSE here for the fifth plan running — the surplus token is DROPPED. A fifth `--local` outcome was measured: this shim never calls `extractLocalFlag`, so `--scope project --local` puts `--local` in the NAME position and the workflow reports `⊘ --local [project] (failed) {not added}`
+Plan: 18 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: the DAG-recomputed wave 4 is one plan from closing — 116-07, 116-08, 116-09 and 116-11 are done; only 116-05 (completions/provider) remains before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
+Last activity: 2026-09-02 — 116-11 rewrote the marketplace remove owner as 11 runtime cases from 7 marked bodies, observing the removal as the on-disk marketplace footprint of both scopes read back as one whole value. Its main finding is a case the PLAN specified that could not fail: the forwarded scope-target flag is read in exactly one place inside `removeMarketplace` — to pick `claude-plugins.local.json` over `claude-plugins.json` as the CFG-03 precondition target — while the success write-back sweeps BOTH layers unconditionally, so in a valid-config fixture `alpha`, `alpha --local` and `--local alpha` are byte-identical. The rows were rewritten against a workspace whose override layer fails schema validation, where supplying the flag aborts the removal and omitting it does not; Plant C (deleting the local spread) turns exactly the two flag-supplied rows RED and would have left the plan's version fully GREEN. A sixth `--local` outcome was measured: this shim reaches `extractLocalFlag` through the shared opener, so `--scope user --local` is ACCEPTED and both members are honored (the third acceptance, matching add and autoupdate). The arity truth split for the first time — a single REQUIRED positional DOES reject zero, so the lower half holds, while the surplus token is still DROPPED. The Group-C negative gave a fourth diagnostic pair: no catch wraps `locationsFor`, so the ctx.cwd-forwarding variant dies as `ERR_INVALID_ARG_TYPE` at `persistence/locations.ts:145` and the literal-cwd variant runs to completion and dies on the emission count at `orchestrators/marketplace/remove.ts:783`. Direct coverage went 7/7 to branches 8/8, functions 2/2, lines 46/46 — denominator and numerator rose together, no D-116-01a claim. Seven plants, all RED, all reverted; no production file touched
 
 Progress: [████████░░] 80%
 
@@ -169,6 +169,7 @@ evidence.
 | Phase 116 P10 | 45 min | 1 tasks | 1 files |
 | Phase 116 P13 | 50 min | 1 tasks | 1 files |
 | Phase 116 P07 | 35 min | 1 tasks | 1 files |
+| Phase 116 P11 | 35 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -375,12 +376,12 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T22:51:47.000Z
-Stopped at: Completed 116-07-PLAN.md
-tests/edge/handlers/marketplace/add.test.ts is the sole mirrored owner for the marketplace add
-shim, at 11 runtime cases from 8 marked bodies and unchanged direct coverage (branches 8/8,
-functions 2/2, lines 48/48). npm test 5047/5047, test:integration 31/31, typecheck/lint/fallow all
-0. Production is byte-identical after five plants.
+Last session: 2026-09-02T23:56:00.000Z
+Stopped at: Completed 116-11-PLAN.md
+tests/edge/handlers/marketplace/remove.test.ts is the sole mirrored owner for the marketplace
+remove shim, at 11 runtime cases from 7 marked bodies and complete direct coverage (branches 8/8,
+functions 2/2, lines 46/46, up from 7/7). npm test 5058/5058, test:integration 31/31,
+typecheck/lint/fallow all 0. Production is byte-identical after seven plants.
 
 Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
 D-116-14 locked, so discuss is done and planning runs first. Pass --skip-ui to plan-phase:
