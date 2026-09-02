@@ -30,7 +30,7 @@ tech-stack:
 
 key-files:
   created:
-    - .planning/phases/116-edge-surface/116-D116-01A-PINS-SUMMARY.md
+    - .planning/phases/116-edge-surface/116-D116-01A-PINS-REPORT.md
   modified:
     - tests/edge/completions/data.test.ts
     - tests/edge/handlers/marketplace/update.test.ts
