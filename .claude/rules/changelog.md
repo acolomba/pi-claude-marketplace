@@ -9,8 +9,8 @@ Target 40 words or fewer per bullet.
 
 ## Before you write
 
-Apply the `simple-english` skill and the `humanizer:humanizer` skill to every
-entry you add or change.
+Apply the `simple-english` skill in Plain mode and the `humanizer:humanizer`
+skill to every entry you add or change.
 
 ## Rules
 
