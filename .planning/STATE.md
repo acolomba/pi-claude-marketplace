@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-27-PLAN.md
-last_updated: "2026-09-02T20:18:27.648Z"
+stopped_at: Completed 116-29-PLAN.md
+last_updated: "2026-09-02T20:39:32.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 855683a6d882b10d6c321e8a307fa99a7050c4db
+state_head: 01cd56e6b67bc057f275886d14fbf94344595bd2
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 187
+  completed_plans: 188
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 10 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-23, 116-26, 116-27, 116-30)
-Status: Wave 3 of 8 complete; 116-27 taken ahead of wave order (it depends on 116-00 alone); wave 4 next
-Last activity: 2026-09-02 — 116-27 complete; the read-only tool surface owner reaches 100 percent direct functions, lines and branches, and the phase's whole D-116-14 exhaustiveness obligation is discharged with four recorded plants (three TS2366, one TS7030)
+Plan: 11 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: Wave 3 of 8 complete; 116-27 and 116-29 taken ahead of wave order (each depends on 116-00 alone); wave 4 next
+Last activity: 2026-09-02 — 116-29 complete; the subcommand router owner reaches 100 percent direct functions, lines and branches through an exact-argument mock of its injected handler record, and two plan defects were corrected in place — an anti-shadowing invariant that is false against the real module, and a duplicate-entry assertion the plan's own acceptance criteria forbid writing
 
 Progress: [████████░░] 80%
 
@@ -164,6 +164,7 @@ evidence.
 | Phase 116 P23 | 50 min | 1 tasks | 1 files |
 | Phase 116 P26 | 45 min | 1 tasks | 1 files |
 | Phase 116 P27 | 70 min | 2 tasks | 2 files |
+| Phase 116 P29 | 20 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -330,6 +331,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-27: an unreachable switch arm is removed by giving the function its producer's row union, derived from the producer's return type rather than named or hand-excluded; re-adding a removed arm raises TS2678, which is the control that proves the removal was forced
 - [Phase 116]: 116-27: a defensive narrowing copied from a shared helper is a branch the local pair can never reach; calling the helper removes it without a cast, a behavior change, or a coverage exception
 - [Phase 116]: 116-27: a mock for a generic method restates that member as a property, because reading a method as a value is an unbound-method lint error; the shared notification boundary cannot serve a registerTool capture for that reason
+- [Phase 116]: 116-29: the two subcommand vocabularies deliberately overlap on list, ls, info and update, so "no marketplace name is also handled by the top level" is false; the anti-shadowing promise is carried instead by proving the shared token reaches a different handler member per dispatch
+- [Phase 116]: 116-29: alias identity is one case with one expectation at a definite count of 2, driven once by the alias and once by the canonical name; two separate cases prove two dispatches, not one identity
+- [Phase 116]: 116-29: a "no duplicate entries" claim cannot be written by deduplicating the exported constant and comparing it back — that is an expectation transformed from an actual; comparing the export against the hand-authored row table that serves it catches the same defect
 
 ### Pending Todos
 
@@ -355,8 +359,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T20:18:00.000Z
-Stopped at: Completed 116-27-PLAN.md
+Last session: 2026-09-02T20:39:32.000Z
+Stopped at: Completed 116-29-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
