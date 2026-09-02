@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-04-PLAN.md
-last_updated: "2026-09-02T17:05:37.181Z"
+stopped_at: Completed 116-06-PLAN.md
+last_updated: "2026-09-02T17:56:35.113Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 1981394adbc205f8527d2c33a07dee2ab5fa62da
+state_head: f66a37f485349bc756af7d97594cea471ba681d8
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 181
+  completed_plans: 182
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 4 of 31 complete (116-00, 116-01, 116-02, 116-04)
+Plan: 5 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06)
 Status: Executing wave 2 of 8
-Last activity: 2026-09-02 — 116-04 complete; completion normalizer at full coverage
+Last activity: 2026-09-02 — 116-06 complete; flag-catalog owner written and an unreachable branch removed
 
 Progress: [████████░░] 80%
 
@@ -158,6 +158,7 @@ evidence.
 | Phase 116 P01 | 25 min | 1 tasks | 1 files |
 | Phase 116 P02 | 20 min | 1 tasks | 1 files |
 | Phase 116 P04 | 25 min | 1 tasks | 1 files |
+| Phase 116 P06 | 65 min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -311,6 +312,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: The args-schema owner records onError with a plain closure asserted as a whole array, never as an interaction mock — The module promise is its return value; a declared callback parameter is not a port, so its call count proves nothing the result does not
 - [Phase 116]: The tokenizer-failure cases declare a required positional the input satisfies, so an undefined result can only mean the early return fired — It proves the short-circuit through the public result instead of observing an internal call, and a plant that removed the short-circuit turned all three cases RED
 - [Phase 116]: The direct-coverage branch denominator is a property of the suite, not of the source: edge/args.ts measures branches 28/29 under its rewritten owner where it measured 25/26 under the old one, with the same single uncovered branch — V8 emits a block range only when that block's execution count diverges from the enclosing range, so a guard whose false arm is never taken is collapsed and never enters the lcov denominator at all. Covering the false arm raises BRH and BRF together. Diffing BRDA records between the two suites over the same source shows three new ranges (args.ts:46, :75, :84) and no lost ones. Consequence: a full-line coverage verdict pin cannot be authored before the rewrite that strengthens the suite. D-116-01a's recorded number for edge/args.ts is superseded by measurement and the three other claimants (116-26, 116-21, 116-17) carry the same exposure. Operator ratification required; nothing was edited.
+- [Phase 116]: 116-06: deleted the unreachable optional-description branch in completionFlagEntries by making FlagEntry.description required, rather than adding a coverage exception; the exported return type is unchanged
+- [Phase 116]: 116-06: where an architecture gate already pins a data table exactly, the mirrored owner proves the derivation shape (filter, order, key presence, exclusion) and asserts nothing about the table contents
 
 ### Pending Todos
 
@@ -336,8 +339,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T17:05:34.891Z
-Stopped at: Completed 116-04-PLAN.md
+Last session: 2026-09-02T17:56:33.150Z
+Stopped at: Completed 116-06-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
