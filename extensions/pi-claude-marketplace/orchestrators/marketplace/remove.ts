@@ -509,16 +509,10 @@ async function resolveRemoveTargetOrSurface(
   orchestrated: boolean,
 ): Promise<{ scope: Scope; locations: ScopedLocations } | RemoveMarketplaceOutcome | undefined> {
   if (orchestrated) {
-    const r = await resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
-    if ("status" in r) {
-      return r;
-    }
-
-    return r;
+    return resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
   }
 
-  const r = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
-  return r;
+  return resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
 }
 
 /**
