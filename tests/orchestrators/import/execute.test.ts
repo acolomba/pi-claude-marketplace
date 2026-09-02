@@ -23,7 +23,8 @@
 // is made rather than being counted afterwards.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -1746,6 +1747,21 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
   verifyBoundary();
 });
 
+/**
+ * Count the completed atomic rewrites of one file. `write-file-atomic` finishes
+ * every write with `fs.rename(tmp, target)`, so one rename whose destination is
+ * the target is one complete rewrite. The spy carries no replacement, so the
+ * real write still runs and the resulting bytes stay assertable; the count is
+ * the separate promise. Counting discriminates the WB-03 batched post-pass from
+ * a per-entry write loop, which an mtime comparison cannot: `>` holds for one
+ * write and for thirty, and equality holds for a same-millisecond rewrite.
+ */
+function countAtomicWrites(t: TestContext, targetPath: string): () => number {
+  const fsModule = createRequire(import.meta.url)("node:fs") as typeof import("node:fs");
+  const renameSpy = t.mock.method(fsModule, "rename");
+  return () => renameSpy.mock.calls.filter((call) => call.arguments[1] === targetPath).length;
+}
+
 /** The exact bytes `claude-plugins.json` carries after a batched post-pass. */
 function configBytes(declared: {
   readonly marketplaces: Record<string, { readonly source: string }>;
@@ -1797,7 +1813,7 @@ test("touches the config file once for a multi-entry batch", async (t) => {
   const { ctx, pi, verifyBoundary } = createNotificationBoundary(1);
   await createScopeRoots(project);
   await writeFile(project.configJsonPath, configBytes({ marketplaces: {}, plugins: {} }), "utf8");
-  const before = await stat(project.configJsonPath);
+  const configWrites = countAtomicWrites(t, project.configJsonPath);
   const expectedBytes = configBytes({
     marketplaces: { mp1: { source: "owner/mp1" }, mp2: { source: "owner/mp2" } },
     plugins: { "p1@mp1": {}, "p2@mp1": {}, "p3@mp2": {} },
@@ -1828,8 +1844,7 @@ test("touches the config file once for a multi-entry batch", async (t) => {
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
-  const after = await stat(project.configJsonPath);
-  assert.ok(after.mtimeMs > before.mtimeMs, "the post-pass should have rewritten the config once");
+  assert.strictEqual(configWrites(), 1);
   verifyBoundary();
 });
 
@@ -1840,7 +1855,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
   await createScopeRoots(project);
   const seededBytes = `${JSON.stringify({ schemaVersion: 1, futureKey: "preserved" }, null, 2)}\n`;
   await writeFile(project.configJsonPath, seededBytes, "utf8");
-  const before = await stat(project.configJsonPath);
+  const configWrites = countAtomicWrites(t, project.configJsonPath);
 
   // act
   await importClaudeSettings({
@@ -1863,8 +1878,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
-  const after = await stat(project.configJsonPath);
-  assert.strictEqual(after.mtimeMs, before.mtimeMs);
+  assert.strictEqual(configWrites(), 0);
   verifyBoundary();
 });
 
@@ -2020,7 +2034,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
     plugins: { "plugin@mp": {} },
   });
   await writeFile(project.configJsonPath, seededBytes, "utf8");
-  const before = await stat(project.configJsonPath);
+  const configWrites = countAtomicWrites(t, project.configJsonPath);
 
   // act
   await importClaudeSettings({
@@ -2052,8 +2066,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
-  const after = await stat(project.configJsonPath);
-  assert.strictEqual(after.mtimeMs, before.mtimeMs);
+  assert.strictEqual(configWrites(), 0);
   verifyBoundary();
 });
 
