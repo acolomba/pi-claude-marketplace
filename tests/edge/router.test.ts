@@ -1,291 +1,448 @@
-// tests/edge/router.test.ts
+// Owner for edge/router.ts (MOD-09).
 //
-// AP-3 + dispatch + TC-2 alias coverage for routeClaudePlugin /
-// routeMarketplace. The router is a pure function of
-// `(args, handlers, ctx)`, so these tests instantiate handlers as spies,
-// build a notify-recording `ctx`, and assert directly on the recorded
-// state.
+// AP-3: the subcommand router is a pure function over the handler record it is
+// handed, so that record is a strict mock and every dispatch case states the one
+// call it promises with both arguments written out. A misrouted subcommand fails
+// on the unexpected member instead of passing quietly.
+//
+// D-116-06: every usage-error case builds the handler record with no stated
+// expectation at all. A strict mock with nothing stated throws on its first
+// call, so a green case is the proof that no handler ran; a stated count of zero
+// would not be, because strong-mock treats that count as no limit.
+//
+// Every dispatch case sizes the Pi boundary at zero emissions, which is what
+// makes a successful route provably silent. Every usage-error case sizes it at
+// one emission and no soft-dependency probe, because notifyUsageError writes
+// straight to the context and probes nothing.
+//
+// No exhaustiveness claim. Both switch statements turn on an open string peeled
+// from raw user input and both carry a default arm, so removing an arm is a
+// behavior change rather than a compiler diagnostic. A missing-arm plant has no
+// target here and none was attempted: what catches a removed arm is the row
+// table below, through the usage error the router would start emitting instead.
+//
+// The two usage blocks are written out by hand here rather than read back off
+// the module, so each emission assertion pins the real text instead of passing
+// for any text. They are compared against the module's own exported constants in
+// their own cases, because those constants are part of the surface this pair
+// owns: the completion provider reads the subcommand lists beside them.
+//
+// No case asserts the absence of direct process output -- ESLint and fallow own
+// that -- and none restates the perma-forbidden-handler or hook-column fences
+// owned by tests/architecture/scope-fences-63.test.ts.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { mock, verify, when } from "strong-mock";
+
 import {
+  MARKETPLACE_SUBCOMMANDS,
   MARKETPLACE_USAGE,
   routeClaudePlugin,
   TOP_LEVEL_SUBCOMMANDS,
   TOP_LEVEL_USAGE,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
+import { createNotificationBoundary } from "../helpers/notification-boundary.ts";
 
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+type HandlerName = keyof SubcommandHandlers;
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+interface DispatchRow {
+  readonly subcommand: string;
+  readonly handler: HandlerName;
 }
 
-function makeCtx(): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  const ctx = {
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionCommandContext;
-  return { ctx, notifications };
+// The accepted top-level vocabulary, minus the one token that opens the second
+// dispatch instead of reaching a handler. Each target member is written out by
+// hand; none is read back off the router.
+const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
+  { subcommand: "bootstrap", handler: "bootstrap" },
+  { subcommand: "install", handler: "install" },
+  { subcommand: "uninstall", handler: "uninstall" },
+  { subcommand: "update", handler: "update" },
+  { subcommand: "fetch", handler: "fetch" },
+  { subcommand: "reinstall", handler: "reinstall" },
+  { subcommand: "list", handler: "list" },
+  { subcommand: "ls", handler: "list" },
+  { subcommand: "info", handler: "pluginInfo" },
+  { subcommand: "pending", handler: "pending" },
+  { subcommand: "enable", handler: "enable" },
+  { subcommand: "disable", handler: "disable" },
+  { subcommand: "import", handler: "import" },
+];
+
+const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
+  { subcommand: "add", handler: "marketplaceAdd" },
+  { subcommand: "remove", handler: "marketplaceRemove" },
+  { subcommand: "rm", handler: "marketplaceRemove" },
+  { subcommand: "list", handler: "marketplaceList" },
+  { subcommand: "ls", handler: "marketplaceList" },
+  { subcommand: "info", handler: "marketplaceInfo" },
+  { subcommand: "update", handler: "marketplaceUpdate" },
+  { subcommand: "autoupdate", handler: "marketplaceAutoupdate" },
+  { subcommand: "noautoupdate", handler: "marketplaceNoautoupdate" },
+];
+
+const EXPECTED_TOP_LEVEL_USAGE =
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "  install <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
+  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  info <plugin>@<marketplace> [--scope user|project]\n" +
+  "  pending [--scope user|project]\n" +
+  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  import [--scope user|project]\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
+
+const EXPECTED_MARKETPLACE_USAGE =
+  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  add <source> [--scope user|project]\n" +
+  "  remove <name> [--scope user|project]   (alias: rm)\n" +
+  "  list [--scope user|project]            (alias: ls)\n" +
+  "  info <name> [--scope user|project]\n" +
+  "  update [<name>] [--scope user|project]\n" +
+  "  autoupdate [<name>] [--scope user|project]\n" +
+  "  noautoupdate [<name>] [--scope user|project]";
+
+for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
+  test(`dispatches ${subcommand} to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+    when(() => handlers[handler]("alpha@official --scope user", ctx)).thenResolve(undefined);
+
+    // act
+    await routeClaudePlugin(`${subcommand} alpha@official --scope user`, handlers, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+    verify(handlers);
+  });
 }
 
-interface HandlerCall {
-  name: keyof SubcommandHandlers;
-  args: string;
+for (const { subcommand, handler } of MARKETPLACE_DISPATCH) {
+  test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+    when(() => handlers[handler]("official --scope user", ctx)).thenResolve(undefined);
+
+    // act
+    await routeClaudePlugin(`marketplace ${subcommand} official --scope user`, handlers, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+    verify(handlers);
+  });
 }
 
-function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } {
-  const calls: HandlerCall[] = [];
-  const mk =
-    (name: keyof SubcommandHandlers) =>
-    (args: string): Promise<void> => {
-      calls.push({ name, args });
-      return Promise.resolve();
-    };
+test("accepts exactly the top-level names its dispatch rows serve, plus the marketplace entry token", () => {
+  // arrange
+  const expectedVocabulary = [...TOP_LEVEL_DISPATCH.map((row) => row.subcommand), "marketplace"];
 
-  const handlers: SubcommandHandlers = {
-    bootstrap: mk("bootstrap"),
-    install: mk("install"),
-    uninstall: mk("uninstall"),
-    update: mk("update"),
-    fetch: mk("fetch"),
-    reinstall: mk("reinstall"),
-    list: mk("list"),
-    pluginInfo: mk("pluginInfo"),
-    pending: mk("pending"),
-    enable: mk("enable"),
-    disable: mk("disable"),
-    import: mk("import"),
-    marketplaceAdd: mk("marketplaceAdd"),
-    marketplaceRemove: mk("marketplaceRemove"),
-    marketplaceList: mk("marketplaceList"),
-    marketplaceInfo: mk("marketplaceInfo"),
-    marketplaceUpdate: mk("marketplaceUpdate"),
-    marketplaceAutoupdate: mk("marketplaceAutoupdate"),
-    marketplaceNoautoupdate: mk("marketplaceNoautoupdate"),
-  };
-  return { handlers, calls };
+  // act
+  const vocabulary = [...TOP_LEVEL_SUBCOMMANDS];
+
+  // assert
+  assert.deepStrictEqual(vocabulary, expectedVocabulary);
+});
+
+test("accepts exactly the marketplace names its dispatch rows serve", () => {
+  // arrange
+  const expectedVocabulary = MARKETPLACE_DISPATCH.map((row) => row.subcommand);
+
+  // act
+  const vocabulary = [...MARKETPLACE_SUBCOMMANDS];
+
+  // assert
+  assert.deepStrictEqual(vocabulary, expectedVocabulary);
+});
+
+test("routes the ls alias and the list subcommand to one and the same plugin list handler", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.list("official --scope user", ctx))
+    .thenResolve(undefined)
+    .times(2);
+
+  // act
+  await routeClaudePlugin("list official --scope user", handlers, ctx);
+  await routeClaudePlugin("ls official --scope user", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
+});
+
+test("routes the marketplace rm alias and the remove subcommand to one and the same handler", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.marketplaceRemove("official --scope user", ctx))
+    .thenResolve(undefined)
+    .times(2);
+
+  // act
+  await routeClaudePlugin("marketplace remove official --scope user", handlers, ctx);
+  await routeClaudePlugin("marketplace rm official --scope user", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
+});
+
+test("routes the marketplace ls alias and the list subcommand to one and the same handler", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.marketplaceList("--scope user", ctx))
+    .thenResolve(undefined)
+    .times(2);
+
+  // act
+  await routeClaudePlugin("marketplace list --scope user", handlers, ctx);
+  await routeClaudePlugin("marketplace ls --scope user", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
+});
+
+// The four names both vocabularies spell. Neither dispatch shadows the other:
+// the same token reaches a different member depending on which one reads it.
+for (const { subcommand, topLevelHandler, marketplaceHandler } of [
+  { subcommand: "list", topLevelHandler: "list", marketplaceHandler: "marketplaceList" },
+  { subcommand: "ls", topLevelHandler: "list", marketplaceHandler: "marketplaceList" },
+  { subcommand: "info", topLevelHandler: "pluginInfo", marketplaceHandler: "marketplaceInfo" },
+  { subcommand: "update", topLevelHandler: "update", marketplaceHandler: "marketplaceUpdate" },
+] satisfies readonly {
+  subcommand: string;
+  topLevelHandler: HandlerName;
+  marketplaceHandler: HandlerName;
+}[]) {
+  test(`reads ${subcommand} as the ${topLevelHandler} handler at the top level and as the ${marketplaceHandler} handler behind the marketplace token`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+    when(() => handlers[topLevelHandler]("official", ctx)).thenResolve(undefined);
+    when(() => handlers[marketplaceHandler]("official", ctx)).thenResolve(undefined);
+
+    // act
+    await routeClaudePlugin(`${subcommand} official`, handlers, ctx);
+    await routeClaudePlugin(`marketplace ${subcommand} official`, handlers, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+    verify(handlers);
+  });
 }
 
-test("AP-3 :: empty input emits TOP_LEVEL_USAGE at error severity", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("", handlers, ctx);
-  assert.deepEqual(calls, []);
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.severity, "error");
-  // notifyUsageError emits `${message}\n\n${usageBlock}` -- assert the
-  // Usage block is present in the surfaced message.
-  assert.ok(notifications[0]?.message.includes(TOP_LEVEL_USAGE));
-  // RINST-01 / D-67-03: the reinstall help line no longer advertises
-  // `[--force]` (overwrite is unconditional; `--force` errors as unknown).
-  assert.ok(
-    TOP_LEVEL_USAGE.includes(
-      "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n",
-    ),
+test("strips the whitespace run after the subcommand and leaves the interior of the remainder alone", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.install("alpha@official   --scope   user", ctx)).thenResolve(undefined);
+
+  // act
+  await routeClaudePlugin("install   alpha@official   --scope   user", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
+});
+
+test("strips whitespace that precedes the subcommand", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.install("alpha@official", ctx)).thenResolve(undefined);
+
+  // act
+  await routeClaudePlugin("   install alpha@official", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
+});
+
+test("hands the quotes and flags of the remainder to the handler untouched", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.install('"my plugin"@official --scope user --local', ctx)).thenResolve(
+    undefined,
   );
-  assert.doesNotMatch(TOP_LEVEL_USAGE, /reinstall.*\[--force\]/);
-  assert.ok(notifications[0]?.message.includes("import"));
+
+  // act
+  await routeClaudePlugin('install "my plugin"@official --scope user --local', handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
 });
 
-test("AP-3 :: unknown subcommand emits Unknown subcommand: + TOP_LEVEL_USAGE at error severity", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("unknownverb foo", handlers, ctx);
-  assert.deepEqual(calls, []);
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.severity, "error");
-  assert.ok(notifications[0]?.message.startsWith('Unknown subcommand: "unknownverb".'));
-  assert.ok(notifications[0]?.message.includes(TOP_LEVEL_USAGE));
-});
+test("hands the handler an empty argument text when the subcommand carries no remainder", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.bootstrap("", ctx)).thenResolve(undefined);
 
-test("AP-3 :: marketplace with empty rest emits MARKETPLACE_USAGE at error severity", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace", handlers, ctx);
-  assert.deepEqual(calls, []);
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.severity, "error");
-  assert.ok(notifications[0]?.message.includes(MARKETPLACE_USAGE));
-});
-
-test("AP-3 :: marketplace with unknown verb emits Unknown subcommand: + MARKETPLACE_USAGE", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace bogus arg", handlers, ctx);
-  assert.deepEqual(calls, []);
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.severity, "error");
-  assert.ok(notifications[0]?.message.startsWith('Unknown marketplace subcommand: "bogus".'));
-  assert.ok(notifications[0]?.message.includes(MARKETPLACE_USAGE));
-});
-
-test("routeClaudePlugin :: dispatches bootstrap to handlers.bootstrap", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
+  // act
   await routeClaudePlugin("bootstrap", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "bootstrap", args: "" }]);
-  assert.deepEqual(notifications, []);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
 });
 
-test("routeClaudePlugin :: dispatches install to handlers.install", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("install foo@bar --scope user", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "install", args: "foo@bar --scope user" }]);
-  assert.deepEqual(notifications, []);
+test("hands the handler an empty argument text when the subcommand is followed only by whitespace", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.bootstrap("", ctx)).thenResolve(undefined);
+
+  // act
+  await routeClaudePlugin("bootstrap   ", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
 });
 
-test("routeClaudePlugin :: dispatches uninstall to handlers.uninstall", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("uninstall foo@bar", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "uninstall", args: "foo@bar" }]);
-  assert.deepEqual(notifications, []);
+test("peels the marketplace token and its subcommand in turn, keeping the interior of what is left", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.marketplaceAdd("gh:owner/repo   --scope user", ctx)).thenResolve(undefined);
+
+  // act
+  await routeClaudePlugin("marketplace   add   gh:owner/repo   --scope user", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
 });
 
-test("routeClaudePlugin :: dispatches update to handlers.update", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("update foo@bar", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "update", args: "foo@bar" }]);
-  assert.deepEqual(notifications, []);
+for (const { input, shape } of [
+  { input: "", shape: "no characters at all" },
+  { input: "   ", shape: "nothing but whitespace" },
+]) {
+  test(`reports a usage error with the top-level usage block for input with ${shape} (AP-3)`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+    // act
+    await routeClaudePlugin(input, handlers, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `Usage error.\n\n${EXPECTED_TOP_LEVEL_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+    verify(handlers);
+  });
+}
+
+test("names an unrecognized top-level token back to the operator with the top-level usage block (AP-3)", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+  // act
+  await routeClaudePlugin("unknownverb alpha@official", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: `Unknown subcommand: "unknownverb".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+  verify(handlers);
 });
 
-test("routeClaudePlugin :: dispatches fetch to handlers.fetch", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("fetch foo@bar", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "fetch", args: "foo@bar" }]);
-  assert.deepEqual(notifications, []);
+for (const { input, shape } of [
+  { input: "marketplace", shape: "nothing after the marketplace token" },
+  { input: "marketplace   ", shape: "nothing but whitespace after the marketplace token" },
+]) {
+  test(`reports that marketplace needs a subcommand, with the marketplace usage block, for input with ${shape} (AP-3)`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+    // act
+    await routeClaudePlugin(input, handlers, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `marketplace requires a subcommand.\n\n${EXPECTED_MARKETPLACE_USAGE}`,
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+    verify(handlers);
+  });
+}
+
+test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+  // act
+  await routeClaudePlugin("marketplace bogus official", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: `Unknown marketplace subcommand: "bogus".\n\n${EXPECTED_MARKETPLACE_USAGE}`,
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+  verify(handlers);
 });
 
-test("routeClaudePlugin :: dispatches reinstall to handlers.reinstall", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("reinstall foo@bar --force", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "reinstall", args: "foo@bar --force" }]);
-  assert.deepEqual(notifications, []);
+test("publishes the top-level usage block for the surfaces that render it", () => {
+  // arrange
+  const expectedUsage = EXPECTED_TOP_LEVEL_USAGE;
+
+  // act
+  const publishedUsage = TOP_LEVEL_USAGE;
+
+  // assert
+  assert.deepStrictEqual(publishedUsage, expectedUsage);
 });
 
-test("routeClaudePlugin :: dispatches list to handlers.list", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("list bar", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "list", args: "bar" }]);
-  assert.deepEqual(notifications, []);
-});
+test("publishes the marketplace usage block for the surfaces that render it", () => {
+  // arrange
+  const expectedUsage = EXPECTED_MARKETPLACE_USAGE;
 
-test("routeClaudePlugin :: dispatches info to handlers.pluginInfo (INFO-02)", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("info foo@mp", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "pluginInfo", args: "foo@mp" }]);
-  assert.deepEqual(notifications, []);
-});
+  // act
+  const publishedUsage = MARKETPLACE_USAGE;
 
-test("router :: TOP_LEVEL_SUBCOMMANDS includes `info` (INFO-02)", () => {
-  assert.ok(
-    (TOP_LEVEL_SUBCOMMANDS as readonly string[]).includes("info"),
-    `TOP_LEVEL_SUBCOMMANDS missing "info" -- got ${TOP_LEVEL_SUBCOMMANDS.join(", ")}`,
-  );
-});
-
-test("router :: TOP_LEVEL_USAGE contains the `info <plugin>@<marketplace>` usage line", () => {
-  assert.match(TOP_LEVEL_USAGE, /info <plugin>@<marketplace> \[--scope user\|project\]/);
-});
-
-test("routeClaudePlugin :: dispatches import to handlers.import", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("import --scope user", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "import", args: "--scope user" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeClaudePlugin :: dispatches ls alias to handlers.list", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("ls bar --scope project", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "list", args: "bar --scope project" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches add to handlers.marketplaceAdd", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace add gh:owner/repo", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceAdd", args: "gh:owner/repo" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches remove to handlers.marketplaceRemove", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace remove myname", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceRemove", args: "myname" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches rm alias to handlers.marketplaceRemove (TC-2 surface, alias accepted)", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace rm myname", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceRemove", args: "myname" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches list to handlers.marketplaceList", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace list", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceList", args: "" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches info to handlers.marketplaceInfo", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace info my-mp --scope user", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceInfo", args: "my-mp --scope user" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches ls alias to handlers.marketplaceList", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace ls", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceList", args: "" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches update to handlers.marketplaceUpdate", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace update myname", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceUpdate", args: "myname" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches autoupdate to handlers.marketplaceAutoupdate", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace autoupdate", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceAutoupdate", args: "" }]);
-  assert.deepEqual(notifications, []);
-});
-
-test("routeMarketplace :: dispatches noautoupdate to handlers.marketplaceNoautoupdate", async () => {
-  const { ctx, notifications } = makeCtx();
-  const { handlers, calls } = makeHandlers();
-  await routeClaudePlugin("marketplace noautoupdate myname --scope project", handlers, ctx);
-  assert.deepEqual(calls, [{ name: "marketplaceNoautoupdate", args: "myname --scope project" }]);
-  assert.deepEqual(notifications, []);
+  // assert
+  assert.deepStrictEqual(publishedUsage, expectedUsage);
 });
