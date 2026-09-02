@@ -281,12 +281,22 @@ function pushDiagnostic(
 type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "updated" | "failed">;
 
 /**
- * A marketplace header awaiting render. `status` is REQUIRED: every marketplace
- * that reaches the cascade carries a marketplace-level outcome, because a
- * marketplace whose plugins were allowed to run was either recorded (`added`),
- * already present (`updated`), or failed (`failed`). Plugin rows accumulate in a
- * sibling map keyed the same way, so a row can never conjure a header carrying
- * no outcome.
+ * A marketplace header awaiting render. `status` is REQUIRED, which makes a
+ * STATUSLESS HEADER unconstructible: every marketplace that reaches the cascade
+ * carries a marketplace-level outcome, because a marketplace whose plugins were
+ * allowed to run was either recorded (`added`), already present (`updated`), or
+ * failed (`failed`).
+ *
+ * WR-04: that is the whole of what the type enforces. It does NOT prevent the
+ * opposite shape -- a HEADERLESS ROW, i.e. a key in the sibling `rowsByMp` map
+ * with no entry in `byMp`. The render pass iterates `byMp` and looks rows up by
+ * key, so such rows would never be visited and would vanish without trace. What
+ * actually rules that out is an invariant spanning four functions, not a type:
+ * every `pushMarketplaceRow` call site is reachable only for a plugin in
+ * `scopePlan.pluginsToInstall` that passed the `blockedMarketplaces` gate, and
+ * `scopedPlan` (`import/marketplaces.ts`) derives `pluginsToInstall` and
+ * `marketplacesToEnsure` from the same `refs` set under one scope, so the key
+ * sets always match. A loud check here would be an arm no input can reach.
  */
 interface MarketplaceBlock {
   readonly key: string;
@@ -498,6 +508,10 @@ function buildImportNotificationMarketplaces(
   return Object.freeze(
     [...byMp.values()]
       .sort((a, b) => compareByNameThenScope(a, b))
+      // WR-04: the `?? []` is the no-rows case (a marketplace added with no
+      // plugins), NOT a silent absorber for orphan rows -- see the
+      // `MarketplaceBlock` doc comment for the invariant that makes a
+      // headerless row unreachable.
       .map((block) => blockToMarketplaceMessage(block, rowsByMp.get(block.key) ?? [])),
   );
 }
