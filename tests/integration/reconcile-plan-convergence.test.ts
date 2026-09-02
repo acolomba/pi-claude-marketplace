@@ -1,4 +1,4 @@
-// tests/orchestrators/reconcile/plan-convergence.test.ts
+// tests/integration/reconcile-plan-convergence.test.ts
 //
 // Cross-module fixed-point integration: state-to-config migration, scope merge,
 // and reconcile planning compose to a complete no-op for populated state.
@@ -6,15 +6,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  githubSource,
-  pathSource,
-} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
-import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
-import { buildConfigFromState } from "../../../extensions/pi-claude-marketplace/persistence/migrate-config.ts";
+import { githubSource, pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { planReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
+import { buildConfigFromState } from "../../extensions/pi-claude-marketplace/persistence/migrate-config.ts";
 
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 function populatedMixedState(): ExtensionState {
   return {
