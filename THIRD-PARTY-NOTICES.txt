@@ -1,20 +1,26 @@
-# Third-party notices
+THIRD-PARTY NOTICES
 
-This repository vendors two Agent Skills that other people wrote. They live in `.claude/skills/` and `.agents/skills/`. Claude Code reads the first directory. Codex and Pi read the second. The two copies are identical.
+This repository vendors two Agent Skills that other people wrote. They live
+in .claude/skills/ and .agents/skills/. Claude Code reads the first
+directory. Codex and Pi read the second. The two copies are identical.
 
-The published npm package `pi-claude-marketplace` does not include these skills. The `files` list in `package.json` limits the package to the extension and its top-level documents.
+The published npm package pi-claude-marketplace does not include these
+skills. The "files" list in package.json limits the package to the extension
+and its top-level documents.
 
-When you update a skill, check that its `LICENSE` file is still in place. The skill installer copies the skill directory only, and some upstream repositories keep the license at the repository root.
+When you update a skill, check that its LICENSE file is still in place. The
+skill installer copies the skill directory only, and some upstream
+repositories keep the license at the repository root.
 
-## humanizer
+--------------------------------------------------------------------------------
 
-- Version: 2.11.2
-- Source: <https://github.com/blader/humanizer>. The skill is the repository root.
-- License: MIT
-- Copyright (c) 2025 Siqi Chen
-- License file: `.claude/skills/humanizer/LICENSE` and `.agents/skills/humanizer/LICENSE`
+humanizer 2.11.2
+Source: https://github.com/blader/humanizer (the skill is the repository root)
+License: MIT
+Copyright (c) 2025 Siqi Chen
+License file: .claude/skills/humanizer/LICENSE
+              .agents/skills/humanizer/LICENSE
 
-```text
 MIT License
 
 Copyright (c) 2025 Siqi Chen
@@ -36,17 +42,18 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
 
-## simple-english
+--------------------------------------------------------------------------------
 
-- Version: 1.3.0
-- Source: <https://github.com/AminBlg/SimpleEnglish>, path `skills/simple-english`, commit `8e8a008a13e4b478f9ccc20ca16e79aef66c0739`
-- License: MIT
-- Copyright (c) 2026 AminBlg
-- License file: `.claude/skills/simple-english/LICENSE` and `.agents/skills/simple-english/LICENSE`
+simple-english 1.3.0
+Source: https://github.com/AminBlg/SimpleEnglish
+        path skills/simple-english
+        commit 8e8a008a13e4b478f9ccc20ca16e79aef66c0739
+License: MIT
+Copyright (c) 2026 AminBlg
+License file: .claude/skills/simple-english/LICENSE
+              .agents/skills/simple-english/LICENSE
 
-```text
 MIT License
 
 Copyright (c) 2026 AminBlg
@@ -68,4 +75,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
