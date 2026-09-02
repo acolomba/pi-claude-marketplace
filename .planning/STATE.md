@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-23-PLAN.md
-last_updated: "2026-09-02T18:52:00.000Z"
+stopped_at: Completed 116-26-PLAN.md
+last_updated: "2026-09-02T19:10:16.281Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 3a48bc39767ba9c3703fe8e9385f4b44b654bda0
+state_head: 8bf2166b312892715a2628564c5c41d9c0503f35
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 185
+  completed_plans: 186
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 8 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-23, 116-30)
-Status: Executing wave 3 of 8
-Last activity: 2026-09-02 — 116-23 complete; the plugin argument helper owns all four runtime exports and states its prelude delegate with exact arguments
+Plan: 9 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-23, 116-26, 116-30)
+Status: Wave 3 of 8 complete; wave 4 next
+Last activity: 2026-09-02 — 116-26 complete; all three helper contracts are now settled, and the cross-cutting flag scanner lands at the argued D-116-01a shortfall (one compiler-forced branch at handlers/shared.ts:53-55)
 
 Progress: [████████░░] 80%
 
@@ -162,6 +162,7 @@ evidence.
 | Phase 116 P30 | 40 min | 1 tasks | 1 files |
 | Phase 116 P12 | 45 min | 1 tasks | 1 files |
 | Phase 116 P23 | 50 min | 1 tasks | 1 files |
+| Phase 116 P26 | 45 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -322,6 +323,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: The closed-over-API case builds two distinct Pi values instead of one shared value: a same-instance case only repeats the delegation case and cannot discriminate.
 - [Phase 116]: 116-23: a double for a generic export derives from an instantiation-expression type query (Parameters<typeof fn<Chosen>>[N]); the uninstantiated form collapses the type parameter to unknown and loses the exact-argument match
 - [Phase 116]: 116-23: input tokens that the module under test derives from another module are hand-authored literals, not read back from that module; feeding the derivation back in is tautological and cannot fail
+- [Phase 116]: 116-26: a whitespace row set must separate the two claims it looks like one of — dropping empty tokens and splitting on a whitespace CLASS are independent, and a spaces-only row pins neither because /\s+/ is greedy
+- [Phase 116]: 116-26: a D-116-01a pair pins the shortfall identity (one uncovered branch, the exact uncovered line set) and records the measured branch numbers as an observation; the denominator tracks suite strength, so a number pin cannot be authored before the rewrite it gates
 
 ### Pending Todos
 
@@ -347,8 +350,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T18:35:54.303Z
-Stopped at: Completed 116-23-PLAN.md
+Last session: 2026-09-02T19:09:44.928Z
+Stopped at: Completed 116-26-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven

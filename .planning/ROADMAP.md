@@ -524,7 +524,7 @@ Plans:
 3. Handlers and LLM tools report exact public results through `ctx.ui.notify(message, severity)` and never write directly to stdout or stderr.
 4. Read-only edge paths remain offline, and invalid input fails before a state-changing workflow runs.
 
-**Plans**: 8/31 plans executed (30 source-test pairs plus one shared-helper plan that must land first)
+**Plans**: 9/31 plans executed (30 source-test pairs plus one shared-helper plan that must land first)
 
 Plans:
 
@@ -554,7 +554,7 @@ Plans:
 - [x] **116-23** (`116-23-PLAN.md`, `P116-23`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts` → `tests/edge/handlers/plugin/shared.test.ts`
 - [ ] **116-24** (`116-24-PLAN.md`, `P116-24`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts` → `tests/edge/handlers/plugin/uninstall.test.ts`
 - [ ] **116-25** (`116-25-PLAN.md`, `P116-25`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts` → `tests/edge/handlers/plugin/update.test.ts`
-- [ ] **116-26** (`116-26-PLAN.md`, `P116-26`) - `extensions/pi-claude-marketplace/edge/handlers/shared.ts` → `tests/edge/handlers/shared.test.ts`
+- [x] **116-26** (`116-26-PLAN.md`, `P116-26`) - `extensions/pi-claude-marketplace/edge/handlers/shared.ts` → `tests/edge/handlers/shared.test.ts`
 - [ ] **116-27** (`116-27-PLAN.md`, `P116-27`) - `extensions/pi-claude-marketplace/edge/handlers/tools.ts` → `tests/edge/handlers/tools.test.ts`
 - [ ] **116-28** (`116-28-PLAN.md`, `P116-28`) - `extensions/pi-claude-marketplace/edge/register.ts` → `tests/edge/register.test.ts`
 - [ ] **116-29** (`116-29-PLAN.md`, `P116-29`) - `extensions/pi-claude-marketplace/edge/router.ts` → `tests/edge/router.test.ts`
@@ -618,6 +618,6 @@ and commit still owns one pair.
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
-| 116. Edge Surface                        |           8/31 | In Progress     | -          |
+| 116. Edge Surface                        |           9/31 | In Progress     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
 | **Total**                                |    **173/204** | **In Progress** | **-**      |
