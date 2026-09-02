@@ -11,12 +11,7 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
-import {
-  assertNever,
-  ConcurrentInstallError,
-  errorMessage,
-  PluginShapeError,
-} from "../../shared/errors.ts";
+import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -211,7 +206,6 @@ function stateLoader(
     return deps.loadState;
   }
 
-  /* c8 ignore next -- production path; unit tests always inject deps.loadState */
   return async (scope, cwd) => defaultLoadState(locationsFor(scope, cwd).extensionRoot);
 }
 
@@ -278,44 +272,79 @@ function pushDiagnostic(
 // carries the structural signal. notify() owns severity, reload-hint,
 // and soft-dep markers.
 
+/**
+ * The marketplace-level statuses the import path assigns, narrowed out of the
+ * wide `MarketplaceStatus` set. Assigning any other token is a compile error at
+ * the assignment site instead of a runtime signal at render time -- the same
+ * narrowing `orchestrators/reconcile/notify.ts` applies to its own block type.
+ */
+type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "updated" | "failed">;
+
+/**
+ * A marketplace header awaiting render. `status` is REQUIRED: every marketplace
+ * that reaches the cascade carries a marketplace-level outcome, because a
+ * marketplace whose plugins were allowed to run was either recorded (`added`),
+ * already present (`updated`), or failed (`failed`). Plugin rows accumulate in a
+ * sibling map keyed the same way, so a row can never conjure a header carrying
+ * no outcome.
+ */
 interface MarketplaceBlock {
   readonly key: string;
   readonly name: string;
   readonly scope: Scope;
-  status?: MarketplaceStatus;
-  plugins: ImportMsg[];
+  status: ImportBlockStatus;
 }
 
-function ensureMarketplaceBlock(
+function setMarketplaceStatus(
   byMp: Map<string, MarketplaceBlock>,
   scope: Scope,
   marketplaceName: string,
-): MarketplaceBlock {
+  status: ImportBlockStatus,
+): void {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
-  if (existing !== undefined) {
-    return existing;
+  if (existing === undefined) {
+    byMp.set(key, { key, name: marketplaceName, scope, status });
+    return;
   }
 
-  const block: MarketplaceBlock = {
-    key,
-    name: marketplaceName,
-    scope,
-    plugins: [],
-  };
-  byMp.set(key, block);
-  return block;
+  existing.status = status;
 }
 
-function importWarningReason(reason: ImportWarningOutcome["reason"]): ContentReason {
+function pushMarketplaceRow(
+  rowsByMp: Map<string, ImportMsg[]>,
+  scope: Scope,
+  marketplaceName: string,
+  row: ImportMsg,
+): void {
+  const key = `${scope}:${marketplaceName}`;
+  const existing = rowsByMp.get(key);
+  if (existing === undefined) {
+    rowsByMp.set(key, [row]);
+    return;
+  }
+
+  existing.push(row);
+}
+
+/**
+ * The two warning reasons that reach a cascade row. D-05: the advisory
+ * `marketplace-failed` / `unmappable-marketplace-source` reasons are dropped
+ * before this point (the failing marketplace's own `(failed)` header carries
+ * their structural signal), so their former arms here were unreachable. The
+ * parameter is narrowed to the reasons that survive, which makes routing a new
+ * reason to a row a compile error at the call site.
+ */
+type RenderedWarningReason = Extract<
+  ImportWarningOutcome["reason"],
+  "unavailable" | "uninstallable"
+>;
+
+function importWarningReason(reason: RenderedWarningReason): ContentReason {
   switch (reason) {
     case "unavailable":
     case "uninstallable":
       return "no longer installable";
-    case "marketplace-failed":
-      return "not found";
-    case "unmappable-marketplace-source":
-      return "unsupported source";
   }
 }
 
@@ -354,21 +383,19 @@ function buildImportNotificationMarketplaces(
   result: ClaudeImportExecutionResult,
 ): Plural<MarketplaceRows<ImportMsg>> {
   const byMp = new Map<string, MarketplaceBlock>();
+  const rowsByMp = new Map<string, ImportMsg[]>();
 
   // Marketplace-level outcomes: set status on the (scope, marketplace) tuple.
   for (const o of result.addedMarketplaces) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-    block.status = "added";
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "added");
   }
 
   for (const o of result.skippedExistingMarketplaces) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-    block.status = "updated";
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "updated");
   }
 
   for (const o of result.marketplaceFailures) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-    block.status = "failed";
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
   }
 
   // Source-mismatch supersedes any prior status (the import for that
@@ -378,15 +405,13 @@ function buildImportNotificationMarketplaces(
   // arm renders only `(failed)` and the source-mismatch reason rides the
   // child `PluginFailedMessage` row below.
   for (const o of result.sourceMismatches) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-    block.status = "failed";
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
   }
 
   // Plugin rows -- orphan-fold contract: per-row `scope?` is OMITTED
   // because the row's scope matches its marketplace's scope by
   // construction (the import cascade groups outcomes by their owning scope).
   for (const o of result.installedPlugins) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
     const row: PluginInstalledMessage = {
       status: "installed",
       name: o.plugin,
@@ -395,11 +420,10 @@ function buildImportNotificationMarketplaces(
       severity: "info",
       needsReload: true,
     };
-    block.plugins.push(row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
   for (const o of result.skippedExistingPlugins) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
     const row: PluginSkippedMessage = {
       status: "skipped",
       name: o.plugin,
@@ -409,11 +433,10 @@ function buildImportNotificationMarketplaces(
       severity: "info",
       needsReload: false,
     };
-    block.plugins.push(row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
   for (const o of result.sourceMismatches) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
     const row: PluginFailedMessage = {
       status: "failed",
       name: o.plugin,
@@ -422,11 +445,10 @@ function buildImportNotificationMarketplaces(
       severity: "error",
       needsReload: false,
     };
-    block.plugins.push(row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
   for (const o of result.unexpectedPluginFailures) {
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
     const row: PluginFailedMessage = {
       status: "failed",
       name: o.plugin,
@@ -440,7 +462,7 @@ function buildImportNotificationMarketplaces(
       severity: "error",
       needsReload: false,
     };
-    block.plugins.push(row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
   for (const o of result.warnings) {
@@ -452,7 +474,6 @@ function buildImportNotificationMarketplaces(
       continue;
     }
 
-    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
     const row: PluginUnavailableMessage = {
       status: "unavailable",
       name: o.plugin,
@@ -464,7 +485,7 @@ function buildImportNotificationMarketplaces(
       severity: "warning",
       needsReload: false,
     };
-    block.plugins.push(row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
   // result.diagnostics (orphan + per-marketplace) have no notification
@@ -475,24 +496,30 @@ function buildImportNotificationMarketplaces(
   // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
   return Object.freeze(
-    [...byMp.values()].sort((a, b) => compareByNameThenScope(a, b)).map(blockToMarketplaceMessage),
+    [...byMp.values()]
+      .sort((a, b) => compareByNameThenScope(a, b))
+      .map((block) => blockToMarketplaceMessage(block, rowsByMp.get(block.key) ?? [])),
   );
 }
 
 /**
  * Construct the concrete per-status `MarketplaceNotificationMessage` arm
- * (TYPE-04 / D-46-03) for an accumulated `MarketplaceBlock`. The import path
- * only ever sets `status` to `"added"` / `"updated"` / `"failed"` (or leaves
- * it absent for the list/inventory arm), so the switch needs exactly those
- * arms; a future status added to the import path becomes a compile error at
- * `assertNever`. (The full B-6 reducer cleanup, TYPE-F3, is deferred
- * post-v1.10.)
+ * (TYPE-04 / D-46-03) for an accumulated `MarketplaceBlock` and its rows.
+ *
+ * D-05: the switch runs over the closed `ImportBlockStatus` union alone, so
+ * TypeScript proves it exhaustive and a fourth member fails to compile here.
+ * The former defensive `default: throw` and the bare `case undefined:` list arm
+ * are both gone: the import path assigns only these three tokens, and a
+ * statusless header is unconstructible now that `status` is required.
  */
-function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceRows<ImportMsg> {
+function blockToMarketplaceMessage(
+  block: MarketplaceBlock,
+  rows: readonly ImportMsg[],
+): MarketplaceRows<ImportMsg> {
   const name = block.name;
   const scope = block.scope;
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
-  const plugins = Object.freeze(block.plugins);
+  const plugins = Object.freeze(rows);
   switch (block.status) {
     case "added":
       return { name, scope, status: "added", plugins };
@@ -501,16 +528,18 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceRows<Imp
     case "failed":
       // D-03: a failed import marketplace block -> error.
       return { name, scope, status: "failed", severity: "error", plugins };
-    case undefined:
-      return { name, scope, plugins };
-    default:
-      // The import path never produces "removed" / "skipped" / autoupdate
-      // statuses; an unhandled status is a producer-contract violation.
-      throw new Error(`unexpected import marketplace status: ${block.status}`);
   }
 }
 
 type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][number];
+
+/**
+ * D-05: every patch this module builds carries BOTH halves, so the optional
+ * fields of `BatchedConfigPatch` made each read site take a `?? {}` fallback
+ * nothing could ever reach. Requiring both halves here removes those dead
+ * fallbacks while staying assignable to the persistence contract.
+ */
+type ImportConfigPatch = Required<BatchedConfigPatch>;
 
 /**
  * WR-07: shared failure bookkeeping for a marketplace add
@@ -636,8 +665,10 @@ async function installOnePlannedPlugin(
   }
 
   // Switch rather than an `if (failed) ... return` fall-through: a third
-  // `InstallPluginOutcome` arm must become a compile error at `assertNever`,
-  // not get counted as a successful install in the cascade totals.
+  // `InstallPluginOutcome` arm must become a compile error here, not get
+  // counted as a successful install in the cascade totals. D-05: the union has
+  // exactly the two arms below, so TypeScript proves the switch exhaustive and
+  // the former `default: assertNever(outcome)` was unreachable dead code.
   switch (outcome.status) {
     case "failed":
       // The collapsed `failed` status carries the typed Error directly. Narrow
@@ -663,8 +694,6 @@ async function installOnePlannedPlugin(
       }
 
       return;
-    default:
-      assertNever(outcome);
   }
 }
 
@@ -908,7 +937,7 @@ async function writeBatchedConfigForScope(
 function buildBatchedPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
-): { ensure: BatchedConfigPatch; repair: BatchedConfigPatch } {
+): { ensure: ImportConfigPatch; repair: ImportConfigPatch } {
   // Map marketplace name -> verbatim rawSource so the batched patch records
   // `source: rawSource` exactly as the user/Claude settings declared it
   // (`samePlannedSource` contract).
@@ -960,7 +989,7 @@ function buildRepairPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   rawSourceByName: ReadonlyMap<string, string>,
-): BatchedConfigPatch {
+): ImportConfigPatch {
   const marketplaces: Record<string, { source: string }> = {};
   for (const skipped of result.skippedExistingMarketplaces) {
     if (skipped.scope !== scopePlan.scope) {
@@ -995,19 +1024,19 @@ function buildRepairPatchForScope(
  * remains.
  */
 function mergeEnsureAndRepairs(
-  ensure: BatchedConfigPatch,
-  repair: BatchedConfigPatch,
+  ensure: ImportConfigPatch,
+  repair: ImportConfigPatch,
   current: { marketplaces?: Record<string, unknown>; plugins?: Record<string, unknown> },
-): BatchedConfigPatch {
+): ImportConfigPatch {
   const marketplaces = { ...ensure.marketplaces };
-  for (const [name, patch] of Object.entries(repair.marketplaces ?? {})) {
+  for (const [name, patch] of Object.entries(repair.marketplaces)) {
     if (current.marketplaces?.[name] === undefined && marketplaces[name] === undefined) {
       marketplaces[name] = patch;
     }
   }
 
   const plugins = { ...ensure.plugins };
-  for (const [key, patch] of Object.entries(repair.plugins ?? {})) {
+  for (const [key, patch] of Object.entries(repair.plugins)) {
     if (current.plugins?.[key] === undefined && plugins[key] === undefined) {
       plugins[key] = patch;
     }
@@ -1016,11 +1045,8 @@ function mergeEnsureAndRepairs(
   return { marketplaces, plugins };
 }
 
-function isEmptyPatch(batch: BatchedConfigPatch): boolean {
-  return (
-    Object.keys(batch.marketplaces ?? {}).length === 0 &&
-    Object.keys(batch.plugins ?? {}).length === 0
-  );
+function isEmptyPatch(batch: ImportConfigPatch): boolean {
+  return Object.keys(batch.marketplaces).length === 0 && Object.keys(batch.plugins).length === 0;
 }
 
 /**
