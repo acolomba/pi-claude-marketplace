@@ -336,6 +336,13 @@ const invalidConfigRows = [
       "claude-plugins.json": "{",
     },
   },
+  {
+    reported: "claude-plugins.local.json",
+    files: {
+      "claude-plugins.json": configBytes("mp", "acme/tools", []),
+      "claude-plugins.local.json": "{",
+    },
+  },
 ] satisfies readonly {
   readonly reported: string;
   readonly files: Readonly<Record<string, string>>;
@@ -378,6 +385,11 @@ for (const { reported, files } of invalidConfigRows) {
 // which reports `unreadable` for a wrapper error that carries no errno code.
 const stateLoadFailureRows = [
   { condition: "an unparseable state.json", bytes: "{", reason: "unparseable" },
+  {
+    condition: "a state.json declaring an unsupported schema version",
+    bytes: JSON.stringify({ schemaVersion: 99, marketplaces: {} }, null, 2),
+    reason: "unreadable",
+  },
 ] satisfies readonly {
   readonly condition: string;
   readonly bytes: string;
