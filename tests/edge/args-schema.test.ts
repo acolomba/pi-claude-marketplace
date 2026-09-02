@@ -1,88 +1,252 @@
-// tests/edge/args-schema.test.ts
-//
-// Schema-driven `parseCommandArgs` validator coverage. The validator is
-// independent of `ExtensionContext` -- callers inject a `notifyError`
-// closure. These tests wire a spy in place of the closure and assert
-// both the spy's calls and the return shape.
-
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import test from "node:test";
 
 import {
   parseCommandArgs,
   type PositionalSpec,
 } from "../../extensions/pi-claude-marketplace/edge/args-schema.ts";
 
-function makeNotifyErrorSpy(): {
-  notifyError: (message: string) => void;
-  calls: string[];
-} {
-  const calls: string[] = [];
-  return {
-    notifyError: (m: string): void => {
-      calls.push(m);
-    },
-    calls,
-  };
-}
-
-test("parseCommandArgs :: required positional missing emits usage via notifyError and returns undefined", () => {
-  const { notifyError, calls } = makeNotifyErrorSpy();
-  const schema = {
-    positional: [{ name: "ref" }] as const satisfies readonly PositionalSpec[],
-    usage: "Usage: /claude:plugin install <ref>",
-  };
-  const result = parseCommandArgs("", schema, notifyError);
-  assert.equal(result, undefined);
-  assert.deepEqual(calls, ["Usage: /claude:plugin install <ref>"]);
-});
-
-test("parseCommandArgs :: optional positional missing returns parsed with property undefined", () => {
-  const { notifyError, calls } = makeNotifyErrorSpy();
+test("parseCommandArgs returns each required positional under its declared name", () => {
+  // arrange
+  const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "name" },
-      { name: "extra", required: false },
+      { name: "marketplace" },
+      { name: "plugin" },
     ] as const satisfies readonly PositionalSpec[],
-    usage: "Usage: /claude:plugin marketplace update [<name>]",
+    usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
   };
-  const result = parseCommandArgs("my-marketplace", schema, notifyError);
-  assert.deepEqual(calls, []);
-  assert.notEqual(result, undefined);
-  assert.equal(result?.name, "my-marketplace");
-  assert.equal(result?.extra, undefined);
+
+  // act
+  const parsedArgs = parseCommandArgs("official alpha", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, { marketplace: "official", plugin: "alpha" });
+  assert.deepStrictEqual(usageErrors, []);
 });
 
-test("parseCommandArgs :: tokenizer throw routes through notifyError + returns undefined", () => {
-  const { notifyError, calls } = makeNotifyErrorSpy();
-  const schema = {
-    positional: [{ name: "ref" }] as const satisfies readonly PositionalSpec[],
-    usage: "Usage: /claude:plugin install <ref>",
-  };
-  const result = parseCommandArgs("--scope foo", schema, notifyError);
-  assert.equal(result, undefined);
-  assert.equal(calls.length, 1);
-  assert.match(calls[0] ?? "", /^Invalid --scope value: "foo"\. Must be "user" or "project"\.$/);
-});
+for (const { args, placement } of [
+  { args: "--scope project official alpha", placement: "before the positionals" },
+  { args: "official --scope project alpha", placement: "between the positionals" },
+  { args: "official alpha --scope project", placement: "after the positionals" },
+]) {
+  test(`parseCommandArgs recovers the positionals and the scope with --scope ${placement}`, () => {
+    // arrange
+    const usageErrors: string[] = [];
+    const schema = {
+      positional: [
+        { name: "marketplace" },
+        { name: "plugin" },
+      ] as const satisfies readonly PositionalSpec[],
+      usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
+    };
 
-test("parseCommandArgs :: typed return shape (compile-time check)", () => {
-  const { notifyError } = makeNotifyErrorSpy();
+    // act
+    const parsedArgs = parseCommandArgs(args, schema, (message) => {
+      usageErrors.push(message);
+    });
+
+    // assert
+    assert.deepStrictEqual(parsedArgs, {
+      marketplace: "official",
+      plugin: "alpha",
+      scope: "project",
+    });
+    assert.deepStrictEqual(usageErrors, []);
+  });
+}
+
+test("parseCommandArgs sets an optional tail positional the caller supplied", () => {
+  // arrange
+  const usageErrors: string[] = [];
   const schema = {
     positional: [
       { name: "marketplace" },
       { name: "plugin", required: false },
     ] as const satisfies readonly PositionalSpec[],
-    usage: "usage",
+    usage: "Usage: /claude:plugin update <marketplace> [<plugin>]",
   };
-  const result = parseCommandArgs("mp1 plug1 --scope user", schema, notifyError);
-  assert.notEqual(result, undefined);
-  // Required positional => string at type level. Runtime confirms.
-  const marketplace: string = result!.marketplace;
-  // Optional positional => string | undefined. Runtime returns a string here.
-  const plugin: string | undefined = result!.plugin;
-  // scope is always optional.
-  const scope: "user" | "project" | undefined = result!.scope;
-  assert.equal(marketplace, "mp1");
-  assert.equal(plugin, "plug1");
-  assert.equal(scope, "user");
+
+  // act
+  const parsedArgs = parseCommandArgs("official alpha", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, { marketplace: "official", plugin: "alpha" });
+  assert.deepStrictEqual(usageErrors, []);
 });
+
+test("parseCommandArgs omits an absent optional tail positional instead of setting it undefined", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [
+      { name: "marketplace" },
+      { name: "plugin", required: false },
+    ] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin update <marketplace> [<plugin>]",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs("official", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, { marketplace: "official" });
+  assert.deepStrictEqual(usageErrors, []);
+});
+
+test("parseCommandArgs omits a blank optional tail positional and reports no usage error", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [
+      { name: "marketplace" },
+      { name: "plugin", required: false },
+    ] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin update <marketplace> [<plugin>]",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs('official "   "', schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, { marketplace: "official" });
+  assert.deepStrictEqual(usageErrors, []);
+});
+
+test("parseCommandArgs reports usage and yields nothing when a required positional is absent", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [
+      { name: "marketplace" },
+      { name: "plugin" },
+    ] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs("official", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, undefined);
+  assert.deepStrictEqual(usageErrors, [
+    "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
+  ]);
+});
+
+test("parseCommandArgs reports usage and yields nothing when a required positional is blank", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [
+      { name: "marketplace" },
+      { name: "plugin" },
+    ] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs('official "   "', schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, undefined);
+  assert.deepStrictEqual(usageErrors, [
+    "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
+  ]);
+});
+
+for (const { args, shape } of [
+  { args: "", shape: "an empty argument string" },
+  { args: "   ", shape: "separator whitespace alone" },
+]) {
+  test(`parseCommandArgs reports usage for a required positional given ${shape}`, () => {
+    // arrange
+    const usageErrors: string[] = [];
+    const schema = {
+      positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+      usage: "Usage: /claude:plugin marketplace remove <marketplace>",
+    };
+
+    // act
+    const parsedArgs = parseCommandArgs(args, schema, (message) => {
+      usageErrors.push(message);
+    });
+
+    // assert
+    assert.deepStrictEqual(parsedArgs, undefined);
+    assert.deepStrictEqual(usageErrors, ["Usage: /claude:plugin marketplace remove <marketplace>"]);
+  });
+}
+
+test("parseCommandArgs accepts an empty argument string against a schema declaring no positional", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin list [--scope user|project]",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs("", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, {});
+  assert.deepStrictEqual(usageErrors, []);
+});
+
+test("parseCommandArgs reports the tokenizer diagnostic and never reaches positional validation", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin marketplace remove <marketplace>",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs("official --scope bogus", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, undefined);
+  assert.deepStrictEqual(usageErrors, [
+    'Invalid --scope value: "bogus". Must be "user" or "project".',
+  ]);
+});
+
+for (const { args, form } of [
+  { args: "official --scope", form: "the last token" },
+  { args: 'official --scope ""', form: "followed by an empty quoted value" },
+]) {
+  test(`parseCommandArgs reports the missing --scope value when the flag is ${form}`, () => {
+    // arrange
+    const usageErrors: string[] = [];
+    const schema = {
+      positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+      usage: "Usage: /claude:plugin marketplace remove <marketplace>",
+    };
+
+    // act
+    const parsedArgs = parseCommandArgs(args, schema, (message) => {
+      usageErrors.push(message);
+    });
+
+    // assert
+    assert.deepStrictEqual(parsedArgs, undefined);
+    assert.deepStrictEqual(usageErrors, ['--scope requires a value: "user" or "project".']);
+  });
+}
