@@ -55,7 +55,6 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import lockfile from "proper-lockfile";
-import { mock, verify, when } from "strong-mock";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -68,6 +67,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
+import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
@@ -85,62 +85,6 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
 
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
-
-type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
-type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
-  readonly notify: (message: string, severity?: NotificationSeverity) => void;
-};
-
-interface Notification {
-  readonly message: string;
-  readonly severity?: NotificationSeverity;
-}
-
-interface NotificationBoundary {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
-  readonly notifications: readonly Notification[];
-  readonly verifyBoundary: () => void;
-}
-
-/**
- * The Pi boundary, sized to the emissions the case promises. The applied
- * cascade takes one soft-dependency probe per emission and that probe reads
- * `pi.getAllTools()` twice; the post-cascade diagnostic channel reads neither,
- * so `toolProbes` is stated separately from `emissions`. An emission beyond the
- * promised count throws at the call site rather than being counted afterwards.
- */
-function createNotificationBoundary(
-  emissions: number,
-  toolProbes = emissions * 2,
-): NotificationBoundary {
-  const notifications: Notification[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .times(emissions);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(toolProbes);
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .times(emissions);
-
-  return {
-    ctx,
-    pi,
-    notifications,
-    verifyBoundary: (): void => {
-      verify(ctx);
-      verify(pi);
-      verify(ui);
-    },
-  };
-}
 
 /**
  * The single network edge. `allowedRemoteUrls` is empty, so the fake refuses

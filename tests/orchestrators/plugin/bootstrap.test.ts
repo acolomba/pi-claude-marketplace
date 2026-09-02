@@ -14,14 +14,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { mock, verify, when } from "strong-mock";
-
 import { bootstrapClaudePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -29,10 +28,6 @@ import { retryTree } from "./scope-tree-inventory.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -79,60 +74,6 @@ function createBootstrapGitOps(options: BootstrapGitOptions = {}): {
   return {
     gitOps,
     clonedUrls: () => git.state.calls.clone.map((call) => call.url),
-  };
-}
-
-interface NotifyRecord {
-  readonly message: string;
-  readonly severity?: string;
-}
-
-type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
-type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
-  readonly notify: (message: string, severity?: NotificationSeverity) => void;
-};
-
-/**
- * Strict boundary for the Pi surfaces bootstrap hands to the composed
- * orchestrators. The promised interaction is stated by exact call count, so an
- * extra or missing notification fails the case: `expectedNotifications` of 0
- * states that nothing may be emitted at all. Each `notify()` entry runs one
- * `softDepStatus(pi)` probe, which reads `getAllTools()` once per soft
- * dependency.
- */
-function createNotificationBoundary(expectedNotifications: number): {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
-  readonly notifications: readonly NotifyRecord[];
-  readonly verifyBoundary: () => void;
-} {
-  const notifications: NotifyRecord[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
-  if (expectedNotifications > 0) {
-    when(() => ctx.ui)
-      .thenReturn(ui)
-      .times(expectedNotifications);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(expectedNotifications * 2);
-    when(() => ui.notify)
-      .thenReturn((message, severity) => {
-        notifications.push(severity === undefined ? { message } : { message, severity });
-      })
-      .times(expectedNotifications);
-  }
-
-  return {
-    ctx,
-    pi,
-    notifications,
-    verifyBoundary: (): void => {
-      verify(ctx);
-      verify(pi);
-      verify(ui);
-    },
   };
 }
 

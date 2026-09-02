@@ -37,6 +37,7 @@ import {
   ConcurrentInstallError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type {
@@ -45,10 +46,6 @@ import type {
   ImportDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 // Every collaborator shape below is derived from the module's own `ImportDeps`,
@@ -71,59 +68,6 @@ type AddOptions = Parameters<AddMarketplace>[0];
 type InstallOptions = Parameters<InstallPlugin>[0];
 type Diagnostic = ClaudeImportExecutionResult["diagnostics"][number];
 type Collaborators = Required<ImportDeps>;
-
-type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
-type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
-  readonly notify: (message: string, severity?: NotificationSeverity) => void;
-};
-
-interface Notification {
-  readonly message: string;
-  readonly severity?: NotificationSeverity;
-}
-
-interface NotificationBoundary {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
-  readonly notifications: readonly Notification[];
-  readonly verifyBoundary: () => void;
-}
-
-/**
- * The Pi boundary, sized to the emissions the case promises. `notify` takes one
- * soft-dependency probe per emission and that probe reads `pi.getAllTools()`
- * twice, so the tool probe is promised at twice the emission count. The probe
- * reports no companion extension loaded, which is what makes a row's declared
- * agent and MCP dependencies visible as markers.
- */
-function createNotificationBoundary(emissions: number): NotificationBoundary {
-  const notifications: Notification[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .times(emissions);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(emissions * 2);
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .times(emissions);
-
-  return {
-    ctx,
-    pi,
-    notifications,
-    verifyBoundary: (): void => {
-      verify(ctx);
-      verify(pi);
-      verify(ui);
-    },
-  };
-}
 
 interface HermeticScopes {
   readonly cwd: string;

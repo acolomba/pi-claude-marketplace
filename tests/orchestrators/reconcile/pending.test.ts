@@ -21,70 +21,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { mock, verify, when } from "strong-mock";
-
 import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
-
-type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
-type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
-  readonly notify: (message: string, severity?: NotificationSeverity) => void;
-};
-
-interface Notification {
-  readonly message: string;
-  readonly severity?: NotificationSeverity;
-}
-
-interface NotificationBoundary {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
-  readonly notifications: readonly Notification[];
-  readonly verifyBoundary: () => void;
-}
-
-/**
- * The Pi boundary, sized to the emissions the case promises. `notify` takes one
- * soft-dependency probe per invocation and that probe reads `pi.getAllTools()`
- * twice, so the tool probe is promised at twice the emission count. An
- * emission beyond the promised count throws at the call site.
- */
-function createNotificationBoundary(emissions: number): NotificationBoundary {
-  const notifications: Notification[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
-  when(() => ctx.ui)
-    .thenReturn(ui)
-    .times(emissions);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(emissions * 2);
-  when(() => ui.notify)
-    .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
-    })
-    .times(emissions);
-
-  return {
-    ctx,
-    pi,
-    notifications,
-    verifyBoundary: (): void => {
-      verify(ctx);
-      verify(pi);
-      verify(ui);
-    },
-  };
-}
 
 interface HermeticScopes {
   readonly cwd: string;
