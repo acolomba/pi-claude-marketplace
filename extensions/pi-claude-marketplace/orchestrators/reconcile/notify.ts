@@ -645,6 +645,13 @@ function backfilledRowFromOutcome(
 /**
  * Apply a MARKETPLACE-subject outcome: the block header's own status and
  * reasons, plus the two arms that also push a synthetic plugin child.
+ *
+ * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
+ * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
+ * declared return type forces a value on every path, so this same switch in a
+ * `void` function would let a newly-added `PerEntryOutcome` kind fall through
+ * and silently drop the row. Answering with the mutated block makes that
+ * TS2366 at the edit site. The caller discards the value.
  */
 function applyMarketplaceOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
@@ -661,26 +668,26 @@ function applyMarketplaceOutcomeToBlock(
         | "invalid-block";
     }
   >,
-): void {
+): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "mp-added":
       block.status = "added";
-      return;
+      return block;
     case "mp-removed":
       block.status = "removed";
-      return;
+      return block;
     case "mp-add-failed":
     case "mp-remove-failed":
       block.status = "failed";
       block.reasons = reasonAsContent(outcome.reason);
-      return;
+      return block;
     case "mp-remove-partial":
       // I1 / PR #51: bare `(failed)` mp header -- the per-plugin children
       // carry the granular reasons (mirrors the standalone CMC-31 PARTIAL
       // byte form). Do NOT set block.reasons; the renderer's MpFailed arm
       // collapses to `⊘ <name> [<scope>] (failed)` when reasons is absent.
       block.status = "failed";
-      return;
+      return block;
     case "source-mismatch":
       block.status = "failed";
       if (outcome.cause === "dangling-reference") {
@@ -700,7 +707,7 @@ function applyMarketplaceOutcomeToBlock(
         block.reasons = ["source mismatch"];
       }
 
-      return;
+      return block;
     case "invalid-block":
       // CFG-03 row: the row subject IS the file basename (T-55-02-01).
       // The block is keyed by (scope, basename) so multiple invalid files in
@@ -728,11 +735,20 @@ function applyMarketplaceOutcomeToBlock(
         });
       }
 
-      return;
+      return block;
   }
 }
 
-/** Apply a PLUGIN-subject outcome: one row pushed onto the block's children. */
+/**
+ * Apply a PLUGIN-subject outcome: one row pushed onto the block's children.
+ *
+ * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
+ * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
+ * declared return type forces a value on every path, so this same switch in a
+ * `void` function would let a newly-added `PerEntryOutcome` kind fall through
+ * and silently drop the row. Answering with the mutated block makes that
+ * TS2366 at the edit site. The caller discards the value.
+ */
 function applyPluginOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: Extract<
@@ -750,13 +766,13 @@ function applyPluginOutcomeToBlock(
         | "plugin-disable-failed";
     }
   >,
-): void {
+): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "plugin-installed":
       // D-03/D-06 realized install row; WARN-01 / D-86-03 raises it to warning
       // with the failure-class token when the outcome carries degradedKinds.
       block.plugins.push(installedRowFromOutcome(outcome));
-      return;
+      return block;
     case "plugin-backfilled":
       // BFILL-01 / D-68-04: a load-time backfill re-materialized the plugin in
       // place. The re-resolved `installable` selects the row: a fully promoted
@@ -765,7 +781,7 @@ function applyPluginOutcomeToBlock(
       // degraded) renders a `partially-installed` row. Both fold into THIS single
       // applied cascade -- no second notify() (RECON-04).
       block.plugins.push(backfilledRowFromOutcome(outcome));
-      return;
+      return block;
     case "plugin-uninstalled":
       block.plugins.push({
         status: "uninstalled",
@@ -775,7 +791,7 @@ function applyPluginOutcomeToBlock(
         severity: "info",
         needsReload: true,
       });
-      return;
+      return block;
     case "plugin-enabled":
       // Reuse existing transition tokens (no new closed-set literal). The
       // enable branch re-materializes via runInstallLedger so the realized
@@ -802,7 +818,7 @@ function applyPluginOutcomeToBlock(
       // `warning` -- WARN-01 parity with the install row for the same ledger
       // run. Both are composed by `enabledRowFromOutcome`.
       block.plugins.push(enabledRowFromOutcome(outcome));
-      return;
+      return block;
     case "plugin-disabled":
       block.plugins.push({
         status: "disabled",
@@ -819,7 +835,7 @@ function applyPluginOutcomeToBlock(
         severity: "info",
         needsReload: true,
       });
-      return;
+      return block;
     case "plugin-install-failed":
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
@@ -832,14 +848,25 @@ function applyPluginOutcomeToBlock(
         severity: "error",
         needsReload: false,
       });
-      return;
+      return block;
   }
 }
 
+/**
+ * Route one per-entry outcome to the marketplace-subject or plugin-subject
+ * applier.
+ *
+ * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
+ * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
+ * declared return type forces a value on every path, so this same switch in a
+ * `void` function would let a newly-added `PerEntryOutcome` kind fall through
+ * and silently drop the row. Answering with the mutated block makes that
+ * TS2366 at the edit site. The caller discards the value.
+ */
 function applyOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: PerEntryOutcome,
-): void {
+): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "mp-added":
     case "mp-removed":
@@ -848,8 +875,7 @@ function applyOutcomeToBlock(
     case "mp-remove-partial":
     case "source-mismatch":
     case "invalid-block":
-      applyMarketplaceOutcomeToBlock(block, outcome);
-      return;
+      return applyMarketplaceOutcomeToBlock(block, outcome);
     case "plugin-installed":
     case "plugin-backfilled":
     case "plugin-uninstalled":
@@ -859,8 +885,7 @@ function applyOutcomeToBlock(
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
     case "plugin-disable-failed":
-      applyPluginOutcomeToBlock(block, outcome);
-      return;
+      return applyPluginOutcomeToBlock(block, outcome);
   }
 }
 
