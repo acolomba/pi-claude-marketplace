@@ -4,8 +4,6 @@ This repository vendors two Agent Skills that other people wrote. They live in `
 
 The published npm package `pi-claude-marketplace` does not include these skills. The `files` list in `package.json` limits the package to the extension and its top-level documents.
 
-Each skill keeps its own license. Each skill directory contains a `LICENSE` file, and this document reproduces the text below. The `skills-lock.json` file at the repository root records the upstream source of each skill.
-
 When you update a skill, check that its `LICENSE` file is still in place. The skill installer copies the skill directory only, and some upstream repositories keep the license at the repository root.
 
 ## humanizer
