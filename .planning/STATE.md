@@ -323,7 +323,7 @@ None for roadmap creation.
 
 | Category | Item | Status | Deferred At | Milestone |
 | -------- | ---- | ------ | ----------- | --------- |
-| _(none)_ |      |        |             |           |
+| Tooling | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted) | Pending | Phase 116 discussion | v1.19 |
 
 ## Session Continuity
 

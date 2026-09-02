@@ -1095,6 +1095,34 @@ void ({ type: "order.cancelled", orderId: "order-123" } satisfies OrderEvent);
 void ({ orderId: "order-123" } satisfies OrderEvent);
 ```
 
+### Facts a gate already enforces
+
+Before writing a case, name the failure it catches and the gate that would miss it. A case that restates something the compiler, lint, `fallow`, or direct coverage already enforces cannot fail. It carries no information, and it has to be edited every time the code legitimately changes.
+
+Detecting an unused member of a type is the case that tempts this most, and it does not work. A test observes a type's shape from outside: it can construct a value, check it with `satisfies`, and prove that omitting a required member fails. Whether any call site reads that member belongs to the call graph, which no test of the type can reach. Testing the consumer instead only tests the consumer.
+
+Coverage does not reach it either, for a structural reason rather than a configuration gap. Coverage answers whether a line ran. An unused member has no read site, so there is no line, and absent code produces no coverage record. Coverage finds code that exists and did not run; it is blind to code that was never written. Type-only modules compound this, because they emit no JavaScript and therefore produce no coverage records at all.
+
+What the stack does guarantee:
+
+- A new **required** member breaks every object literal that builds the type. The compiler catches it, and `npm run check` gates it.
+- A new **optional** member that something reads is runtime code in the consumer, so the consumer's own paired test drops below full direct coverage.
+- A member nothing reads is a dead-code question for static analysis, not a case.
+
+```ts
+// Wrong. Pins the member list so a fourth member "cannot be added silently".
+// It proves the members exist, never that anything reads them, and it must be
+// edited whenever the interface legitimately grows.
+void ({ gitOps, pluginUpdate, importClaudeSettings } satisfies Required<EdgeDeps>);
+
+// Right. Pin the contract that carries meaning: which members are optional.
+void ({ gitOps, pluginUpdate } satisfies EdgeDeps);
+// @ts-expect-error the injected git operations are required
+void ({ pluginUpdate } satisfies EdgeDeps);
+```
+
+Write the negative on the line the diagnostic lands on. A multi-line `satisfies` reports on its closing line, so a `@ts-expect-error` placed above the opening brace attaches to nothing and the check silently passes.
+
 ### Barrel modules
 
 Prefer importing concrete modules over an `index.ts` that only re-exports them. When a barrel exists, it is a production module with a paired test module. That test module imports through the barrel and asserts that each runtime re-export is the same binding as its source export with `assert.strictEqual()`. The compiler checks re-exported types when the test module imports them.

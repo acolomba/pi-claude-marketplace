@@ -218,6 +218,17 @@ void ({ type: 'order.placed', orderId: 'order-123', total: 25 } satisfies OrderE
 void ({ orderId: 'order-123' } satisfies OrderEvent)
 ```
 
+**Do not test what a gate already enforces.** Before writing a case, name the failure it catches and the gate that would miss it. If the compiler, lint, `fallow`, or direct coverage already catches it, the case cannot fail and is a maintenance cost that proves nothing.
+
+**Usage is not a property of a type.** Never enumerate a type's members to detect an unused one. A test observes shape from outside; whether a member is read belongs to the call graph, which no test of the type can reach. Coverage does not reach it either: an unused member has no read site, so there is no line, and absent code produces no coverage record. Rely on the compiler for required members, since every object literal that builds the type stops compiling, and on the consumer's own direct coverage for members it reads. A member nothing reads is a dead-code question for static analysis, not a case.
+
+```ts
+// wrong: pins the member list so a fourth member "cannot be added silently"
+void ({ gitOps, pluginUpdate, importClaudeSettings } satisfies Required<EdgeDeps>)
+// right: pin the contract that carries meaning — which members are optional
+void ({ gitOps, pluginUpdate } satisfies EdgeDeps)
+```
+
 **Barrels.** Prefer importing concrete modules. An existing `index.ts` gets a test module that asserts each runtime re-export is the same binding as its source with `assert.strictEqual()`.
 
 **Filesystem.** Use the real filesystem when stored files, paths, permissions, encoding, or rendered bytes are the behavior. Create one `mkdtemp(join(tmpdir(), 'file-order-store-'))` per case and remove it with `rm(directory, { recursive: true, force: true })` in `finally` or `t.after()`. Do not share a directory across cases or write into the repository, the home directory, or a fixed path.
@@ -250,6 +261,7 @@ A unit-test change is complete when:
 - [ ] Time comes from an injected clock or the context's fake timers; environment and global changes are restored through the test context.
 - [ ] Public results and state are asserted before promised interactions; whole values are compared; typed errors are asserted by class and fields.
 - [ ] Expected values are independent from production and harness computations.
+- [ ] No case restates a fact the compiler, lint, `fallow`, or direct coverage already enforces.
 - [ ] Shared support is organized by concern, with no generic helper directory.
 - [ ] Real and fake adapters pass the same contract, and the contract has a proven negative control.
 - [ ] The focused source-test pair has 100% direct function, line, and branch coverage, with no coverage exception added.
