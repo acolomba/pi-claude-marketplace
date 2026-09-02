@@ -1,5 +1,7 @@
 # Third-party notices
 
+This file records third-party notices for Agent Skills vendored into this repository, beyond normal package-manager dependency metadata. The files live under `.agents/skills/`. The `.claude/skills/` entries are symlinks to them, and Pi reads `.agents/skills/` directly. Each skill directory also carries its own `LICENSE` file. The published npm package does not include these skills.
+
 ## humanizer
 
 The `humanizer` skill is a copy of the upstream repository at version 2.11.2. The skill is the repository root.
