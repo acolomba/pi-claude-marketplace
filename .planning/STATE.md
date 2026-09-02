@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-12-PLAN.md
-last_updated: "2026-09-02T18:36:10.708Z"
+stopped_at: Completed 116-23-PLAN.md
+last_updated: "2026-09-02T18:52:00.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: ccec62c5b74a276bd58a30a407fae9566428be98
+state_head: 3a48bc39767ba9c3703fe8e9385f4b44b654bda0
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 184
+  completed_plans: 185
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 7 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-30)
+Plan: 8 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-12, 116-23, 116-30)
 Status: Executing wave 3 of 8
-Last activity: 2026-09-02 — 116-12 complete; the single-name marketplace helper owns its injected run delegate with exact arguments
+Last activity: 2026-09-02 — 116-23 complete; the plugin argument helper owns all four runtime exports and states its prelude delegate with exact arguments
 
 Progress: [████████░░] 80%
 
@@ -161,6 +161,7 @@ evidence.
 | Phase 116 P06 | 65 min | 1 tasks | 3 files |
 | Phase 116 P30 | 40 min | 1 tasks | 1 files |
 | Phase 116 P12 | 45 min | 1 tasks | 1 files |
+| Phase 116 P23 | 50 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -319,6 +320,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-30: the type-only owner pins EdgeDeps required-versus-optional split only; enumerating the member set or asserting the export surface would restate what the compiler and fallow dead-code already enforce
 - [Phase 116]: 116-30: a clean tsc is itself proof that every ts-expect-error in a file binds, because an unattached directive raises TS2578; the moved-marker plant showed the multi-line satisfies diagnostic landing on the closing line
 - [Phase 116]: The closed-over-API case builds two distinct Pi values instead of one shared value: a same-instance case only repeats the delegation case and cannot discriminate.
+- [Phase 116]: 116-23: a double for a generic export derives from an instantiation-expression type query (Parameters<typeof fn<Chosen>>[N]); the uninstantiated form collapses the type parameter to unknown and loses the exact-argument match
+- [Phase 116]: 116-23: input tokens that the module under test derives from another module are hand-authored literals, not read back from that module; feeding the derivation back in is tautological and cannot fail
 
 ### Pending Todos
 
@@ -345,7 +348,7 @@ None for roadmap creation.
 **Resume file:** None
 
 Last session: 2026-09-02T18:35:54.303Z
-Stopped at: Completed 116-12-PLAN.md
+Stopped at: Completed 116-23-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
