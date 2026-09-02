@@ -110,7 +110,8 @@ Seven belong to this phase; the remaining seven belong to Phase 117.
 #### Exhaustiveness enforcement carried from Phase 115
 
 - **D-116-14:** Phase 115 proved with a compiler repro that a **`void`-returning** `switch`
-  with a missing arm compiles clean — only a value-returning switch raises TS2366. Four gates
+  with a missing arm compiles clean — only a value-returning switch raises TS2366 (and, under
+  `noImplicitReturns`, a `default`-less switch raises TS7030 regardless of the return type). Four gates
   in the codebase had been deleted against a guarantee TypeScript never made. Wherever this
   phase claims an exhaustiveness guarantee, prefer a value-returning shape and plant a missing
   arm to prove the gate fires. `router.ts` and the handler dispatch tables are exactly this
@@ -173,8 +174,10 @@ available. The planner must resolve this explicitly rather than let each plan im
 The second finding is that **D-116-14's stated targets are the wrong ones.** `router.ts` switches
 on an open `string` with a `default` arm — it carries no exhaustiveness claim TypeScript could
 enforce or lose. The real hole is `pluginVersion()` in `edge/handlers/tools.ts`, whose
-`string | undefined` return type means a missing arm compiles clean. I proved this with a
-compiler repro in this session.
+`string | undefined` return type means a missing arm compiles clean. **That claim is wrong and was
+corrected during planning:** the repro below omitted `noImplicitReturns`, which `tsconfig.json:11`
+sets. With it, a deleted arm in a `default`-less switch raises `TS7030: Not all code paths return a
+value.` All four `tools.ts` switches are gated — three by TS2366 and this one by TS7030.
 
 **Primary recommendation:** Sequence a wave 0 that (a) extends `tests/helpers/notification-boundary.ts`
 with a `cwd` option and a zero-probe mode, and (b) settles the D-116-05 seam question as one
@@ -567,7 +570,7 @@ key fails to satisfy the interface. Testing that is forbidden by D-116-12.
 | `tools.ts:161` `projectRowStatus` | `(status: PluginNotificationMessage["status"]) => ToolPluginStatus`, no `default` | **Yes** — non-nullable return |
 | `tools.ts:210` `statusLabel` | `(status: ToolPluginStatus) => string`, no `default` | **Yes** |
 | `tools.ts:253` `statusKey` | `(status: ToolPluginStatus) => "i" \| "a" \| "u"`, no `default` | **Yes** |
-| `tools.ts:367` `pluginVersion` | `(p: PluginNotificationMessage) => string \| undefined`, no `default` | **NO — a missing arm compiles clean** |
+| `tools.ts:367` `pluginVersion` | `(p: PluginNotificationMessage) => string \| undefined`, no `default` | **Yes, but via TS7030 rather than TS2366** — corrected during planning; the repro below omitted `noImplicitReturns` |
 
 I confirmed the rule with a compiler repro this session `[VERIFIED: tsc --noEmit --strict on a
 3-function file, exit 2 with exactly one diagnostic]`:
@@ -577,8 +580,10 @@ repro.ts(4,36): error TS2366: Function lacks ending return statement and return 
 ```
 
 Only the non-nullable value-returning function raised TS2366. The `string | undefined` variant and
-the `void` variant both compiled silently. `pluginVersion` is therefore the same class of hole
-D-116-14 was written about, sitting one function away from the three sound ones.
+the `void` variant both compiled silently **under that repro's flags**. Re-running with
+`noImplicitReturns`, which this repository sets, raises `TS7030` for the `string | undefined`
+variant. `pluginVersion` is therefore **gated**, not a hole; only the `void` variant is genuinely
+unguarded.
 
 ### Recommendation
 
@@ -587,9 +592,8 @@ D-116-14 was written about, sitting one function away from the three sound ones.
    `default`. A phase-wide rule would manufacture ceremony where no guarantee exists.
 2. **Apply it to plan 116-27 specifically.** For `projectRowStatus`, `statusLabel`, and
    `statusKey`, plant one deleted arm and confirm `npm run typecheck` goes RED; record each
-   plant. For `pluginVersion`, plant the same way, observe that typecheck stays **green**, and
-   record that as the finding — then close the gap with a runtime case per reachable status
-   value, since no compiler gate exists to lean on.
+   plant. For `pluginVersion`, plant the same way and expect **RED with `TS7030`**, not green — the
+   original prediction of a clean compile omitted `noImplicitReturns`.
 3. **State in every other plan that the phase makes no exhaustiveness claim for that pair**, so
    a verifier does not go looking for a plant that has no target.
 
@@ -951,17 +955,17 @@ closed. The planner MUST treat these as locked and MUST NOT reopen them.
   class and no other, still bans every coverage-exception pragma, and requires each claiming pair
   to name the line range, the compiler setting, and its exact resulting numbers in `must_haves`.
   **No production file changes in any of the four.**
-- **`edge/handlers/tools.ts:391-401` is NOT removed, and NOT in the D-116-01a class.** Research
-  predicted that `pluginVersion`, returning `string | undefined`, would let a missing arm compile
-  clean. A compiler repro run during planning with this repository's own settings shows that is
-  **wrong**: `noImplicitReturns` (`tsconfig.json:11`) raises `TS7030: Not all code paths return a
-  value.` for a switch with a deleted arm and no `default`, exactly as for the three
-  TS2366-guarded ones. All four `tools.ts` switches therefore carry a real missing-arm gate — three
-  through TS2366 and this one through TS7030. Deleting the unreachable arms would destroy that
-  gate and, because the same setting then demands a trailing `return`, would trade an uncovered
-  branch for an uncovered line. The arms stay, plan 116-27 makes no production change, and its
-  shortfall is recorded with this argument. **This case is outside D-116-01a as written and awaits
-  operator ratification.**
+- **`edge/handlers/tools.ts` is restructured to reach 100 percent (ratified 2026-09-02).** A fifth
+  coverage shortfall was proposed for `pluginVersion`'s unreachable arms and **rejected**. Plain
+  deletion is unavailable: a compiler repro run during planning shows that deleting an arm from a
+  `default`-less switch raises `TS7030: Not all code paths return a value.` under `noImplicitReturns`
+  (`tsconfig.json:11`), and the two shapes that do compile — a trailing `return`, or a `default` arm
+  — each trade the uncovered branch for an uncovered line, with the `default` shape additionally
+  silencing the missing-arm gate. The ratified answer is to change the **type** rather than delete
+  the arms: narrow `pluginVersion`'s parameter to the list-surface row type the payload already
+  carries, so the four pending arms have nothing left to match and come out on their own. Plan
+  116-27 carries that edit and is the **only** plan in the phase permitted to touch `extensions/`.
+  D-116-01a is unaffected and stays at exactly four pairs.
 - **D-116-14 scope: plan 116-27 only.** Only the four `edge/handlers/tools.ts` switches turn on a
   closed union and carry an exhaustiveness claim. `router.ts` switches on open `string` with a
   `default` arm, so no guarantee exists there to prove or lose. Every other plan states the
