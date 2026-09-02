@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 5 of 31
-Status: Ready to execute
-Last activity: 2026-09-02 — Phase 116 execution started
+Plan: 4 of 31 complete (116-00, 116-01, 116-02, 116-04)
+Status: Executing wave 2 of 8
+Last activity: 2026-09-02 — 116-04 complete; completion normalizer at full coverage
 
 Progress: [████████░░] 80%
 
