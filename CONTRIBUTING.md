@@ -36,4 +36,12 @@ pre-commit run --all-files
 
 ## Vendored skills
 
-The skills under `.agents/skills/` and `.claude/skills/` come from other repositories. `skills-lock.json` records their source, and `THIRD_PARTY_NOTICES.md` records their license. When you update a skill, check that its `LICENSE` file is still in place. The skill installer copies the skill directory only, and some upstream repositories keep the license at the repository root.
+The skills under `.agents/skills/` come from other repositories. `.claude/skills/` and `.pi/skills/` hold symlinks to them. `skills-lock.json` records their source, and `THIRD_PARTY_NOTICES.md` records their version and license.
+
+To update a skill:
+
+```bash
+npx skills@latest update <name> -p -y
+```
+
+The installer copies the skill directory only, and some upstream repositories keep the license at the repository root. After an update, check that the `LICENSE` file is still in place, and record the new version and commit in `THIRD_PARTY_NOTICES.md`.

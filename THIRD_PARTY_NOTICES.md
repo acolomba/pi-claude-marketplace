@@ -35,10 +35,10 @@ SOFTWARE.
 
 ## simple-english
 
-The `simple-english` skill is a copy of `skills/simple-english` from the upstream repository at commit `8e8a008a13e4b478f9ccc20ca16e79aef66c0739`.
+The `simple-english` skill is a copy of `skills/simple-english` from the upstream repository at tag `v2.0.0`, commit `d9e523409686e88df175623f7a692d025aff95b1`.
 
 - Upstream: <https://github.com/AminBlg/SimpleEnglish>
-- Version: 1.3.0
+- Version: 2.0.0
 - License: MIT
 - Copyright: Copyright (c) 2026 AminBlg
 
