@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-06-PLAN.md
-last_updated: "2026-09-02T17:56:35.113Z"
+stopped_at: Completed 116-30-PLAN.md
+last_updated: "2026-09-02T18:16:44.332Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: f66a37f485349bc756af7d97594cea471ba681d8
+state_head: d9a3d996f4870ac3805037928aeb2c3b7345b5f1
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 182
+  completed_plans: 183
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 5 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06)
+Plan: 6 of 31 complete (116-00, 116-01, 116-02, 116-04, 116-06, 116-30)
 Status: Executing wave 2 of 8
-Last activity: 2026-09-02 — 116-06 complete; flag-catalog owner written and an unreachable branch removed
+Last activity: 2026-09-02 — 116-30 complete; edge dependency bundle owned as a type-only pair
 
 Progress: [████████░░] 80%
 
@@ -159,6 +159,7 @@ evidence.
 | Phase 116 P02 | 20 min | 1 tasks | 1 files |
 | Phase 116 P04 | 25 min | 1 tasks | 1 files |
 | Phase 116 P06 | 65 min | 1 tasks | 3 files |
+| Phase 116 P30 | 40 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -314,6 +315,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: The direct-coverage branch denominator is a property of the suite, not of the source: edge/args.ts measures branches 28/29 under its rewritten owner where it measured 25/26 under the old one, with the same single uncovered branch — V8 emits a block range only when that block's execution count diverges from the enclosing range, so a guard whose false arm is never taken is collapsed and never enters the lcov denominator at all. Covering the false arm raises BRH and BRF together. Diffing BRDA records between the two suites over the same source shows three new ranges (args.ts:46, :75, :84) and no lost ones. Consequence: a full-line coverage verdict pin cannot be authored before the rewrite that strengthens the suite. D-116-01a's recorded number for edge/args.ts is superseded by measurement and the three other claimants (116-26, 116-21, 116-17) carry the same exposure. Operator ratification required; nothing was edited.
 - [Phase 116]: 116-06: deleted the unreachable optional-description branch in completionFlagEntries by making FlagEntry.description required, rather than adding a coverage exception; the exported return type is unchanged
 - [Phase 116]: 116-06: where an architecture gate already pins a data table exactly, the mirrored owner proves the derivation shape (filter, order, key presence, exclusion) and asserts nothing about the table contents
+- [Phase 116]: 116-30: the type-only owner pins EdgeDeps required-versus-optional split only; enumerating the member set or asserting the export surface would restate what the compiler and fallow dead-code already enforce
+- [Phase 116]: 116-30: a clean tsc is itself proof that every ts-expect-error in a file binds, because an unattached directive raises TS2578; the moved-marker plant showed the multi-line satisfies diagnostic landing on the closing line
 
 ### Pending Todos
 
@@ -339,8 +342,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T17:56:33.150Z
-Stopped at: Completed 116-06-PLAN.md
+Last session: 2026-09-02T18:16:30.383Z
+Stopped at: Completed 116-30-PLAN.md
 canonical verification passed 6 of 6 must-haves with coverage independently re-measured
 per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
 deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
