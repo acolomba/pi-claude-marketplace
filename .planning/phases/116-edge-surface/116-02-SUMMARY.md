@@ -9,7 +9,7 @@ requires:
 provides:
   - "Sole mirrored direct owner for edge/args.ts, contract-compliant at the argued D-116-01a shortfall"
 affects:
-  - "D-116-01a recorded coverage numbers for edge/args.ts — the pinned pair (25/26) is superseded by measurement (28/29); operator ratification required"
+  - "RESOLVED 2026-09-02: D-116-01a amended to pin the shortfall identity rather than absolute branch numbers. The plan verify block now asserts an incomplete verdict, exactly one uncovered branch (denominator minus numerator == 1), lines 86/89, and uncovered lines 35-37. Re-run against this committed suite: PASSES."
 tech-stack:
   added: []
   patterns:
@@ -59,6 +59,30 @@ emitting 19 runtime cases, every expectation hand-authored and compared as one w
 pair lands at the D-116-01a shortfall — one compiler-forced branch, at `edge/args.ts:34-37` — but
 at **branches 28/29, lines 86/89**, not the **25/26** the plan pinned. That discrepancy is the
 headline finding of this plan and is argued in full below.
+
+## RESOLUTION (operator, 2026-09-02) — pin amended, re-run passes
+
+The finding below was escalated and ratified. D-116-01a's fourth required part now pins the
+shortfall's **identity** rather than absolute branch numbers, for the reason this summary
+established: V8 emits a branch range only when its count diverges from its enclosing range, so a
+guard whose false arm is never taken is collapsed out of the denominator, and strengthening the
+suite raises numerator and denominator together. A branch-number pin measures suite strength, not
+the source.
+
+`116-02-PLAN.md`'s verify block was amended to assert, from the same gate output: an
+`Incomplete direct coverage for .../edge/args.ts:` verdict is printed; denominator minus numerator
+equals exactly 1; the `lines` clause reads `86/89`; and the uncovered-line cell reads `35-37`. A
+passing verdict still fails the link.
+
+**The amended command was re-run against this committed suite and exits 0.** Neither
+`tests/edge/args.test.ts` nor any production file was touched; the suite recorded below is correct
+as committed. The measured `branches 28/29` is retained throughout this summary as an observation,
+which is what D-116-01a now calls for.
+
+The three remaining claimants — 116-26, 116-21, 116-17 — were re-pinned to the same identity form
+in the same amendment. 116-17 additionally carried an unsubstituted placeholder
+(`branches N-1/N with the concrete numbers recorded`) that could never have matched any real
+verdict; it is gone.
 
 ## FINDING — the pinned verdict line is not a property of the source
 

@@ -50,8 +50,25 @@ Phases 108 through 115 locked the contract this phase inherits. It is not reopen
   and `node:coverage ignore` stands unchanged and applies to this class too. It admits no other
   kind of miss. A pair claiming it MUST, in its `must_haves`, name the exact line range, state
   that the branch is unreachable at runtime, name the compiler setting that forces it to exist,
-  and state the exact coverage numbers it therefore lands on — so a verifier reads an argued,
-  scoped shortfall rather than a gap.
+  and pin the shortfall by its **identity** — the uncovered line set, and that exactly ONE branch
+  is uncovered — so a verifier reads an argued, scoped shortfall rather than a gap.
+
+  **Pin the identity, not the branch numbers (amended 2026-09-02, after 116-02 executed).** A pair
+  MUST NOT pin an absolute branch numerator and denominator. V8 emits a branch range only when that
+  block's count diverges from its enclosing range, so a guard whose false arm is never taken is
+  collapsed and never enters the denominator; strengthening the suite adds previously-collapsed
+  ranges and raises numerator and denominator together. A branch-number pin is therefore a property
+  of suite strength, not of the source, and cannot be authored before the rewrite it is meant to
+  gate — 116-02 was authored at `branches 25/26` and measured `28/29` with nothing regressed and the
+  shortfall's identity unmoved. The verify block asserts instead: (1) the gate still prints an
+  `Incomplete direct coverage for <source>:` verdict, with branch numbers matched loosely; (2)
+  denominator minus numerator equals exactly 1, which is immune to denominator drift and still
+  catches a NEW uncovered branch — precisely what a matching number pair can mask; and (3) the
+  uncovered line set is exactly the documented one. **Line counts are NOT affected** — a file's
+  executable-line total is fixed — so the exact `lines N/M` clause stays pinned wherever it was
+  measured. Functions stay pinned at 100 percent. Measured branch numbers are recorded in the
+  summary as an observation, never as a gate. A *passing* verdict still fails the link and must be
+  reported, never edited away.
   Four pairs claim it: 116-02 (`edge/args.ts:34-37`), 116-26 (`edge/handlers/shared.ts:53-55`),
   116-21 (`edge/handlers/plugin/pending.ts:39`), and 116-17
   (`edge/handlers/plugin/import.ts:31`). No other pair may.
