@@ -40,7 +40,6 @@
 // advisory takes precedence.
 
 import { resolveStrict } from "../../domain/resolver.ts";
-import { assertNever } from "../../shared/errors.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -140,6 +139,17 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
   // deleted; `MarketplaceBlock.status` is now narrowed to
   // `ReconcileBlockStatus` so any attempt to assign one of those tokens here
   // is a compile error caught at edit time instead of a runtime signal.
+  //
+  // D-05: the list arm is an early return rather than a `case undefined:` so the
+  // switch below runs over the three-token closed union alone. TypeScript proves
+  // THAT switch exhaustive (it does not credit a `case undefined:` arm towards
+  // exhaustiveness), so a fourth `ReconcileBlockStatus` member fails to compile
+  // here -- which is what makes a defensive `default` arm unreachable dead code
+  // rather than the safety net.
+  if (block.status === undefined) {
+    return { name, scope, plugins };
+  }
+
   switch (block.status) {
     case "added":
       // RECON-04: realized apply-time transition token.
@@ -157,10 +167,6 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
         plugins,
         ...(block.reasons !== undefined && { reasons: block.reasons }),
       };
-    case undefined:
-      return { name, scope, plugins };
-    default:
-      assertNever(block.status);
   }
 }
 
@@ -723,11 +729,6 @@ function applyMarketplaceOutcomeToBlock(
       }
 
       return;
-    default:
-      // The caller's own `assertNever` only proves the OUTER union is fully
-      // routed; without this arm a newly-added marketplace-subject kind would
-      // be widened into the `Extract<>` above and silently no-op the row.
-      assertNever(outcome);
   }
 }
 
@@ -832,11 +833,6 @@ function applyPluginOutcomeToBlock(
         needsReload: false,
       });
       return;
-    default:
-      // The caller's own `assertNever` only proves the OUTER union is fully
-      // routed; without this arm a newly-added plugin-subject kind would be
-      // widened into the `Extract<>` above and silently drop the row.
-      assertNever(outcome);
   }
 }
 
@@ -865,8 +861,6 @@ function applyOutcomeToBlock(
     case "plugin-disable-failed":
       applyPluginOutcomeToBlock(block, outcome);
       return;
-    default:
-      assertNever(outcome);
   }
 }
 
