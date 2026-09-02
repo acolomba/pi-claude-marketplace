@@ -1,7 +1,7 @@
 ---
 phase: 115-composition-orchestrators
 verified: 2026-09-02T07:15:00Z
-status: human_needed
+status: passed
 score: 6/6 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -9,9 +9,11 @@ human_verification:
   - test: "Confirm ROADMAP.md's 115-05 checkbox and REQUIREMENTS.md's per-pair triage table are refreshed to match the completed state (both are stale bookkeeping, not code defects)."
     expected: "ROADMAP.md line 507 shows `[x] 115-05`, and REQUIREMENTS.md's Phase 115 pair table shows `PASS` / `Complete` for all eight rows instead of the pre-work `COVERAGE_FAIL`/`MISSING`/`Open` snapshot."
     why_human: "Cosmetic doc-sync fix outside the codebase-truth scope of this verification; flagged so it does not silently persist into Phase 116/117 planning inputs."
+    resolution: "Done in 5a0d604d. ROADMAP.md now shows [x] for 115-05 and for the Phase 115 summary line, and all eight P115 Status cells read Complete. The HEAD triage column was deliberately NOT rewritten: its legend states it records the milestone-start snapshot (59 PASS, 83 COVERAGE_FAIL, 60 MISSING, 2 TEST_FAIL), so overwriting it would destroy the baseline the milestone measures progress against. Separately noted: the Status column lapsed at Phase 110, leaving 115 rows across phases 110-114 reading Open despite all five being verified complete. That drift predates this phase and was left untouched."
   - test: "Operator decision on WINDOWS.md entry 9 (WR-02): restore the three per-entry catch clauses in reconcile/apply.ts, add the forbidden DI seam, or accept the recorded exposure."
     expected: "One of the three remedies is chosen and WINDOWS.md entry 9 is updated to `fixed` or `waived` accordingly."
     why_human: "The fix pass explicitly left this open pending an operator decision because both structural remedies collide with this phase's own bounds (100% branch coverage; no test-only DI seam on apply.ts)."
+    resolution: "Operator chose to accept the recorded exposure. No code change. WINDOWS.md entry 9 stays open as the durable record of the residual risk, with its blast radius documented. Rationale: the removed arms are genuinely unreachable today, so there is no live defect, and both remedies would break one of this phase's own bounds. A systematic fix belongs with the repository-wide gates that Phase 117 owns."
 ---
 
 # Phase 115: Composition Orchestrators Verification Report

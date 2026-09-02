@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.19
-current_phase: 115
-current_phase_name: Composition Orchestrators
-status: executing
-stopped_at: Completed 115-05-PLAN.md
+current_phase: 116
+current_phase_name: Edge Surface
+status: planning
+stopped_at: Phase 115 complete; Phase 116 needs context before planning
 last_updated: "2026-09-02T04:37:15.426Z"
 last_activity: 2026-09-02
-last_activity_desc: Phase 115 plan 05 landed; all eight composition-orchestrator pairs complete
-state_head: 3b45c6e05e77328184bdd6455bedd5130bfaa334
+last_activity_desc: Phase 115 closed after review fixes; MOD-08 satisfied
+state_head: 5a0d604d
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 177
   completed_plans: 177
 milestone_name: Unit Test Refactor
@@ -26,18 +26,19 @@ See: `.planning/PROJECT.md` (updated 2026-09-01 after Phase 113)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 115 — Composition Orchestrators
+**Current focus:** Phase 116 — Edge Surface
 
 ## Current Position
 
-Phase: 115 (Composition Orchestrators) — EXECUTING
-Plan: 8 of 8 executed
-Status: All eight plans landed; the phase is ready for verification
-Last activity: 2026-09-02 — Phase 115 plan 05 landed
+Phase: 116 (Edge Surface) — READY TO DISCUSS
+Plan: 0 of 30
+Status: No context gathered; discuss has not started
+Last activity: 2026-09-02 — Phase 115 closed: verification 6/6, code review fixed 11 of
+12 findings, WR-02 accepted as recorded, transition applied
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
-One hundred sixty-seven of 204 source-test pairs are complete. The remaining 37 are open.
+One hundred seventy-three of 204 source-test pairs are complete. The remaining 31 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -326,13 +327,25 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-09-02T04:37:13.527Z
-Stopped at: Completed 115-05-PLAN.md
-115-07 (wave 1) and 115-06, 115-08 (wave 2). Remaining: 115-02, which is
-unblocked, then 115-05, which waits on it and must also close WINDOWS.md
-entry 6. Both carry the exhaustive matrices and an instruction to stop and
-report rather than sample. Debts to know: worktree isolation is off so plans must run
-sequentially; git hooks are not installed in this checkout; npm run check
-short-circuits before its test steps; and phase.complete cannot write the root
-planning files, so 115's transition needs hand-applying like 114's did.
-Resume file: None
+Last session: 2026-09-02T07:40:00.000Z
+Stopped at: Phase 115 closed and transition applied by hand. All eight pairs landed;
+canonical verification passed 6 of 6 must-haves with coverage independently re-measured
+per pair. Code review found 1 critical and 11 warnings, all rooted in one shape: a
+deleted defense replaced by a compile-time guarantee TypeScript does not make. Eleven
+were fixed, including converting four void-returning switches to value-returning shapes
+so a missing arm raises TS2366 at the edit site. WR-02 was accepted as recorded by
+operator decision and stays open as WINDOWS.md entry 9.
+
+Next: Phase 116 (Edge Surface), 30 pairs. No CONTEXT.md yet, so discuss runs first.
+
+Standing environment debts, all still true: npm run check short-circuits at format:check
+on untracked operator files and never runs the tests, so run npm test and
+npm run test:integration separately; git hooks are not installed in this checkout, so run
+pre-commit run --files <paths> manually and never --all-files; this is a linked worktree,
+so trufflehog needs the filesystem route plus SKIP=trufflehog; worktree isolation is off,
+so plans run sequentially; and phase.complete refuses to write root planning files under
+workstream mode, so every transition needs hand-applying.
+
+Also open: the REQUIREMENTS.md per-pair Status column lapsed at Phase 110 — 115 rows
+across phases 110 through 114 still read Open despite all five being verified complete.
+Phase 115's eight rows were closed; the older drift was left untouched as out of scope.

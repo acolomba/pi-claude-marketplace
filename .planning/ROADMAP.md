@@ -38,7 +38,7 @@ secondary detail.
 - [x] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts. (completed 2026-08-31)
 - [x] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts. (completed 2026-09-01)
 - [x] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows. (completed 2026-09-01)
-- [x] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions.
+- [x] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions. (completed 2026-09-02)
 - [ ] **Phase 116: Edge Surface** - Prove 30 command parsing, completion, handler, tool, and dispatch contracts.
 - [ ] **Phase 117: Extension Entry and Final Gate** - Prove the root entry pair and close all repository-wide gates.
 
@@ -496,7 +496,7 @@ Plans:
 3. Every composition arm applies the correct scope, dependency, state, and notification effect.
 4. Bootstrap and pending-state behavior remain idempotent and stable across repeated calls.
 
-**Plans**: 8/8 plans executed
+**Plans**: 8/8 plans complete
 
 Plans:
 
@@ -616,7 +616,7 @@ and commit still owns one pair.
 | 112. Hook Runtime                        |          31/31 | Complete        | 2026-08-31 |
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
-| 115. Composition Orchestrators           |            8/8 | In Progress     | -          |
+| 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
 | 116. Edge Surface                        |           0/30 | Not started     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
 | **Total**                                |    **173/204** | **In Progress** | **-**      |
