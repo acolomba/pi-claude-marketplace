@@ -38,7 +38,7 @@ secondary detail.
 - [x] **Phase 112: Hook Runtime** - Prove 31 hook routing, payload, process, timer, and lifecycle contracts. (completed 2026-08-31)
 - [x] **Phase 113: Orchestrator Support and Presenters** - Prove 35 helper, classifier, planner, and message contracts. (completed 2026-09-01)
 - [x] **Phase 114: Plugin and Marketplace Lifecycle** - Prove 14 state-changing lifecycle workflows. (completed 2026-09-01)
-- [ ] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions.
+- [x] **Phase 115: Composition Orchestrators** - Prove eight import, bootstrap, dependency, and reconcile compositions.
 - [ ] **Phase 116: Edge Surface** - Prove 30 command parsing, completion, handler, tool, and dispatch contracts.
 - [ ] **Phase 117: Extension Entry and Final Gate** - Prove the root entry pair and close all repository-wide gates.
 
@@ -504,7 +504,7 @@ Plans:
 - [x] **115-02** (`115-02-PLAN.md`, `P115-02`) - `extensions/pi-claude-marketplace/orchestrators/import/execute.ts` → `tests/orchestrators/import/execute.test.ts`
 - [x] **115-03** (`115-03-PLAN.md`, `P115-03`) - `extensions/pi-claude-marketplace/orchestrators/import/index.ts` → `tests/orchestrators/import/index.test.ts`
 - [x] **115-04** (`115-04-PLAN.md`, `P115-04`) - `extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts` → `tests/orchestrators/plugin/bootstrap.test.ts`
-- [ ] **115-05** (`115-05-PLAN.md`, `P115-05`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts` → `tests/orchestrators/reconcile/apply.test.ts`
+- [x] **115-05** (`115-05-PLAN.md`, `P115-05`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts` → `tests/orchestrators/reconcile/apply.test.ts`
 - [x] **115-06** (`115-06-PLAN.md`, `P115-06`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts` → `tests/orchestrators/reconcile/backfill.test.ts`
 - [x] **115-07** (`115-07-PLAN.md`, `P115-07`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts` → `tests/orchestrators/reconcile/notify.test.ts`
 - [x] **115-08** (`115-08-PLAN.md`, `P115-08`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts` → `tests/orchestrators/reconcile/pending.test.ts`

@@ -390,14 +390,14 @@ Every row starts `Open`.
 
 | Pair    | Production source                                                      | Mirrored owner test                              | HEAD triage     | Status |
 | ------- | ---------------------------------------------------------------------- | ------------------------------------------------ | --------------- | ------ |
-| P115-01 | `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts`          | `tests/orchestrators/edge-deps.test.ts`          | `PASS`          | Open   |
-| P115-02 | `extensions/pi-claude-marketplace/orchestrators/import/execute.ts`     | `tests/orchestrators/import/execute.test.ts`     | `COVERAGE_FAIL` | Open   |
-| P115-03 | `extensions/pi-claude-marketplace/orchestrators/import/index.ts`       | `tests/orchestrators/import/index.test.ts`       | `MISSING`       | Open   |
-| P115-04 | `extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts`   | `tests/orchestrators/plugin/bootstrap.test.ts`   | `PASS`          | Open   |
-| P115-05 | `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`    | `tests/orchestrators/reconcile/apply.test.ts`    | `COVERAGE_FAIL` | Open   |
-| P115-06 | `extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts` | `tests/orchestrators/reconcile/backfill.test.ts` | `COVERAGE_FAIL` | Open   |
-| P115-07 | `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts`   | `tests/orchestrators/reconcile/notify.test.ts`   | `COVERAGE_FAIL` | Open   |
-| P115-08 | `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts`  | `tests/orchestrators/reconcile/pending.test.ts`  | `COVERAGE_FAIL` | Open   |
+| P115-01 | `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts`          | `tests/orchestrators/edge-deps.test.ts`          | `PASS`          | Complete |
+| P115-02 | `extensions/pi-claude-marketplace/orchestrators/import/execute.ts`     | `tests/orchestrators/import/execute.test.ts`     | `COVERAGE_FAIL` | Complete |
+| P115-03 | `extensions/pi-claude-marketplace/orchestrators/import/index.ts`       | `tests/orchestrators/import/index.test.ts`       | `MISSING`       | Complete |
+| P115-04 | `extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts`   | `tests/orchestrators/plugin/bootstrap.test.ts`   | `PASS`          | Complete |
+| P115-05 | `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`    | `tests/orchestrators/reconcile/apply.test.ts`    | `COVERAGE_FAIL` | Complete |
+| P115-06 | `extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts` | `tests/orchestrators/reconcile/backfill.test.ts` | `COVERAGE_FAIL` | Complete |
+| P115-07 | `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts`   | `tests/orchestrators/reconcile/notify.test.ts`   | `COVERAGE_FAIL` | Complete |
+| P115-08 | `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts`  | `tests/orchestrators/reconcile/pending.test.ts`  | `COVERAGE_FAIL` | Complete |
 
 ### Phase 116: Edge Surface
 
