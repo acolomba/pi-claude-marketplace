@@ -4,8 +4,8 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-08-PLAN.md
-last_updated: "2026-09-02T22:51:22.583Z"
+stopped_at: Completed 116-09-PLAN.md
+last_updated: "2026-09-03T00:05:00.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
 state_head: 844c9f3d318cc4ff613af9fcde8e798a5e646dad
@@ -13,7 +13,7 @@ progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 192
+  completed_plans: 193
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 16 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-08, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: the DAG-recomputed wave 4 is open — 116-07 and 116-08 are done; 116-05, 116-09 and 116-11 remain before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
-Last activity: 2026-09-02 — 116-08 rewrote the dual-form marketplace autoupdate owner and established the phase's normative Group-C no-seam negative-delegation case: boundary sized at one emission and zero probes with `cwd` OMITTED, both scopes seeded, the whole notification list compared, `verifyBoundary()` last, plus an on-disk negative. It also CORRECTED 116-10's correction — `setMarketplaceAutoupdate` catches the unstated-`cwd` failure and notifies, so the negative fires on the emission count here, not in `path.join`. The durable rule is "the first unstated boundary member the workflow reaches AFTER its own error handling"; no Group-C plan may promise its plant's diagnostic before running it. Delegation is observed as the config footprint (SPLIT-01: a flip never writes state.json). Coverage rose from branches 13/14, functions 3/4, lines 58/61 to 15/15, 4/4, 61/61 — no D-116-01a claim. Eight plants, all RED, all reverted. Four plan deviations: `must_haves` truths 3 and 4 are false against this module (a single OPTIONAL positional DROPS surplus tokens, and `--scope` beside the scope-target flag is ACCEPTED — the fourth distinct `--local` outcome measured), the negative plant needed two further variants, and three specified cases were folded or narrowed off sibling owners
+Plan: 17 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-08, 116-09, 116-10, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: the DAG-recomputed wave 4 is nearly closed — 116-07, 116-08 and 116-09 are done; 116-05 and 116-11 remain before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
+Last activity: 2026-09-02 — 116-09 rewrote the marketplace info owner, the thinnest shim in the phase, as 7 runtime cases from 5 marked bodies. It copied 116-08's normative Group-C shape and MEASURED a third diagnostic for the same negative: `getMarketplaceInfo` runs no catch, so the unstated-`cwd` failure dies as `ERR_INVALID_ARG_TYPE` inside `locationsFor` (the list.ts family), while the same plant with a literal working directory dies on the emission count as `ctx.ui.notify is not a function`. Both variants recorded. NFR-5 is proven per-owner by call count on a context-owned fail-fast transport — the architecture suite that gates network reach names orchestrator files only and says nothing about the edge tier. Direct coverage held at branches 2/2, functions 1/1, lines 22/22 — no D-116-01a claim. Six plants, all RED, all reverted; no production file touched. One plan deviation: `must_haves` truth 3's "one above the accepted arity is rejected" is FALSE here for the fifth plan running — the surplus token is DROPPED. A fifth `--local` outcome was measured: this shim never calls `extractLocalFlag`, so `--scope project --local` puts `--local` in the NAME position and the workflow reports `⊘ --local [project] (failed) {not added}`
 
 Progress: [████████░░] 80%
 
