@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.19
 current_phase: 115
 current_phase_name: Composition Orchestrators
-status: planning
-stopped_at: Phase 115 paused at 6 of 8 plans; 115-02 and 115-05 remain
-last_updated: "2026-09-02T02:00:34.223Z"
-last_activity: 2026-09-01
-last_activity_desc: Phase 115 paused after six pairs; gate 18 to 15
-state_head: 65467ffbe7858824c4431221a269b0a7a744e9fa
+status: executing
+stopped_at: Completed 115-02-PLAN.md; 115-05 remains
+last_updated: "2026-09-02T03:05:24.650Z"
+last_activity: 2026-09-02
+last_activity_desc: Phase 115 plan 02 landed at full direct coverage
+state_head: 6324939a0f684e0b9ecff1be54bd6a735d3b43b1
 progress:
   total_phases: 10
   completed_phases: 7
-  total_plans: 169
-  completed_plans: 169
+  total_plans: 177
+  completed_plans: 176
 milestone_name: Unit Test Refactor
 ---
 
@@ -26,19 +26,18 @@ See: `.planning/PROJECT.md` (updated 2026-09-01 after Phase 113)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 114 — Plugin and Marketplace Lifecycle
+**Current focus:** Phase 115 — Composition Orchestrators
 
 ## Current Position
 
-Phase: 115 (Composition Orchestrators) — READY TO PLAN
-Plan: 6 of 8 executed
-Status: Paused. 115-02 unblocked; 115-05 waits on it
-Last activity: 2026-09-01 — Phase 114 closed: verification 75/75, re-review blocker and
-nine warnings fixed, transition applied
+Phase: 115 (Composition Orchestrators) — EXECUTING
+Plan: 7 of 8 executed
+Status: Executing. 115-02 landed; 115-05 remains
+Last activity: 2026-09-02 — Phase 115 execution resumed from pause
 
 Progress: [███████░░░] 70%
 
-One hundred sixty-five of 204 source-test pairs are complete. The remaining 39 are open.
+One hundred sixty-six of 204 source-test pairs are complete. The remaining 38 are open.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -153,6 +152,7 @@ evidence.
 | Phase 112 P26 | 19 min   | 2 tasks | 2 files |
 | Phase 112 P07 | 34 min   | 2 tasks | 3 files |
 | Phase 112 P14 | 16 min   | 2 tasks | 1 file  |
+| Phase 115 P02 | 96 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -296,6 +296,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 113]: Removed one unreachable closed-union presenter default instead of fabricating an impossible test value.
 - [Phase 113]: Restored shipped barrel and interface exports after review showed aggregate dead-code cleanup had narrowed public contracts.
 - [Phase 113]: Replaced passive-value mocks and every broad `anyTimes()` expectation with fresh typed data and exact, explicitly verified interaction doubles.
+- [Phase 115]: Removed five structurally unreachable arms from the import cascade after a caller trace, narrowing two private types so a wrong token is a compile error rather than a runtime signal.
+- [Phase 115]: Deleted the last c8 ignore in the extensions tree by running the entrypoint twice with no dependency bundle, so the production default state loader's own answer is what changes the second outcome.
+- [Phase 115]: A defensive guard can be reached and still not be discriminating; the repair builder's undeclared-source guard is redundant with the already-declared merge check and is reported rather than removed.
 
 ### Pending Todos
 
@@ -319,13 +322,13 @@ None for roadmap creation.
 
 ## Session Continuity
 
-Last session: 2026-09-01T20:29:11.520Z
-Stopped at: Phase 115 paused at 6 of 8 pairs. Landed: 115-01, 115-03, 115-04,
+Last session: 2026-09-02T03:05:22.971Z
+Stopped at: Completed 115-02-PLAN.md; 115-05 remains
 115-07 (wave 1) and 115-06, 115-08 (wave 2). Remaining: 115-02, which is
-unblocked, then 115-05, which waits on it and must also close WINDOWS.md entry
-6. Both carry the exhaustive matrices and an instruction to stop and report
-rather than sample. Debts to know: worktree isolation is off so plans must run
+unblocked, then 115-05, which waits on it and must also close WINDOWS.md
+entry 6. Both carry the exhaustive matrices and an instruction to stop and
+report rather than sample. Debts to know: worktree isolation is off so plans must run
 sequentially; git hooks are not installed in this checkout; npm run check
 short-circuits before its test steps; and phase.complete cannot write the root
 planning files, so 115's transition needs hand-applying like 114's did.
-Resume file: .planning/phases/115-composition-orchestrators/.continue-here.md
+Resume file: None

@@ -496,18 +496,18 @@ Plans:
 3. Every composition arm applies the correct scope, dependency, state, and notification effect.
 4. Bootstrap and pending-state behavior remain idempotent and stable across repeated calls.
 
-**Plans**: 8 plans
+**Plans**: 7/8 plans executed
 
 Plans:
 
-- [ ] **115-01** (`115-01-PLAN.md`, `P115-01`) - `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` → `tests/orchestrators/edge-deps.test.ts`
-- [ ] **115-02** (`115-02-PLAN.md`, `P115-02`) - `extensions/pi-claude-marketplace/orchestrators/import/execute.ts` → `tests/orchestrators/import/execute.test.ts`
-- [ ] **115-03** (`115-03-PLAN.md`, `P115-03`) - `extensions/pi-claude-marketplace/orchestrators/import/index.ts` → `tests/orchestrators/import/index.test.ts`
-- [ ] **115-04** (`115-04-PLAN.md`, `P115-04`) - `extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts` → `tests/orchestrators/plugin/bootstrap.test.ts`
+- [x] **115-01** (`115-01-PLAN.md`, `P115-01`) - `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` → `tests/orchestrators/edge-deps.test.ts`
+- [x] **115-02** (`115-02-PLAN.md`, `P115-02`) - `extensions/pi-claude-marketplace/orchestrators/import/execute.ts` → `tests/orchestrators/import/execute.test.ts`
+- [x] **115-03** (`115-03-PLAN.md`, `P115-03`) - `extensions/pi-claude-marketplace/orchestrators/import/index.ts` → `tests/orchestrators/import/index.test.ts`
+- [x] **115-04** (`115-04-PLAN.md`, `P115-04`) - `extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts` → `tests/orchestrators/plugin/bootstrap.test.ts`
 - [ ] **115-05** (`115-05-PLAN.md`, `P115-05`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts` → `tests/orchestrators/reconcile/apply.test.ts`
-- [ ] **115-06** (`115-06-PLAN.md`, `P115-06`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts` → `tests/orchestrators/reconcile/backfill.test.ts`
-- [ ] **115-07** (`115-07-PLAN.md`, `P115-07`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts` → `tests/orchestrators/reconcile/notify.test.ts`
-- [ ] **115-08** (`115-08-PLAN.md`, `P115-08`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts` → `tests/orchestrators/reconcile/pending.test.ts`
+- [x] **115-06** (`115-06-PLAN.md`, `P115-06`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts` → `tests/orchestrators/reconcile/backfill.test.ts`
+- [x] **115-07** (`115-07-PLAN.md`, `P115-07`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts` → `tests/orchestrators/reconcile/notify.test.ts`
+- [x] **115-08** (`115-08-PLAN.md`, `P115-08`) - `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts` → `tests/orchestrators/reconcile/pending.test.ts`
 
 ### Phase 116: Edge Surface
 
@@ -616,7 +616,7 @@ and commit still owns one pair.
 | 112. Hook Runtime                        |          31/31 | Complete        | 2026-08-31 |
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
-| 115. Composition Orchestrators           |            0/8 | Not started     | -          |
+| 115. Composition Orchestrators           | 7/8 | In Progress|  |
 | 116. Edge Surface                        |           0/30 | Not started     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
 | **Total**                                |    **165/204** | **In Progress** | **-**      |
