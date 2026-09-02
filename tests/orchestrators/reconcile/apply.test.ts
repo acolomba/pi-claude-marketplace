@@ -254,6 +254,13 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
     project: locationsFor("project", cwd),
     user: locationsFor("user", cwd),
     denyWrites: async (directory: string): Promise<void> => {
+      // A 0o555 directory stays writable for uid 0, so under root the EACCES
+      // this helper exists to provoke never happens and the case fails against
+      // the reconcile logic instead of naming the environment. Refuse up front.
+      if (typeof process.getuid === "function" && process.getuid() === 0) {
+        throw new Error("denyWrites cannot deny root; run this suite as a non-root user");
+      }
+
       denied.push(directory);
       await chmod(directory, 0o555);
     },
