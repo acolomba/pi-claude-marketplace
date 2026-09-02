@@ -44,12 +44,12 @@ coverage:
     human_judgment: true
     rationale: "The measured verdict line differs from the number D-116-01a and the plan recorded. The identity of the shortfall is unchanged and the evidence is stronger, but the recorded number is a locked decision artifact, so the correction needs operator ratification rather than an executor edit."
 metrics:
-  duration: "~35 min"
+  duration: "20 min"
   completed: 2026-09-02
 actuals:
   tokens: 3300
   tasks: 1
-  commits: 2
+  commits: 3
 ---
 
 # Phase 116 Plan 02: args Owner Summary
