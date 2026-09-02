@@ -1,7 +1,8 @@
 // Complete relative inventory of one scope root, shared by the install,
-// reinstall, and uninstall retry proofs. It defines the tree-inventory
-// contract those proofs assert against, so it lives in one module rather than
-// once per test file.
+// reinstall, and uninstall retry proofs, by the bootstrap idempotence proof,
+// and by the reconcile owners. It defines the tree-inventory contract those
+// proofs assert against, so it lives in one module rather than once per test
+// file.
 //
 // `readdir` is bound here at module load, before any case installs a mock, for
 // two reasons: a walk must never record itself into the schedule of a case
