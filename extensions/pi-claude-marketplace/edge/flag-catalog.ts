@@ -32,12 +32,14 @@
 // by completion (parse=true, complete=false).
 
 /**
- * A single per-verb flag: its long-flag name, an optional completion
- * description, and the parse/complete visibility bits.
+ * A single per-verb flag: its long-flag name, its completion description, and
+ * the parse/complete visibility bits. The description is REQUIRED so that a
+ * completable entry without one cannot be constructed; `completionFlagEntries`
+ * therefore needs no presence test.
  */
 interface FlagEntry {
   readonly name: string;
-  readonly description?: string;
+  readonly description: string;
   readonly parse: boolean;
   readonly complete: boolean;
 }
@@ -61,9 +63,12 @@ export type CatalogVerb =
   | "bootstrap";
 
 // The scope-target flag is parse-accepted on install/update/uninstall/reinstall/
-// enable/disable but is never offered by completion.
+// enable/disable but is never offered by completion. Its description satisfies
+// the FlagEntry contract and documents the flag for a reader of this file; with
+// complete=false it never reaches `completionFlagEntries` and is never rendered.
 const NON_COMPLETED_SCOPE_TARGET: FlagEntry = {
   name: "--local",
+  description: "Record the declaration in claude-plugins.local.json (WB-01)",
   parse: true,
   complete: false,
 };
@@ -156,16 +161,15 @@ export function isCatalogVerb(value: string): value is CatalogVerb {
 export const SCOPE_TARGET_FLAG = NON_COMPLETED_SCOPE_TARGET.name;
 
 /**
- * Ordered completion entries (name + optional description) for a verb -- the
- * entries flagged `complete: true`, in catalog order. `flagCompletions` spreads
- * these after the global `--scope` base entry.
+ * Ordered completion entries (name + description) for a verb -- the entries
+ * flagged `complete: true`, in catalog order. `flagCompletions` spreads these
+ * after the global `--scope` base entry. Every entry carries a description
+ * because `FlagEntry` requires one, so no presence test is needed here.
  */
 export function completionFlagEntries(verb: CatalogVerb): { name: string; description?: string }[] {
   return CATALOG[verb]
     .filter((f) => f.complete)
-    .map((f) =>
-      f.description === undefined ? { name: f.name } : { name: f.name, description: f.description },
-    );
+    .map((f) => ({ name: f.name, description: f.description }));
 }
 
 /**
