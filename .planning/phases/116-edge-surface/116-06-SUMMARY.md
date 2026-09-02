@@ -263,3 +263,10 @@ Ready for the next plan in Phase 116. Two notes for later plans:
 
 - **Other plans still pin `flag-catalog.ts`** with `git diff --quiet`. That pin compares the working tree against HEAD, so it still passes now that this change is committed. No other plan needs amending.
 - **The order-proof recipe generalizes.** When proving that a derivation preserves declaration order, pick the input whose declared order differs from its sorted order. `116-05` (`completions/provider`) and `116-20` face the same catalog and the same trap.
+
+## Self-Check: PASSED
+
+- `tests/edge/flag-catalog.test.ts` exists on disk.
+- `.planning/phases/116-edge-surface/116-06-SUMMARY.md` exists on disk.
+- All four commits resolve in `git log`: `623f2c0f`, `3968a30b`, `f66a37f4`, `3ccd77ec`.
+- `git diff --quiet` is clean for the three `shared.ts` helpers and `tests/helpers/notification-boundary.ts`; the boundary helper carries no change across the whole plan.
