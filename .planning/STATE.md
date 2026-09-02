@@ -4,11 +4,11 @@ milestone: v1.19
 current_phase: 115
 current_phase_name: Composition Orchestrators
 status: planning
-stopped_at: Phase 115 wave 1 complete (115-01, 115-03, 115-04, 115-07)
-last_updated: "2026-09-02T00:50:30.000Z"
+stopped_at: Phase 115 paused at 6 of 8 plans; 115-02 and 115-05 remain
+last_updated: "2026-09-02T02:00:34.223Z"
 last_activity: 2026-09-01
-last_activity_desc: Phase 115 wave 1 landed; correspondence gate 18 to 15
-state_head: 18ef201ffaa633174492d61aafc4c322278debe5
+last_activity_desc: Phase 115 paused after six pairs; gate 18 to 15
+state_head: 65467ffbe7858824c4431221a269b0a7a744e9fa
 progress:
   total_phases: 10
   completed_phases: 7
@@ -31,8 +31,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 115 (Composition Orchestrators) — READY TO PLAN
-Plan: 4 of 8 executed
-Status: Wave 1 complete; wave 2 next (115-06, 115-08, 115-02)
+Plan: 6 of 8 executed
+Status: Paused. 115-02 unblocked; 115-05 waits on it
 Last activity: 2026-09-01 — Phase 114 closed: verification 75/75, re-review blocker and
 nine warnings fixed, transition applied
 
@@ -320,9 +320,12 @@ None for roadmap creation.
 ## Session Continuity
 
 Last session: 2026-09-01T20:29:11.520Z
-Stopped at: Phase 115 is planned. Eight plans across three waves; the
-plan-checker returned zero blockers and three advisory warnings. Watch 115-02
-and 115-05 during execution — they carry the exhaustive outcome matrices and the
-checker flagged their size as the phase's main risk. The next step is executing
-wave 1 (115-01, 115-03, 115-04, 115-07).
-Resume file: .planning/phases/115-composition-orchestrators/115-CONTEXT.md
+Stopped at: Phase 115 paused at 6 of 8 pairs. Landed: 115-01, 115-03, 115-04,
+115-07 (wave 1) and 115-06, 115-08 (wave 2). Remaining: 115-02, which is
+unblocked, then 115-05, which waits on it and must also close WINDOWS.md entry
+6. Both carry the exhaustive matrices and an instruction to stop and report
+rather than sample. Debts to know: worktree isolation is off so plans must run
+sequentially; git hooks are not installed in this checkout; npm run check
+short-circuits before its test steps; and phase.complete cannot write the root
+planning files, so 115's transition needs hand-applying like 114's did.
+Resume file: .planning/phases/115-composition-orchestrators/.continue-here.md
