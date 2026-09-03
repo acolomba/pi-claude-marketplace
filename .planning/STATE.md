@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: executing
-stopped_at: Completed 117-02-PLAN.md
-last_updated: "2026-09-03T17:42:13.000Z"
+stopped_at: Completed 117-03-PLAN.md
+last_updated: "2026-09-03T17:59:13.000Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 117 execution started
-state_head: 263b9c265e5da9b533b9fbdf30a698308e45a80e
+state_head: 50296404193ecd253d3b6bb786c50e6d8066fdbf
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 220
-  completed_plans: 210
+  completed_plans: 211
 milestone_name: Unit Test Refactor
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 
 Phase: 117 (Extension Entry and Final Gate) — EXECUTING
 Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 verification measured every promise directly rather than reading the summaries. Its one gap — the two
 D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
@@ -220,6 +220,7 @@ evidence.
 | Phase 116 P28 | 30 min | 1 tasks | 1 files |
 | Phase 117 P01 | 11 min | 1 tasks | 1 files |
 | Phase 117 P02 | 15 min | 2 tasks | 10 files |
+| Phase 117 P03 | 16 min | 1 tasks | 27 files |
 
 ## Accumulated Context
 
@@ -413,6 +414,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: The unit-suite glob control lands before the amendment it guards, so the later glob change must turn it RED and back GREEN rather than tune it to agree
 - [Phase 117]: 117-02: a support-module relocation ships as ONE commit carrying the `git mv` and its consumer import rewrites — a pure-move commit leaves the consumers importing a path that no longer exists, so it cannot typecheck, and git still reports the rename at 96 to 98 percent
 - [Phase 117]: 117-02: ESLint and Prettier disagree on the shape of a shortened import — `eslint --fix` split the two integration children's import onto four lines and `prettier --check` then failed, because the shorter sibling specifier let the statement fit one 94-character line; run both, never either alone
+- [Phase 117]: 117-03: shortening an import specifier re-sorts it INSIDE the parent group, not only across groups — the boundary move reddened `import-x/order` in six suites where the plan predicted two, so the ordering must be read off ESLint rather than reasoned about
+- [Phase 117]: 117-03: a 100 percent rename reading is only evidence once the consumer edits are confirmed staged — the identical number was false in 117-02, produced by an aborted `git add`, so cross-check it against `md5sum` and `git log --follow`
 
 ### Pending Todos
 
@@ -436,7 +439,7 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-02-PLAN.md
+**Stopped at:** Completed 117-03-PLAN.md
 
 **Resume file:** None
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
