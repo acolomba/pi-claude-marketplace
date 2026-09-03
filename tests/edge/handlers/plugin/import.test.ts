@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { makeImportHandler } from "../../../extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts";
+import { makeImportHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts";
 
-import type { ImportClaudeSettingsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { ImportClaudeSettingsOptions } from "../../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import type { GitOps } from "../../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
