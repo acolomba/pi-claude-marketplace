@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-25-PLAN.md
-last_updated: "2026-09-03T06:05:00.000Z"
+stopped_at: Completed 116-28-PLAN.md
+last_updated: "2026-09-03T06:12:00.000Z"
 last_activity: 2026-09-02
-last_activity_desc: Phase 116 execution started
+last_activity_desc: Phase 116 plan execution complete
 state_head: 132690965ebe16fb3a70088bddbd43856dfd8190
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 205
+  completed_plans: 206
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,8 +31,10 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 30 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-18, 116-19, 116-20, 116-21, 116-22, 116-23, 116-24, 116-25, 116-26, 116-27, 116-29, 116-30)
-Status: wave 5 (the eleven plugin handlers) is CLOSED — 116-14 through 116-22, 116-24 and 116-25 are all done. One plan remains in the phase: 116-28 (register), wave 6
+Plan: 31 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-18, 116-19, 116-20, 116-21, 116-22, 116-23, 116-24, 116-25, 116-26, 116-27, 116-28, 116-29, 116-30)
+Status: every plan in the phase is EXECUTED. 116-28 (register) closed the last one, wave 6. The phase now goes to its gates — aggregate, code review, regression, verification — which the orchestrator owns, along with the deferred 173/204 pair total and MOD-09
+Last activity: 2026-09-03 — 116-28 rewrote the registration-glue owner and finished the phase's plan set. Every callback the module hands to Pi is now captured off the recorded registration and INVOKED: 11 runtime cases from 11 marked bodies (was 13 cases through a hand-rolled recorder), direct coverage branches 15/15, functions 9/9, lines 143/143 — up from branches 9/10 and functions 7/9, so both previously-unreached functions (the suggestion pass-through and the file-completion trigger) are covered and no D-116-01a claim arises. THREE findings. First, and the one that changes a stated fact: the plan's must_haves truth that the working directory is "captured at registration" is FALSE against the module. `process.cwd()` is evaluated INSIDE the `getArgumentCompletions` arrow (register.ts:107-108), so it is read on every completion invocation; the two-root case therefore asserts the INVOCATION-time root and Plant C (hoisting the read above `pi.registerCommand`) turned exactly that case RED. Two production comments (register.ts:18-20 and 104-106) assert the registration-time property the code does not have; no licence remains to fix them, so they are reported. Second, the plan's literal Plant 3 — "move the working-directory read from registration time into the completion callback" — has NO TARGET, because the read is already there; a zero-diff plant cannot redden anything, and the mirror was run instead. Third, a registration table is DATA and the phase's data-field warning applies: the command name, the event name, the description and both tool names are hand-authored literals matched exactly by the expectation, and only the callbacks beside them are captured, because a function has no structural comparison. Plants G and H (a different command name, a different event name) fail at the CALL SITE across 10 of 11 rows; Plant D (swapping the two tool registrations) reddens exactly one row. Eight plants, eight RED, all reverted; production is byte-identical. The edge tier is now fully mirrored and fully owned: all 30 sources under `extensions/pi-claude-marketplace/edge/` have a mirrored owner, and the one orphan test (`tests/edge/index-handler.test.ts`) is D-116-10's deliberate deferral to Phase 117. npm test 5134/5134 across 295 suites, test:integration 31/31, typecheck/lint/fallow all 0.
+
 Last activity: 2026-09-03 — 116-25 rewrote the plugin update shim owner and CLOSED wave 5, crossing the three target forms with the flag matrix: 22 runtime cases from 9 marked bodies (was 18 cases through a hand-rolled context), direct coverage branches 22/22, functions 2/2, lines 90/90 — up from branches 20/22 and lines 85/90, so BOTH regions the plan named (update.ts:45-46, the early return after the shared map-model parse, and update.ts:51-53, the too-many-arguments rejection) are now covered and no D-116-01a claim arises. SIX findings. First, a NINTH parser/arity/flag combination: extractLocalFlag then parseMapModelArgs plus the handler's own `nonFlagPositionals.length > 1` guard. TWO and THREE references are rejected with `Too many arguments.`, but ZERO is ACCEPTED — it IS the all form — so the surplus half of the arity truth HOLDS and the lower half has NO TARGET. The arity must_haves truth is half false for a SEVENTEENTH consecutive plan. Second, `--local` is ACCEPTED — the FIFTEENTH distinct outcome and the SIXTH acceptance — and it is invisible in the notification, which is byte-identical with and without it; the sole observable difference is that the update's config write-back creates the declaration in claude-plugins.local.json instead of claude-plugins.json. This is 116-22's config-layer shape, NOT 116-24's footprint-invisible one, because update's write-back (maybeWritePluginConfigBack, orchestrators/plugin/shared.ts:1049-1079) targets ONE layer chosen by the flag rather than sweeping both. `--scope user one@alpha --local` honours BOTH selectors, so the mutually-exclusive truth is FALSE for the sixth time. Third, and the answer that made the plan's 'assert the identical outcome' rows falsifiable rather than tautological: an OMITTED scope flag is not a default here. enumerateTargets walks `explicitScope === undefined ? ["project", "user"] : [explicitScope]`, so the omitted form produces a THIRD footprint neither explicit value can — which is what makes absence provable. Plant D (delete the scope conditional spread) turned BOTH scope rows RED plus the both-selectors case, where 116-24's equivalent plant left one row green. Fourth, the Group-C negative fires, and BOTH the scope AND the cwd forwarding discriminate it — 116-19's rule on one axis and the opposite of 116-22 on the other. From ONE plant (delete the too-many-arguments guard) three outcomes: unstated cwd with no scope token gives `A plugin operation has failed. … ⊘ one (failed) {unreadable manifest} cause: The "path" argument must be of type string. Received function`, CAUGHT by the orchestrator so the emission count stays at one; `--scope user` never reaches path.join and the update COMPLETES with `A plugin operation needs attention. … ● one v1.0.0 → v3.0.0 (updated)`; the STATED-cwd variant completes the same way against the project source at v2.0.0. A separate plant on the first scan's early return produced a NEW diagnostic family for this phase: falling through the first rejection lands in the SECOND scanner's rejection, not in the workflow — `TypeError: ctx.ui.notify is not a function` at shared/notify.ts:326 via parsePositionalsWithFlags (edge/handlers/plugin/shared.ts:76). Fifth, SC-4: the https.request zero is asserted in all 22 cases and is an NFR-5 and hermeticity REGRESSION GUARD, not a discriminated measurement. Two independent fixture attempts to reach the door THROUGH this handler both left the counter at zero — a url-source marketplace because makeSyncCloneOnce (orchestrators/plugin/update.ts:293-298) no-ops for every non-github kind, and a github-source marketplace because refreshGitHubClone fails on the absent clone (`Could not find HEAD.`) before reaching the transport — so the fixture cannot reach it and no flag turns it on. An out-of-suite control confirmed the door is instrumented (a direct https.request call moves the counter 0 to 1). Sixth, the four-combination downstream matrix over a plugin whose NEW source declares an unsupported component kind: the gate-widening flag alone decides whether anything materialises and the model-mapping flag alone does NOT widen the gate, so the unsupplied model flag is proven ABSENT rather than present-and-false by the agent frontmatter omitting the field entirely. EIGHT production plants across two files (edge/handlers/plugin/update.ts, edge/handlers/shared.ts), all EIGHT RED, all reverted; both SHA-1s restored (acc5ea9d892560e68e5deeb4b2f1300690df1439, 9c42cb8b2c5c7066e962b50dbef035485c7e0320) and git diff --quiet over the five pinned production files plus tests/helpers/notification-boundary.ts exits 0. npm test 5136/5136 across 293 suites, integration 31/31
 
 Last activity: 2026-09-03 — 116-24 rewrote the plugin uninstall shim owner, the smallest seamless handler and the first destructive verb owned through its ON-DISK FOOTPRINT: 16 runtime cases from 10 marked bodies (was 10 cases matching regular expressions through a hand-rolled context), direct coverage branches 10/10, functions 2/2, lines 42/42 — unchanged, so the thinner rewrite dropped no branch the old suite covered incidentally (T-116-24-B answered). FIVE findings. First, the shape to carry: every case, the eight rejecting ones included, compares the surviving install records of BOTH scope roots as one whole value beside the notification, and both scopes are seeded with the SAME demo@alpha record so a wrong scope shows. Second, an EIGHTH parser/arity/flag combination — extractLocalFlag then parseCommandArgs with ONE REQUIRED positional: zero IS rejected (`Missing required argument.`), but a surplus positional is DROPPED, not rejected, because parseCommandArgs iterates the SCHEMA; `demo@alpha surplus` uninstalls exactly as the bare form does. The arity truth is half false for a sixteenth consecutive plan. Third, `--local` is ACCEPTED — the FOURTEENTH distinct outcome and the fifth acceptance — and it is invisible in BOTH the notification AND the footprint on a healthy workspace, which is a step past 116-22's config-layer answer: uninstallPlugin reads opts.local in ONE place, to pick targetConfigPath for the CFG-03 precondition (uninstall.ts:543-545), and the success path then sweeps BOTH layers unconditionally (378-384). The plan's 'assert the identical outcome' rows would have been a pure tautology; the whole scope-target family was moved onto an override layer that FAILS SCHEMA VALIDATION, where supplying the flag aborts the command and omitting it completes it, with a companion case asserting that opposite outcome. `--scope user --local` is accepted with both selectors honoured, so the mutually-exclusive truth is FALSE for the fifth time. Fourth, the Group-C negative fires, the SCOPE DOES discriminate it (116-19's rule, not 116-20's exception), and ONE plant produced THREE distinct frames: with the cwd unstated the bare form dies at persistence/locations.ts:145 via the unqualified fan-out (orchestrators/plugin/shared.ts:275), `--scope project` dies at the same line via the explicit-scope arm (shared.ts:248), and `--scope user` never reaches path.join at all, runs to COMPLETION and dies on the second ctx.ui access as `ctx.ui.notify is not a function` at notify.ts:3658 via uninstall.ts:737 — the same diagnostic the STATED-cwd variant gives. Fifth, a THIRD SC-4 answer: the uninstall path can reach NO transport at all (the git door is in the import graph only because orchestrators/marketplace/shared.ts, which supplies the unstage cascade, also re-exports the git operations), so unlike 116-20 and 116-21 the fixture cannot reach it AND no input turns it on. The https.request zero is kept in every case and stated in those words as an NFR-5 REGRESSION GUARD with neither a positive control nor a reachable input; an out-of-suite control confirmed the door is instrumented. The plan's literal Plant A does not compile (two TS18048) and dies as a raw TypeError at the handler rather than at the boundary, so it was run, recorded, and then re-run in the form that reaches the workflow. Five production plants across two files (edge/handlers/plugin/uninstall.ts, edge/handlers/shared.ts), all FIVE RED, all reverted; both SHA-1s restored and git diff --quiet over the five pinned production files plus tests/helpers/notification-boundary.ts exits 0. npm test 5132/5132 across 293 suites, integration 31/31
@@ -65,7 +67,7 @@ evidence.
 
 **Velocity:**
 
-- Total plans completed: 151
+- Total plans completed: 152
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -195,6 +197,7 @@ evidence.
 | Phase 116 P11 | 35 min | 1 tasks | 1 files |
 | Phase 116 P05 | 30 min | 1 tasks | 1 files |
 | Phase 116 P17 | 40 min | 2 tasks | 1 files |
+| Phase 116 P28 | 30 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -410,8 +413,22 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-03T05:35:00.000Z
-Stopped at: Completed 116-24-PLAN.md
+Last session: 2026-09-03T06:12:00.000Z
+Stopped at: Completed 116-28-PLAN.md
+tests/edge/register.test.ts is the sole mirrored owner for the registration glue, at 11 runtime
+cases from 11 marked bodies. Direct coverage moved from branches 9/10 and functions 7/9 to branches
+15/15, functions 9/9, lines 143/143, because every callback the module hands to Pi is now captured
+off the recorded registration and INVOKED rather than merely observed as installed. The plan's
+must_haves truth that the working directory is captured AT REGISTRATION is FALSE: `process.cwd()`
+runs inside the completion arrow, so it is read per invocation, and two production comments assert
+the property the code does not have (no licence remains to fix them). The plan's literal Plant 3 has
+no target for the same reason; the mirror was run instead and reddened exactly the two-root case.
+The edge tier is now fully mirrored and fully owned; the only orphan test under tests/edge/ is
+index-handler.test.ts, D-116-10's deliberate deferral to Phase 117. npm test 5134/5134 across 295
+suites, test:integration 31/31, typecheck/lint/fallow all 0. Production is byte-identical after
+eight plants, all eight RED.
+
+Superseded, kept for the trail:
 tests/edge/handlers/plugin/uninstall.test.ts is the sole mirrored owner for the uninstall shim, at
 16 runtime cases from 10 marked bodies. Direct coverage holds at branches 10/10, functions 2/2,
 lines 42/42, so no D-116-01a claim arises and no branch the old suite covered incidentally was lost.
