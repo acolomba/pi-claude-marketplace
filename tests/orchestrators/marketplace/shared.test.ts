@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -616,6 +616,23 @@ test("cascadeUnstagePlugin returns every removed resource in five-kind order", a
   assert.equal(Object.isFrozen(outcome), true);
   assert.equal(Object.isFrozen(outcome.dropped), true);
   assert.equal(Object.values(outcome.dropped).every(Object.isFrozen), true);
+});
+
+test("cascadeUnstagePlugin deletes the staged hooks subtree from the scope root", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-hooks-subtree");
+  const hookFile = path.join(locations.hooksDir, "sample", "hooks.json");
+  await mkdir(path.dirname(hookFile), { recursive: true });
+  await writeFile(hookFile, '{"hooks":{}}');
+  const record = pluginRecord({ hooks: ["sample"] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(outcome.ok, true);
+  assert.deepStrictEqual(outcome.dropped.hooks, ["sample"]);
+  assert.deepStrictEqual(await readdir(locations.hooksDir), []);
 });
 
 test("cascadeUnstagePlugin stops before commands when skill validation fails", async (t) => {
