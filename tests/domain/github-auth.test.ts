@@ -19,6 +19,7 @@ import {
   type DeviceFlowContractParticipant,
   type DeviceFlowContractScenario,
 } from "./device-flow-contract.ts";
+import { createDeviceFlowFake } from "./device-flow-fake.ts";
 
 import type { GitAuthProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import type { CredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
@@ -182,6 +183,54 @@ describe("initiateDeviceFlow", () => {
       authAttempted: true,
     });
     verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("emits the documented AUTH-03 prompt before any token is acquired", async () => {
+    // arrange
+    // The device-code values and the expected prompt below are the published
+    // example in docs/output-catalog.md, "Out-of-band notifications" ->
+    // "Device Flow user-code prompt" (catalog-state: device-flow-prompt).
+    // Changing the emission string in domain/github-auth.ts needs a lockstep
+    // edit of that catalog entry and of the expected string here. The poll
+    // denies authorization, so no access token ever exists while the prompt is
+    // emitted (AUTH-09) and no credential is persisted.
+    const { http } = createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode: {
+        device_code: "device-1",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 0,
+      },
+      pollResponses: [{ kind: "access_denied" }],
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => {
+      notification("Open https://github.com/login/device and enter: ABCD-1234", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "github.com",
+      credentialOps,
+      notifyFn: notification,
+      http,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "User cancelled authorization. Run the command again to retry.",
+      authAttempted: true,
+    });
     verify(credentialOps);
     verify(notification);
     verify(pollingWait);
