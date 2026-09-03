@@ -332,3 +332,15 @@ Wave 5 has 116-24 and 116-25 remaining, plus 116-28 (register) in wave 6. Both r
 plans are seamless Group C and inherit the same three questions this owner re-measured: arity,
 `--local`, and whether the scope discriminates the Group-C negative plant. All three answered
 differently here than in the sibling they would most naturally be copied from.
+
+## Self-Check: PASSED
+
+- `tests/edge/handlers/plugin/reinstall.test.ts` and
+  `.planning/phases/116-edge-surface/116-22-SUMMARY.md` both present on disk.
+- Commits `87fd5673`, `e07ef3b9` and `f2062ca2` all reachable from `git log --all`.
+- The plan's whole `<verify>` chain re-run end to end against the committed pair: exit 0, with the
+  arrange-marker link reporting 14.
+- `git status --short` lists only the operator's pre-existing modified and untracked entries.
+- Nothing filed in `.planning/WINDOWS.md`: this pair carries no stub, no skipped test, no unrun
+  `<verify>` link and no D-116-01a shortfall — the region the plan called possibly unreachable is
+  reached by a real input.
