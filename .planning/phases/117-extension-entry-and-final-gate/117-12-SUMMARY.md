@@ -18,7 +18,7 @@ affects: [milestone-close, gsd-complete-milestone, ship-gate]
 actuals:
   tokens: 24971
   tasks: 3
-  commits: 3
+  commits: 5
 
 tech-stack:
   added: []
