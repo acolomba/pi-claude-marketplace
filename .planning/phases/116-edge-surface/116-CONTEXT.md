@@ -105,6 +105,32 @@ Phases 108 through 115 locked the contract this phase inherits. It is not reopen
   This does NOT widen what counts as unreachable. A branch you merely failed to reach is not a
   claim — it is a gap. The claim is that no input CAN reach it, and the plant is what separates the
   two.
+- **D-116-15 (operator decision, 2026-09-03, after code review):** A THIRD production licence is
+  granted, narrowly, for `extensions/pi-claude-marketplace/edge/handlers/tools.ts`, to fix the two
+  critical findings in `116-REVIEW.md`. This supersedes the "both licences are spent" rule for that
+  file ONLY; every other production file stays closed.
+
+  Both defects are **pre-existing, not regressions from this phase** — `applyFilter` dates to the
+  original extension implementation (#4) and `pluginReasons`'s status branching to #120. They are
+  fixed here rather than deferred because the phase owns this file's pair and is already inside it.
+
+  - **CR-01:** the tool can never return a `remote` or `partially-available` row. `applyFilter` maps
+    "no filter set" to all three of installed/available/unavailable, so `filtersPassive()` is never
+    true on this surface and `shouldShow`'s union arms gate `remote` behind `opts.remote` and
+    `partially-available` behind `opts.partial` — neither of which the tool exposes. Those two arms of
+    `projectRowStatus` are dead on the execute path. Note that a comment 116-27's rewrite REPLACED
+    already recorded this ("on the list surface only the installed / upgradable / available /
+    unavailable subset is reachable"); the knowledge existed and was lost.
+  - **CR-02:** `pluginReasons` omits `disabled`, `available` and `remote`, so three row variants that
+    carry a `reasons` field lose it, contradicting the function's own comment claiming an agent sees
+    the same facts a human sees.
+
+  **Conditions on the licence:** the 116-27 owner suite must gain execute-path fixtures for both
+  statuses (the existing coverage exercises `projectRowStatus` through its direct table only, which is
+  what let the unreachability hide), and **the D-116-14 exhaustiveness pin must be re-measured against
+  the changed switches** — its four recorded diagnostics (three TS2366, one TS7030) are a measurement,
+  not an assumption, and a switch that changes shape may change them.
+
 - **D-116-02:** Runtime cases use separate lowercase `// arrange`, `// act`, and `// assert`
   phases. Lowercase `// act & assert` is reserved for one `assert.throws()` or
   `assert.rejects()` expression. Marker counts equal case **bodies**, not runtime cases — a
