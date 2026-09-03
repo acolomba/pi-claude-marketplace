@@ -26,6 +26,14 @@
 // rather than a re-derivation of the update workflow's own detail tokens, which
 // belong to tests/orchestrators/marketplace/update.test.ts.
 //
+// NFR-5: every case also asserts that the door the git transport opens --
+// `https.request`, replaced by a counting fail-fast throw -- recorded ZERO
+// calls. That zero is a REGRESSION GUARD WITH NO POSITIVE CONTROL, measured to
+// be one rather than assumed to be one: no reachable input moves this counter,
+// because the refresh path dies inside `isomorphic-git` before the transport.
+// The fetch RECORDER, not the zero, is what carries the delegation claim. See
+// `installNetworkCounter` for the measurement.
+//
 // Arity: the positional schema declares ONE optional entry, so zero and one
 // positional are both accepted and there is no count below the accepted range.
 // `parseCommandArgs` walks the SCHEMA rather than the input, so a second
@@ -68,6 +76,7 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -110,8 +119,8 @@ const MARKETPLACE_MANIFEST = `{
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  readonly fetchCallCount: () => number;
+  /** How many times the case reached the replaced git transport door. */
+  readonly networkCallCount: () => number;
 }
 
 interface SeededClones {
@@ -120,8 +129,37 @@ interface SeededClones {
   readonly userAlpha: string;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the marketplace update must reach git through the injected port");
+/**
+ * Replace the door the git transport opens with a counting fail-fast throw
+ * owned by the test context, which restores it after the case.
+ *
+ * The zero asserted against this counter is an NFR-5 REGRESSION GUARD WITH NO
+ * POSITIVE CONTROL, not a discriminated proof, and that limit was measured
+ * rather than assumed. The fixture is not vacuous -- every seeded marketplace
+ * is a url source the workflow really refreshes -- but no reachable input opens
+ * the door. With both `gitOps: deps.gitOps` forwards deleted, so the workflow
+ * falls back to `DEFAULT_GIT_OPS`, five of the seven cases go red on their
+ * MESSAGE (`{network unreachable}`, cause `The function requires a "remote OR
+ * url" parameter but none was provided`) while this counter stays at exactly
+ * ZERO: the refresh path dies inside `isomorphic-git` on a staged clone with no
+ * configured remote, one step before the transport. Having the git door in the
+ * import graph is not the same as having a route that opens it.
+ *
+ * What carries the delegation claim here is therefore the fetch RECORDER beside
+ * this zero, never the zero itself.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
+ * zero here whatever the handler did -- this repository's only `fetch` caller
+ * is the device flow in `domain/github-auth.ts`, and every seeded source sits
+ * on a host with no registered auth provider, so no case reaches it.
+ */
+function installNetworkCounter(t: TestContext): () => number {
+  const networkSpy = t.mock.method(https, "request", (): never => {
+    throw new Error("the marketplace update must reach git through the injected port");
+  });
+  return (): number => networkSpy.mock.callCount();
 }
 
 /** The single fetch a clone pinned to `main` produces on the refresh path. */
@@ -172,11 +210,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount: (): number => fetchSpy.mock.callCount(),
-  };
+  const networkCallCount = installNetworkCounter(t);
+  return { cwd, networkCallCount };
 }
 
 /**
@@ -249,7 +284,7 @@ async function seedThreeMarketplaces(cwd: string): Promise<SeededClones> {
 
 test("updates every recorded marketplace in both scopes when no name is supplied", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "all");
+  const { cwd, networkCallCount } = await createHermeticScope(t, "all");
   const clones = await seedThreeMarketplaces(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 6, {
     value: cwd,
@@ -277,7 +312,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
     fetchOf(clones.projectBeta),
     fetchOf(clones.userAlpha),
   ]);
-  assert.strictEqual(fetchCallCount(), 0);
+  assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
@@ -288,7 +323,7 @@ for (const { args, label, arity } of [
 ]) {
   test(`updates the named marketplace alone and leaves its siblings untouched ${arity}`, async (t) => {
     // arrange
-    const { cwd, fetchCallCount } = await createHermeticScope(t, label);
+    const { cwd, networkCallCount } = await createHermeticScope(t, label);
     const clones = await seedThreeMarketplaces(cwd);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: cwd,
@@ -308,7 +343,7 @@ for (const { args, label, arity } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
     assert.deepStrictEqual(git.state.calls.fetch, [fetchOf(clones.projectAlpha)]);
-    assert.strictEqual(fetchCallCount(), 0);
+    assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -338,7 +373,7 @@ for (const { emissions, probes, rows, scope, touched } of [
 }[]) {
   test(`updates the ${scope} scope alone when --scope ${scope} narrows the command`, async (t) => {
     // arrange
-    const { cwd, fetchCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { cwd, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
     const clones = await seedThreeMarketplaces(cwd);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(
       emissions,
@@ -368,7 +403,7 @@ for (const { emissions, probes, rows, scope, touched } of [
       rows.map((message) => ({ message })),
     );
     assert.deepStrictEqual(git.state.calls.fetch, touched(clones).map(fetchOf));
-    assert.strictEqual(fetchCallCount(), 0);
+    assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -376,7 +411,7 @@ for (const { emissions, probes, rows, scope, touched } of [
 
 test("takes the scope-target flag as the marketplace name instead of rejecting it", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "scope-target");
+  const { cwd, networkCallCount } = await createHermeticScope(t, "scope-target");
   await seedThreeMarketplaces(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: cwd,
@@ -400,14 +435,14 @@ test("takes the scope-target flag as the marketplace name instead of rejecting i
     },
   ]);
   assert.deepStrictEqual(git.state.calls.fetch, []);
-  assert.strictEqual(fetchCallCount(), 0);
+  assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
 
 test("reports an unrecognised scope value with the update usage block and never updates", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "invalid-scope");
+  const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-scope");
   await seedThreeMarketplaces(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitOpsFake({ boundary: "memory" });
@@ -428,7 +463,7 @@ test("reports an unrecognised scope value with the update usage block and never 
     },
   ]);
   assert.deepStrictEqual(git.state.calls.fetch, []);
-  assert.strictEqual(fetchCallCount(), 0);
+  assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });

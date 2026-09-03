@@ -37,6 +37,13 @@
 // for a stable token and any other directory is compared verbatim, so a clone
 // staged under the wrong scope root fails on its raw directory.
 //
+// NFR-5: every case also asserts that the door the git transport opens --
+// `https.request`, replaced by a counting fail-fast throw -- recorded ZERO
+// calls. On the two clone-carrying cases that zero can rise and was measured
+// doing so; on the rejecting cases it is a regression guard. See
+// `installNetworkCounter` for both halves and for why `globalThis.fetch` is not
+// the door watched even though this handler's source is a github one.
+//
 // The delegating case asserts the clone recorder and the boundary sizing, not the
 // two notification bodies the workflow renders: those belong to
 // tests/orchestrators/plugin/bootstrap.test.ts and its two composed orchestrator
@@ -75,6 +82,7 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -136,8 +144,8 @@ const MARKETPLACE_MANIFEST = `{
 interface HermeticScope {
   readonly cwd: string;
   readonly sourceTree: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  readonly fetchCallCount: () => number;
+  /** How many times the case reached the replaced git transport door. */
+  readonly networkCallCount: () => number;
 }
 
 interface GitPort {
@@ -145,8 +153,36 @@ interface GitPort {
   readonly clones: readonly GitCloneCall[];
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the bootstrap handler must reach git through the injected port");
+/**
+ * Replace the door the git transport opens with a counting fail-fast throw
+ * owned by the test context, which restores it after the case.
+ *
+ * On the two clone-carrying cases the zero asserted against this counter CAN
+ * rise, which is what makes it a measurement rather than a regression guard.
+ * Measured: with the `gitOps` forward deleted so the bootstrap source falls
+ * back to `DEFAULT_GIT_OPS`, the hard-coded github source is dialled for real
+ * and this counter reads 1 instead of 0, alongside an empty clone recorder.
+ * What the zero states is therefore that the clone was carried out by the
+ * INJECTED port and never by the real transport. On the eight rejecting cases
+ * the same plant leaves it green -- they never reach a clone -- so there it is
+ * a regression guard.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
+ * zero here whatever the handler did. The bootstrap source IS a github one, so
+ * the device flow in `domain/github-auth.ts` -- this repository's only `fetch`
+ * caller -- is the one path that would use that door; it is not watched because
+ * no case reaches it. `platform/git.ts` consults `credentialOps.fill(host)`
+ * first and hands the device-flow closure to the transport as an `onAuth`
+ * callback, which only a challenge from a real connection can invoke, and the
+ * injected port issues none.
+ */
+function installNetworkCounter(t: TestContext): () => number {
+  const networkSpy = t.mock.method(https, "request", (): never => {
+    throw new Error("the bootstrap handler must reach git through the injected port");
+  });
+  return (): number => networkSpy.mock.callCount();
 }
 
 /**
@@ -188,12 +224,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   );
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    sourceTree,
-    fetchCallCount: (): number => fetchSpy.mock.callCount(),
-  };
+  const networkCallCount = installNetworkCounter(t);
+  return { cwd, sourceTree, networkCallCount };
 }
 
 /**
@@ -239,7 +271,7 @@ function describeClones(clones: readonly GitCloneCall[], stagingRoot: string): G
 
 test("clones through the injected git port into the user scope at the accepted arity", async (t) => {
   // arrange
-  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "accepted");
+  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
   const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
@@ -250,7 +282,7 @@ test("clones through the injected git port into the user scope at the accepted a
 
   // assert
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
-  assert.strictEqual(fetchCallCount(), 0);
+  assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
@@ -261,7 +293,7 @@ for (const { args, label, tokens } of [
 ]) {
   test(`rejects ${tokens} with the no-arguments sentence and never reaches the workflow`, async (t) => {
     // arrange
-    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `positional-${label}`);
+    const { sourceTree, networkCallCount } = await createHermeticScope(t, `positional-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
@@ -273,7 +305,7 @@ for (const { args, label, tokens } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
     assert.deepStrictEqual(git.clones, []);
-    assert.strictEqual(fetchCallCount(), 0);
+    assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -282,7 +314,7 @@ for (const { args, label, tokens } of [
 for (const scope of ["user", "project"] satisfies readonly Scope[]) {
   test(`rejects --scope ${scope} as never accepted, because bootstrap always targets the user scope`, async (t) => {
     // arrange
-    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
@@ -296,7 +328,7 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
       { message: SCOPE_NOT_ACCEPTED_MESSAGE, severity: "error" },
     ]);
     assert.deepStrictEqual(git.clones, []);
-    assert.strictEqual(fetchCallCount(), 0);
+    assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -312,7 +344,7 @@ for (const { args, label, subject } of [
 ]) {
   test(`takes the scope-target flag as a positional and rejects it ${subject}`, async (t) => {
     // arrange
-    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `scope-target-${label}`);
+    const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-target-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
@@ -324,7 +356,7 @@ for (const { args, label, subject } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
     assert.deepStrictEqual(git.clones, []);
-    assert.strictEqual(fetchCallCount(), 0);
+    assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -340,7 +372,7 @@ for (const { args, label, subject } of [
 ]) {
   test(`reports an unrecognised scope value with the bootstrap usage block when ${subject}`, async (t) => {
     // arrange
-    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
+    const { sourceTree, networkCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
@@ -352,7 +384,7 @@ for (const { args, label, subject } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: INVALID_SCOPE_MESSAGE, severity: "error" }]);
     assert.deepStrictEqual(git.clones, []);
-    assert.strictEqual(fetchCallCount(), 0);
+    assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -360,7 +392,7 @@ for (const { args, label, subject } of [
 
 test("converts a thrown bootstrap failure into one failed marketplace row carrying no error text", async (t) => {
   // arrange
-  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "failure");
+  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "failure");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: cwd,
     reads: 1,
@@ -375,7 +407,7 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
   // assert
   assert.deepStrictEqual(notifications, [{ message: FAILED_ROW_MESSAGE, severity: "error" }]);
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
-  assert.strictEqual(fetchCallCount(), 0);
+  assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
