@@ -163,10 +163,12 @@ function checkBaseline() {
   for (const input of baseline.inputs ?? []) {
     const text = read(input.preserved_copy);
     if (hash(text) !== input.sha256) fail(`input hash mismatch: ${input.preserved_copy}`);
-    if (Buffer.byteLength(text) !== input.bytes) fail(`input size mismatch: ${input.preserved_copy}`);
+    if (Buffer.byteLength(text) !== input.bytes)
+      fail(`input size mismatch: ${input.preserved_copy}`);
   }
   const patch = read(baseline.dirty_checkpoint?.patch ?? "DIRTY-CHECKPOINT.patch");
-  if (hash(patch) !== baseline.dirty_checkpoint?.patch_sha256) fail("dirty checkpoint hash mismatch");
+  if (hash(patch) !== baseline.dirty_checkpoint?.patch_sha256)
+    fail("dirty checkpoint hash mismatch");
   facts.input_count = baseline.inputs?.length ?? 0;
 }
 
@@ -174,25 +176,48 @@ function checkTransformations() {
   const baseline = facts.baseline ?? data("BASELINE.yaml");
   const value = data("TRANSFORMATIONS.yaml");
   const [contentBase, oracleHead] = String(value.source_range ?? "").split("..");
-  if (contentBase !== baseline.revisions?.oracle_content_base?.commit) fail("transformation content base differs from baseline");
-  if (oracleHead !== baseline.revisions?.oracle_head?.commit) fail("transformation oracle head differs from baseline");
+  if (contentBase !== baseline.revisions?.oracle_content_base?.commit)
+    fail("transformation content base differs from baseline");
+  if (oracleHead !== baseline.revisions?.oracle_head?.commit)
+    fail("transformation oracle head differs from baseline");
 
   const productionExpected = parseNameStatus(
-    git("diff", "--name-status", "--find-renames=30%", value.source_range, "--", "extensions/pi-claude-marketplace"),
+    git(
+      "diff",
+      "--name-status",
+      "--find-renames=30%",
+      value.source_range,
+      "--",
+      "extensions/pi-claude-marketplace",
+    ),
   ).map(operationSignature);
   const testsExpected = parseNameStatus(
     git("diff", "--name-status", "--find-renames=30%", value.source_range, "--", "tests"),
   ).map(operationSignature);
-  sameSet("production path manifest", (value.production_path_operations ?? []).map(operationSignature), productionExpected);
-  sameSet("test path manifest", (value.test_path_operations ?? []).map(operationSignature), testsExpected);
+  sameSet(
+    "production path manifest",
+    (value.production_path_operations ?? []).map(operationSignature),
+    productionExpected,
+  );
+  sameSet(
+    "test path manifest",
+    (value.test_path_operations ?? []).map(operationSignature),
+    testsExpected,
+  );
   checkDisposition("production_path_operations", value.production_path_operations ?? []);
   checkDisposition("test_path_operations", value.test_path_operations ?? []);
   checkDisposition("production_symbol_moves", value.production_symbol_moves ?? []);
   checkDisposition("test_symbol_moves", value.test_symbol_moves ?? []);
   checkDisposition("intent_commits", value.intent_commits ?? []);
-  checkUnique("intent commits", (value.intent_commits ?? []).map((record) => record.commit));
+  checkUnique(
+    "intent commits",
+    (value.intent_commits ?? []).map((record) => record.commit),
+  );
 
-  for (const move of [...(value.production_symbol_moves ?? []), ...(value.test_symbol_moves ?? [])]) {
+  for (const move of [
+    ...(value.production_symbol_moves ?? []),
+    ...(value.test_symbol_moves ?? []),
+  ]) {
     const fromPath = move.from.replace(/:\d+$/, "");
     const toPath = move.to.replace(/:\d+$/, "");
     if (!revisionHasPath(contentBase, fromPath)) fail(`symbol move source is absent: ${move.from}`);
@@ -209,10 +234,22 @@ function checkContracts() {
   const persistence = data("PERSISTENCE-CONTRACTS.yaml");
   const adapters = data("ADAPTER-CONTRACTS.yaml");
 
-  checkUnique("behavior contract IDs", (behavior.contracts ?? []).map((record) => record.id));
-  checkUnique("public surface IDs", (surface.surfaces ?? []).map((record) => record.id));
-  checkUnique("persistence artifact IDs", (persistence.artifacts ?? []).map((record) => record.id));
-  checkUnique("adapter contract IDs", (adapters.contracts ?? []).map((record) => record.id));
+  checkUnique(
+    "behavior contract IDs",
+    (behavior.contracts ?? []).map((record) => record.id),
+  );
+  checkUnique(
+    "public surface IDs",
+    (surface.surfaces ?? []).map((record) => record.id),
+  );
+  checkUnique(
+    "persistence artifact IDs",
+    (persistence.artifacts ?? []).map((record) => record.id),
+  );
+  checkUnique(
+    "adapter contract IDs",
+    (adapters.contracts ?? []).map((record) => record.id),
+  );
   checkDisposition("behavior contracts", behavior.contracts ?? []);
   checkDisposition("public surfaces", surface.surfaces ?? []);
   checkDisposition("persistence artifacts", persistence.artifacts ?? []);

@@ -326,4 +326,28 @@ export default tseslint.config(
     files: ["eslint.config.js"],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // The repository gate scripts. They are plain ESM JavaScript that Node runs
+    // directly and they sit outside the typed tree on purpose -- tsconfig.json
+    // includes only extensions/**/*.ts and tests/**/*.ts -- so the type-aware
+    // presets are switched off for them the way they are for this config file.
+    // Switching the presets off rather than ignoring the directory keeps every
+    // rule that needs no type information, which is the point: these files
+    // carry the correspondence and direct-coverage invariants and used to be
+    // unlinted, unformatted and untypechecked all at once.
+    files: ["scripts/**/*.mjs"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      // `process.stdout.write` is how a command-line gate reports its verdict.
+      // The IL-2 ban on it is scoped to extensions/**, which these are not.
+      "no-restricted-syntax": "off",
+    },
+  },
 );

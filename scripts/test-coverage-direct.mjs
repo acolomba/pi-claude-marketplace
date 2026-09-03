@@ -364,9 +364,7 @@ export function assertReportComplete(records, modulePaths) {
   }
 
   if (records.length !== modulePaths.length) {
-    throw new Error(
-      `Expected ${modulePaths.length} all-pair records, found ${records.length}`,
-    );
+    throw new Error(`Expected ${modulePaths.length} all-pair records, found ${records.length}`);
   }
 }
 
@@ -473,9 +471,7 @@ async function main() {
   } else if (args.length === 0) {
     pairs = pairsForChangedPaths();
   } else {
-    throw new Error(
-      "Pass one source or test path, --all, --all --report <path>, or no arguments",
-    );
+    throw new Error("Pass one source or test path, --all, --all --report <path>, or no arguments");
   }
 
   if (pairs.length === 0) {

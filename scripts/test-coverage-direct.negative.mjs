@@ -164,8 +164,7 @@ try {
   assert.throws(
     () => assertReportComplete([completeRecords[0], completeRecords[2]], enumeratedModules),
     {
-      message:
-        "Missing from the all-pair result: extensions/pi-claude-marketplace/domain/beta.ts",
+      message: "Missing from the all-pair result: extensions/pi-claude-marketplace/domain/beta.ts",
     },
   );
 
