@@ -108,6 +108,18 @@ const SESSION_ENV_KEYS = ["CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSIO
 
 const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: [] };
 
+/**
+ * Which `event.cwd` read each NFR-2 refusal case targets, and how many reads the
+ * handler makes in all. The discover handler reads the event's working directory
+ * once per stage, in this order: the deferred project-scope hydrate, the
+ * reconcile, the plugin PATH recompute, and the project-scope half of the
+ * resource aggregation. Naming the ordinals states which stage a case refuses;
+ * asserting the total states that the stage list itself has not moved.
+ */
+const CWD_READ_DEFERRED_HYDRATE = 1;
+const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
+const CWD_READS_PER_DISCOVER = 4;
+
 /** The cascade the reconcile renders for a project scope whose state is unreadable. */
 const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
   "Some operations have failed.\n\n" +
@@ -344,14 +356,33 @@ async function loadExtension(emissions: number, toolProbes: number): Promise<Loa
   };
 }
 
-/** A discover event whose working-directory read throws on exactly the nth read. */
-function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): ResourcesDiscoverEvent {
+/**
+ * A discover event whose working-directory read throws on exactly the nth read,
+ * paired with the two counters that make the injection observable.
+ *
+ * The ordinal is a raw coupling to the order in which the handler reads
+ * `event.cwd`, so a case that asserted only the handler's answer would stay
+ * green if a refactor retargeted the injection at another stage -- or past the
+ * last read, where nothing is refused at all. `refused()` states that the
+ * injection was reached, and `readCount()` states how many reads the handler
+ * made in total, so a read added or removed anywhere fails the case instead of
+ * silently moving what it tests.
+ */
+interface CwdRefusal {
+  readonly event: ResourcesDiscoverEvent;
+  readonly refused: () => boolean;
+  readonly readCount: () => number;
+}
+
+function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRefusal {
   let reads = 0;
-  return new Proxy(event, {
+  let refused = false;
+  const proxy = new Proxy(event, {
     get(target, property, receiver): unknown {
       if (property === "cwd") {
         reads += 1;
         if (reads === nth) {
+          refused = true;
           throw new Error(`working directory read ${nth} refused`);
         }
       }
@@ -359,6 +390,12 @@ function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): Resou
       return Reflect.get(target, property, receiver);
     },
   });
+
+  return {
+    event: proxy,
+    refused: () => refused,
+    readCount: () => reads,
+  };
 }
 
 /**
@@ -572,33 +609,59 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   verifyBoundary();
 });
 
+// The two refusal cases below both seed one enabled plugin, so the plugin PATH
+// recompute has something to do. That is what separates them: the answer and the
+// emission count are identical either way, so a case that stated only those two
+// would be the pristine-workspace case written twice under a different title.
+// The recompute is downstream of the hydrate and is itself the stage the second
+// case refuses, so the PATH it leaves behind is the one observable that differs.
+
 test("still answers when the deferred project-scope hydrate fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "hydrate-refused");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  const binDir = path.join(resolvedSource, "bin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
-  const event = eventRefusingCwdRead(discoverEvent(scope.cwd), 1);
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
 
   // act
-  const discovered = await discover(event, ctx);
+  const discovered = await discover(refusal.event, ctx);
 
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
   assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // The refusal landed upstream of the recompute, so that stage still ran.
+  assert.deepStrictEqual(process.env.PATH, `/usr/bin${path.delimiter}${binDir}`);
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
   verifyBoundary();
 });
 
 test("still answers when the plugin PATH recompute fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "recompute-refused");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
-  const event = eventRefusingCwdRead(discoverEvent(scope.cwd), 3);
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_PLUGIN_PATH_RECOMPUTE);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
 
   // act
-  const discovered = await discover(event, ctx);
+  const discovered = await discover(refusal.event, ctx);
 
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
   assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // The refusal landed ON the recompute, so that stage left the PATH alone.
+  assert.deepStrictEqual(process.env.PATH, "/usr/bin");
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, undefined);
   verifyBoundary();
 });
 
