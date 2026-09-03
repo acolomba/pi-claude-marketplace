@@ -3,10 +3,10 @@
 // The catalog's per-verb flag DATA is already pinned exactly by
 // tests/architecture/flag-catalog-drift.test.ts, which reconciles every verb's
 // parse-set and completion labels against the handlers and the completion
-// provider. This owner therefore proves the module's four DERIVATIONS -- the
+// provider. This owner therefore proves the module's DERIVATIONS -- the
 // complete-bit filter, the description key carried through, catalog declaration
-// order, the fresh parse-set, and the scope-target exclusion -- and states no
-// claim about which flags a verb carries.
+// order, the fresh parse-set, the scope-target exclusion, and the exported verb
+// key list -- and states no claim about which flags a verb carries.
 //
 // Two cases name SCOPE_TARGET_FLAG in their expectation on purpose: the promise
 // there is the identity relation between two exports (the name
@@ -28,6 +28,33 @@ import {
   passThroughFlagNames,
   SCOPE_TARGET_FLAG,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
+
+/**
+ * The verbs the catalog indexes, hand-authored so this owner never reads the
+ * key set out of the object it is checking. `CATALOG_VERBS` is
+ * `Object.keys(CATALOG)` and `isCatalogVerb` is `Object.hasOwn(CATALOG, ...)`,
+ * so driving either from the other proves nothing.
+ *
+ * `tests/architecture/flag-catalog-drift.test.ts` reconciles the same set
+ * against its own `Record<CatalogVerb, ...>` pin, but the compiler forces that
+ * Record total over the union, so a verb dropped from the catalog AND the union
+ * in one change leaves it green. This list is what stays behind to catch that,
+ * and it carries the declaration order the Record's sorted comparison does not.
+ */
+const EXPECTED_CATALOG_VERBS: readonly string[] = [
+  "install",
+  "update",
+  "list",
+  "info",
+  "uninstall",
+  "reinstall",
+  "fetch",
+  "enable",
+  "disable",
+  "pending",
+  "import",
+  "bootstrap",
+];
 
 test("completionFlagEntries returns the completable entries in catalog declaration order", () => {
   // arrange
@@ -124,7 +151,7 @@ test("passThroughFlagNames keeps the remaining parse-accepted flags in catalog d
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
 });
 
-for (const verb of CATALOG_VERBS) {
+for (const verb of EXPECTED_CATALOG_VERBS) {
   test(`isCatalogVerb accepts the catalog key "${verb}"`, () => {
     // arrange
     const expectedRecognition = true;
@@ -154,14 +181,13 @@ for (const { candidate, situation } of [
   });
 }
 
-test("CATALOG_VERBS carries at least one key and lists no key twice", () => {
+test("CATALOG_VERBS lists exactly the catalog's verbs, in declaration order", () => {
   // arrange
-  const catalogVerbs = [...CATALOG_VERBS];
+  const expectedVerbs = [...EXPECTED_CATALOG_VERBS];
 
   // act
-  const distinctVerbs = new Set(catalogVerbs);
+  const catalogVerbs = [...CATALOG_VERBS];
 
   // assert
-  assert.ok(catalogVerbs.length > 0);
-  assert.strictEqual(distinctVerbs.size, catalogVerbs.length);
+  assert.deepStrictEqual(catalogVerbs, expectedVerbs);
 });
