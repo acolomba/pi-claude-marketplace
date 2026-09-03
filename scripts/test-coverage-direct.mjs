@@ -124,17 +124,57 @@ function changedPaths() {
   return [...paths].sort();
 }
 
+// The test roots that hold no corresponding tests, mirroring the correspondence gate's set of the
+// same name. A test under one of these has no production pair by design, so mapping it would name a
+// module that was never meant to exist.
+const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
+
+/**
+ * Whether the path is a structural supplement -- a suite owning a contract and its fake rather than
+ * a production module -- mirroring the exemption of the same name in the correspondence gate. Both
+ * companions have to be present, so a suite that merely happens to be named `*-fake.test.ts` is
+ * still treated as a pair member and still has to map.
+ */
+function isStructuralSupplement(projectPath) {
+  const match = /^tests\/(?:domain|platform)\/(?<name>.+)-fake\.test\.ts$/.exec(projectPath);
+
+  if (match === null) {
+    return false;
+  }
+
+  const prefix = projectPath.slice(0, -".test.ts".length);
+  return (
+    existsSync(path.join(projectRoot, `${prefix}.ts`)) &&
+    existsSync(path.join(projectRoot, `${prefix.slice(0, -"-fake".length)}-contract.ts`))
+  );
+}
+
+/**
+ * Whether a changed path names one member of a source-test pair.
+ *
+ * Both halves have to be tight, because `pairForPath` throws rather than skips: a path admitted here
+ * that cannot be mapped aborts the whole run. On the production side that means requiring `.ts`, so
+ * a changed README or JSON fixture under the production root is passed over instead of refused. On
+ * the test side it means excluding the non-corresponding roots and the structural supplements, so
+ * the suites that have no pair by design do not compose a module path that does not exist.
+ */
+function isPairablePath(projectPath) {
+  if (projectPath.startsWith(`${productionRoot}/`)) {
+    return projectPath.endsWith(".ts");
+  }
+
+  if (!projectPath.startsWith(`${testRoot}/`) || !projectPath.endsWith(".test.ts")) {
+    return false;
+  }
+
+  const firstSegment = projectPath.slice(`${testRoot}/`.length).split("/", 1)[0];
+  return !nonCorrespondingRoots.has(firstSegment) && !isStructuralSupplement(projectPath);
+}
+
 function pairsForChangedPaths() {
   const pairs = new Map();
 
-  for (const projectPath of changedPaths()) {
-    if (
-      !projectPath.startsWith(`${productionRoot}/`) &&
-      !(projectPath.startsWith(`${testRoot}/`) && projectPath.endsWith(".test.ts"))
-    ) {
-      continue;
-    }
-
+  for (const projectPath of changedPaths().filter(isPairablePath)) {
     const pair = pairForPath(projectPath);
     pairs.set(pair.sourcePath, pair);
   }
