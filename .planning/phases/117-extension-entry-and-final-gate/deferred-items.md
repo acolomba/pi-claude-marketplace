@@ -62,7 +62,7 @@ it and why that plan could not resolve it.
   glob-completeness control reads the live scripts in `package.json`, which are
   correct.
 
-## 4. `--all` cannot complete: the seven D-116-01a shortfalls are accepted, and the gate has no vocabulary for them
+## 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted
 
 - **Found during:** 117-11 Task 2
 - **File:** `scripts/test-coverage-direct.mjs` (`assertCompleteCoverage`), against the
@@ -88,10 +88,17 @@ it and why that plan could not resolve it.
   workaround (an allowlist of accepted shortfalls) is exactly the thing the phase
   prohibits. How the all-pair gate should represent an accepted shortfall is an
   operator decision, not an executor one.
-- **Suggested owner:** a new plan opened against the operator's answer, before the
-  117-12 sweep closes COV-05.
+- **RESOLUTION (operator, 2026-09-03):** amend D-117-20 to **190 + 7 + 7**. The gate is
+  deliberately NOT changed, no ledger-keyed verdict is added, and no production licence is
+  opened -- a ledger-keyed pass would be D-116-01a's banned pragma wearing a different hat,
+  and the seven are already pinned by identity in their own pairs. The decision record moves
+  to meet the measurement. The retained 204-row result is
+  `117-ALL-PAIR-RESULT.ndjson`, produced by driving the shipped gate once per row and
+  recording each row's exit code; `117-ALL-PAIR-RESULT.md` carries the reading, the line
+  dimension per shortfall, the runtime and the concurrency decision. Ledger entry 27 is
+  closed. Nothing is left for the 117-12 sweep here.
 
-## 5. The PATH interpreter was upgraded mid-phase and reddens 11 tests
+## 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests
 
 - **Found during:** 117-11 Task 2
 - **File:** ten test suites, led by
@@ -112,5 +119,13 @@ it and why that plan could not resolve it.
   (`node-version: "24"` at lines 70, 91, 111 and 132). This is a local-tree hazard, and
   the same class as D-117-18's warning: a whole-value comparison that captures a value
   the runtime owns.
-- **Suggested owner:** the operator, for the runtime; then a plan owning those ten
-  pairs, to stop asserting a runtime-owned property.
+- **RESOLUTION (operator, 2026-09-03):** an authorized scope addition to plan 117-11
+  hardened the assertions in place. The measured set was **12 sites across 10 files** --
+  two projecting the errno `path` and ten pinning the errno message text -- not the 16
+  sites across 7 suites the failure log suggested. `tests/bridges/commands/unstage.test.ts`
+  was correctly left alone: its `unlink` message is path-based and always carried the path.
+  The fix keeps every comparison whole-value: projections that already carry `code` and
+  `syscall` drop the derived field, and the five sites where production composes its own
+  sentence read the runtime's wording back from the same failing read. Measured after:
+  `npm test` 5142/295/0 on v26.8.1, and the ten suites 411/411 on BOTH v22.22.2 and
+  v26.8.1. Five plants confirm the assertions still fire. Ledger entry 28 is closed.

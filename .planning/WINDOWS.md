@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 23
+open_count: 21
 waived_count: 0
-fixed_count: 5
+fixed_count: 7
 total_count: 28
-last_updated: 2026-09-03T21:13:11.747Z
+last_updated: 2026-09-03T22:06:14.027Z
 ---
 
 # Broken Windows Ledger
@@ -41,8 +41,8 @@ last_updated: 2026-09-03T21:13:11.747Z
 | 24 | 117 | stub | docs/output-catalog.md | 2729 | Output catalog still names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock; the lock now lives in tests/domain/github-auth.test.ts | open |  | 2026-09-03T18:29:36.570Z |  |
 | 25 | 117 | deviation | .planning/codebase/TESTING.md | 124 | TESTING.md still describes tests/helpers/ as live and names four modules by their pre-move paths; the directory and both glob alternatives are gone as of 117-07 | open |  | 2026-09-03T19:17:31.820Z |  |
 | 26 | 117 | deviation | extensions/pi-claude-marketplace/bridges/hooks/event-router.ts | 741 | Comment justifying the SessionStart gate on ensureSharedDataDir names tests/edge/index-handler.test.ts as the pin for the WR-05 clean-reconcile invariant; 117-08 deleted that suite and may not edit production. The invariant itself survives: tests/index.test.ts asserts neither scope root is created by a clean reconcile. | open |  | 2026-09-03T19:50:24.976Z |  |
-| 27 | 117 | unrun-verify | scripts/test-coverage-direct.mjs |  | test:coverage:direct:all cannot complete on this tree: it throws on the first of the seven accepted D-116-01a single-branch shortfalls (ledger 15-19, 21, 22), so COV-05's 204-row result is 190 complete records + 7 accepted shortfalls + 7 type-only, not D-117-20's 197 + 7 | open |  | 2026-09-03T21:13:03.167Z |  |
-| 28 | 117 | deviation | tests/bridges/agents/marker.test.ts | 232 | PATH node was upgraded v26.7.0 -> v26.8.1 mid-phase (26.7.0 no longer in the Cellar). On 26.8.1 readFile on a directory attaches path to the EISDIR error; eleven whole-value assertions across ten suites compare against path: undefined and now fail. Measured: npm test is 5131/11 on v26.8.1 and 5142/0 on /usr/bin/node v22.22.2. CI is unaffected (pins Node 24). Same class as D-117-18: a whole-value comparison capturing a runtime-owned value. | open |  | 2026-09-03T21:13:11.747Z |  |
+| 27 | 117 | unrun-verify | scripts/test-coverage-direct.mjs |  | test:coverage:direct:all cannot complete on this tree: it throws on the first of the seven accepted D-116-01a single-branch shortfalls (ledger 15-19, 21, 22), so COV-05's 204-row result is 190 complete records + 7 accepted shortfalls + 7 type-only, not D-117-20's 197 + 7 | fixed |  | 2026-09-03T21:13:03.167Z | 2026-09-03T22:06:14.027Z |
+| 28 | 117 | deviation | tests/bridges/agents/marker.test.ts | 232 | PATH node was upgraded v26.7.0 -> v26.8.1 mid-phase (26.7.0 no longer in the Cellar). On 26.8.1 readFile on a directory attaches path to the EISDIR error; eleven whole-value assertions across ten suites compare against path: undefined and now fail. Measured: npm test is 5131/11 on v26.8.1 and 5142/0 on /usr/bin/node v22.22.2. CI is unaffected (pins Node 24). Same class as D-117-18: a whole-value comparison capturing a runtime-owned value. | fixed |  | 2026-09-03T21:13:11.747Z | 2026-09-03T22:06:08.080Z |
 
 ````json
 [
@@ -365,10 +365,10 @@ last_updated: 2026-09-03T21:13:11.747Z
     "file": "scripts/test-coverage-direct.mjs",
     "line": null,
     "description": "test:coverage:direct:all cannot complete on this tree: it throws on the first of the seven accepted D-116-01a single-branch shortfalls (ledger 15-19, 21, 22), so COV-05's 204-row result is 190 complete records + 7 accepted shortfalls + 7 type-only, not D-117-20's 197 + 7",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T21:13:03.167Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-03T22:06:14.027Z"
   },
   {
     "id": 28,
@@ -377,10 +377,10 @@ last_updated: 2026-09-03T21:13:11.747Z
     "file": "tests/bridges/agents/marker.test.ts",
     "line": 232,
     "description": "PATH node was upgraded v26.7.0 -> v26.8.1 mid-phase (26.7.0 no longer in the Cellar). On 26.8.1 readFile on a directory attaches path to the EISDIR error; eleven whole-value assertions across ten suites compare against path: undefined and now fail. Measured: npm test is 5131/11 on v26.8.1 and 5142/0 on /usr/bin/node v22.22.2. CI is unaffected (pins Node 24). Same class as D-117-18: a whole-value comparison capturing a runtime-owned value.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T21:13:11.747Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-03T22:06:08.080Z"
   }
 ]
 ````
