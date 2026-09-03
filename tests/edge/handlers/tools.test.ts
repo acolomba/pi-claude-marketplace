@@ -11,13 +11,19 @@
 // written-out literal, never a value this suite derives by re-running the
 // production classification it is checking.
 //
-// D-02 / SC-4: both tools are read-only, so every case replaces the process-wide
-// transport with a fail-fast stub and asserts its call count is zero. The Pi
-// boundary states no `ctx.ui` and no `pi.getAllTools()` expectation at all, which
-// is what proves the tools neither notify nor probe for a companion extension.
+// D-02 / SC-4: both tools are read-only, so every case replaces `https.request`
+// -- the door the git transport opens -- with a counting fail-fast stub and
+// asserts its call count is zero. That zero is an NFR-5 regression guard, NOT a
+// discriminated proof: the fixture can reach the transport (`remote-mp`
+// declares a git source with no clone) but no parameter either tool exposes
+// turns materialization on, so no positive control exists. See
+// `installNetworkCounter`. The Pi boundary states no `ctx.ui` and no
+// `pi.getAllTools()` expectation at all, which is what proves the tools neither
+// notify nor probe for a companion extension.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
@@ -82,8 +88,8 @@ type PluginStatus = PluginNotificationMessage["status"];
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
+  /** How many times the case reached the replaced git transport door. */
+  networkCallCount(): number;
 }
 
 interface SeededInstall {
@@ -133,8 +139,33 @@ interface ExpectedPluginRow {
   readonly reasons?: readonly string[];
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the read-only tool surface must not reach the network");
+/**
+ * Replace the door the git transport opens with a counting fail-fast throw
+ * owned by the test context, which restores it after the case.
+ *
+ * The zero asserted against this counter is an NFR-5 REGRESSION GUARD WITH NO
+ * POSITIVE CONTROL, and the two halves of that are separate facts. The fixture
+ * is NOT vacuous: `remote-mp` declares `https://127.0.0.1:9/alpha.git`, a git
+ * source with no clone on disk, which is an input that would need the network
+ * to resolve any further -- the row is projected offline instead. But no
+ * parameter either tool exposes turns materialization on, so there is no 0
+ * versus non-0 pair to assert, and this zero is not presented as a
+ * discriminated proof.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
+ * zero here whatever the tools did. The instrument itself is known to fire: a
+ * live `https.request` call planted in `loadToolPluginPayload` turns 28 of this
+ * suite's 53 cases red -- every case that routes through the plugin-list tool
+ * body -- so the absence of a positive control is a fact about the tool's
+ * parameter space, not about the detector.
+ */
+function installNetworkCounter(t: TestContext): () => number {
+  const networkSpy = t.mock.method(https, "request", (): never => {
+    throw new Error("the read-only tool surface must not open a network connection");
+  });
+  return (): number => networkSpy.mock.callCount();
 }
 
 /**
@@ -168,13 +199,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
-  };
+  const networkCallCount = installNetworkCounter(t);
+  return { cwd, networkCallCount };
 }
 
 function marketplaceRootIn(cwd: string, marketplaceName: string): string {
@@ -443,7 +469,7 @@ describe("registerListMarketplacesTool", () => {
       })),
       [expectedDefinition],
     );
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -467,7 +493,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -520,7 +546,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 });
@@ -916,7 +942,7 @@ describe("registerListPluginsTool", () => {
       })),
       [expectedDefinition],
     );
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -939,7 +965,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.deepStrictEqual(scope.fetchCallCount(), 0);
+      assert.strictEqual(scope.networkCallCount(), 0);
       verifyBoundary();
     });
   }
@@ -963,7 +989,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.deepStrictEqual(scope.fetchCallCount(), 0);
+      assert.strictEqual(scope.networkCallCount(), 0);
       verifyBoundary();
     });
   }
@@ -1016,7 +1042,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1059,7 +1085,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1108,7 +1134,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1155,7 +1181,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.deepStrictEqual(scope.fetchCallCount(), 0);
+      assert.strictEqual(scope.networkCallCount(), 0);
       verifyBoundary();
     });
   }
@@ -1204,7 +1230,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1226,7 +1252,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1247,7 +1273,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1296,7 +1322,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1345,7 +1371,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1378,7 +1404,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1405,7 +1431,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1445,7 +1471,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 
@@ -1475,7 +1501,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
 });
