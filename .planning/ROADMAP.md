@@ -576,7 +576,7 @@ Plans:
 4. Planted negative controls fail for their intended violations, and the clean tree passes focused tests, all-pair coverage, and `npm run check`.
 5. Public, persistence, adapter, and named product contracts remain unchanged. Prohibited preservation and migration mechanisms are absent.
 
-**Plans**: 4/12 plans executed
+**Plans**: 6/12 plans executed
 
 Plans:
 
@@ -584,8 +584,8 @@ Plans:
 - [x] 117-02-PLAN.md
 - [x] 117-03-PLAN.md
 - [x] 117-04-PLAN.md
-- [ ] 117-05-PLAN.md
-- [ ] 117-06-PLAN.md
+- [x] 117-05-PLAN.md
+- [x] 117-06-PLAN.md
 - [ ] 117-07-PLAN.md
 - [ ] 117-08-PLAN.md
 - [ ] 117-09-PLAN.md
@@ -643,5 +643,5 @@ and commit still owns one pair.
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
 | 116. Edge Surface                        |          31/31 | Complete        | 2026-09-03 |
-| 117. Extension Entry and Final Gate      | 4/12 | In Progress|  |
+| 117. Extension Entry and Final Gate      | 6/12 | In Progress|  |
 | **Total**                                |    **203/204** | **In Progress** | **-**      |
