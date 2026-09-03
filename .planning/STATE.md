@@ -4,11 +4,11 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: phase_complete
-stopped_at: Phase 116 verified and closed
-last_updated: "2026-09-03T08:15:00.000Z"
+stopped_at: Phase 117 context gathered
+last_updated: "2026-09-03T12:47:03.176Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 116 complete - verification passed 6 of 6
-state_head: f093e5439dcd8b84f35c8c7251f0ec83b907214a
+state_head: 9774a421a00fbb4bd5e4b55a260b8c5b3be730d9
 progress:
   total_phases: 10
   completed_phases: 9
@@ -431,14 +431,19 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Resume file:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
+**Stopped at:** Phase 117 context gathered
+
+**Resume file:** `.planning/phases/117-extension-entry-and-final-gate/117-CONTEXT.md` — phase 117's
+decisions, with every count in it measured in this tree rather than inherited.
+
+**Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03. Phase 116 closed — verified, transitioned, ROADMAP and STATE updated by hand.
+Last session: 2026-09-03. Phase 117 context gathered — six areas discussed, all decided.
 
-**Next: Phase 117 (Extension Entry and Final Gate).** Nothing exists for it yet — no directory, no
-CONTEXT.md, no plans. Start with `/gsd-discuss-phase 117`, then plan, then execute.
+**Next: Phase 117 (Extension Entry and Final Gate).** CONTEXT.md and DISCUSSION-LOG.md exist
+(`9774a421`); no research and no plans yet. Continue with `/gsd-plan-phase 117`, then execute.
 
 ### What Phase 117 inherits
 
