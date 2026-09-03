@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 20
+open_count: 21
 waived_count: 0
 fixed_count: 5
-total_count: 25
-last_updated: 2026-09-03T19:17:31.820Z
+total_count: 26
+last_updated: 2026-09-03T19:50:24.976Z
 ---
 
 # Broken Windows Ledger
@@ -40,6 +40,7 @@ last_updated: 2026-09-03T19:17:31.820Z
 | 23 | 117 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts | 476 | Doc comment on isHooksResolverNote still cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts; 117-04 moved that suite to tests/architecture/ and may not edit production | open |  | 2026-09-03T18:15:25.451Z |  |
 | 24 | 117 | stub | docs/output-catalog.md | 2729 | Output catalog still names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock; the lock now lives in tests/domain/github-auth.test.ts | open |  | 2026-09-03T18:29:36.570Z |  |
 | 25 | 117 | deviation | .planning/codebase/TESTING.md | 124 | TESTING.md still describes tests/helpers/ as live and names four modules by their pre-move paths; the directory and both glob alternatives are gone as of 117-07 | open |  | 2026-09-03T19:17:31.820Z |  |
+| 26 | 117 | deviation | extensions/pi-claude-marketplace/bridges/hooks/event-router.ts | 741 | Comment justifying the SessionStart gate on ensureSharedDataDir names tests/edge/index-handler.test.ts as the pin for the WR-05 clean-reconcile invariant; 117-08 deleted that suite and may not edit production. The invariant itself survives: tests/index.test.ts asserts neither scope root is created by a clean reconcile. | open |  | 2026-09-03T19:50:24.976Z |  |
 
 ````json
 [
@@ -341,6 +342,18 @@ last_updated: 2026-09-03T19:17:31.820Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-03T19:17:31.820Z",
+    "resolved_at": null
+  },
+  {
+    "id": 26,
+    "kind": "deviation",
+    "phase": "117",
+    "file": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+    "line": 741,
+    "description": "Comment justifying the SessionStart gate on ensureSharedDataDir names tests/edge/index-handler.test.ts as the pin for the WR-05 clean-reconcile invariant; 117-08 deleted that suite and may not edit production. The invariant itself survives: tests/index.test.ts asserts neither scope root is created by a clean reconcile.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-03T19:50:24.976Z",
     "resolved_at": null
   }
 ]

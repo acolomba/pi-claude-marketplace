@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: executing
-stopped_at: Completed 117-07-PLAN.md
-last_updated: "2026-09-03T19:20:34.698Z"
+stopped_at: Completed 117-08-PLAN.md
+last_updated: "2026-09-03T19:54:07.142Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 117 execution started
-state_head: 5a244641a67854328486a40403cabb56a31f771f
+state_head: bd93a1f477abf8c095945cfc7160d24562e8da49
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 220
-  completed_plans: 215
+  completed_plans: 216
 milestone_name: Unit Test Refactor
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 
 Phase: 117 (Extension Entry and Final Gate) — EXECUTING
 Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
 verification measured every promise directly rather than reading the summaries. Its one gap — the two
 D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
@@ -225,6 +225,7 @@ evidence.
 | Phase 117 P05 | 9 min | 1 tasks | 2 files |
 | Phase 117 P06 | 13 min | 1 tasks | 2 files |
 | Phase 117 P07 | 28 min | 2 tasks | 17 files |
+| Phase 117 P08 | 22 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -428,6 +429,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: The seed's own three production specifiers gained a climb because its new home is one directory deeper; no consumer rewrite reveals that, only reading the module does.
 - [Phase 117]: The helpers glob alternative was removed for honesty, not function: both globs match the same 248 paths with and without it, and the 117-01 completeness control is the independent proof.
 - [Phase 117]: Shortening an import specifier re-sorts it inside the parent group with no predictable direction: 13 handler suites moved a line, the mirror image of 117-03's effect.
+- [Phase 117]: The extension entry pair asserts two notifications for an unreadable install state, not one: the reconcile renders its own failure cascade for the same file before the plugin-PATH warning, and the legacy filtered assertion concealed it. — Measured on this tree; the whole two-element notification list is now compared.
+- [Phase 117]: Both entry-pair fixtures use a schema violation rather than a syntax error, because the reconcile renders the runtime JSON parser text into a user-visible message and that text is not part of any contract. — Keeps the whole-value cascade comparisons stable across Node versions; this tree runs v26.7.0 while CI pins 24.
 
 ### Pending Todos
 
@@ -451,7 +454,7 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-07-PLAN.md
+**Stopped at:** Completed 117-08-PLAN.md
 
 **Resume file:** None
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
@@ -461,7 +464,7 @@ lines) beside them.
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03T19:19:59.312Z
+Last session: 2026-09-03T19:53:48.355Z
 
 **Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
 six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
