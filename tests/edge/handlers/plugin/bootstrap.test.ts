@@ -1,120 +1,213 @@
-// bootstrap handler shim tests.
+// Owner for edge/handlers/plugin/bootstrap.ts (MOD-09).
 //
-// Mirrors `tests/edge/handlers/marketplace/autoupdate.test.ts` shape
-// (hermetic HOME + NotifyRecord harness) with two additions:
-//   - the dispatch cases supply a mocked GitOps so the orchestrator can
-//     run end-to-end without touching the network.
-//   - argument-validation cases use a no-op GitOps (orchestrator is
-//     never invoked when the handler short-circuits on usage).
+// This is the one handler in the tier that REJECTS a scope flag instead of
+// forwarding it, and one of the two that emit through the probing notification
+// path rather than the usage-error path. Both facts are visible in how each case
+// sizes the shared boundary: the three rejection sentences reach
+// `notifyUsageError`, which probes nothing, so those cases state one emission and
+// ZERO probes; the delegating and failure cases reach `notify()`, which runs one
+// soft-dependency probe per emission and reads the tool list twice per probe, so
+// they state two probes per emission. Every count here was measured against the
+// real module through a counting context before a line was written: the workflow
+// emits twice (add, then autoupdate) and the failure conversion emits once, and
+// the handler reads `ctx.cwd` exactly once on the path that reaches the workflow
+// and never on a rejection path.
+//
+// D-116-05 (O3) places this handler in the injected-port group: `deps.gitOps` is
+// threaded into the bootstrap workflow at one real call site (the module's other
+// mention of it is its own header comment), so the port itself is the seam. What
+// the clone recorder pins was narrowed to what a plant can measure: the git
+// operation the workflow performs is CARRIED OUT BY the injected implementation.
+// A port re-boxed as a spread copy, and a port with one member wrapped around a
+// call back into the injected one, both still record, so no case claims object
+// identity or member identity. A port whose implementation is replaced records
+// nothing and turns both clone-carrying cases red.
+//
+// The bootstrap source is a hard-coded github shorthand, and a github source
+// resolves the GitHub provider, which attaches a credential bundle whose
+// functions are not structured-clonable -- `createGitOpsFake` records each call
+// with `structuredClone`, so the raw fake throws inside its own recorder before
+// the workflow can run. The port therefore drops that downstream-owned bundle and
+// delegates every operation, including the clone itself, to the fake. It is not a
+// hand-rolled object of git functions: every member is the fake's own.
+//
+// The staging directory carries a `randomUUID()` leaf, so the recorded `dir`
+// cannot be a hand-authored literal. The recorder is still compared as one whole
+// value: a leaf that is a UUID under the USER scope's staging root is substituted
+// for a stable token and any other directory is compared verbatim, so a clone
+// staged under the wrong scope root fails on its raw directory.
+//
+// The delegating case asserts the clone recorder and the boundary sizing, not the
+// two notification bodies the workflow renders: those belong to
+// tests/orchestrators/plugin/bootstrap.test.ts and its two composed orchestrator
+// pairs. An exact `times(2)` on the boundary is what proves the workflow ran to
+// completion here. The failure row is the opposite case -- the handler builds that
+// payload itself, so its rendered bytes are this owner's to claim, and the thrown
+// error carries a sentinel message that the compared value proves never reaches
+// the user channel.
+//
+// Arity: this handler parses raw arguments with `parseArgs` and rejects a
+// non-empty positional list itself, so the accepted arity is ZERO positionals and
+// one above it IS a rejection -- unlike the `parseCommandArgs` siblings, which
+// walk the schema and drop surplus tokens. There is no count below zero, so that
+// half of the arity claim has no target here and no case asserts it.
+//
+// The scope-target flag is not a mutually exclusive selector against `--scope`
+// either: this handler never reaches `extractLocalFlag`, so `--local` is an
+// ordinary token that lands on `positional`. Supplied beside a scope flag it is
+// rejected by the positional guard before the scope guard is consulted, which is
+// what pins the order of the three guards; the unrecognised-scope rows pin the
+// parse failure ahead of both, by driving one row with a positional token already
+// present.
+//
+// The rejection cases build the plugin-update port as a strict mock with NO
+// stated expectation, so a green case proves the handler never touches it, and
+// they omit the boundary's `cwd`, so the early return is proven to read nothing
+// off the context.
+//
+// No exhaustiveness claim: the module holds no switch and no closed-union
+// dispatch, so a missing-arm plant has no target here. No case asserts the
+// absence of direct process output (ESLint and fallow own that), and none
+// restates the tokenizer or scope-validator rules owned by
+// tests/edge/args.test.ts -- the unrecognised-scope rows claim that this
+// handler's own usage block reached the catch-and-notify path and that the
+// workflow never started.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test, type TestContext } from "node:test";
+
+import { mock, verify } from "strong-mock";
 
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
-import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+// Both port shapes are derived from the handler's own dependency object, so a
+// change to either injection seam is a compile error in this suite rather than a
+// silently stale hand-copied type.
+type PluginUpdate = EdgeDeps["pluginUpdate"];
+type GitCloneCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"][number];
+
+/** Each written out by hand; never read back off the module under test. */
+const NO_ARGUMENTS_MESSAGE = "bootstrap takes no arguments.\n\nUsage: /claude:plugin bootstrap";
+
+const SCOPE_NOT_ACCEPTED_MESSAGE =
+  "bootstrap does not accept --scope; it always targets user scope.\n\nUsage: /claude:plugin bootstrap";
+
+const INVALID_SCOPE_MESSAGE =
+  'Invalid --scope value: "nope". Must be "user" or "project".\n\nUsage: /claude:plugin bootstrap';
+
+/**
+ * The row the handler's own catch builds. The marketplace name comes from the
+ * orchestrator constant because that module owns it; everything else -- the
+ * failure header, the failed glyph, the user scope bracket and the status token
+ * -- is written out by hand.
+ */
+const FAILED_ROW_MESSAGE = `A marketplace operation has failed.\n\n⊘ ${BOOTSTRAP_MARKETPLACE_NAME} [user] (failed)`;
+
+/** Distinctive enough that the compared row proves it never reached the user. */
+const REFUSED_CLONE_MESSAGE = "@@the injected git port refused this clone@@";
+
+const CLONE_URL = "https://github.com/anthropics/claude-plugins-official.git";
+
+/** Stands in for the `randomUUID()` staging leaf, which cannot be a literal. */
+const STAGED_CLONE_DIR = "<sources-staging>/<uuid>";
+const UUID_LEAF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The single clone the hard-coded github shorthand produces, authless. */
+const BOOTSTRAP_CLONE: GitCloneCall = { dir: STAGED_CLONE_DIR, url: CLONE_URL };
+
+/** The manifest the cloned staging tree carries. */
+const MARKETPLACE_MANIFEST = `{
+  "name": "${BOOTSTRAP_MARKETPLACE_NAME}",
+  "owner": { "name": "seed owner" },
+  "plugins": [{ "name": "hello", "source": "./plugins/hello", "version": "1.0.0" }]
+}
+`;
+
+interface HermeticScope {
+  readonly cwd: string;
+  readonly sourceTree: string;
+  /** How many times the case reached the replaced process-wide transport. */
+  readonly fetchCallCount: () => number;
 }
 
-function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  const ctx = {
-    cwd,
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-    pi: { getAllTools: (): unknown[] => [] },
-  } as unknown as ExtensionCommandContext;
-  return { ctx, notifications };
+interface GitPort {
+  readonly gitOps: EdgeDeps["gitOps"];
+  readonly clones: readonly GitCloneCall[];
 }
 
-// `makeBootstrapHandler(pi, deps)` requires `pi`
-// as first positional arg (the composed `addMarketplace` /
-// `setMarketplaceAutoupdate` orchestrators require `pi`).
-function makePi(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
+function refuseNetwork(): Promise<Response> {
+  throw new Error("the bootstrap handler must reach git through the injected port");
 }
 
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "bootstrap-shim-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "bootstrap-shim-cwd-"));
-  process.env.HOME = home;
-  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
-  // to homedir(). Clear it so the hermetic HOME above actually governs the
-  // user scope -- otherwise a developer/CI env that sets the variable would
-  // make these tests install bootstrap records into the real Pi agent dir.
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await fn({ cwd });
-  } finally {
-    if (originalHome === undefined) {
+/**
+ * One temporary working directory, one temporary home, and one source tree per
+ * case, with the agent-directory variable cleared: `getAgentDir()` reads it
+ * before `homedir()`, so an ambient value would defeat a hermetic `HOME` (SC-1).
+ * Removal and both environment restores are registered before the handler runs.
+ */
+async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
+  const cwd = await mkdtemp(path.join(tmpdir(), `plugin-bootstrap-${label}-cwd-`));
+  const home = await mkdtemp(path.join(tmpdir(), `plugin-bootstrap-${label}-home-`));
+  const sourceTree = await mkdtemp(path.join(tmpdir(), `plugin-bootstrap-${label}-source-`));
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  const previousHome = process.env.HOME;
+  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
+    } else {
       delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
     }
 
-    if (originalAgentDir === undefined) {
+    if (agentDirExisted) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
       delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
-    await rm(home, { recursive: true, force: true });
     await rm(cwd, { recursive: true, force: true });
-  }
-}
-
-function fixtureClaudePluginsOfficial(): string {
-  return path.join(
-    path.dirname(new URL(import.meta.url).pathname),
-    "..",
-    "..",
-    "..",
-    "orchestrators",
-    "plugin",
-    "_fixtures",
-    "claude-plugins-official",
+    await rm(home, { recursive: true, force: true });
+    await rm(sourceTree, { recursive: true, force: true });
+  });
+  await mkdir(path.join(sourceTree, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceTree, ".claude-plugin", "marketplace.json"),
+    MARKETPLACE_MANIFEST,
+    "utf8",
   );
+  process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
+  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
+  return {
+    cwd,
+    sourceTree,
+    fetchCallCount: (): number => fetchSpy.mock.callCount(),
+  };
 }
 
-function fixtureMarketplaceDir(name: "valid-marketplace"): string {
-  return path.join(
-    path.dirname(new URL(import.meta.url).pathname),
-    "..",
-    "..",
-    "..",
-    "orchestrators",
-    "marketplace",
-    "_fixtures",
-    name,
-  );
-}
-
-function makeMockGitOps(options: { readonly fixtureSourceDir: string }) {
+/**
+ * The git port, which admits only the one remote a case may reach and drops the
+ * GitHub credential bundle the provider attaches, because the recorder clones
+ * every call structurally and a function member cannot survive that. Every
+ * operation, the clone included, is the fake's own.
+ */
+function createGitPort(sourceTree: string, cloneError?: Error): GitPort {
   const git = createGitOpsFake({
     boundary: "memory",
-    allowedRemoteUrls: ["https://github.com/anthropics/claude-plugins-official.git"],
-    cloneFixture: {
-      boundary: "local",
-      sourceDir: options.fixtureSourceDir,
-    },
+    allowedRemoteUrls: [CLONE_URL],
+    cloneFixture: { boundary: "local", sourceDir: sourceTree },
+    ...(cloneError === undefined ? {} : { cloneError }),
   });
   const gitOps: EdgeDeps["gitOps"] = {
     ...git.gitOps,
@@ -124,180 +217,165 @@ function makeMockGitOps(options: { readonly fixtureSourceDir: string }) {
     },
   };
 
-  return {
-    gitOps,
-    state: { cloneCalls: git.state.calls.clone },
-  };
+  return { gitOps, clones: git.state.calls.clone };
 }
 
-function makeDeps(): { deps: EdgeDeps; gitState: ReturnType<typeof makeMockGitOps>["state"] } {
-  const { gitOps, state } = makeMockGitOps({
-    fixtureSourceDir: fixtureClaudePluginsOfficial(),
-  });
-  const deps: EdgeDeps = {
-    gitOps,
-    // pluginUpdate is part of EdgeDeps but the bootstrap path does not
-    // invoke plugin update. A throwing stub catches accidental misuse.
-    pluginUpdate: () =>
-      Promise.reject(new Error("bootstrap handler unexpectedly invoked pluginUpdate")),
-  };
-  return { deps, gitState: state };
+function userStagingRoot(cwd: string): string {
+  return path.join(locationsFor("user" satisfies Scope, cwd).extensionRoot, "sources-staging");
 }
 
-test("bootstrap handler (no args, clean state): dispatches to orchestrator and emits two notifications", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitState } = makeDeps();
-    const handler = makeBootstrapHandler(makePi(), deps);
-
-    await handler("", ctx);
-
-    // Both composed orchestrators emitted their messages in order.
-    assert.equal(notifications.length, 2);
-    // SNM-33 / D-22-01 / D-22-03: both composed orchestrators emit
-    // marketplace-status-only blocks (no plugin rows), so NEITHER carries
-    // the `/reload` trailer -- a marketplace record and its autoupdate flag
-    // are not Pi-visible resources.
-    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
-    // UXG-04: fresh autoupdate enable renders the `<autoupdate>` marker-as-outcome.
-    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
-
-    // Clone happened against the canonical Anthropic repo URL.
-    assert.equal(gitState.cloneCalls.length, 1);
-    assert.equal(
-      gitState.cloneCalls[0]?.url,
-      "https://github.com/anthropics/claude-plugins-official.git",
-    );
-
-    // State reflects the marketplace at user scope.
-    const userLocations = locationsFor("user", cwd);
-    const userState = await loadState(userLocations.extensionRoot);
-    assert.ok("claude-plugins-official" in userState.marketplaces);
-    // post-flip `autoupdate` lives in `claude-plugins.json`.
-    const cfg = await loadConfig(userLocations.configJsonPath);
-    assert.equal(cfg.status, "valid");
-    if (cfg.status === "valid") {
-      assert.equal(cfg.config.marketplaces?.["claude-plugins-official"]?.autoupdate, true);
-    }
+/**
+ * Substitute the stable token for a staging leaf that is a UUID under the user
+ * scope's staging root, so the whole recorder stays comparable and a clone staged
+ * anywhere else still fails on its directory.
+ */
+function describeClones(clones: readonly GitCloneCall[], stagingRoot: string): GitCloneCall[] {
+  return clones.map((call) => {
+    const staged =
+      path.dirname(call.dir) === stagingRoot && UUID_LEAF.test(path.basename(call.dir));
+    return { ...call, dir: staged ? STAGED_CLONE_DIR : call.dir };
   });
+}
+
+test("clones through the injected git port into the user scope at the accepted arity", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "accepted");
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4, { value: cwd, reads: 1 });
+  const git = createGitPort(sourceTree);
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+
+  // act
+  await bootstrapHandler("", ctx);
+
+  // assert
+  assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
 
-test("bootstrap handler (whitespace-only args): treated identically to empty args", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps } = makeDeps();
-    const handler = makeBootstrapHandler(makePi(), deps);
+for (const { args, label, tokens } of [
+  { args: "official", label: "one", tokens: "a single positional token" },
+  { args: "official extra", label: "two", tokens: "two positional tokens" },
+]) {
+  test(`rejects ${tokens} with the no-arguments sentence and never reaches the workflow`, async (t) => {
+    // arrange
+    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `positional-${label}`);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
 
-    await handler("   ", ctx);
+    // act
+    await bootstrapHandler(args, ctx);
 
-    assert.equal(notifications.length, 2);
-    // SNM-33 / D-22-01 / D-22-03: see preceding test for the no-trailer rationale.
-    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
-    // UXG-04: fresh autoupdate enable renders the `<autoupdate>` marker-as-outcome.
-    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
+    assert.deepStrictEqual(git.clones, []);
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
   });
-});
+}
 
-test("bootstrap handler (positional argument): rejected with usage error, orchestrator not invoked", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitState } = makeDeps();
-    const handler = makeBootstrapHandler(makePi(), deps);
+for (const scope of ["user", "project"] satisfies readonly Scope[]) {
+  test(`rejects --scope ${scope} as never accepted, because bootstrap always targets the user scope`, async (t) => {
+    // arrange
+    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
 
-    await handler("foo", ctx);
+    // act
+    await bootstrapHandler(`--scope ${scope}`, ctx);
 
-    assert.equal(notifications.length, 1);
-    // CMC-34: the positional-rejected case
-    // routes via notifyUsageError, which emits `${message}\n\n${USAGE}`. The
-    // sentence head ("bootstrap takes no arguments.") + blank-line separator
-    // + Usage block is the on-the-wire byte shape (MSG-NC-2 / MSG-SR-7).
-    assert.equal(
-      notifications[0]?.message,
-      "bootstrap takes no arguments.\n\nUsage: /claude:plugin bootstrap",
-    );
-    assert.equal(notifications[0]?.severity, "error");
-    // Orchestrator never invoked -> clone never attempted.
-    assert.equal(gitState.cloneCalls.length, 0);
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: SCOPE_NOT_ACCEPTED_MESSAGE, severity: "error" },
+    ]);
+    assert.deepStrictEqual(git.clones, []);
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
   });
-});
+}
 
-test("bootstrap handler (--scope project): rejected with user-scope-only usage error", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps, gitState } = makeDeps();
-    const handler = makeBootstrapHandler(makePi(), deps);
+for (const { args, label, subject } of [
+  { args: "--local", label: "alone", subject: "when it is the only token" },
+  {
+    args: "--scope user --local",
+    label: "with-scope",
+    subject: "before the scope guard is consulted",
+  },
+]) {
+  test(`takes the scope-target flag as a positional and rejects it ${subject}`, async (t) => {
+    // arrange
+    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `scope-target-${label}`);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
 
-    await handler("--scope project", ctx);
+    // act
+    await bootstrapHandler(args, ctx);
 
-    assert.equal(notifications.length, 1);
-    assert.match(notifications[0]?.message ?? "", /bootstrap does not accept --scope/);
-    assert.equal(notifications[0]?.severity, "error");
-    assert.equal(gitState.cloneCalls.length, 0);
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
+    assert.deepStrictEqual(git.clones, []);
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
   });
-});
+}
 
-test("bootstrap handler (--scope user): rejected too -- the bootstrap subcommand never accepts --scope", async () => {
-  // Belt-and-suspenders: the handler rejects --scope regardless of value.
-  // Even `--scope user` (which is the implicit target) is denied because
-  // accepting it would create a misleading user contract.
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps } = makeDeps();
-    const handler = makeBootstrapHandler(makePi(), deps);
+for (const { args, label, subject } of [
+  { args: "--scope nope", label: "bare", subject: "no positional token accompanies it" },
+  {
+    args: "extra --scope nope",
+    label: "with-positional",
+    subject: "a positional token is already present",
+  },
+]) {
+  test(`reports an unrecognised scope value with the bootstrap usage block when ${subject}`, async (t) => {
+    // arrange
+    const { sourceTree, fetchCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const git = createGitPort(sourceTree);
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
 
-    await handler("--scope user", ctx);
+    // act
+    await bootstrapHandler(args, ctx);
 
-    assert.equal(notifications.length, 1);
-    assert.match(notifications[0]?.message ?? "", /bootstrap does not accept --scope/);
-    assert.equal(notifications[0]?.severity, "error");
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: INVALID_SCOPE_MESSAGE, severity: "error" }]);
+    assert.deepStrictEqual(git.clones, []);
+    assert.strictEqual(fetchCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
   });
-});
+}
 
-test("bootstrap handler (invalid --scope value): surfaces parseArgs error", async () => {
-  // parseArgs rejects unknown --scope values BEFORE the handler reaches
-  // the positional / scope checks. The error must arrive as a notified
-  // error rather than propagate.
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const { deps } = makeDeps();
-    const handler = makeBootstrapHandler(makePi(), deps);
-
-    await handler("--scope nope", ctx);
-
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]?.severity, "error");
-    assert.match(notifications[0]?.message ?? "", /Invalid --scope value/);
+test("converts a thrown bootstrap failure into one failed marketplace row carrying no error text", async (t) => {
+  // arrange
+  const { cwd, sourceTree, fetchCallCount } = await createHermeticScope(t, "failure");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: cwd,
+    reads: 1,
   });
-});
+  const git = createGitPort(sourceTree, new Error(REFUSED_CLONE_MESSAGE));
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
 
-test("bootstrap handler (orchestrator throws): catch routes a failed marketplace row at error severity", async () => {
-  // IL-2: `addMarketplace` signals a first-run clone failure by THROWING. The
-  // handler's catch must route it through `notify` as a caller-stamped
-  // `severity: "error"` failed marketplace row -- never a raw stack trace.
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const throwingGitOps = {
-      clone: (): Promise<void> => Promise.reject(new Error("network unreachable")),
-    } as unknown as EdgeDeps["gitOps"];
-    const deps: EdgeDeps = {
-      gitOps: throwingGitOps,
-      pluginUpdate: () =>
-        Promise.reject(new Error("bootstrap handler unexpectedly invoked pluginUpdate")),
-    };
-    const handler = makeBootstrapHandler(makePi(), deps);
+  // act
+  await bootstrapHandler("", ctx);
 
-    await handler("", ctx);
-
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]?.severity, "error");
-    assert.match(notifications[0]?.message ?? "", /\(failed\)/);
-  });
-});
-
-// Sanity: the existing reusable marketplace fixture still exists where
-// the orchestrator-side test points to it; this keeps the cross-test
-// directory contract explicit in one place.
-test("bootstrap shim fixture pointer: orchestrator-side fixture path resolves to a real fixture dir", () => {
-  const valid = fixtureMarketplaceDir("valid-marketplace");
-  assert.ok(valid.endsWith("valid-marketplace"));
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: FAILED_ROW_MESSAGE, severity: "error" }]);
+  assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
+  assert.strictEqual(fetchCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
 });
