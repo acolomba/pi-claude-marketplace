@@ -335,6 +335,12 @@ export default tseslint.config(
     // rule that needs no type information, which is the point: these files
     // carry the correspondence and direct-coverage invariants and used to be
     // unlinted, unformatted and untypechecked all at once.
+    //
+    // The format half of that repair is in package.json, where `scripts/**/*.mjs`
+    // is a SEPARATE glob argument rather than an `mjs` entry in the brace list.
+    // Do not merge the two: a repo-wide `**/*.mjs` glob makes fallow read
+    // tests/live-uat/*.mjs as package.json entry points, which turns their
+    // `fallow-ignore-file unused-file` markers stale and fails `npm run fallow`.
     files: ["scripts/**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {

@@ -48,7 +48,9 @@ function run(command, args, options = {}) {
     ...options,
   });
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} failed (${result.status}):\n${result.stderr}`);
+    throw new Error(
+      `${command} ${args.join(" ")} failed (${result.status}):\n${result.stderr}`,
+    );
   }
   return result.stdout;
 }
@@ -224,13 +226,7 @@ function semanticMoves(baselineRows, oracleRows) {
     if (stayed || candidates.length === 0) continue;
 
     const ranked = candidates
-      .map((after) => ({
-        after,
-        score:
-          before.fingerprint === after.fingerprint
-            ? 1
-            : jaccard(before.normalized, after.normalized),
-      }))
+      .map((after) => ({ after, score: before.fingerprint === after.fingerprint ? 1 : jaccard(before.normalized, after.normalized) }))
       .sort((a, b) => b.score - a.score || a.after.path.localeCompare(b.after.path));
     const best = ranked[0];
     const tied = ranked.length > 1 && Math.abs(ranked[1].score - best.score) < 0.01;
@@ -274,8 +270,7 @@ function intentCommits() {
       return { commit: line.slice(0, tab), subject: line.slice(tab + 1) };
     });
 
-  const movePattern =
-    /refactor|split|partition|extract|move|carve|relocat|fan |fold|internal|narrow|consolidat|construct|inject|scope|mirror|ownership/i;
+  const movePattern = /refactor|split|partition|extract|move|carve|relocat|fan |fold|internal|narrow|consolidat|construct|inject|scope|mirror|ownership/i;
   return rows
     .filter(({ subject }) => movePattern.test(subject))
     .map(({ commit, subject }) => {
@@ -346,24 +341,10 @@ function build() {
   }
 
   const productionOperations = parseNameStatus(
-    git(
-      "diff",
-      "--name-status",
-      "--find-renames=30%",
-      `${ORACLE_CONTENT_BASE}..${ORACLE_HEAD}`,
-      "--",
-      PRODUCTION_ROOT,
-    ),
+    git("diff", "--name-status", "--find-renames=30%", `${ORACLE_CONTENT_BASE}..${ORACLE_HEAD}`, "--", PRODUCTION_ROOT),
   );
   const testOperations = parseNameStatus(
-    git(
-      "diff",
-      "--name-status",
-      "--find-renames=30%",
-      `${ORACLE_CONTENT_BASE}..${ORACLE_HEAD}`,
-      "--",
-      TEST_ROOT,
-    ),
+    git("diff", "--name-status", "--find-renames=30%", `${ORACLE_CONTENT_BASE}..${ORACLE_HEAD}`, "--", TEST_ROOT),
   );
   const baselineProductionDeclarations = revisionDeclarations(ORACLE_CONTENT_BASE, PRODUCTION_ROOT);
   const oracleProductionDeclarations = revisionDeclarations(ORACLE_HEAD, PRODUCTION_ROOT);
@@ -376,8 +357,7 @@ function build() {
     schema_version: 1,
     purpose: "Immutable inputs for the unit-test refactor preservation kit.",
     future_restart_base: null,
-    future_restart_base_note:
-      "Select the future base in the new branch and milestone. This export does not select it.",
+    future_restart_base_note: "Select the future base in the new branch and milestone. This export does not select it.",
     revisions: {
       branch_start: revisionMetadata(BRANCH_BASE),
       oracle_content_base: revisionMetadata(ORACLE_CONTENT_BASE),
@@ -415,8 +395,7 @@ function build() {
 
   const transformations = {
     schema_version: 1,
-    purpose:
-      "Semantic and file-level map of work performed between the branch start and the committed oracle head.",
+    purpose: "Semantic and file-level map of work performed between the branch start and the committed oracle head.",
     source_range: `${ORACLE_CONTENT_BASE}..${ORACLE_HEAD}`,
     history_range: `${MAIN_AT_EXPORT}..${ORACLE_HEAD}`,
     interpretation: {
@@ -437,12 +416,7 @@ function build() {
       ORACLE_HEAD,
       "production",
     ),
-    test_path_operations: enrichOperations(
-      testOperations,
-      ORACLE_CONTENT_BASE,
-      ORACLE_HEAD,
-      "test",
-    ),
+    test_path_operations: enrichOperations(testOperations, ORACLE_CONTENT_BASE, ORACLE_HEAD, "test"),
     production_symbol_moves: semanticMoves(
       baselineProductionDeclarations,
       oracleProductionDeclarations,
@@ -458,8 +432,7 @@ function build() {
   };
   transformations.coverage.exact_or_probable_production_symbol_moves =
     transformations.production_symbol_moves.length;
-  transformations.coverage.exact_or_probable_test_symbol_moves =
-    transformations.test_symbol_moves.length;
+  transformations.coverage.exact_or_probable_test_symbol_moves = transformations.test_symbol_moves.length;
   transformations.coverage.intent_commit_records = transformations.intent_commits.length;
 
   const files = new Map([

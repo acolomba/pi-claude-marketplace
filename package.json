@@ -75,8 +75,8 @@
   "scripts": {
     "check": "npm run typecheck && npm run lint && npm run fallow && npm run format:check && npm test && npm run test:integration",
     "fallow": "fallow dead-code --fail-on-issues --format human && fallow health --fail-on-issues --format human && fallow dupes --fail-on-issues --format human",
-    "format": "prettier --write \"**/*.{js,mjs,json,ts}\"",
-    "format:check": "prettier --check \"**/*.{js,mjs,json,ts}\"",
+    "format": "prettier --write \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
     "lint": "eslint extensions tests scripts eslint.config.js",
     "lint:fix": "eslint extensions tests scripts eslint.config.js --fix",
     "test": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
