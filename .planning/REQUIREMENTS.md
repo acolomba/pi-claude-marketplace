@@ -125,7 +125,7 @@ brownfield input and do not prove compliance for later phases.
 - [x] **MOD-08**: All eight composition orchestrator pairs complete the pair
       contract.
 
-- [ ] **MOD-09**: All 30 edge-surface pairs complete the pair contract.
+- [x] **MOD-09**: All 30 edge-surface pairs complete the pair contract.
 - [ ] **MOD-10**: The extension entry pair completes the pair contract and
       carries the final repository gates.
 
@@ -499,7 +499,7 @@ apply to the full inventory close with the Phase 117 root-pair repository gates.
 | MOD-06      | Phase 113 | Complete |
 | MOD-07      | Phase 114 | Pending  |
 | MOD-08      | Phase 115 | Complete |
-| MOD-09      | Phase 116 | Pending  |
+| MOD-09      | Phase 116 | Complete |
 | MOD-10      | Phase 117 | Pending  |
 | PRES-01     | Phase 117 | Pending  |
 | PRES-02     | Phase 117 | Pending  |

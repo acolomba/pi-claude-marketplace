@@ -59,7 +59,8 @@ Last activity: 2026-09-02 — 116-14 rewrote the bootstrap shim owner: 10 runtim
 
 Progress: [████████░░] 80%
 
-One hundred seventy-three of 204 source-test pairs are complete. The remaining 31 are open.
+Two hundred three of 204 source-test pairs are complete. The one that remains is the extension
+entry point, which Phase 117 owns.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
