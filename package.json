@@ -73,7 +73,7 @@
     "url": "git+https://github.com/acolomba/pi-claude-marketplace.git"
   },
   "scripts": {
-    "check": "npm run typecheck && npm run lint && npm run fallow && npm run format:check && npm test && npm run test:integration",
+    "check": "npm run typecheck && npm run lint && npm run fallow && npm run format:check && npm run test:corresponding && npm run test:corresponding:negative && npm run test:coverage:direct:negative && npm test && npm run test:integration",
     "fallow": "fallow dead-code --fail-on-issues --format human && fallow health --fail-on-issues --format human && fallow dupes --fail-on-issues --format human",
     "format": "prettier --write \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
