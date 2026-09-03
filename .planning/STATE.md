@@ -4,8 +4,8 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-05-PLAN.md
-last_updated: "2026-09-03T00:23:04.095Z"
+stopped_at: Completed 116-17-PLAN.md
+last_updated: "2026-09-03T01:00:00.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
 state_head: 132690965ebe16fb3a70088bddbd43856dfd8190
@@ -13,7 +13,7 @@ progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 194
+  completed_plans: 195
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 19 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: the DAG-recomputed wave 4 is CLOSED — 116-05 (completions/provider) was its last plan. Wave 5 is next: the eleven plugin handlers (116-14 … 116-22, 116-24, 116-25), with 116-17 carrying the atomic git mv; wave 6 is 116-28 (register)
-Last activity: 2026-09-02 — 116-05 replaced the phase's largest existing suite (1,670 lines, 67 cases) with 58 runtime cases from 22 marked bodies, asserting the COMPOSITION the provider owns rather than the contents of the three surfaces it composes. Direct coverage went 319/335 lines and 71/78 branches to lines 335/335, functions 11/11 and branches 79/80; the +16 lines are the enable and disable arms no case reached before, and the denominator moved 78 to 80 because V8 emits a range only for code it executed, so the two scope guards inside those arms did not exist as ranges until they ran. TWO findings. First, the plan's case list omitted the `allowMarketplaceOnly` half of each head's branch configuration: it is invisible at a plain plugin cursor and coverage cannot see it (it is data, not a branch), so the eight heads are now driven at an `@` cursor too — update, fetch and reinstall offer the bare `@<marketplace>` targets, the other five offer none, and two plants (enable flipped true, update flipped false) each turn exactly their own row RED. Second, a NEW D-116-01a claimant: the empty-object arm of `optionalDescription` at `edge/completions/provider.ts:125` is unreachable through the module's single export, because every entry `flagCompletions` builds carries a description (a written-out literal, and `completionFlagEntries` whose elements derive from a `FlagEntry` with a REQUIRED description). Structural, not compiler-forced. Proved by a plant that stayed GREEN plus an independent route over 406 long-flag cursor prefixes that emitted 169 items with zero missing a description. Pinned by identity in the plan's `must_haves` and `<verify>` link, planted in both directions (two assertion-side, three output-side, all six correct), and filed as WINDOWS.md entry 17. The plan's scope-order rationale was also wrong: `scope-order-drift.test.ts` walks `extensions/` only, and re-reading `SCOPES` would have made the order claim circular, so the scope pair is hand-authored. Five plants, four RED and one GREEN-by-design, all reverted; no production file touched
+Plan: 20 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-17, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: wave 5 (the eleven plugin handlers) is OPEN — 116-17 carried its atomic git mv and is done. Ten remain: 116-14, 116-15, 116-16, 116-18, 116-19, 116-20, 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
+Last activity: 2026-09-02 — 116-17 moved the import suite from tests/edge/handlers/ to its mirrored path and rewrote it as the phase's one literal exact-argument owner: every delegating case states the COMPLETE options bag (context, Pi handle, working directory, selected scopes, git port) in a strong-mock `when()` with no wildcard matcher. 8 runtime cases from 6 marked bodies; direct coverage branches 11/12, lines and functions complete. THREE findings. First, the plan's move-and-rewrite-in-one-commit rule and its own "git status shows a rename" acceptance criterion are mutually exclusive: a total rewrite shares nothing with the original, so git detects no rename even at -M10%. Split into a pure move (91% similar, rename recorded, tree green) then the rewrite, per the orchestrator's explicit "commit the move so git log --follow keeps the file's history" — --follow now reaches back to f1855ecf, the commit that added the import command. Second, the git-port forward pins the port's MEMBERS, not the container: a `{ ...deps.gitOps }` spread plant stayed GREEN because strong-mock compares the bag structurally, while wrapping one method turned all three delegating cases RED. The header states the narrowed claim. Third, this handler parses raw arguments with parseArgs rather than parseCommandArgs, so unlike all six marketplace siblings it DOES reject a surplus positional — and `--local` is an ordinary token that lands on positional and is rejected there, making the "mutually exclusive scope selectors" case a positional rejection, not a scope diagnostic. A NEW D-116-01a pin: the String(err) arm at edge/handlers/plugin/import.ts:31, COMPILER-FORCED by the unknown-typed catch binding, proved by a plant that stayed GREEN plus a brute force over 3,615 argument strings that produced 521 throws and zero non-Error values, planted in both directions (two assertion-side, three output-side, all five FAIL; control PASS), and filed as WINDOWS.md entry 18. Seven production plants, five RED and two GREEN-by-design, all reverted; no production file touched. Measured baseline correction: npm test was 5049/5049 before this plan, not the 5041 the handoff recorded; it is 5052/5052 now
 
 Progress: [████████░░] 80%
 
@@ -171,6 +171,7 @@ evidence.
 | Phase 116 P07 | 35 min | 1 tasks | 1 files |
 | Phase 116 P11 | 35 min | 1 tasks | 1 files |
 | Phase 116 P05 | 30 min | 1 tasks | 1 files |
+| Phase 116 P17 | 40 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -377,11 +378,12 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-03T00:23:01.677Z
-Stopped at: Completed 116-05-PLAN.md
-tests/edge/handlers/marketplace/remove.test.ts is the sole mirrored owner for the marketplace
-remove shim, at 11 runtime cases from 7 marked bodies and complete direct coverage (branches 8/8,
-functions 2/2, lines 46/46, up from 7/7). npm test 5058/5058, test:integration 31/31,
+Last session: 2026-09-03T01:00:00.000Z
+Stopped at: Completed 116-17-PLAN.md
+tests/edge/handlers/plugin/import.test.ts is the sole mirrored owner for the import shim, at 8
+runtime cases from 6 marked bodies, carrying the phase's one literal exact-argument proof and a
+pinned single-branch D-116-01a shortfall (branches 11/12; lines and functions complete). The
+correspondence gate went 10 to 8 violations. npm test 5052/5052, test:integration 31/31,
 typecheck/lint/fallow all 0. Production is byte-identical after seven plants.
 
 Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
