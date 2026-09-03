@@ -1,4 +1,4 @@
-// tests/helpers/ipc-child.ts
+// tests/integration/ipc-child.ts
 //
 // Shared stubs for the forked IPC child drivers under `tests/integration/`.
 // Each child stands up a minimal `ctx` + `pi` pair, runs ONE orchestrator, and
