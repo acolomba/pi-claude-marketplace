@@ -4,8 +4,8 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-17-PLAN.md
-last_updated: "2026-09-03T01:00:00.000Z"
+stopped_at: Completed 116-14-PLAN.md
+last_updated: "2026-09-03T01:25:00.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
 state_head: 132690965ebe16fb3a70088bddbd43856dfd8190
@@ -13,7 +13,7 @@ progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 195
+  completed_plans: 196
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 20 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-17, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: wave 5 (the eleven plugin handlers) is OPEN — 116-17 carried its atomic git mv and is done. Ten remain: 116-14, 116-15, 116-16, 116-18, 116-19, 116-20, 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
+Plan: 21 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-17, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: wave 5 (the eleven plugin handlers) is OPEN — 116-17 and 116-14 are done. Nine remain: 116-15, 116-16, 116-18, 116-19, 116-20, 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
 Last activity: 2026-09-02 — 116-17 moved the import suite from tests/edge/handlers/ to its mirrored path and rewrote it as the phase's one literal exact-argument owner: every delegating case states the COMPLETE options bag (context, Pi handle, working directory, selected scopes, git port) in a strong-mock `when()` with no wildcard matcher. 8 runtime cases from 6 marked bodies; direct coverage branches 11/12, lines and functions complete. THREE findings. First, the plan's move-and-rewrite-in-one-commit rule and its own "git status shows a rename" acceptance criterion are mutually exclusive: a total rewrite shares nothing with the original, so git detects no rename even at -M10%. Split into a pure move (91% similar, rename recorded, tree green) then the rewrite, per the orchestrator's explicit "commit the move so git log --follow keeps the file's history" — --follow now reaches back to f1855ecf, the commit that added the import command. Second, the git-port forward pins the port's MEMBERS, not the container: a `{ ...deps.gitOps }` spread plant stayed GREEN because strong-mock compares the bag structurally, while wrapping one method turned all three delegating cases RED. The header states the narrowed claim. Third, this handler parses raw arguments with parseArgs rather than parseCommandArgs, so unlike all six marketplace siblings it DOES reject a surplus positional — and `--local` is an ordinary token that lands on positional and is rejected there, making the "mutually exclusive scope selectors" case a positional rejection, not a scope diagnostic. A NEW D-116-01a pin: the String(err) arm at edge/handlers/plugin/import.ts:31, COMPILER-FORCED by the unknown-typed catch binding, proved by a plant that stayed GREEN plus a brute force over 3,615 argument strings that produced 521 throws and zero non-Error values, planted in both directions (two assertion-side, three output-side, all five FAIL; control PASS), and filed as WINDOWS.md entry 18. Seven production plants, five RED and two GREEN-by-design, all reverted; no production file touched. Measured baseline correction: npm test was 5049/5049 before this plan, not the 5041 the handoff recorded; it is 5052/5052 now
+
+Last activity: 2026-09-02 — 116-14 rewrote the bootstrap shim owner: 10 runtime cases from 6 marked bodies, direct coverage branches 8/8, functions 2/2, lines 88/88. FOUR findings. First, the injected git port is proven by the clone recorder, and two GREEN plants bound that claim — a re-boxed port AND a port with one member wrapped around a delegating call both stay green, so a recorder-based forward proof is measurably WEAKER than 116-17's structural when() comparison, which goes red on the wrapped member. The claim is stated as "carried out by the injected implementation". Second, this handler calls parseArgs, so like plugin/import.ts and unlike all six marketplace siblings it rejects a surplus positional, has no arity below the accepted zero, and takes --local as an ordinary positional token. Third, the plan's guard-order input (an unrecognised scope value with NO positional) pins no ordering, because the positional guard never applies to it; two inputs that satisfy two guards at once were added instead — `--scope user --local` proves the positional guard precedes the scope guard, `extra --scope nope` proves the parse failure precedes both. Fourth, the branch DENOMINATOR moved from 11/11 to 8/8 while both readings are complete, re-measured in both directions by restoring the HEAD suite: 8 is exactly the structural count (four binary branches times two sides), so T-116-07-B's "a thinner rewrite can drop a branch" did not occur. Four production plants, two RED and two GREEN-by-design, all reverted; no production file touched. npm test 5054/5054 across 291 suites, integration 31/31
 
 Progress: [████████░░] 80%
 
@@ -65,6 +67,7 @@ evidence.
 
 | Plan          | Duration | Tasks   | Files   |
 | ------------- | -------- | ------- | ------- |
+| Phase 116 P14 | 45 min   | 1 tasks | 1 files |
 | Phase 108 P01 | 10 min   | 2 tasks | 1 files |
 | Phase 108 P06 | 18 min   | 3 tasks | 7 files |
 | Phase 108 P08 | 13 min   | 2 tasks | 1 files |
@@ -353,6 +356,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: An injected port forwarded from two call sites needs one plant per site; a single-site plant leaves the sibling arm's claim unproven — Removing the all-marketplaces arm's pluginUpdate forward left both named-marketplace rows GREEN; removing the single-marketplace arm's forward left the bare and scope-narrowed cases GREEN. Applies to 116-07, 116-14 and 116-17, the remaining injected-port owners.
 - [Phase 116]: 116-07: the marketplace add owner proves the injected git port by driving a url source on a provider-less host and comparing the whole clone recorder, with the randomUUID staging leaf replaced by a token only under the expected scope root
 - [Phase 116]: 116-07: scope and the scope-target flag are proven as an on-disk footprint (which scope root holds state.json, and whether the write-back landed in claude-plugins.json or claude-plugins.local.json) because the edge tier has no injection point against the options bag
+- [Phase 116]: 116-14: a RECORDER-based port-forward proof is weaker than a structural exact-argument `when()` — a re-boxed port AND a port with one member wrapped around a delegating call both stay GREEN under a recorder, while 116-17's `when()` goes RED on the wrapped member; only replacing the implementation goes RED under both, so the claim states that the operation is carried out by the injected implementation
+- [Phase 116]: 116-14: a guard order is only pinnable with an input that satisfies TWO guards at once — the plan's unrecognised-scope-with-no-positional input passes under any order, while `--scope user --local` proves the positional guard precedes the scope guard and `extra --scope nope` proves the parse failure precedes both
+- [Phase 116]: 116-14: `plugin/bootstrap.ts` calls `parseArgs`, the second handler measured to do so, and answers all three inherited questions like `plugin/import.ts` rather than like the marketplace tier — a surplus positional IS rejected, there is no arity below the accepted zero, and `--local` lands on positional
+- [Phase 116]: 116-14: a github-source workflow cannot be driven through a bare `createGitOpsFake` — the GitHub provider attaches a credential bundle whose functions are not structured-clonable and the fake's recorder clones every call, so the port must drop that downstream-owned bundle while still delegating every operation to the fake
 
 ### Pending Todos
 
