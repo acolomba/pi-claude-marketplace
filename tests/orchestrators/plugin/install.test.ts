@@ -8916,9 +8916,18 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       const manifestBytes = await readFile(manifestPath, "utf8");
       await mkdir(locations.mcpJsonPath, { recursive: true });
       // Read back the runtime's own errno wording: later majors append the offending path to it.
-      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch(
-        (error: unknown) => (error as Error).message,
-      );
+      // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
+      // composition: the probe is the same read production makes, so it moves with whatever is on
+      // disk. A fixture that drifted to a missing file would report ENOENT on both sides and leave
+      // this case green against a different failure entirely.
+      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch((error: unknown) => {
+        const errno = error as NodeJS.ErrnoException;
+        assert.deepStrictEqual(
+          { code: errno.code, syscall: errno.syscall },
+          { code: "EISDIR", syscall: "read" },
+        );
+        return errno.message;
+      });
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };

@@ -286,10 +286,19 @@ describe("loadConfig", () => {
     const filePath = path.join(scopeRoot, "claude-plugins.json");
     await mkdir(filePath);
     // The runtime owns the errno wording and later majors append the offending path to it, so the
-    // expectation reads it back from the same failing read. What stays pinned is the prefix.
-    const readFailure = await readFile(filePath, "utf8").catch(
-      (error: unknown) => (error as Error).message,
-    );
+    // expectation reads the sentence back from the same failing read. The failure's IDENTITY is not
+    // runtime-owned and is pinned here rather than left to the composition: the probe is the same
+    // read production makes, so it moves with whatever is on disk. A fixture that drifted to a
+    // missing file would report ENOENT on both sides and leave this case green against a different
+    // failure entirely.
+    const readFailure = await readFile(filePath, "utf8").catch((error: unknown) => {
+      const errno = error as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        { code: errno.code, syscall: errno.syscall },
+        { code: "EISDIR", syscall: "read" },
+      );
+      return errno.message;
+    });
 
     // act
     const loadedConfig = await loadConfig(filePath);
