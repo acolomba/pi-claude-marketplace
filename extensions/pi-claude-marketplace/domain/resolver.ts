@@ -611,9 +611,14 @@ async function readManifest(
   ctx: ResolveContext,
   pluginRoot: string,
 ): Promise<{ ok: true; manifest: Record<string, unknown> | null } | { ok: false; reason: string }> {
-  const manifestPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
+  let manifestPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
   if ((await statKindOf(ctx)(manifestPath)) !== "file") {
-    return { ok: true, manifest: null };
+    const codexManifestPath = path.join(pluginRoot, ".codex-plugin", "plugin.json");
+    if ((await statKindOf(ctx)(codexManifestPath)) === "file") {
+      manifestPath = codexManifestPath;
+    } else {
+      return { ok: true, manifest: null };
+    }
   }
 
   try {

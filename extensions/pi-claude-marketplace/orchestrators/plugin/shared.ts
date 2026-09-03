@@ -917,18 +917,20 @@ export async function resolvePluginVersion(
 ): Promise<string> {
   // Tier 1: the plugin's own plugin.json `version`. Re-read in place; any
   // failure falls through to the next tier (D-23-02 / D-23-03).
-  try {
-    const manifestPath = path.join(installable.pluginRoot, ".claude-plugin", "plugin.json");
-    const raw = await readFile(manifestPath, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    const pluginJsonVersion = (parsed as { version?: unknown }).version;
-    if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
-      return pluginJsonVersion;
+  for (const manifestDir of [".claude-plugin", ".codex-plugin"]) {
+    try {
+      const raw = await readFile(path.join(installable.pluginRoot, manifestDir, "plugin.json"), "utf8");
+      const parsed: unknown = JSON.parse(raw);
+      const pluginJsonVersion = (parsed as { version?: unknown }).version;
+      if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
+        return pluginJsonVersion;
+      }
+    } catch {
+      // try next layout
     }
-  } catch {
-    // Fall through -- plugin.json is absent, unparseable, or carries no usable
-    // version; tier 2 / tier 3 cover it.
   }
+  // Fall through -- plugin.json is absent, unparseable, or carries no usable
+  // version; tier 2 / tier 3 cover it.
 
   // Tier 2: the marketplace entry version.
   if (typeof entry.version === "string" && entry.version.length > 0) {

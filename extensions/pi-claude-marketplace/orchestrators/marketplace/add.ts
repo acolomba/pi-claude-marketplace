@@ -50,7 +50,7 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { findMarketplaceManifestPath, loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
@@ -642,7 +642,7 @@ async function addGitClonedInGuard(args: {
   let finalDir: string | undefined;
   try {
     // 2. Read + validate manifest.
-    const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
+    const manifestPath = await findMarketplaceManifestPath(stagingDir);
     const parsed = await loadMarketplaceManifest(manifestPath);
 
     const derivedName = (parsed as { name: string }).name;
@@ -673,7 +673,7 @@ async function addGitClonedInGuard(args: {
       scope: locations.scope,
       source,
       addedFromCwd: cwd,
-      manifestPath: path.join(finalDir, ".claude-plugin", "marketplace.json"),
+      manifestPath: await findMarketplaceManifestPath(finalDir),
       marketplaceRoot: finalDir,
       lastUpdatedAt: new Date().toISOString(),
       plugins: {},
@@ -801,7 +801,7 @@ async function addPathInGuard(args: {
   let marketplaceRoot: string;
   if (probe.isDirectory()) {
     marketplaceRoot = onDiskPath;
-    manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    manifestPath = await findMarketplaceManifestPath(marketplaceRoot);
   } else if (probe.isFile()) {
     manifestPath = onDiskPath;
     // Walk up two levels: <root>/.claude-plugin/marketplace.json -> <root>

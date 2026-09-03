@@ -92,9 +92,8 @@
 //  D-14 sequence: fetch + (symbolic HEAD) forceUpdateRef + checkout, OR
 //  (detached HEAD) checkout directly. NO `pull`.
 
-import path from "node:path";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { findMarketplaceManifestPath, loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -854,7 +853,7 @@ async function validateManifestAtRoot(
   record: ExtensionState["marketplaces"][string],
   marketplaceRoot: string,
 ): Promise<void> {
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const manifestPath = await findMarketplaceManifestPath(marketplaceRoot);
   await loadMarketplaceManifest(manifestPath);
 
   if (record.manifestPath !== manifestPath) {

@@ -6,7 +6,8 @@
 // D-05 + D-07: TypeBox JIT compilation runs at module load. The import path
 // is `typebox/compile` (the package is `typebox` with no scope).
 
-import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { readFile, stat } from "node:fs/promises";
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
@@ -35,6 +36,30 @@ const MARKETPLACE_SCHEMA = Type.Object({
 });
 
 export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
+
+/**
+ * Marketplace manifest location candidates, in priority order. Stock Claude
+ * layout first; the Codex plugin-marketplace layout (`.agents/plugins/`) is
+ * accepted as a fallback so git-served Codex marketplaces (e.g. Bifrost's
+ * /serve/codex endpoint) load unmodified. When none exist, the Claude path
+ * is returned so missing-manifest errors keep their original shape.
+ */
+export const MARKETPLACE_MANIFEST_CANDIDATES: readonly (readonly string[])[] = [
+  [".claude-plugin", "marketplace.json"],
+  [".agents", "plugins", "marketplace.json"],
+];
+
+export async function findMarketplaceManifestPath(root: string): Promise<string> {
+  for (const rel of MARKETPLACE_MANIFEST_CANDIDATES) {
+    const candidate = path.join(root, ...rel);
+    try {
+      if ((await stat(candidate)).isFile()) return candidate;
+    } catch {
+      // keep looking
+    }
+  }
+  return path.join(root, ".claude-plugin", "marketplace.json");
+}
 
 /** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
 export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
