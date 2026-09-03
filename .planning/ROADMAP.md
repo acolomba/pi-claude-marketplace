@@ -576,12 +576,12 @@ Plans:
 4. Planted negative controls fail for their intended violations, and the clean tree passes focused tests, all-pair coverage, and `npm run check`.
 5. Public, persistence, adapter, and named product contracts remain unchanged. Prohibited preservation and migration mechanisms are absent.
 
-**Plans**: 1/12 plans executed
+**Plans**: 2/12 plans executed
 
 Plans:
 
 - [x] 117-01-PLAN.md
-- [ ] 117-02-PLAN.md
+- [x] 117-02-PLAN.md
 - [ ] 117-03-PLAN.md
 - [ ] 117-04-PLAN.md
 - [ ] 117-05-PLAN.md
@@ -594,7 +594,7 @@ Plans:
 - [ ] 117-12-PLAN.md
 
 - [x] **117-01** (`117-01-PLAN.md`) - Unit-suite glob completeness control, landed while it is still green
-- [ ] **117-02** (`117-02-PLAN.md`) - Relocate the source-scanning mechanic to `tests/architecture/` and the IPC stubs to `tests/integration/`
+- [x] **117-02** (`117-02-PLAN.md`) - Relocate the source-scanning mechanic to `tests/architecture/` and the IPC stubs to `tests/integration/`
 - [ ] **117-03** (`117-03-PLAN.md`) - Relocate the Pi notification boundary to `tests/edge/` and rewrite its 28 import lines
 - [ ] **117-04** (`117-04-PLAN.md`) - Relocate the two cross-module orphan supplements to `tests/architecture/`
 - [ ] **117-05** (`117-05-PLAN.md`) - Fold the device-flow prompt lock into `tests/domain/github-auth.test.ts`
@@ -643,5 +643,5 @@ and commit still owns one pair.
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
 | 116. Edge Surface                        |          31/31 | Complete        | 2026-09-03 |
-| 117. Extension Entry and Final Gate      | 1/12 | In Progress|  |
+| 117. Extension Entry and Final Gate      | 2/12 | In Progress|  |
 | **Total**                                |    **203/204** | **In Progress** | **-**      |
