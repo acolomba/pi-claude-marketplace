@@ -27,9 +27,9 @@ provides:
 affects: []
 
 actuals:
-  tokens: 34000
+  tokens: 8700
   tasks: 1
-  commits: 1
+  commits: 4
 
 tech-stack:
   added: []
