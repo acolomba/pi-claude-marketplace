@@ -7,10 +7,15 @@
 // functions -- the only real disk this module touches is the completion cache,
 // which writes under a temporary root owned by the case.
 //
-// This surface is read-only and must never reach the network (NFR-5), so every
-// case installs a context-owned fail-fast replacement for the process-wide
-// transport and asserts its call count is zero. The count is the proof; the
-// thrown message never is.
+// This surface is read-only and must never reach the network (NFR-5), so the
+// cases that reach a collaborator -- the three cache-backed accessors -- install
+// a context-owned fail-fast replacement for the process-wide transport and
+// assert its call count is zero. The count is the proof; the thrown message
+// never is.
+//
+// The five pure token helpers carry no such guard. Each is synchronous, takes no
+// resolver and touches nothing outside its arguments, so a zero asserted over
+// one of them could not have risen whatever the helper did.
 //
 // The status vocabulary seeded below is owned by
 // `tests/shared/completion-cache.test.ts` and by
@@ -101,11 +106,16 @@ function installOfflineGuard(t: TestContext): () => number {
 }
 
 /**
- * One temporary cache root and one temporary home per case, with the
- * agent-directory variable cleared so no ambient value can redirect a write.
- * Removal, both environment restores, and the process-global completion-cache
- * reset are registered before the module under test runs, so an early throw
- * still unwinds them.
+ * One temporary cache root per case. Removal and the process-global
+ * completion-cache reset are registered before the module under test runs, so an
+ * early throw still unwinds them.
+ *
+ * No environment is substituted here. Neither `data.ts`, `shared/completion-
+ * cache.ts` nor anything else in their import closure reads `process.env`,
+ * `homedir()` or `getAgentDir()` -- every path this module touches arrives
+ * through the injected resolver or through the cache path the resolver hands
+ * back. A `HOME` substitution would change nothing observable, so this helper
+ * does not carry one.
  */
 async function seedResolver(
   t: TestContext,
@@ -114,30 +124,10 @@ async function seedResolver(
 ): Promise<SeededResolver> {
   resetCompletionCache();
   const cacheRoot = await mkdtemp(path.join(tmpdir(), `completions-data-${label}-cache-`));
-  const home = await mkdtemp(path.join(tmpdir(), `completions-data-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
     resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
   });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
   const networkCallCount = installOfflineGuard(t);
 
   const resolver = {
@@ -215,16 +205,12 @@ describe("buildItem", () => {
       expectedValue: "install alpha@",
     },
   ]) {
-    test(`replaces the whole argument text with ${JSON.stringify(expectedValue)}`, (t) => {
-      // arrange
-      const networkCallCount = installOfflineGuard(t);
-
+    test(`replaces the whole argument text with ${JSON.stringify(expectedValue)}`, () => {
       // act
       const item = buildItem(argumentTextPrefix, itemText, appendSpace);
 
       // assert
       assert.deepStrictEqual(item, { label: itemText, value: expectedValue });
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 });
@@ -238,24 +224,19 @@ describe("splitCompletionInput", () => {
     { input: "install   alpha@official", tokens: ["install"], current: "alpha@official" },
     { input: "   ", tokens: [], current: "" },
   ] satisfies readonly { input: string; tokens: string[]; current: string }[]) {
-    test(`splits ${JSON.stringify(input)} into ${String(tokens.length)} finished token(s) and ${JSON.stringify(current)}`, (t) => {
-      // arrange
-      const networkCallCount = installOfflineGuard(t);
-
+    test(`splits ${JSON.stringify(input)} into ${String(tokens.length)} finished token(s) and ${JSON.stringify(current)}`, () => {
       // act
       const split = splitCompletionInput(input);
 
       // assert
       assert.deepStrictEqual(split, { tokens, current });
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 });
 
 describe("extractPositionals", () => {
-  test("returns every token when no flag vocabulary is present", (t) => {
+  test("returns every token when no flag vocabulary is present", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const tokens = ["install", "alpha@official"];
 
     // act
@@ -263,7 +244,6 @@ describe("extractPositionals", () => {
 
     // assert
     assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   for (const { position, tokens } of [
@@ -271,22 +251,17 @@ describe("extractPositionals", () => {
     { position: "interior", tokens: ["install", "--scope", "project", "alpha@official"] },
     { position: "trailing", tokens: ["install", "alpha@official", "--scope", "project"] },
   ] satisfies readonly { position: string; tokens: string[] }[]) {
-    test(`recovers the same positionals with a ${position} scope flag pair`, (t) => {
-      // arrange
-      const networkCallCount = installOfflineGuard(t);
-
+    test(`recovers the same positionals with a ${position} scope flag pair`, () => {
       // act
       const positionals = extractPositionals(tokens);
 
       // assert
       assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 
-  test("consumes the scope flag pair even when its value is missing", (t) => {
+  test("consumes the scope flag pair even when its value is missing", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const tokens = ["install", "--scope"];
 
     // act
@@ -294,12 +269,10 @@ describe("extractPositionals", () => {
 
     // assert
     assert.deepStrictEqual(positionals, ["install"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
-  test("drops a declared boolean flag without consuming the token after it", (t) => {
+  test("drops a declared boolean flag without consuming the token after it", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const tokens = ["install", "--partial", "alpha@official"];
 
     // act
@@ -307,12 +280,10 @@ describe("extractPositionals", () => {
 
     // assert
     assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
-  test("keeps an undeclared flag-shaped token as a positional", (t) => {
+  test("keeps an undeclared flag-shaped token as a positional", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const tokens = ["install", "--undeclared"];
 
     // act
@@ -320,12 +291,10 @@ describe("extractPositionals", () => {
 
     // assert
     assert.deepStrictEqual(positionals, ["install", "--undeclared"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
-  test("skips a hole left by a sparse token list", (t) => {
+  test("skips a hole left by a sparse token list", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const tokens: string[] = ["install"];
     tokens[2] = "alpha@official";
 
@@ -334,7 +303,6 @@ describe("extractPositionals", () => {
 
     // assert
     assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 });
 
@@ -343,16 +311,12 @@ describe("extractScope", () => {
     { tokens: ["--scope", "user"], expectedScope: "user" },
     { tokens: ["--scope", "project"], expectedScope: "project" },
   ] satisfies readonly { tokens: string[]; expectedScope: Scope }[]) {
-    test(`reads the ${expectedScope} scope out of the token list`, (t) => {
-      // arrange
-      const networkCallCount = installOfflineGuard(t);
-
+    test(`reads the ${expectedScope} scope out of the token list`, () => {
       // act
       const scope = extractScope(tokens);
 
       // assert
       assert.strictEqual(scope, expectedScope);
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 
@@ -361,22 +325,17 @@ describe("extractScope", () => {
     { situation: "the flag carries an unrecognised value", tokens: ["--scope", "local"] },
     { situation: "the flag has no value after it", tokens: ["install", "--scope"] },
   ] satisfies readonly { situation: string; tokens: string[] }[]) {
-    test(`returns no scope when ${situation}`, (t) => {
-      // arrange
-      const networkCallCount = installOfflineGuard(t);
-
+    test(`returns no scope when ${situation}`, () => {
       // act
       const scope = extractScope(tokens);
 
       // assert
       assert.strictEqual(scope, undefined);
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 
-  test("keeps scanning past an unrecognised value and reads a later valid one", (t) => {
+  test("keeps scanning past an unrecognised value and reads a later valid one", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const tokens = ["--scope", "local", "--scope", "project"];
 
     // act
@@ -384,14 +343,12 @@ describe("extractScope", () => {
 
     // assert
     assert.strictEqual(scope, "project");
-    assert.strictEqual(networkCallCount(), 0);
   });
 });
 
 describe("getMarketplaceCompletions", () => {
-  test("keeps only the prefix matches and terminates each with a space", (t) => {
+  test("keeps only the prefix matches and terminates each with a space", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const names = ["official", "other", "internal"];
 
     // act
@@ -402,12 +359,10 @@ describe("getMarketplaceCompletions", () => {
       { label: "official", value: "marketplace info official " },
       { label: "other", value: "marketplace info other " },
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
-  test("preserves the caller's order and repeats an equal name in place", (t) => {
+  test("preserves the caller's order and repeats an equal name in place", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const names = ["zeta", "alpha", "zeta"];
 
     // act
@@ -419,12 +374,10 @@ describe("getMarketplaceCompletions", () => {
       { label: "alpha", value: "alpha " },
       { label: "zeta", value: "zeta " },
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
-  test("matches the partial token case-sensitively, with no case folding", (t) => {
+  test("matches the partial token case-sensitively, with no case folding", () => {
     // arrange
-    const networkCallCount = installOfflineGuard(t);
     const names = ["Official"];
 
     // act
@@ -434,7 +387,6 @@ describe("getMarketplaceCompletions", () => {
     // assert
     assert.deepStrictEqual(lowerCaseMatches, []);
     assert.deepStrictEqual(exactCaseMatches, [{ label: "Official", value: "Official " }]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 });
 
@@ -1002,6 +954,10 @@ describe("getPluginRefCompletions", () => {
     assert.strictEqual(networkCallCount(), 0);
   });
 
+  // The mode is held at `update`, so this differs from the accepting case two
+  // above it in the flag alone. Under `install` the seed's three installed rows
+  // match no install-candidate status, the candidate map is empty, and the
+  // result would be `[]` with the flag either way -- nothing would be measured.
   test("the bare marketplace form offers nothing when the mode does not allow it", async (t) => {
     // arrange
     const { resolver, networkCallCount } = await seedResolver(
@@ -1011,7 +967,7 @@ describe("getPluginRefCompletions", () => {
     );
 
     // act
-    const items = await getPluginRefCompletions("install", "@", "install", resolver, {
+    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
       allowMarketplaceOnly: false,
     });
 
