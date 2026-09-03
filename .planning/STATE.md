@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
-status: phase_complete
-stopped_at: Phase 117 context gathered
+status: planned
+stopped_at: Phase 117 planned - 12 plans across 6 waves
 last_updated: "2026-09-03T12:47:03.176Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 116 complete - verification passed 6 of 6
@@ -12,8 +12,8 @@ state_head: 9774a421a00fbb4bd5e4b55a260b8c5b3be730d9
 progress:
   total_phases: 10
   completed_phases: 9
-  total_plans: 208
-  completed_plans: 206
+  total_plans: 220
+  completed_plans: 208
 milestone_name: Unit Test Refactor
 ---
 
@@ -433,8 +433,9 @@ None for roadmap creation.
 
 **Stopped at:** Phase 117 context gathered
 
-**Resume file:** `.planning/phases/117-extension-entry-and-final-gate/117-CONTEXT.md` — phase 117's
-decisions, with every count in it measured in this tree rather than inherited.
+**Resume file:** `.planning/phases/117-extension-entry-and-final-gate/117-01-PLAN.md` — the first of
+twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
+lines) beside them.
 
 **Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
@@ -442,8 +443,14 @@ only its per-plan wave list is spent.
 
 Last session: 2026-09-03. Phase 117 context gathered — six areas discussed, all decided.
 
-**Next: Phase 117 (Extension Entry and Final Gate).** CONTEXT.md and DISCUSSION-LOG.md exist
-(`9774a421`); no research and no plans yet. Continue with `/gsd-plan-phase 117`, then execute.
+**Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
+six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
+Continue with `/gsd-execute-phase 117`.
+
+Plan counts here are MEASURED, not carried: 220 total and 208 complete, counted by `find` over
+`1??-??-{PLAN,SUMMARY}.md`. The prior 208/206 was stale on both halves — `total_plans` had never
+absorbed phase 117, and `completed_plans` carried the known `state.record-metric` drift. Every phase
+108-116 has a SUMMARY for every PLAN.
 
 ### What Phase 117 inherits
 
