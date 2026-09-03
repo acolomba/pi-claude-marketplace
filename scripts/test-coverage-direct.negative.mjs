@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertCompleteCoverage } from "./test-coverage-direct.mjs";
+import { assertCompleteCoverage, assertReportComplete } from "./test-coverage-direct.mjs";
 
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "direct-coverage-gate-"));
 const sourceDirectory = path.join(fixtureRoot, "extensions/pi-claude-marketplace/domain");
@@ -108,6 +108,100 @@ try {
   assert.match(
     unmappableInTree.stderr,
     /Not a corresponding test path: tests\/edge\/notification-boundary\.ts/,
+  );
+
+  // The all-pair completeness assertion. These records are string pairs only -- the assertion never
+  // reads the disk -- so the fixture names deliberately do not exist in the tree.
+  const enumeratedModules = [
+    "extensions/pi-claude-marketplace/domain/alpha.ts",
+    "extensions/pi-claude-marketplace/domain/beta.ts",
+    "extensions/pi-claude-marketplace/shared/gamma.ts",
+  ];
+  const completeRecords = [
+    { sourcePath: enumeratedModules[0], testPath: "tests/domain/alpha.test.ts" },
+    { sourcePath: enumeratedModules[1], testPath: "tests/domain/beta.test.ts" },
+    { sourcePath: enumeratedModules[2], testPath: "tests/shared/gamma.test.ts" },
+  ];
+
+  // The passing state comes first and is not decoration: without it the three refusals below could
+  // all be firing on a malformed record list rather than on the property each one claims.
+  assert.doesNotThrow(() => assertReportComplete(completeRecords, enumeratedModules));
+
+  // A run that quietly visited one row fewer. Whole-value comparison: the verdict names the module.
+  assert.throws(
+    () => assertReportComplete([completeRecords[0], completeRecords[2]], enumeratedModules),
+    {
+      message:
+        "Missing from the all-pair result: extensions/pi-claude-marketplace/domain/beta.ts",
+    },
+  );
+
+  // A row counted twice. The repeat is reported ahead of the row it displaced, because the repeat is
+  // the cause and the absence is the symptom.
+  assert.throws(
+    () =>
+      assertReportComplete(
+        [completeRecords[0], completeRecords[1], completeRecords[1]],
+        enumeratedModules,
+      ),
+    {
+      message:
+        "Repeated sourcePath in the all-pair result: extensions/pi-claude-marketplace/domain/beta.ts",
+    },
+  );
+
+  // Two rows claiming one test. The source paths are distinct, so only the test-path half of the
+  // repeat check can refuse this -- without this state that half is never exercised.
+  assert.throws(
+    () =>
+      assertReportComplete(
+        [
+          completeRecords[0],
+          { sourcePath: enumeratedModules[1], testPath: completeRecords[0].testPath },
+          completeRecords[2],
+        ],
+        enumeratedModules,
+      ),
+    {
+      message: "Repeated testPath in the all-pair result: tests/domain/alpha.test.ts",
+    },
+  );
+
+  // A row whose test path is well-formed and unique but does not map back to its own source.
+  assert.throws(
+    () =>
+      assertReportComplete(
+        [
+          completeRecords[0],
+          completeRecords[1],
+          { sourcePath: enumeratedModules[2], testPath: "tests/shared/delta.test.ts" },
+        ],
+        enumeratedModules,
+      ),
+    {
+      message:
+        "Mapping does not round-trip in the all-pair result: extensions/pi-claude-marketplace/shared/gamma.ts <-> tests/shared/delta.test.ts",
+    },
+  );
+
+  // A row for a module the run never enumerated. Nothing repeats, everything round-trips and no
+  // enumerated module is absent, so only the count check can refuse it. Without this state the count
+  // check would ship unplanted.
+  assert.throws(
+    () =>
+      assertReportComplete(
+        [
+          ...completeRecords,
+          {
+            sourcePath: "extensions/pi-claude-marketplace/shared/delta.ts",
+            testPath: "tests/shared/delta.test.ts",
+          },
+        ],
+        enumeratedModules,
+      ),
+    {
+      message: "Expected 3 all-pair records, found 4",
+    },
   );
 
   process.stdout.write("Direct-coverage negative controls passed.\n");
