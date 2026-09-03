@@ -420,6 +420,25 @@ function contextNotifyingThrough(
   });
 }
 
+/**
+ * A context with no session manager at all. This is the second of the two inputs
+ * the production comment names -- `ctx.sessionManager.getSessionId()` can throw,
+ * or `ctx.sessionManager` can be absent so the dereference throws instead. Both
+ * land in one `catch`, so line and branch coverage cannot tell the two apart and
+ * only a case naming this input exercises it.
+ */
+function contextWithoutSessionManager(ctx: ExtensionCommandContext): ExtensionCommandContext {
+  return new Proxy(ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "sessionManager") {
+        return undefined;
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
 /** A context whose session manager answers with the given reader. */
 function contextWithSessionId(
   ctx: ExtensionCommandContext,
@@ -766,6 +785,28 @@ test("leaves the session variables alone when the session id cannot be read (WR-
   const sessionCtx = contextWithSessionId(ctx, () => {
     throw new Error("session id refused");
   });
+  for (const key of SESSION_ENV_KEYS) {
+    Reflect.deleteProperty(process.env, key);
+  }
+
+  const expectedSessionEnv = [undefined, undefined, undefined];
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    SESSION_ENV_KEYS.map((key) => process.env[key]),
+    expectedSessionEnv,
+  );
+  verifyBoundary();
+});
+
+test("leaves the session variables alone when there is no session manager (WR-02)", async (t) => {
+  // arrange
+  await createHermeticScope(t, "session-env-absent");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const sessionCtx = contextWithoutSessionManager(ctx);
   for (const key of SESSION_ENV_KEYS) {
     Reflect.deleteProperty(process.env, key);
   }
