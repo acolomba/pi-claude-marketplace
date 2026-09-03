@@ -576,7 +576,7 @@ Plans:
 4. Planted negative controls fail for their intended violations, and the clean tree passes focused tests, all-pair coverage, and `npm run check`.
 5. Public, persistence, adapter, and named product contracts remain unchanged. Prohibited preservation and migration mechanisms are absent.
 
-**Plans**: 8/12 plans executed
+**Plans**: 9/12 plans executed
 
 Plans:
 
@@ -588,7 +588,7 @@ Plans:
 - [x] 117-06-PLAN.md
 - [x] 117-07-PLAN.md
 - [x] 117-08-PLAN.md
-- [ ] 117-09-PLAN.md
+- [x] 117-09-PLAN.md
 - [ ] 117-10-PLAN.md
 - [ ] 117-11-PLAN.md
 - [ ] 117-12-PLAN.md
@@ -600,7 +600,7 @@ Plans:
 - [x] **117-05** (`117-05-PLAN.md`) - Fold the device-flow prompt lock into `tests/domain/github-auth.test.ts`
 - [x] **117-06** (`117-06-PLAN.md`) - Fold the cross-bridge cascade evidence into `tests/orchestrators/marketplace/shared.test.ts`
 - [x] **117-07** (`117-07-PLAN.md`) - Relocate the marketplace seed, delete `tests/helpers/`, drop it from both npm globs
-- [ ] **117-08** (`117-08-PLAN.md`, `P117-01`) - `extensions/pi-claude-marketplace/index.ts` → `tests/index.test.ts`, the glob amendment, and the two legacy proxies deleted
+- [x] **117-08** (`117-08-PLAN.md`, `P117-01`) - `extensions/pi-claude-marketplace/index.ts` → `tests/index.test.ts`, the glob amendment, and the two legacy proxies deleted
 - [ ] **117-09** (`117-09-PLAN.md`) - Name barrel-proxy ownership as its own correspondence verdict, with a planting control
 - [ ] **117-10** (`117-10-PLAN.md`) - Planting controls for the shortfall and ambiguity coverage verdicts and two mapping refusals
 - [ ] **117-11** (`117-11-PLAN.md`) - Self-checking all-pair run, retained result artifact, and the runtime and concurrency decisions
@@ -643,5 +643,5 @@ and commit still owns one pair.
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
 | 116. Edge Surface                        |          31/31 | Complete        | 2026-09-03 |
-| 117. Extension Entry and Final Gate      | 8/12 | In Progress|  |
+| 117. Extension Entry and Final Gate      | 9/12 | In Progress|  |
 | **Total**                                |    **203/204** | **In Progress** | **-**      |
