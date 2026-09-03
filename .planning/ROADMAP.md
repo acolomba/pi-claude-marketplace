@@ -524,7 +524,7 @@ Plans:
 3. Handlers and LLM tools report exact public results through `ctx.ui.notify(message, severity)` and never write directly to stdout or stderr.
 4. Read-only edge paths remain offline, and invalid input fails before a state-changing workflow runs.
 
-**Plans**: 23/31 plans executed (30 source-test pairs plus one shared-helper plan that must land first)
+**Plans**: 24/31 plans executed (30 source-test pairs plus one shared-helper plan that must land first)
 
 Plans:
 
@@ -546,7 +546,7 @@ Plans:
 - [x] **116-15** (`116-15-PLAN.md`, `P116-15`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts` → `tests/edge/handlers/plugin/enable-disable.test.ts`
 - [x] **116-16** (`116-16-PLAN.md`, `P116-16`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts` → `tests/edge/handlers/plugin/fetch.test.ts`
 - [x] **116-17** (`116-17-PLAN.md`, `P116-17`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts` → `tests/edge/handlers/plugin/import.test.ts`
-- [ ] **116-18** (`116-18-PLAN.md`, `P116-18`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts` → `tests/edge/handlers/plugin/info.test.ts`
+- [x] **116-18** (`116-18-PLAN.md`, `P116-18`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts` → `tests/edge/handlers/plugin/info.test.ts`
 - [ ] **116-19** (`116-19-PLAN.md`, `P116-19`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts` → `tests/edge/handlers/plugin/install.test.ts`
 - [ ] **116-20** (`116-20-PLAN.md`, `P116-20`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts` → `tests/edge/handlers/plugin/list.test.ts`
 - [ ] **116-21** (`116-21-PLAN.md`, `P116-21`) - `extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts` → `tests/edge/handlers/plugin/pending.test.ts`
@@ -618,6 +618,6 @@ and commit still owns one pair.
 | 113. Orchestrator Support and Presenters |          35/35 | Complete        | 2026-09-01 |
 | 114. Plugin and Marketplace Lifecycle    |          14/14 | Complete        | 2026-09-01 |
 | 115. Composition Orchestrators           |            8/8 | Complete        | 2026-09-02 |
-| 116. Edge Surface                        |          23/31 | In Progress     | -          |
+| 116. Edge Surface                        |          24/31 | In Progress     | -          |
 | 117. Extension Entry and Final Gate      |            0/1 | Not started     | -          |
 | **Total**                                |    **173/204** | **In Progress** | **-**      |
