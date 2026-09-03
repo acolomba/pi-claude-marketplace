@@ -4,11 +4,11 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: executing
-stopped_at: "HALTED at 117-11 Task 2: the all-pair run cannot complete"
-last_updated: "2026-09-03T21:20:52.403Z"
+stopped_at: Completed 117-11-PLAN.md (halt resolved by operator decision; all-pair result retained)
+last_updated: "2026-09-03T22:11:16.917Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 117 execution started
-state_head: eb6264ed69957dae4aad8c07cd4b0ebc65da0b18
+state_head: ba4993de00dd822582abdd1c530cd7efdb0a4a44
 progress:
   total_phases: 10
   completed_phases: 9
@@ -229,6 +229,7 @@ evidence.
 | Phase 117 P09 | 13 min | 1 tasks | 2 files |
 | Phase 117 P10 | 12 min | 1 tasks | 1 files |
 | Phase 117 P11 | 50 min | 1 tasks | 4 files |
+| Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -435,8 +436,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: The extension entry pair asserts two notifications for an unreadable install state, not one: the reconcile renders its own failure cascade for the same file before the plugin-PATH warning, and the legacy filtered assertion concealed it. — Measured on this tree; the whole two-element notification list is now compared.
 - [Phase 117]: Both entry-pair fixtures use a schema violation rather than a syntax error, because the reconcile renders the runtime JSON parser text into a user-visible message and that text is not part of any contract. — Keeps the whole-value cascade comparisons stable across Node versions; this tree runs v26.7.0 while CI pins 24.
 - [Phase 117]: Barrel-proxy ownership is named as its own gate verdict, proxy-owned, split from wrong-import and decided from the import graph the gate already builds. — D-117-21 gives the verdict its spelling; the split needs no name list, registry or exemption entry, and both sides are planted in the control.
-- [Phase 117]: COV-05's 204 rows measure as 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, not D-117-20's 197 + 7 — Measured over every row on both interpreters using the gate's own assertion; the seven short-by-one modules match the seven open D-116-01a ledger entries file for file
-- [Phase 117]: Concurrency for the all-pair run stays undecided — D-117-11 forbids an unmeasured choice and no complete all-pair duration exists, since every run aborted on the accepted shortfalls
+- [Phase 117]: D-117-20 amended to 190 + 7 + 7: 190 complete numeric records, 7 accepted D-116-01a shortfalls, 7 type-only — Operator decision after plan 117-11 measured it; the gate is deliberately unchanged, no ledger-keyed verdict and no production licence, because a ledger-keyed pass would be the coverage-exception pragma D-116-01a bans
+- [Phase 117]: Concurrency is NOT added to the all-pair run, decided against a measured 533.2 s for all 204 rows — Under nine minutes at a phase boundary does not justify D-117-11's obligation of a second planting control proving a failing pair is still detected under interleaving
+- [Phase 117]: An errno path and errno message text are runtime-owned, not contractual; assertions pin name, code and syscall, and read the runtime's wording back where production composes around it — A package upgrade changed the EISDIR wording mid-phase and reddened 11 assertions with no behaviour change; the ten hardened suites are now identical on v22.22.2 and v26.8.1
 
 ### Pending Todos
 
@@ -444,15 +446,13 @@ None for roadmap creation.
 
 ### Blockers/Concerns
 
-- Phase 117 must measure the Node 24 all-pair duration before adding concurrency.
 - `gsd-tools query phase.complete` cannot write the root planning files while
   workstream mode is active, and neither existing workstream holds v1.19 —
   `defaults-enabled` is a finished milestone at phase 105 and `milestone` is v1.18
   at phase 100. Phase 114's ROADMAP and STATE transition was therefore applied by
   hand. Phases 115 through 117 and milestone close will hit the same wall until the
   stale workstream directories are retired or v1.19 is given its own workstream.
-- Plan 117-11 HALTED: test:coverage:direct:all cannot complete. Seven of the 204 rows are the accepted D-116-01a single-branch shortfalls (ledger 15-19, 21, 22), so COV-05 is 190 complete + 7 accepted + 7 type-only, not D-117-20's 197 + 7. Needs an operator decision on how the gate represents an accepted shortfall, given the standing ban on coverage-exception pragmas.
-- PATH node upgraded v26.7.0 to v26.8.1 mid-phase; 26.7.0 is gone from the Cellar. Eleven whole-value assertions across ten suites now fail because EISDIR from reading a directory carries a path property. npm test: 5142/0 on /usr/bin/node v22.22.2, 5131 with 11 failures on v26.8.1. CI pins Node 24 and is unaffected.
+- D-117-20 must be amended in 117-CONTEXT.md to read 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only. Operator decision taken in plan 117-11; the decision record still carries the superseded 197 + 7 wording. Owned by the 117-12 sweep.
 
 ## Deferred Items
 
@@ -462,9 +462,9 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** HALTED at 117-11 Task 2: the all-pair run cannot complete
+**Stopped at:** Completed 117-11-PLAN.md (halt resolved by operator decision; all-pair result retained)
 
-**Resume file:** .planning/phases/117-extension-entry-and-final-gate/117-11-SUMMARY.md
+**Resume file:** None
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
 lines) beside them.
 
@@ -472,7 +472,7 @@ lines) beside them.
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03T21:20:20.046Z
+Last session: 2026-09-03T22:11:10.556Z
 
 **Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
 six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
@@ -489,9 +489,12 @@ absorbed phase 117, and `completed_plans` carried the known `state.record-metric
 - **`tests/edge/index-handler.test.ts` is an ORPHAN by design** — D-116-10 deferred it here. It is the
   only unmirrored test in the edge tier, and it holds the 7 `as any` / `as unknown as` casts that are
   absent from every one of phase 116's own 30 pairs.
-- **A blocker recorded before phase 116 began:** Phase 117 must MEASURE the Node 24 all-pair duration
-  before adding concurrency.
-- **17 open Broken Windows entries**, 8 from phase 116. Seven of those are D-116-01a coverage
+- **The all-pair duration blocker is discharged.** Plan 117-11 measured 533.2 s for all 204 rows on
+  Node v26.8.1, read from the runner's own printed line, and decided NOT to add concurrency against
+  that number. No Node 24 is installed on this machine; CI pins it.
+- **21 open Broken Windows entries.** Entries 27 and 28, opened by plan 117-11, are closed: the
+  all-pair reading was settled by operator decision, and the eleven runtime-dependent assertions were
+  hardened so the tree is green on both installed interpreters. Seven of those are D-116-01a coverage
   shortfalls (15-19, 21, 22) — argued, pinned, and closable only by a production rewrite. Entry 20 is
   different: two production comments in `edge/register.ts` (18-20 and 104-106) assert a
   registration-time `process.cwd()` capture the code does not make; `process.cwd()` is evaluated inside

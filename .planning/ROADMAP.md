@@ -603,7 +603,7 @@ Plans:
 - [x] **117-08** (`117-08-PLAN.md`, `P117-01`) - `extensions/pi-claude-marketplace/index.ts` → `tests/index.test.ts`, the glob amendment, and the two legacy proxies deleted
 - [x] **117-09** (`117-09-PLAN.md`) - Name barrel-proxy ownership as its own correspondence verdict, with a planting control
 - [x] **117-10** (`117-10-PLAN.md`) - Planting controls for the shortfall and ambiguity coverage verdicts and two mapping refusals
-- [ ] **117-11** (`117-11-PLAN.md`) - Self-checking all-pair run, retained result artifact, and the runtime and concurrency decisions
+- [x] **117-11** (`117-11-PLAN.md`) - Self-checking all-pair run, retained result artifact, and the runtime and concurrency decisions
 - [ ] **117-12** (`117-12-PLAN.md`) - Inventory sweep: roadmap, state, requirements and the broken-windows ledger
 
 ## Requirement Coverage
