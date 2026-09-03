@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.19
-current_phase: 116
-current_phase_name: Edge Surface
-status: executing
-stopped_at: Completed 116-28-PLAN.md
-last_updated: "2026-09-03T06:12:00.000Z"
-last_activity: 2026-09-02
-last_activity_desc: Phase 116 plan execution complete
-state_head: 132690965ebe16fb3a70088bddbd43856dfd8190
+current_phase: 117
+current_phase_name: Extension Entry and Final Gate
+status: phase_complete
+stopped_at: Phase 116 verified and closed
+last_updated: "2026-09-03T08:15:00.000Z"
+last_activity: 2026-09-03
+last_activity_desc: Phase 116 complete - verification passed 6 of 6
+state_head: f093e5439dcd8b84f35c8c7251f0ec83b907214a
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 208
   completed_plans: 206
 milestone_name: Unit Test Refactor
@@ -26,13 +26,25 @@ See: `.planning/PROJECT.md` (updated 2026-09-01 after Phase 113)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 116 — Edge Surface
+**Current focus:** Phase 117 — Extension Entry and Final Gate
 
 ## Current Position
 
-Phase: 116 (Edge Surface) — EXECUTING
+Phase: 116 (Edge Surface) — COMPLETE, verification passed 6 of 6 on 2026-09-03
+Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
 Plan: 31 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-18, 116-19, 116-20, 116-21, 116-22, 116-23, 116-24, 116-25, 116-26, 116-27, 116-28, 116-29, 116-30)
-Status: every plan in the phase is EXECUTED. 116-28 (register) closed the last one, wave 6. Code review has now RUN and TWELVE of its thirteen findings are CLOSED — both criticals under the D-116-15 licence, the other seven in the test suite with no production change; WR-01, left open twice as contested, is now CLOSED too with no production change, so ALL THIRTEEN are closed. The remaining gates — aggregate, regression, verification — stay with the orchestrator, along with the deferred 173/204 pair total and MOD-09
+Status: CLOSED. All 31 plans executed, all 13 code-review findings closed, all five gates green, and
+verification measured every promise directly rather than reading the summaries. Its one gap — the two
+D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
+ledger — is closed; all seven shortfalls are now filed as entries 15-19, 21 and 22. MOD-09 closed, the
+pair total swept to 203/204, and the ROADMAP row marked Complete.
+
+Closing gates, each run separately: typecheck 0, lint 0, fallow 0, `npm test` 5141/5141 across 295
+suites, `test:integration` 31/31. Zero coverage pragmas repo-wide, zero banned casts in the phase's own
+work, and all 30 edge sources mirrored — the one orphan, `tests/edge/index-handler.test.ts`, is
+D-116-10's deliberate deferral to Phase 117.
+
+The history below is the per-plan record, newest first; it is retained deliberately.
 
 Last activity: 2026-09-03 — code-review gap closure part three: WR-01, the last open finding, closed across TWELVE suites with `git diff --quiet -- extensions/` clean at every commit and after every plant. The finding was twice called false on a grep for the literal string `globalThis.fetch`, which does NOT match a `t.mock.method(globalThis, "fetch", …)` installation and returns only comment prose inside the seven `https.request` suites. Grepping the installation form confirms part two's split: twelve edge suites watched `globalThis.fetch`, seven watched `https.request`, disjoint. The control settles it — a live `https.request` dial-out planted in `data.ts`'s `getMarketplaceNamesAcrossScopes`, the review's own worked example, leaves the suite 66/66 GREEN on the fetch door and turns 5 RED once the door is `https.request`. All twelve now watch `https.request` and no `globalThis.fetch` spy remains under `tests/edge/`. Each suite was classified by asking the two questions SEPARATELY — can this fixture reach the transport, and does any input turn it on — and got the matching shape. EIGHT keep the fail-fast replacement as a hermeticity device and assert NO count: `data`, `provider`, `marketplace/info` and `marketplace/list` hold no HTTP client anywhere in their import closure, and `marketplace/remove`, `plugin/enable-disable`, `plugin/import` and `register` drive path sources, a mocked delegate, or an injected port never invoked. TWO keep the zero as a measurement and were planted: deleting the `gitOps` forward makes `marketplace/add` dial its url source for real (7 of 11 RED, the fail-fast firing from `simple-get` inside `isomorphic-git/http/node`) and moves `plugin/bootstrap`'s counter to 1. TWO keep it as a labelled regression guard: `handlers/tools`, whose fixture carries a cold git source but whose parameter space has no way to turn materialization on (a planted dial-out reddens 28 of its 53 cases, so the detector is known to fire), and `marketplace/update` — the finding of this run: the same port-forward plant reddens 5 of 7 rows on their MESSAGE while the counter, probed directly, stays at exactly 0, because the refresh dies inside `isomorphic-git` on a staged clone with no configured remote, one step before the transport. 116-25's rule confirmed independently, and the review's own guess that `marketplace/update` and `plugin/import` carry positive controls is wrong on both while it missed `plugin/bootstrap`, which carries the cleanest one. All four "the count is the proof" headers are gone, and the phrase "the process-wide transport" is gone from all twelve. Gates run separately, all exit 0: typecheck, lint, fallow, `npm test` at `ℹ tests 5141` across 295 suites (UNCHANGED — assertions were removed, no case was), `test:integration` 31/31. Both D-116-01a pins re-measured and holding: `data.ts` 109/110 and `provider.ts` 79/80, lines and functions complete, uncovered-line sets empty; the 116-13 and 116-17 pins at 11/12 are unchanged. Report: `116-REVIEW-FIX-REPORT-3.md`. No new plan, no plan-count movement.
 
@@ -419,49 +431,64 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Resume file:** None
+**Resume file:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
+BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
+only its per-plan wave list is spent.
 
-Last session: 2026-09-03T06:12:00.000Z
-Stopped at: Completed 116-28-PLAN.md
-tests/edge/register.test.ts is the sole mirrored owner for the registration glue, at 11 runtime
-cases from 11 marked bodies. Direct coverage moved from branches 9/10 and functions 7/9 to branches
-15/15, functions 9/9, lines 143/143, because every callback the module hands to Pi is now captured
-off the recorded registration and INVOKED rather than merely observed as installed. The plan's
-must_haves truth that the working directory is captured AT REGISTRATION is FALSE: `process.cwd()`
-runs inside the completion arrow, so it is read per invocation, and two production comments assert
-the property the code does not have (no licence remains to fix them). The plan's literal Plant 3 has
-no target for the same reason; the mirror was run instead and reddened exactly the two-root case.
-The edge tier is now fully mirrored and fully owned; the only orphan test under tests/edge/ is
-index-handler.test.ts, D-116-10's deliberate deferral to Phase 117. npm test 5134/5134 across 295
-suites, test:integration 31/31, typecheck/lint/fallow all 0. Production is byte-identical after
-eight plants, all eight RED.
+Last session: 2026-09-03. Phase 116 closed — verified, transitioned, ROADMAP and STATE updated by hand.
 
-Superseded, kept for the trail:
-tests/edge/handlers/plugin/uninstall.test.ts is the sole mirrored owner for the uninstall shim, at
-16 runtime cases from 10 marked bodies. Direct coverage holds at branches 10/10, functions 2/2,
-lines 42/42, so no D-116-01a claim arises and no branch the old suite covered incidentally was lost.
-Every case, rejections included, compares the surviving install records of BOTH scope roots as one
-whole value beside the notification — the footprint is how a destructive seamless verb is owned. A
-surplus positional is DROPPED, not rejected; the scope-target flag is ACCEPTED but invisible in both
-the message and the footprint unless the override layer fails schema validation, which is the fixture
-the whole flag family was moved onto; mutually exclusive selectors are honoured rather than rejected.
-npm test 5132/5132 across 293 suites, test:integration 31/31, typecheck/lint/fallow all 0. Production
-is byte-identical after five plants across two files, all five RED.
+**Next: Phase 117 (Extension Entry and Final Gate).** Nothing exists for it yet — no directory, no
+CONTEXT.md, no plans. Start with `/gsd-discuss-phase 117`, then plan, then execute.
 
-Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
-D-116-14 locked, so discuss is done and planning runs first. Pass --skip-ui to plan-phase:
-the phase is backend but its vocabulary trips the UI gate's keyword match. Blocking
-constraints and the full anti-pattern table live in
-.planning/phases/116-edge-surface/.continue-here.md.
+### What Phase 117 inherits
 
-Standing environment debts, all still true: npm run check short-circuits at format:check
-on untracked operator files and never runs the tests, so run npm test and
-npm run test:integration separately; git hooks are not installed in this checkout, so run
-pre-commit run --files <paths> manually and never --all-files; this is a linked worktree,
-so trufflehog needs the filesystem route plus SKIP=trufflehog; worktree isolation is off,
-so plans run sequentially; and phase.complete refuses to write root planning files under
-workstream mode, so every transition needs hand-applying.
+- **One pair remains**: the extension entry point. The ROADMAP shows 1 plan; the pair total is 203/204.
+- **`tests/edge/index-handler.test.ts` is an ORPHAN by design** — D-116-10 deferred it here. It is the
+  only unmirrored test in the edge tier, and it holds the 7 `as any` / `as unknown as` casts that are
+  absent from every one of phase 116's own 30 pairs.
+- **A blocker recorded before phase 116 began:** Phase 117 must MEASURE the Node 24 all-pair duration
+  before adding concurrency.
+- **17 open Broken Windows entries**, 8 from phase 116. Seven of those are D-116-01a coverage
+  shortfalls (15-19, 21, 22) — argued, pinned, and closable only by a production rewrite. Entry 20 is
+  different: two production comments in `edge/register.ts` (18-20 and 104-106) assert a
+  registration-time `process.cwd()` capture the code does not make; `process.cwd()` is evaluated inside
+  the completion arrow, so it is read per invocation. No licence remained to fix them in 116.
+- **`BOOLEAN_FLAGS` is still re-exported from `edge/handlers/plugin/list.ts`** solely for
+  `tests/architecture/flag-catalog-drift.test.ts`. Recorded as an observation for the phase that owns
+  the repository-wide gates.
+- **`tests/orchestrators/edge-deps.test.ts` still watches `globalThis.fetch`** — the precedent that
+  spread the wrong door across twelve edge suites. It sits outside the edge tier so phase 116 left it;
+  the git transport reaches the wire through `simple-get` → `https.request`, and `globalThis.fetch` has
+  exactly one production caller (`domain/github-auth.ts`'s device flow, correctly watched by
+  `tests/domain/github-auth.test.ts`).
 
-Also open: the REQUIREMENTS.md per-pair Status column lapsed at Phase 110 — 115 rows
-across phases 110 through 114 still read Open despite all five being verified complete.
-Phase 115's eight rows were closed; the older drift was left untouched as out of scope.
+### Two open operator decisions
+
+1. **The tool's `available` / `unavailable` parameter DESCRIPTIONS** now admit a bucket their wording
+   does not mention, after D-116-15's CR-01 fix made the `remote` and `partially-available` arms
+   reachable. Changing them alters the LLM-facing contract and the pinned registration schema, which
+   the fixer judged past its licence. Left for a deliberate decision.
+2. **REQUIREMENTS.md status drift.** MOD-07 (Phase 114) still reads `Pending` despite that phase being
+   verified complete, and the per-pair Status column lapsed at Phase 110 — roughly 115 rows across
+   phases 110-114. Phase 116 swept only what it owned (MOD-09). Bookkeeping fix or milestone-audit
+   item, your call.
+
+### Standing environment debts — all still true
+
+- **`npm run check` NEVER runs the tests.** `format:check` fails on the operator's pre-existing
+  untracked files and short-circuits before `test`. Run `npm run typecheck`, `npm run lint`,
+  `npm run fallow`, `npm test` and `npm run test:integration` SEPARATELY, checking each exit code.
+- **Git hooks are not installed in this checkout** — a successful commit is not evidence hooks passed.
+  Use the operator-approved recipe: filesystem trufflehog, per-file `prettier --check`, then
+  `SKIP=trufflehog,npm-format-check pre-commit run --files <explicit paths>`.
+- **This is a linked worktree**, so trufflehog needs the filesystem route.
+- **This shell does not word-split**, and backticks inside `git commit -m` execute — use `git commit -F`.
+- **`workflow.use_worktrees=false`**, so executors run sequentially on the shared tree, one at a time.
+- **`phase.complete` cannot write the root planning files** under workstream mode — neither workstream
+  holds v1.19 — so every phase transition is hand-applied. 114, 115 and 116 all were.
+- **`roadmap.update-plan-progress` mangles ROADMAP.md every single time** (31 for 31 in phase 116):
+  hand-edit instead. ROADMAP carries the plan count in TWO places that drift independently.
+- **`state.record-metric` double-increments `completed_plans`**; `state.update-progress` writes nothing;
+  `state.advance-plan` increments without appending the plan id.
+- **NEVER name a non-plan artifact `*-SUMMARY.md`** — that glob is counted as a plan summary by
+  `find-phase`, `phase-plan-index` and `progress.bar`, and it silently inflates the phase count.
