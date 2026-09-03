@@ -13,7 +13,7 @@ progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 197
+  completed_plans: 198
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,8 +31,10 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 22 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-17, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: wave 5 (the eleven plugin handlers) is OPEN — 116-14, 116-15 and 116-17 are done. Eight remain: 116-16, 116-18, 116-19, 116-20, 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
+Plan: 23 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: wave 5 (the eleven plugin handlers) is OPEN — 116-14, 116-15, 116-16 and 116-17 are done. Seven remain: 116-18, 116-19, 116-20, 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
+Last activity: 2026-09-02 — 116-16 rewrote the fetch shim owner, the only plugin handler that exports its own parser: 21 runtime cases from 8 marked bodies across two top-level describe blocks, one per exported entrypoint, direct coverage held at branches 27/27, functions 4/4, lines 132/132. FOUR findings. First, this module calls parseArgs DIRECTLY and never reaches extractLocalFlag, which gives a FOURTH parser combination: zero positionals is an ACCEPTED arity (the all form) so nothing lies below it, and two positionals IS rejected — by the handler's own `nonFlagPositionals.length > 1` guard rather than by any parser, the first genuine surplus rejection measured on a module of this shape. Second, `--scope user --local` is REJECTED with `Unknown flag: "--local".` — the scope-target flag reaches the positional list as an ordinary token and the handler's own long-flag scan claims it. That is the EIGHTH distinct `--local` outcome in this phase and the FIRST time the inherited mutually-exclusive-rejection truth has held against a real module. Third, the delegating path runs TWO tool probes, not the four 116-15 measured: fetchPlugins emits one cascade through notifyWithContext, which runs a single soft-dependency probe reading getAllTools twice. The probe count is per-orchestrator and must be measured every time. Fourth, the Group-C negative produced a SEVENTH and EIGHTH diagnostic site: forwarding ctx.cwd dies at persistence/locations.ts:145 via orchestrators/plugin/fetch.ts:244 (fetchPlugins runs no catch around enumeration), and a literal working directory runs the sweep to completion and dies on the emission count at orchestrators/plugin/fetch.ts:194. No on-disk footprint is asserted beside verifyBoundary(): fetch persists no state, so an empty-tree assertion would pass whether or not the workflow ran. Nine production plants, all NINE RED, all reverted; git diff --stat -- extensions/ empty; no production file touched. npm test 5070/5070 across 293 suites, integration 31/31
+
 Last activity: 2026-09-02 — 116-15 rewrote the dual-form plugin enable/disable owner: 17 runtime cases from 9 marked bodies, direct coverage branches 17/17 (was 14/16), functions 3/3, lines 87/87. FOUR findings. First, this handler parses through parseCommandArgs with ONE REQUIRED positional, so the arity truth splits: zero positionals IS rejected (`Missing required argument.`), and a surplus token is silently DROPPED — `alpha@mp beta@mp` flips alpha and leaves the seeded beta untouched, proven discriminating by a planted surplus rejection. Second, `--scope user --local` is ACCEPTED and BOTH selectors are honoured — the scope names the record, the scope-target flag names the config layer — the seventh distinct `--local` outcome measured in this phase, so the plan's mutually-exclusive-rejection truth is false here. Third, the Group-C negative produced a FIFTH and SIXTH distinct diagnostic site from the same omitted `cwd`: forwarding `ctx.cwd` dies at orchestrators/plugin/enable-disable.ts:610 inside the RESOLUTION catch (emitResolutionFailure), and a literal working directory dies at :785/:1048 in dispatchOutcome after the workflow ran to completion. Fourth, the two branches uncovered at HEAD were the `?? "user"` scope default and the non-Error arm of the catch's cause normalization, both reachable only through the handler's defense-in-depth catch; they are reached by a context that delegates every member to the shared strict boundary through a Proxy and throws on the single `cwd` read, so no Pi member is hand-rolled and `verifyBoundary()` still governs the emission. Boundary counts were measured through a counting proxy before a case was written: FOUR tool probes when delegating (the orchestrator's context cascade runs two probes), TWO on the handler's own failure conversion, ZERO on a rejection. Eleven production plants across three files, ten RED and one GREEN-by-design, all reverted; `git diff --stat -- extensions/` empty; no production file touched. npm test 5061/5061 across 291 suites, integration 31/31
 
 Last activity: 2026-09-02 — 116-17 moved the import suite from tests/edge/handlers/ to its mirrored path and rewrote it as the phase's one literal exact-argument owner: every delegating case states the COMPLETE options bag (context, Pi handle, working directory, selected scopes, git port) in a strong-mock `when()` with no wildcard matcher. 8 runtime cases from 6 marked bodies; direct coverage branches 11/12, lines and functions complete. THREE findings. First, the plan's move-and-rewrite-in-one-commit rule and its own "git status shows a rename" acceptance criterion are mutually exclusive: a total rewrite shares nothing with the original, so git detects no rename even at -M10%. Split into a pure move (91% similar, rename recorded, tree green) then the rewrite, per the orchestrator's explicit "commit the move so git log --follow keeps the file's history" — --follow now reaches back to f1855ecf, the commit that added the import command. Second, the git-port forward pins the port's MEMBERS, not the container: a `{ ...deps.gitOps }` spread plant stayed GREEN because strong-mock compares the bag structurally, while wrapping one method turned all three delegating cases RED. The header states the narrowed claim. Third, this handler parses raw arguments with parseArgs rather than parseCommandArgs, so unlike all six marketplace siblings it DOES reject a surplus positional — and `--local` is an ordinary token that lands on positional and is rejected there, making the "mutually exclusive scope selectors" case a positional rejection, not a scope diagnostic. A NEW D-116-01a pin: the String(err) arm at edge/handlers/plugin/import.ts:31, COMPILER-FORCED by the unknown-typed catch binding, proved by a plant that stayed GREEN plus a brute force over 3,615 argument strings that produced 521 throws and zero non-Error values, planted in both directions (two assertion-side, three output-side, all five FAIL; control PASS), and filed as WINDOWS.md entry 18. Seven production plants, five RED and two GREEN-by-design, all reverted; no production file touched. Measured baseline correction: npm test was 5049/5049 before this plan, not the 5041 the handoff recorded; it is 5052/5052 now
@@ -388,13 +390,14 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-03T01:00:00.000Z
-Stopped at: Completed 116-17-PLAN.md
-tests/edge/handlers/plugin/import.test.ts is the sole mirrored owner for the import shim, at 8
-runtime cases from 6 marked bodies, carrying the phase's one literal exact-argument proof and a
-pinned single-branch D-116-01a shortfall (branches 11/12; lines and functions complete). The
-correspondence gate went 10 to 8 violations. npm test 5052/5052, test:integration 31/31,
-typecheck/lint/fallow all 0. Production is byte-identical after seven plants.
+Last session: 2026-09-03T02:15:00.000Z
+Stopped at: Completed 116-16-PLAN.md
+tests/edge/handlers/plugin/fetch.test.ts is the sole mirrored owner for the fetch shim, at 21
+runtime cases from 8 marked bodies in two top-level describe blocks — one per exported entrypoint,
+because this is the only plugin handler that exports its parser. Direct coverage held at branches
+27/27, functions 4/4, lines 132/132, so no D-116-01a claim arises. npm test 5070/5070 across 293
+suites, test:integration 31/31, typecheck/lint/fallow all 0. Production is byte-identical after
+nine plants, all nine RED.
 
 Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
 D-116-14 locked, so discuss is done and planning runs first. Pass --skip-ui to plan-phase:
