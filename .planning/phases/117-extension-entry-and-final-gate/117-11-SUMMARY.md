@@ -329,3 +329,15 @@ Task 1's work is complete, committed and green, and is independent of that decis
 ---
 *Phase: 117-extension-entry-and-final-gate*
 *Completed: 2026-09-03*
+
+## Self-Check: PASSED
+
+- `scripts/test-coverage-direct.mjs` — present
+- `scripts/test-coverage-direct.negative.mjs` — present
+- `.planning/phases/117-extension-entry-and-final-gate/117-11-SUMMARY.md` — present
+- `.planning/phases/117-extension-entry-and-final-gate/deferred-items.md` — present
+- `117-ALL-PAIR-RESULT.ndjson` — confirmed absent, as intended: the aborted run's
+  partial file was removed rather than committed
+- commits `c47ad76f` and `172a0ec5` — both in `git log`
+- `git diff --quiet -- extensions/ tests/ package.json` — exit 0
+- `node scripts/test-coverage-direct.negative.mjs` — exit 0, all six states pass
