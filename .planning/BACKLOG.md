@@ -1408,6 +1408,57 @@ write, beats an agent-plugin entry. On an undetected collision OUR server
 shadows the user's, which is the worse direction: the user's own
 declaration disappears with no diagnostic from either side.
 
+**Amended 2026-09-01** from the upstream release review covering
+2026-08-24..2026-08-31, verified first-hand against the published
+`pi-mcp-adapter@2.31.0` tarball. Two further defects, one of them worse than
+the missing paths.
+
+**Our precedence direction is inverted.** The paragraph above already records
+that `mergeConfigs(base, next)` lets `next` win. It never connects that to our
+own walk, which does the opposite:
+
+```ts
+if (!map.has(name)) {
+  map.set(name, slotPath); // first-declarer wins
+}
+```
+
+(`bridges/mcp/collision-slots.ts:79`; the tuple's doc comment at line 21 also
+states "Order is FIRST-DECLARER-WINS".)
+
+`loadMcpConfig` folds sources in order through `mergeServerMaps(base, next)`,
+which builds `{...base}` and lets `next` overwrite, and its own conflict
+reporter names `sources[sources.length - 1]` as the winner (`config.ts:410`).
+Last source wins. So `<cwd>/.pi/mcp.json` is the HIGHEST-precedence slot, not
+the lowest, and every cross-slot collision we report names the wrong owning
+file. The frozen tuple order is a reviewed contract, so the fix is a
+deliberate reorder plus a comment rewrite plus a snapshot update -- not a
+one-line flip.
+
+**Two server sources are not files at all.** pi-mcp-adapter 2.27.0 added two
+registration paths no file walk can reach:
+
+- `registerMcpServer({pi, name, definition})` -- session-scoped, in-memory,
+  never persisted. It checks duplicates against the merged file config, so it
+  shares our namespace and fails closed with
+  `MCP server "x" is already registered` once we have written that name. Read
+  at changelog and export level only; the runtime map was not read in source.
+- `pi.mcp` package manifest entries, loaded outside `getConfigSources()` and
+  merged as the LOWEST-precedence base --
+  `mergeConfigs({mcpServers: packageServers}, mergeConfigs(pluginConfig, config))`
+  (`config.ts:335`). Anything we write silently overrides them. Confirmed in
+  source.
+
+**A third direction, now available.** 2.28.0 published `./config` and
+`./metadata-cache` as package subpath exports (confirmed in
+`package.json#exports` at 2.31.0). `dist/config.d.ts` exports
+`getConfigDiscoveryPaths()`, `loadMcpConfig()`, and `getServerProvenance()`
+returning `Map<string, ServerProvenance>`. `getServerProvenance()` answers our
+exact question -- who owns this name -- and would make both the path drift and
+the precedence inversion structurally impossible. The cost is that
+pi-mcp-adapter becomes a real dependency, which it currently is not. That is a
+scope decision, not a mechanical swap.
+
 Direction for later: extend the slot tuple with the two `.agents` paths
 and re-word the MC-4/RN-5 contract comment away from "four". The
 agent-plugin source is a separate and harder question -- its paths are
@@ -1435,15 +1486,26 @@ both small enough for one `/gsd-quick` pass over the file.
 
 **Point 1 -- the pi-mcp-adapter anchor is 13 minor versions old.** The
 "MCP runtime env inheritance" subsection (`docs/env-vars.md:151`) opens
-with "behavior verified against 2.10.0". Current upstream is 2.23.0. The
-CLAIM is still correct: `server-manager.ts::resolveEnv` at v2.23.0 still
-builds `{...process.env, ...interpolated(config.env)}` for the path our
-entries take, so nothing in the divergence text is wrong. What is missing
-is that the signature became
-`resolveEnv(env, serverName, literalEnv = false)` in 2.21.0, adding an
-opt-out the doc does not mention. Re-anchor the version and add one
-sentence for the third parameter. The behavioral question that opt-out
-raises is filed separately as [ENVLIT-01] -- keep this one to doc accuracy.
+with "behavior verified against 2.10.0". Current upstream is 2.31.0.
+
+**Corrected 2026-09-01: the claim below was NOT still correct, and was
+already wrong on the day this entry was written.** The original text read
+"the CLAIM is still correct: `server-manager.ts::resolveEnv` at v2.23.0
+still builds `{...process.env, ...interpolated(config.env)}`". It does
+not. `resolveEnv` (`server-manager.ts:1306` at 2.31.0) calls
+`resolveCommandSecretsRecord`, which routes every value through
+`resolveCommandSecret` -- and a value beginning with a single `!` is
+EXECUTED as a shell command. That landed in 2.15.0 (2026-07-25), three
+weeks BEFORE the 2.23.0 reading this entry claimed. Verified first-hand
+against the published 2.31.0 tarball, not from changelog prose.
+
+So the doc is not merely under-anchored; its divergence text describes
+behavior the adapter has not had since 2.15.0. Re-anchor to 2.31.0 and
+rewrite the subsection around `resolveCommandSecretsRecord`, the `!` /
+`!!` marker contract, and the `literalEnv` opt-out (the signature became
+`resolveEnv(env, serverName, literalEnv = false)` in 2.21.0). The
+behavioral question the opt-out raises stays in [ENVLIT-01]; the one the
+`!` marker raises is filed as [MENVX-01]. Keep this entry to doc accuracy.
 
 **Point 2 -- `AI_AGENT=pi` has no row in the overview matrix.** pi 0.84.0
 added it (#7493). It is set as `process.env.AI_AGENT = "pi"` at the top of
@@ -1996,6 +2058,324 @@ rule (info = reached, warning = fell short, error = not carried out).
 The re-grade moves the IN-SCOPE case too, which is why it needed a decision
 rather than a drive-by: the `enable-not-installed` catalog state was re-graded
 with it, not worked around.
+
+## HKMS-01: the two new model-switch hook events (`PreModelSwitch`, `PostModelSwitch`)
+
+Surfaced by an upstream hooks review (2026-09-01). Claude Code 2.1.251 added
+two hook events the bridge does not know: `PreModelSwitch` and
+`PostModelSwitch`. Both carry `from_model` / `to_model` (canonical model names)
+and both match against `to_model`. They differ on control: `PreModelSwitch` is
+sequential and can block the switch (exit 2, or `permissionDecision: "deny"`;
+a timeout also blocks), while `PostModelSwitch` is async and observation-only
+-- output and exit code are ignored apart from `systemMessage` /
+`terminalSequence` -- and it fires for self-initiated changes too, such as
+restoring the model on resume.
+
+Today both are non-bucket-A event keys, so `partitionHooks` drops them as
+`kind:"event"` and the plugin resolves `partially-available`. Nothing
+mis-fires; the hooks simply never run.
+
+**`PostModelSwitch` is a direct bucket-A admission.** Pi's `model_select`
+carries `{ model, previousModel, source: "set" | "cycle" | "restore" }`, its
+handler returns `void` (observation-only, matching upstream exactly), and
+`source: "restore"` covers the self-initiated arm. `from_model` / `to_model`
+come from `previousModel?.id` and `model.id` (`Model` carries `id`, `name`,
+`provider`). No peer-dep floor move is needed: `model_select` landed in pi
+0.44.0, far below the `>=0.80.5` floor.
+
+Two gaps to decide, neither blocking:
+
+- `previousModel` is `undefined` on the first selection, so `from_model` needs
+  an omit-or-empty rule where upstream always carries both.
+- **The matcher is the real design question.** Upstream matches the canonical
+  `to_model` with regex and `|` alternatives. Pi model ids are provider-scoped
+  and do not share Claude's canonical vocabulary, so `claude-opus-5` would
+  silently never fire while `.*opus.*` happens to work -- the exact
+  under-fire / over-fire pair D-58-06 refuses to ship. Recommended disposition
+  is the `SessionEnd` precedent: an empty closed set, match-all only, with
+  non-empty matchers group-dropped through the existing gate and documented
+  `⚠`. The alternative -- pass the matcher through as a regex against
+  `model.id` -- buys partial fidelity at the price of a silent never-fire.
+
+**`PreModelSwitch` is blocked on upstream Pi.** `model_select` fires after the
+change and cannot cancel, and Pi has no before-model-switch event. The
+cancelable shape already exists next door (`session_before_switch`,
+`session_before_fork`, and `session_before_compact` all take
+`{ cancel: true }`), so the ask is a small, idiomatic upstream feature request
+rather than a new concept. A synthesis that reverts through `pi.setModel()`
+after the fact is mechanically possible and should be rejected: it is a
+visible flip-flop rather than a block, and it re-enters `model_select`
+recursively.
+
+**Docs drift, independent of whether the events ship.**
+`docs/hooks-compatibility.md` predates both events, so its table is two rows
+short. `docs/research/claude-hooks-vs-pi-events.md` is worse than incomplete
+-- it lists `model_select` under "Pi events with no Claude analog", which
+`PostModelSwitch` has made false.
+
+Code seams: `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`,
+`DISPATCHABLE_EVENTS`, `NON_TOOL_EVENT_FIELDS`, `NON_TOOL_EVENT_CLOSED_SETS`),
+`shared/concerns/hooks.ts` (`ClaudeHookEvent`), a new
+`bridges/hooks/payloads/post-model-switch.ts`,
+`bridges/hooks/dispatch-exec.ts` (`TRANSLATORS` and the required-field table),
+`bridges/hooks/async-rewake/registry.ts`, `bridges/hooks/event-adapters.ts`
+(observation narrowing), `bridges/hooks/timeout.ts`, and one
+`pi.on("model_select", ...)` registration in `bridges/hooks/event-router.ts`.
+
+## FMBOM-01: a UTF-8 BOM silently discards skill and agent frontmatter -- IMPORTANT
+
+Surfaced by the upstream release review covering 2026-08-18..2026-08-25 and
+re-verified against the installed peer on 2026-09-01. Marked IMPORTANT: this
+is the only item in this group that corrupts what the model reads, and it
+never self-heals.
+
+pi 0.84.3 shipped "Fixed UTF-8 BOM markers preventing frontmatter and user
+configuration files from loading (#8337)". The line reads routine. It is not.
+Pi 0.84.2's parser -- the one we re-export at `platform/pi-api.ts:38` -- gates
+on `normalized.startsWith("---")` with no BOM strip:
+
+```text
+no-BOM : {"frontmatter":{"description":"hi"},"body":"body"}
+BOM    : {"frontmatter":{},"body":"\ufeff---\ndescription: hi\n---\nbody"}
+```
+
+Run against the installed `@earendil-works/pi-coding-agent@0.84.2`, not read
+from the changelog.
+
+Both bridges are exposed, for different reasons:
+
+- **Skills** parse through Pi's parser, so empty frontmatter takes the
+  `freshBlock()` path in `bridges/skills/stage.ts`. No guard fires: the
+  SKILL-01 degrade needs a throw, SKILL-03 verifies the generated name and
+  passes, and the PARSE-02 backstop sees a valid `{name}`. The plugin's
+  original `---` block survives as literal body text the model reads, and its
+  `description` is gone.
+- **Agents** never reach Pi's parser. `bridges/agents/frontmatter.ts:90`
+  matches `/^---\r?\n/` itself, so a BOM drops `name`, `description`, `tools`,
+  and `model`, and `sourceName` falls back to the filename stem
+  (`bridges/agents/discover.ts:88`).
+
+`sourceHash` is deliberately BOM-tolerant (`bridges/agents/discover.ts:80`),
+so update and reinstall both see "unchanged" and never repair it.
+
+Note for whoever picks this up: a later upstream review dismissed #8337 as
+"already handled" by citing `domain/version.ts:95`. That site strips a BOM for
+the content hash only. It has nothing to do with frontmatter parsing, and the
+dismissal was wrong.
+
+**Fix shape.** Strip a leading BOM at both read sites. A peer floor bump to
+`>=0.84.3` fixes the skills half only -- the agents parser is ours on every Pi
+version -- so it buys half a fix for a full NFR-11 floor move. See [FLOOR-01].
+
+Code seams: `bridges/agents/frontmatter.ts` (`parseFrontmatter`),
+`bridges/skills/stage.ts` (the gate-1 parse call), `platform/pi-api.ts:38`
+(the re-exported parser).
+
+## MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command
+
+Surfaced by the upstream release review covering 2026-08-24..2026-08-31,
+verified first-hand against the published `pi-mcp-adapter@2.31.0` tarball on
+2026-09-01. The doc-accuracy half is [ENVDOC-01]; this is the behavioral
+question.
+
+`resolveEnv` (`server-manager.ts:1306`) no longer interpolates. It calls
+`resolveCommandSecretsRecord`, and `resolveCommandSecret` (`utils.ts:125`)
+treats a leading single `!` as a command:
+
+```ts
+if (value.startsWith("!!")) return interpolateEnvVars(value.slice(1));
+if (!value.startsWith("!")) return interpolateEnvVars(value);
+const result = spawnSync(value.slice(1), { shell: true, ... });
+```
+
+A 10 s timeout, a 1 MiB output cap, trimmed stdout becomes the value, `!!`
+escapes to a literal `!`, and `literalEnv: true` on the entry bypasses the
+path entirely. The adapter's changelog dates this to **2.15.0 (2026-07-25)**:
+"connection-time command resolution for HTTP bearer tokens and headers, OAuth
+client secrets, and stdio environment values, with `!!` escaping and
+fail-closed execution".
+
+It reaches us because `bridges/mcp/stage.ts` passes a plugin's declared `env`
+through substitution and writes it verbatim into `<scopeRoot>/mcp.json`. We
+set no `literalEnv` and inspect no value prefixes.
+
+**What this is, and what it is not.** It is NOT a privilege escalation: a
+plugin the user chose to install can already run arbitrary commands through
+its hooks, so a leading `!` grants it nothing new. It IS a fidelity
+divergence -- the same manifest sets a literal string under Claude Code and
+executes under Pi -- and it is invisible at install time.
+
+Three dispositions, deliberately unranked because the choice is a product
+call:
+
+- **Warn.** Detect a leading `!` at stage time and surface it as an install
+  warning, in the same channel that already reports a malformed `env`.
+- **Escape.** Rewrite `!x` to `!!x` on the way out, making Pi match Claude
+  Code exactly. Highest fidelity, but it silently overrides the author who
+  meant it.
+- **Document only.** Record it in `docs/env-vars.md` and leave behavior alone.
+
+`literalEnv` is the fourth lever and is filed separately as [ENVLIT-01].
+Decide the two together: setting `literalEnv: true` also disables `${VAR}`
+interpolation, so it is not a free opt-out of just this behavior.
+
+Code seams: `bridges/mcp/stage.ts` (`substituteAndInject`, and the declared-env
+warning at ~line 177), `bridges/mcp/substitute.ts`, `docs/env-vars.md` (the
+"MCP runtime env inheritance" subsection).
+
+## CFGDIR-01: project scope hardcodes `.pi` where two upstreams resolve it dynamically
+
+Surfaced by the upstream release review covering 2026-08-18..2026-08-25,
+re-verified 2026-09-01.
+
+`locationsFor` builds every project-scope path from a literal:
+
+```ts
+const scopeRoot = scope === "user" ? getAgentDir() : path.join(cwd, ".pi");
+```
+
+(`persistence/locations.ts:145`)
+
+Pi exports the value it actually uses: `CONFIG_DIR_NAME`, re-exported from the
+package root (`dist/index.d.ts:2`) and derived from
+`pkg.piConfig?.configDir || ".pi"`. pi-mcp-adapter resolves it through
+`getConfigDirName()`, pi-subagents through `getProjectConfigDir()`. We are the
+outlier, and the user half of our own function already resolves dynamically
+through `getAgentDir()`.
+
+Under a host that sets `piConfig.configDir`, our entire project scope --
+`state.json`, `mcp.json`, `agents/`, `claude-plugins.json` and its `.local`
+sibling -- lands in a directory neither Pi nor either companion extension
+reads. Nothing warns: installs report success and materialize nothing anyone
+can see.
+
+**Why this is filed rather than fixed.** The change is one line and the
+constant is already importable from a package we already depend on. What is
+not established is whether a rebranded Pi host is a scenario we support at
+all. If it is not, the honest fix is a comment saying so, not an import.
+Answer that first -- and note that `getAgentDir()` handling the user side may
+already be the precedent that says we implicitly do support it.
+
+Code seams: `persistence/locations.ts` (`locationsFor`), `platform/pi-api.ts`
+(where a `CONFIG_DIR_NAME` re-export would land), plus any test that
+constructs a project scope root from a literal.
+
+## IDXDOC-01: `agents-index.json` is documented as pi-subagents' file; it is ours -- IMPORTANT
+
+Surfaced by the upstream release review covering 2026-08-18..2026-08-25,
+verified 2026-09-01. Marked IMPORTANT because it is two doc lines and it
+retires a whole risk class: upstream reviews have been budgeting for
+pi-subagents index-schema drift that cannot happen.
+
+`locationsFor` puts the file at
+`<scopeRoot>/pi-claude-marketplace/agents-index.json`
+(`persistence/locations.ts:152`) -- inside our own extension root, which
+pi-subagents never scans. pi-subagents reads `<scopeRoot>/agents/**/*.md`,
+which is our separate `agentsDir`, and the string `agents-index.json` does not
+appear anywhere in its source.
+
+Two corrections:
+
+- `.planning/codebase/ARCHITECTURE.md:125` calls
+  `agents-index-io.ts` / `agents-index-schema.ts` the "pi-subagents index
+  file". It is our own ownership ledger.
+- `.planning/codebase/INTEGRATIONS.md:22` gives the path as
+  `agents/agents-index.json`. The real path is
+  `pi-claude-marketplace/agents-index.json`.
+
+Code seams: the two doc lines above. No source change -- the code is correct,
+only its description is wrong.
+
+## SAEVT-01: "pi-subagents already publishes the events the bridge needs" is async-only -- IMPORTANT
+
+Surfaced by the upstream release review covering 2026-08-18..2026-08-25.
+Marked IMPORTANT for the same reason as [IDXDOC-01]: one sentence, and left
+alone it reads as a green light for a `SubagentStart` / `SubagentStop`
+admission the event surface does not actually support.
+
+`docs/research/claude-hooks-vs-pi-events.md:308` states that pi-subagents
+"already publishes the events the bridge needs".
+`docs/hooks-compatibility.md:23` more cautiously says the pair is "blocked on
+pi-subagents wiring". The precise position, as of pi-subagents 0.56.0:
+
+- `subagent:async-started` and `subagent:async-complete` are live and
+  unrenamed, and 0.55.0 added `subagent:child-status`.
+- **Synchronous runs emit neither start nor stop.**
+  `subagent:foreground-complete` has a single emit site, reachable only via
+  `onDetachedExit`.
+
+The sentence is therefore true for the async lane and false for the sync one.
+The research doc's bucket-B plan -- synthesize the sync half from `tool_call`
+/ `tool_result` -- is unaffected and still correct; only the unqualified claim
+needs the qualifier.
+
+This one is inherited from an upstream-verification agent and was NOT
+re-confirmed against pi-subagents source in the 2026-09-01 pass. Confirm the
+single emit site before writing the qualifier.
+
+Code seams: `docs/research/claude-hooks-vs-pi-events.md` (the bucket-B
+paragraph at ~line 308), `docs/hooks-compatibility.md` (the `SubagentStart` /
+`SubagentStop` row at line 23).
+
+## RTREG-01: runtime agent and MCP registration evaluated and declined
+
+Surfaced across two upstream release reviews (2026-08-18..08-25 and
+2026-08-24..08-31), which independently flagged the same shape. Filed as a
+decision record so the next changelog mentioning it does not restart the
+argument.
+
+pi-subagents 0.53.0 added `registerAgent()`. pi-mcp-adapter 2.27.0 added
+`registerMcpServer({pi, name, definition})`, and 2.28.0 / 2.30.0 extended it
+to cross-extension registration over a versioned shared event contract (#443,
+#453). All are the same offer: materialize a component in memory instead of
+writing a file.
+
+Declined, on four reasons that compound:
+
+- **Ephemeral by design.** Both die with the process. Our recovery model is
+  that `/reload` alone converges from on-disk state (NFR-2); runtime
+  registration inverts it, and the adapter's own note calls registrations
+  "never persisted".
+- **Floor cost.** `pi-subagents/agents` does not exist below 0.53.0, against
+  our optional peer floor of `>=0.35.0`.
+- **Expressiveness gap.** `RuntimeAgentDefinition` cannot express `package:`,
+  `memory:`, or `fast:`.
+- **Worse collision behavior.** A runtime agent colliding with an on-disk one
+  throws from `mergeRuntimeAgents`, which has three call sites and no
+  wrapping -- poisoning agent discovery for the whole session rather than
+  failing one agent.
+
+What would reopen this: a persisted variant, or a Pi-side guarantee that
+re-registration happens on `/reload` without our involvement. Neither exists
+today.
+
+The cross-extension contract (#443 / #453) was read at changelog and export
+level only, not at the event-contract level. "Declined" therefore rests on the
+persistence argument, which holds regardless of what that contract says.
+
+## FLOOR-01: bank pi 0.84.3 (#8424) as floor-bump justification, do not bump for it alone
+
+Surfaced by the upstream release review covering 2026-08-18..2026-08-25.
+
+pi 0.84.3 fixed "failed extension factories leaving event subscriptions,
+provider registrations, and default flag state active". We are exactly such a
+factory: `index.ts:63` awaits `registerHooksBridge` (seven `pi.on` calls)
+before registering `resources_discover`. On a host below 0.84.3, a throw
+between those two points leaves hooks live while reconcile never runs -- hooks
+firing against a half-built routing table, with no `/reload` path back
+(NFR-2).
+
+**Why not bump.** Both lifecycle handlers already wrap in try/catch and wrap
+the notify again, and the hooks bridge's own async I/O precedes its `pi.on`
+calls, so the common failure is already clean. The window is narrow and the
+failing sequence has not been constructed -- this is defense-in-depth, not a
+live bug. Raising `>=0.80.5` to `>=0.84.3` costs every user on an older host
+(NFR-11) for a defect nobody has hit.
+
+Bank it instead: when the next genuinely floor-worthy item lands, this is the
+second justification that makes the move cheap to argue. [FMBOM-01]
+deliberately does NOT count toward it -- its recommended fix avoids the floor
+precisely so the bump stays optional.
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
