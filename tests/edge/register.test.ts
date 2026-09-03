@@ -27,14 +27,17 @@
 // `SubcommandHandlers`, so a case asserting that record has every key would
 // restate a compiler guarantee and is deliberately absent.
 //
-// NFR-5: every case installs a fail-fast replacement of the process-wide
-// transport and asserts it recorded no calls. No input to this module opens a
-// transport -- the completion path reads the two scope roots off disk and the
-// git operations are injected and never invoked -- so the zero is a regression
-// guard with no positive control, not a measurement.
+// NFR-5: every case installs a fail-fast replacement of `https.request`, the
+// door the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT. No
+// input to this module opens a transport -- the completion path reads the two
+// scope roots off disk and the git operations are injected and never invoked --
+// so a zero here could not rise, which is why none is asserted. What the
+// replacement is, is a hermeticity device: a dial-out reached from any of these
+// cases fails where it happens. See `installNetworkTrap`.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
@@ -98,8 +101,6 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
 }
 
 interface CommandUnderTest {
@@ -122,8 +123,27 @@ const FOREIGN_COMMAND_LINE = "/other-extension  alpha";
 const CHOSEN_ITEM: AutocompleteItem = { label: "alpha", value: "install alpha " };
 const SESSION_START: SessionStartEvent = { type: "session_start", reason: "startup" };
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the registration glue must not reach the network");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof, and no case asserts a call count
+ * against it. No input to this module opens a transport -- the completion path
+ * reads the two scope roots off disk, and the git operations are injected and
+ * never invoked -- so a zero here could not rise whatever this module did. The
+ * value of the replacement is that a dial-out reached from any of these cases
+ * fails where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which no registration or completion enters.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the registration glue must not open a network connection");
+  });
 }
 
 /**
@@ -162,13 +182,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
   process.chdir(cwd);
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
-  };
+  installNetworkTrap(t);
+  return { cwd };
 }
 
 function marketplaceRecordIn(root: string, marketplaceName: string): MarketplaceRecord {
@@ -287,7 +302,7 @@ function installAutocompleteWrapper(): WrapperUnderTest {
 describe("registerClaudePluginCommand", () => {
   test("registers the slash command once under its published description (D-04)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "command-description");
+    await createHermeticScope(t, "command-description");
     const expectedDescription = EXPECTED_COMMAND_DESCRIPTION;
 
     // act
@@ -295,13 +310,12 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(registration.description, expectedDescription);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyRegistrar();
   });
 
   test("hands the argument text and the command context to the subcommand router (D-04)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "command-handler");
+    await createHermeticScope(t, "command-handler");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { registration, verifyRegistrar } = registerCommandUnderTest();
     const expectedNotifications: readonly Notification[] = [
@@ -313,7 +327,6 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(notifications, expectedNotifications);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
     verifyRegistrar();
   });
@@ -336,25 +349,23 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(candidates, expectedCandidates);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyRegistrar();
   });
 
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "provider-install");
+    await createHermeticScope(t, "provider-install");
 
     // act
     const { verifyBoundary } = installAutocompleteWrapper();
 
     // assert
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 
   test("returns the underlying provider's suggestions unchanged (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "suggestions");
+    await createHermeticScope(t, "suggestions");
     const { wrap, verifyBoundary } = installAutocompleteWrapper();
     const underlyingSuggestions = {
       items: [{ label: "install", value: "install " }],
@@ -383,13 +394,12 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(suggestions, underlyingSuggestions);
     assert.deepStrictEqual(requests, expectedRequests);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 
   test("collapses the whitespace run a completion left on its own command line (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "apply-own-line");
+    await createHermeticScope(t, "apply-own-line");
     const { wrap, verifyBoundary } = installAutocompleteWrapper();
     const underlyingApplication = { lines: [OWN_COMMAND_LINE], cursorLine: 0, cursorCol: 23 };
     const applications: [string[], number, number, AutocompleteItem, string][] = [];
@@ -419,13 +429,12 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(application, expectedApplication);
     assert.deepStrictEqual(applications, expectedApplications);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 
   test("leaves another extension's command line exactly as the underlying provider left it (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "apply-foreign-line");
+    await createHermeticScope(t, "apply-foreign-line");
     const { wrap, verifyBoundary } = installAutocompleteWrapper();
     const underlyingApplication = { lines: [FOREIGN_COMMAND_LINE], cursorLine: 0, cursorCol: 17 };
     const current = {
@@ -449,13 +458,12 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(application, expectedApplication);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 
   test("leaves the result untouched when the cursor names a line the buffer does not hold (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "apply-absent-line");
+    await createHermeticScope(t, "apply-absent-line");
     const { wrap, verifyBoundary } = installAutocompleteWrapper();
     const underlyingApplication = { lines: [OWN_COMMAND_LINE], cursorLine: 0, cursorCol: 23 };
     const current = {
@@ -479,13 +487,12 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(application, expectedApplication);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 
   test("defers the file-completion trigger to the underlying provider that answers it (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "trigger-delegate");
+    await createHermeticScope(t, "trigger-delegate");
     const { wrap, verifyBoundary } = installAutocompleteWrapper();
     const triggerTests: [string[], number, number][] = [];
     const current = {
@@ -509,13 +516,12 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(triggersFileCompletion, false);
     assert.deepStrictEqual(triggerTests, expectedTriggerTests);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 
   test("permits the file-completion trigger when the underlying provider does not answer it (TC-7)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "trigger-fallback");
+    await createHermeticScope(t, "trigger-fallback");
     const { wrap, verifyBoundary } = installAutocompleteWrapper();
     const current = {
       getSuggestions: () => {
@@ -533,7 +539,6 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(triggersFileCompletion, expectedTrigger);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verifyBoundary();
   });
 });
@@ -541,7 +546,7 @@ describe("registerClaudePluginCommand", () => {
 describe("registerClaudeMarketplaceTools", () => {
   test("registers the two read-only tools in order and nothing else (D-04)", async (t) => {
     // arrange
-    const scope = await createHermeticScope(t, "tools");
+    await createHermeticScope(t, "tools");
     const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
     const firstTool = It.willCapture<ToolRegistration>("first registered tool");
     const secondTool = It.willCapture<ToolRegistration>("second registered tool");
@@ -562,7 +567,6 @@ describe("registerClaudeMarketplaceTools", () => {
 
     // assert
     assert.deepStrictEqual([firstTool.value?.name, secondTool.value?.name], expectedToolNames);
-    assert.strictEqual(scope.fetchCallCount(), 0);
     verify(pi);
   });
 });

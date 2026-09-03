@@ -28,9 +28,13 @@
 // order claim circular.
 //
 // This surface is read-only and must never reach the network (NFR-5). Every
-// case installs a context-owned fail-fast replacement for the process-wide
-// transport and asserts its call count is zero. The count is the proof; the
-// refusal message never is.
+// case installs a context-owned fail-fast replacement of `https.request`, the
+// door the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and
+// the replacement is NOT presented as an offline proof: the import closure of
+// `provider.ts` and `data.ts` holds no HTTP client, so a zero here could not
+// rise whatever these modules did. What it is, is a hermeticity device -- a
+// dial-out this surface acquires later fails the case where it happens. See
+// `installNetworkTrap`.
 //
 // Five heads -- uninstall, update, reinstall, enable and disable -- map to
 // modes that share ONE candidate map in the data layer, so their lists are
@@ -68,6 +72,7 @@
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -91,12 +96,6 @@ interface Suggestion {
 
 interface SeededResolver {
   readonly resolver: LocationsResolver;
-  /**
-   * How often the case reached the replaced process-wide transport. Declared
-   * as a property rather than a method so a case can destructure it without
-   * tripping the unbound-method rule.
-   */
-  readonly networkCallCount: () => number;
 }
 
 /**
@@ -139,8 +138,30 @@ function manifestFor(scope: Scope, marketplace: string): readonly PluginIndexRow
   return undefined;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the completion provider must not reach the network");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * This is a HERMETICITY DEVICE, not an offline proof, and no case asserts a
+ * call count against it. The import closure of `provider.ts` and `data.ts`
+ * holds no HTTP client of any kind, so a zero asserted here could not rise
+ * whatever these modules did. What the replacement buys is that a dial-out this
+ * surface acquires LATER fails the case where it happens instead of passing
+ * silently -- measured on the sibling pair, where a live `https.request` call
+ * planted in `getMarketplaceNamesAcrossScopes` left the whole suite green while
+ * the watched door was `globalThis.fetch` and turned five cases red once the
+ * door was this one.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which is not in this module's closure at all.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the completion provider must not open a network connection");
+  });
 }
 
 /**
@@ -161,7 +182,7 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
     resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
   });
-  const networkSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
+  installNetworkTrap(t);
 
   const resolver = {
     marketplaceNamesCachePath: (scope: Scope): string =>
@@ -188,7 +209,7 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
     },
   } satisfies LocationsResolver;
 
-  return { resolver, networkCallCount: (): number => networkSpy.mock.callCount() };
+  return { resolver };
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +218,7 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
 
 test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declaration order", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "top-level-empty");
+  const { resolver } = await seedResolver(t, "top-level-empty");
 
   // act
   const suggestions = await getArgumentCompletions("", resolver);
@@ -219,7 +240,6 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "import", value: "import " },
     { label: "marketplace", value: "marketplace " },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 for (const { prefix, expected } of [
@@ -236,14 +256,13 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-1 narrows the top-level vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, `top-level-${prefix}`);
+    const { resolver } = await seedResolver(t, `top-level-${prefix}`);
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
@@ -255,19 +274,18 @@ for (const { prefix, expected } of [
 
 test("a top-level token one character short still offers the subcommand vocabulary", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "promote-short");
+  const { resolver } = await seedResolver(t, "promote-short");
 
   // act
   const suggestions = await getArgumentCompletions("marketplac", resolver);
 
   // assert
   assert.deepStrictEqual(suggestions, [{ label: "marketplace", value: "marketplace " }]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 test("TC-2 promotes an exact top-level token with no trailing space to the next argument", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "promote-exact");
+  const { resolver } = await seedResolver(t, "promote-exact");
 
   // act
   const suggestions = await getArgumentCompletions("marketplace", resolver);
@@ -284,12 +302,11 @@ test("TC-2 promotes an exact top-level token with no trailing space to the next 
     { label: "autoupdate", value: "marketplace autoupdate " },
     { label: "noautoupdate", value: "marketplace noautoupdate " },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 test("TC-2 offers the marketplace vocabulary after the marketplace token and a space", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "marketplace-space");
+  const { resolver } = await seedResolver(t, "marketplace-space");
 
   // act
   const suggestions = await getArgumentCompletions("marketplace ", resolver);
@@ -306,7 +323,6 @@ test("TC-2 offers the marketplace vocabulary after the marketplace token and a s
     { label: "autoupdate", value: "marketplace autoupdate " },
     { label: "noautoupdate", value: "marketplace noautoupdate " },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 for (const { prefix, expected } of [
@@ -322,20 +338,19 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-2 narrows the marketplace vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "marketplace-narrow");
+    const { resolver } = await seedResolver(t, "marketplace-narrow");
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
 test("TC-2 promotes an exact marketplace subcommand token to the name argument", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "promote-nested");
+  const { resolver } = await seedResolver(t, "promote-nested");
 
   // act
   const suggestions = await getArgumentCompletions("marketplace remove", resolver);
@@ -345,7 +360,6 @@ test("TC-2 promotes an exact marketplace subcommand token to the name argument",
     { label: "hub", value: "marketplace remove hub " },
     { label: "lab", value: "marketplace remove lab " },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -381,39 +395,36 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-5 offers marketplace names from both scopes for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "marketplace-names");
+    const { resolver } = await seedResolver(t, "marketplace-names");
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
 test("TC-5 offers no name argument for a marketplace verb that takes none", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "marketplace-add");
+  const { resolver } = await seedResolver(t, "marketplace-add");
 
   // act
   const suggestions = await getArgumentCompletions("marketplace add ", resolver);
 
   // assert
   assert.strictEqual(suggestions, null);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 test("TC-5 offers nothing past the single marketplace name a list head accepts", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "list-surplus");
+  const { resolver } = await seedResolver(t, "list-surplus");
 
   // act
   const suggestions = await getArgumentCompletions("list hub ", resolver);
 
   // assert
   assert.strictEqual(suggestions, null);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -441,27 +452,25 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-4 offers the scope values after the scope flag for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "scope-values");
+    const { resolver } = await seedResolver(t, "scope-values");
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
 test("TC-4 offers nothing for a scope flag pair that carries no subcommand", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "scope-only");
+  const { resolver } = await seedResolver(t, "scope-only");
 
   // act
   const suggestions = await getArgumentCompletions("--scope user ", resolver);
 
   // assert
   assert.strictEqual(suggestions, null);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -472,7 +481,7 @@ test("TC-4 offers nothing for a scope flag pair that carries no subcommand", asy
 
 test("TC-3 prepends the global scope flag before a verb's own completable flags", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "flags-install");
+  const { resolver } = await seedResolver(t, "flags-install");
 
   // act
   const suggestions = await getArgumentCompletions("install -", resolver);
@@ -491,12 +500,11 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
       description: "Install over collisions and unsupported components (not unavailable)",
     },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 test("TC-3 resolves the ls alias to the list flag entries", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "flags-ls");
+  const { resolver } = await seedResolver(t, "flags-ls");
 
   // act
   const suggestions = await getArgumentCompletions("ls -", resolver);
@@ -514,12 +522,11 @@ test("TC-3 resolves the ls alias to the list flag entries", async (t) => {
     },
     { label: "--remote", value: "ls --remote ", description: "Show remote plugins" },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 test("TC-3 offers the global scope flag alone for a head the catalog does not carry", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "flags-marketplace");
+  const { resolver } = await seedResolver(t, "flags-marketplace");
 
   // act
   const suggestions = await getArgumentCompletions("marketplace -", resolver);
@@ -528,12 +535,11 @@ test("TC-3 offers the global scope flag alone for a head the catalog does not ca
   assert.deepStrictEqual(suggestions, [
     { label: "--scope", value: "marketplace --scope ", description: "Scope: user or project" },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 test("TC-3 narrows the flag entries by the typed long-flag prefix", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "flags-narrow");
+  const { resolver } = await seedResolver(t, "flags-narrow");
 
   // act
   const suggestions = await getArgumentCompletions("install --m", resolver);
@@ -546,7 +552,6 @@ test("TC-3 narrows the flag entries by the typed long-flag prefix", async (t) =>
       description: "Enable model field mapping in generated agents (default: omit)",
     },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -637,14 +642,13 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 completes plugin references for ${JSON.stringify(prefix)} through the ${mode} mode`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, `ref-${mode}`);
+    const { resolver } = await seedResolver(t, `ref-${mode}`);
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
@@ -684,14 +688,13 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 offers ${String(expected.length)} bare marketplace target(s) for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, `bare-${mode}`);
+    const { resolver } = await seedResolver(t, `bare-${mode}`);
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
@@ -776,14 +779,13 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 carries an explicit scope into the ${mode} mode for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, `ref-scoped-${mode}`);
+    const { resolver } = await seedResolver(t, `ref-scoped-${mode}`);
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
@@ -804,27 +806,25 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 shifts the ${mode} candidate set when the partial flag precedes the reference`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, `ref-partial-${mode}`);
+    const { resolver } = await seedResolver(t, `ref-partial-${mode}`);
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }
 
 test("TC-6 treats the partial flag as a positional for a head that does not accept it", async (t) => {
   // arrange
-  const { resolver, networkCallCount } = await seedResolver(t, "ref-partial-reinstall");
+  const { resolver } = await seedResolver(t, "ref-partial-reinstall");
 
   // act
   const suggestions = await getArgumentCompletions("reinstall --partial ", resolver);
 
   // assert
   assert.strictEqual(suggestions, null);
-  assert.strictEqual(networkCallCount(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -835,13 +835,12 @@ test("TC-6 treats the partial flag as a positional for a head that does not acce
 for (const prefix of ["pending ", "import ", "bootstrap ", "frobnicate ", "install alpha extra "]) {
   test(`offers nothing at the argument after ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "no-completion");
+    const { resolver } = await seedResolver(t, "no-completion");
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver);
 
     // assert
     assert.strictEqual(suggestions, null);
-    assert.strictEqual(networkCallCount(), 0);
   });
 }

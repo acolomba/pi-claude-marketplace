@@ -25,11 +25,16 @@
 // measured against the real module through a counting proxy before this file
 // was written.
 //
-// Every case also asserts the process-wide transport recorded zero calls. The
-// architecture suite that gates network reach names orchestrator files only and
-// says nothing about the edge tier, so NFR-5 for this read-only path is proven
-// here, by call count rather than by an error message: an error-message
-// assertion would pass for the wrong error.
+// Every case also installs a fail-fast replacement of `https.request`, the door
+// the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and the
+// replacement is NOT an offline proof: the import closure of
+// `edge/handlers/marketplace/info.ts` reaches no HTTP client at all -- neither
+// `platform/git.ts` nor `isomorphic-git` nor `node:https` -- so a zero here
+// could not rise whatever this surface did. What it is, is a hermeticity
+// device: a dial-out this path acquires later fails the case where it happens
+// instead of passing silently. That is the half of NFR-5 the architecture suite
+// cannot cover here, since it names orchestrator files only. See
+// `installNetworkTrap`.
 //
 // Three marketplaces are seeded in every case, rejecting ones included, so a
 // workflow that did run would have records to report. `beta` exists in the user
@@ -44,6 +49,7 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -68,12 +74,27 @@ const USER_ALPHA_ROW = "● alpha [user] <no autoupdate>\npath: /home/user/marke
 interface HermeticWorkspace {
   /** The project working directory the handler forwards as `ctx.cwd`. */
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the marketplace info surface must not reach the network");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof: nothing in this handler's import
+ * closure can open a connection, so no count asserted against it could ever
+ * rise, and none is. The value is that a dial-out acquired later fails the case
+ * where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which this closure does not reach.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the marketplace info surface must not open a network connection");
+  });
 }
 
 /**
@@ -108,13 +129,8 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
-  };
+  installNetworkTrap(t);
+  return { cwd };
 }
 
 /**
@@ -185,7 +201,6 @@ for (const { expectedMessage, flags, selection } of [
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
-    assert.strictEqual(workspace.fetchCallCount(), 0);
     verifyBoundary();
   });
 }
@@ -204,7 +219,6 @@ test("supplies the info usage block, shown when the name positional is missing",
   assert.deepStrictEqual(notifications, [
     { message: `Missing required argument.\n\n${INFO_USAGE}`, severity: "error" },
   ]);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -225,7 +239,6 @@ test("supplies the info usage block beside a parse diagnostic the parser reports
       severity: "error",
     },
   ]);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -244,7 +257,6 @@ test("queries the first positional alone, so a surplus token reaches no second l
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: `${PROJECT_ALPHA_ROW}\n\n${USER_ALPHA_ROW}` }]);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -268,6 +280,5 @@ test("treats the scope-target flag as the name positional rather than a scope se
       severity: "error",
     },
   ]);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });

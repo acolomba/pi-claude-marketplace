@@ -7,15 +7,17 @@
 // functions -- the only real disk this module touches is the completion cache,
 // which writes under a temporary root owned by the case.
 //
-// This surface is read-only and must never reach the network (NFR-5), so the
-// cases that reach a collaborator -- the three cache-backed accessors -- install
-// a context-owned fail-fast replacement for the process-wide transport and
-// assert its call count is zero. The count is the proof; the thrown message
-// never is.
+// This surface is read-only and must never reach the network (NFR-5), and the
+// cases that reach a collaborator -- the three cache-backed accessors -- own a
+// context-installed fail-fast replacement of `https.request`, the door the git
+// transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and the replacement
+// is NOT presented as an offline proof: `data.ts`'s import closure holds no HTTP
+// client at all, so a zero here could not rise whatever this module did. What
+// the replacement is, is a hermeticity device -- a dial-out this surface
+// acquires later fails the case where it happens. See `installNetworkTrap`.
 //
-// The five pure token helpers carry no such guard. Each is synchronous, takes no
-// resolver and touches nothing outside its arguments, so a zero asserted over
-// one of them could not have risen whatever the helper did.
+// The five pure token helpers carry no such device. Each is synchronous, takes
+// no resolver and touches nothing outside its arguments.
 //
 // The status vocabulary seeded below is owned by
 // `tests/shared/completion-cache.test.ts` and by
@@ -48,6 +50,7 @@
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
@@ -83,26 +86,34 @@ interface ResolverSeed {
 
 interface SeededResolver {
   readonly resolver: LocationsResolver;
-  /**
-   * How many times the case reached the replaced process-wide transport.
-   * Declared as a property rather than a method so a case can destructure it
-   * without tripping the unbound-method rule.
-   */
-  readonly networkCallCount: () => number;
-}
-
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the completion data layer must not reach the network");
 }
 
 /**
- * Replace the process-wide transport with a fail-fast stub owned by the test
- * context, which restores it after the case. The returned counter is what every
- * case asserts against; a case never matches the refusal message.
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * This is a HERMETICITY DEVICE, not an offline proof, and no case asserts a
+ * call count against it. `data.ts`'s whole import closure -- `edge/router.ts`,
+ * `edge/flag-catalog.ts`, `platform/pi-api.ts`, `shared/atomic-json.ts`,
+ * `shared/completion-cache.ts`, `shared/concerns/{hooks,soft-dep}.ts`,
+ * `shared/errors.ts`, `shared/notify.ts`, `shared/types.ts` -- contains no HTTP
+ * client of any kind, so a count asserted here could not rise whatever this
+ * module did. What the replacement does buy is that a dial-out this surface
+ * acquires LATER fails the case where it happens instead of passing silently:
+ * measured, a live `https.request` call planted in
+ * `getMarketplaceNamesAcrossScopes` leaves the whole suite green while the door
+ * is `globalThis.fetch` and turns it red once the door is this one.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which is not in this module's closure at all.
  */
-function installOfflineGuard(t: TestContext): () => number {
-  const networkSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return (): number => networkSpy.mock.callCount();
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the completion data layer must not open a network connection");
+  });
 }
 
 /**
@@ -128,7 +139,7 @@ async function seedResolver(
     resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
   });
-  const networkCallCount = installOfflineGuard(t);
+  installNetworkTrap(t);
 
   const resolver = {
     marketplaceNamesCachePath: (scope: Scope): string =>
@@ -161,7 +172,7 @@ async function seedResolver(
     },
   } satisfies LocationsResolver;
 
-  return { resolver, networkCallCount };
+  return { resolver };
 }
 
 /** Every derived status the plugin-index cache can carry, in one marketplace. */
@@ -393,7 +404,7 @@ describe("getMarketplaceCompletions", () => {
 describe("getMarketplaceNamesAcrossScopes", () => {
   test("unions both scopes in first-seen order and records a shared name once", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "names-union", {
+    const { resolver } = await seedResolver(t, "names-union", {
       marketplaces: {
         user: { zeta: {}, shared: {} },
         project: { shared: {}, beta: {} },
@@ -405,12 +416,11 @@ describe("getMarketplaceNamesAcrossScopes", () => {
 
     // assert
     assert.deepStrictEqual([...names], ["zeta", "shared", "beta"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("returns the names when only one scope holds a marketplace", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "names-one-scope", {
+    const { resolver } = await seedResolver(t, "names-one-scope", {
       marketplaces: { project: { internal: {} } },
     });
 
@@ -419,26 +429,24 @@ describe("getMarketplaceNamesAcrossScopes", () => {
 
     // assert
     assert.deepStrictEqual([...names], ["internal"]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("returns an empty union when neither scope has a marketplace", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "names-empty", {});
+    const { resolver } = await seedResolver(t, "names-empty", {});
 
     // act
     const names = await getMarketplaceNamesAcrossScopes(resolver);
 
     // assert
     assert.deepStrictEqual([...names], []);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   for (const failingScope of ["user", "project"] satisfies readonly Scope[]) {
     test(`propagates a ${failingScope} state read failure instead of a partial union`, async (t) => {
       // arrange
       const stateFailure = new Error(`state is unreadable for ${failingScope}`);
-      const { resolver, networkCallCount } = await seedResolver(t, `names-fail-${failingScope}`, {
+      const { resolver } = await seedResolver(t, `names-fail-${failingScope}`, {
         marketplaces: { user: { zeta: {} }, project: { beta: {} } },
         stateFailures: { [failingScope]: stateFailure },
       });
@@ -451,7 +459,6 @@ describe("getMarketplaceNamesAcrossScopes", () => {
           return true;
         },
       );
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 });
@@ -459,7 +466,7 @@ describe("getMarketplaceNamesAcrossScopes", () => {
 describe("getPluginToMarketplacesMap", () => {
   test("install offers the not-yet-installed and not-yet-fetched rows of the default user scope", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-install", {
+    const { resolver } = await seedResolver(t, "map-install", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
@@ -472,13 +479,12 @@ describe("getPluginToMarketplacesMap", () => {
       ["fresh", ["official"]],
       ["not-fetched", ["official"]],
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("install with the partial option trades the not-fetched row for the degraded one", async (t) => {
     // arrange
     const options = { partial: true } satisfies PluginMapOptions;
-    const { resolver, networkCallCount } = await seedResolver(t, "map-install-partial", {
+    const { resolver } = await seedResolver(t, "map-install-partial", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
@@ -491,12 +497,11 @@ describe("getPluginToMarketplacesMap", () => {
       ["fresh", ["official"]],
       ["degraded", ["official"]],
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("install excludes a plugin already recorded in the target scope (CMP-7)", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-install-recorded", {
+    const { resolver } = await seedResolver(t, "map-install-recorded", {
       marketplaces: { user: { official: { plugins: { held: {} } } } },
       manifests: {
         user: {
@@ -513,13 +518,12 @@ describe("getPluginToMarketplacesMap", () => {
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["fresh", ["official"]]]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("a project install reads project marketplaces first and falls back to unshadowed user ones (CMP-8)", async (t) => {
     // arrange
     const options = { targetScope: "project" } satisfies PluginMapOptions;
-    const { resolver, networkCallCount } = await seedResolver(t, "map-install-project", {
+    const { resolver } = await seedResolver(t, "map-install-project", {
       marketplaces: {
         user: { official: {}, "user-only-mp": {} },
         project: { official: {} },
@@ -541,13 +545,12 @@ describe("getPluginToMarketplacesMap", () => {
       ["project-side", ["official"]],
       ["extra", ["user-only-mp"]],
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   for (const mode of INSTALLED_INVENTORY_MODES) {
     test(`${mode} offers the whole installed inventory and nothing outside it`, async (t) => {
       // arrange
-      const { resolver, networkCallCount } = await seedResolver(t, `map-inventory-${mode}`, {
+      const { resolver } = await seedResolver(t, `map-inventory-${mode}`, {
         marketplaces: { user: { official: {} } },
         manifests: { user: { official: everyStatusManifest() } },
       });
@@ -563,21 +566,16 @@ describe("getPluginToMarketplacesMap", () => {
         ["held-partly-outdated", ["official"]],
         ["outdated-partly", ["official"]],
       ]);
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 
   for (const mode of INSTALLED_INVENTORY_MODES) {
     test(`the partial option narrows ${mode} to the rows with a newer candidate`, async (t) => {
       // arrange
-      const { resolver, networkCallCount } = await seedResolver(
-        t,
-        `map-inventory-partial-${mode}`,
-        {
-          marketplaces: { user: { official: {} } },
-          manifests: { user: { official: everyStatusManifest() } },
-        },
-      );
+      const { resolver } = await seedResolver(t, `map-inventory-partial-${mode}`, {
+        marketplaces: { user: { official: {} } },
+        manifests: { user: { official: everyStatusManifest() } },
+      });
 
       // act
       const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, {
@@ -590,13 +588,12 @@ describe("getPluginToMarketplacesMap", () => {
         ["held-partly-outdated", ["official"]],
         ["outdated-partly", ["official"]],
       ]);
-      assert.strictEqual(networkCallCount(), 0);
     });
   }
 
   test("an installed-inventory mode without an explicit scope reads project before user", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-inventory-both", {
+    const { resolver } = await seedResolver(t, "map-inventory-both", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "installed" }] },
@@ -612,12 +609,11 @@ describe("getPluginToMarketplacesMap", () => {
       ["project-side", ["internal"]],
       ["user-side", ["official"]],
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("an explicit target scope narrows an installed-inventory mode to that scope alone", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-inventory-scoped", {
+    const { resolver } = await seedResolver(t, "map-inventory-scoped", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "installed" }] },
@@ -632,12 +628,11 @@ describe("getPluginToMarketplacesMap", () => {
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["user-side", ["official"]]]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("fetch offers the warm and warmable rows and ignores the partial option", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-fetch", {
+    const { resolver } = await seedResolver(t, "map-fetch", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
@@ -654,12 +649,11 @@ describe("getPluginToMarketplacesMap", () => {
       ["degraded", ["official"]],
     ]);
     assert.deepStrictEqual(Array.from(withPartial), Array.from(withoutPartial));
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("an explicit target scope narrows fetch to that scope alone", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-fetch-scoped", {
+    const { resolver } = await seedResolver(t, "map-fetch-scoped", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "remote" }] },
@@ -674,12 +668,11 @@ describe("getPluginToMarketplacesMap", () => {
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["project-side", ["internal"]]]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("info spans both scopes with no status filter and ignores the target scope", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-info", {
+    const { resolver } = await seedResolver(t, "map-info", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: {
@@ -704,12 +697,11 @@ describe("getPluginToMarketplacesMap", () => {
       ["broken", ["official"]],
       ["fresh", ["internal"]],
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("a plugin carried by two marketplaces records both in visit order", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-two-marketplaces", {
+    const { resolver } = await seedResolver(t, "map-two-marketplaces", {
       marketplaces: { user: { "mp-a": {}, "mp-b": {} } },
       manifests: {
         user: {
@@ -724,12 +716,11 @@ describe("getPluginToMarketplacesMap", () => {
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["shared", ["mp-a", "mp-b"]]]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("a marketplace named in both scopes is recorded once for the same plugin", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-same-name-both-scopes", {
+    const { resolver } = await seedResolver(t, "map-same-name-both-scopes", {
       marketplaces: { user: { official: {} }, project: { official: {} } },
       manifests: {
         user: { official: [{ name: "held", status: "installed" }] },
@@ -742,12 +733,11 @@ describe("getPluginToMarketplacesMap", () => {
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("a marketplace whose manifest cannot be loaded contributes no candidates (TC-8)", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "map-manifest-soft-fail", {
+    const { resolver } = await seedResolver(t, "map-manifest-soft-fail", {
       marketplaces: { user: { official: {}, "unreadable-mp": {} } },
       manifests: { user: { official: [{ name: "held", status: "installed" }] } },
     });
@@ -757,13 +747,12 @@ describe("getPluginToMarketplacesMap", () => {
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("a state read failure during the candidate sweep propagates (TC-9)", async (t) => {
     // arrange
     const stateFailure = new Error("state is unreadable for project");
-    const { resolver, networkCallCount } = await seedResolver(t, "map-state-fail", {
+    const { resolver } = await seedResolver(t, "map-state-fail", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: [{ name: "held", status: "installed" }] } },
       stateFailures: { project: stateFailure },
@@ -777,7 +766,6 @@ describe("getPluginToMarketplacesMap", () => {
         return true;
       },
     );
-    assert.strictEqual(networkCallCount(), 0);
   });
 });
 
@@ -797,11 +785,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half offers a fully qualified value for a plugin unique to one marketplace", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(
-      t,
-      "ref-unique",
-      twoMarketplaceSeed(),
-    );
+    const { resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "so", "update", resolver, {
@@ -810,12 +794,11 @@ describe("getPluginRefCompletions", () => {
 
     // assert
     assert.deepStrictEqual(items, [{ label: "solo@mp-a", value: "update solo@mp-a " }]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the plugin half stops at the separator for a plugin carried by two marketplaces", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
+    const { resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "sh", "update", resolver, {
@@ -824,12 +807,11 @@ describe("getPluginRefCompletions", () => {
 
     // assert
     assert.deepStrictEqual(items, [{ label: "shared@", value: "update shared@" }]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the plugin half keeps every candidate in map order when the partial token is empty", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
+    const { resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "", "", resolver, {
@@ -841,12 +823,11 @@ describe("getPluginRefCompletions", () => {
       { label: "solo@mp-a", value: "solo@mp-a " },
       { label: "shared@", value: "shared@" },
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the plugin half matches the partial token case-sensitively, with no case folding", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
+    const { resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
 
     // act
     const upperCaseMatches = await getPluginRefCompletions("update", "SO", "update", resolver, {
@@ -859,16 +840,11 @@ describe("getPluginRefCompletions", () => {
     // assert
     assert.deepStrictEqual(upperCaseMatches, []);
     assert.deepStrictEqual(exactCaseMatches, [{ label: "solo@mp-a", value: "update solo@mp-a " }]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the marketplace half offers only the marketplaces that carry the named plugin", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(
-      t,
-      "ref-mp-half",
-      twoMarketplaceSeed(),
-    );
+    const { resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "shared@mp-", "update", resolver, {
@@ -880,16 +856,11 @@ describe("getPluginRefCompletions", () => {
       { label: "shared@mp-a", value: "update shared@mp-a " },
       { label: "shared@mp-b", value: "update shared@mp-b " },
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the marketplace half narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(
-      t,
-      "ref-mp-half-narrow",
-      twoMarketplaceSeed(),
-    );
+    const { resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "shared@mp-b", "update", resolver, {
@@ -898,16 +869,11 @@ describe("getPluginRefCompletions", () => {
 
     // assert
     assert.deepStrictEqual(items, [{ label: "shared@mp-b", value: "update shared@mp-b " }]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the marketplace half offers nothing for a plugin no marketplace carries", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(
-      t,
-      "ref-mp-half-unknown",
-      twoMarketplaceSeed(),
-    );
+    const { resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "ghost@", "update", resolver, {
@@ -916,12 +882,11 @@ describe("getPluginRefCompletions", () => {
 
     // assert
     assert.deepStrictEqual(items, []);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the bare marketplace form lists each marketplace once when the mode allows it", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
+    const { resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "@", "update", resolver, {
@@ -933,16 +898,11 @@ describe("getPluginRefCompletions", () => {
       { label: "@mp-a", value: "update @mp-a " },
       { label: "@mp-b", value: "update @mp-b " },
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the bare marketplace form narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(
-      t,
-      "ref-bare-narrow",
-      twoMarketplaceSeed(),
-    );
+    const { resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "@mp-b", "update", resolver, {
@@ -951,7 +911,6 @@ describe("getPluginRefCompletions", () => {
 
     // assert
     assert.deepStrictEqual(items, [{ label: "@mp-b", value: "update @mp-b " }]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   // The mode is held at `update`, so this differs from the accepting case two
@@ -960,11 +919,7 @@ describe("getPluginRefCompletions", () => {
   // result would be `[]` with the flag either way -- nothing would be measured.
   test("the bare marketplace form offers nothing when the mode does not allow it", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(
-      t,
-      "ref-bare-denied",
-      twoMarketplaceSeed(),
-    );
+    const { resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions("update", "@", "update", resolver, {
@@ -973,12 +928,11 @@ describe("getPluginRefCompletions", () => {
 
     // assert
     assert.deepStrictEqual(items, []);
-    assert.strictEqual(networkCallCount(), 0);
   });
 
   test("the plugin half honours the target scope and the partial option it is given", async (t) => {
     // arrange
-    const { resolver, networkCallCount } = await seedResolver(t, "ref-options", {
+    const { resolver } = await seedResolver(t, "ref-options", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: everyStatusManifest() },
@@ -999,6 +953,5 @@ describe("getPluginRefCompletions", () => {
       { label: "held-partly-outdated@official", value: "update held-partly-outdated@official " },
       { label: "outdated-partly@official", value: "update outdated-partly@official " },
     ]);
-    assert.strictEqual(networkCallCount(), 0);
   });
 });

@@ -22,8 +22,12 @@
 // tests/orchestrators/marketplace/list.test.ts and are not restated here.
 //
 // The listing is read-only (NFR-5), so every case owns a fail-fast replacement
-// for the process-wide transport and asserts its call count is zero, never an
-// error message.
+// of `https.request`, the door the git transport opens. NO CASE ASSERTS A CALL
+// COUNT AGAINST IT, and the replacement is NOT an offline proof: the import
+// closure of `edge/handlers/marketplace/list.ts` reaches no HTTP client at all,
+// so a zero here could not rise whatever this surface did. What it is, is a
+// hermeticity device -- a dial-out this path acquires later fails the case
+// where it happens. See `installNetworkTrap`.
 //
 // No exhaustiveness claim: marketplace/list.ts holds no switch and no
 // closed-union dispatch, so a missing-arm plant has no target here. No case
@@ -34,6 +38,7 @@
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -54,12 +59,27 @@ const BOTH_SCOPE_ROWS = `${PROJECT_ROW}\n\n${USER_ROW}`;
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  readonly fetchCallCount: () => number;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the marketplace listing must not reach the network");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof: nothing in this handler's import
+ * closure can open a connection, so no count asserted against it could ever
+ * rise, and none is. The value is that a dial-out acquired later fails the case
+ * where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which this closure does not reach.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the marketplace listing must not open a network connection");
+  });
 }
 
 /**
@@ -93,11 +113,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount: (): number => fetchSpy.mock.callCount(),
-  };
+  installNetworkTrap(t);
+  return { cwd };
 }
 
 async function seedMarketplace(cwd: string, scope: Scope, name: string): Promise<void> {
@@ -120,7 +137,7 @@ async function seedBothScopes(cwd: string): Promise<void> {
 
 test("lists every scope project-first when no scope flag narrows the listing", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "both-scopes");
+  const { cwd } = await createHermeticScope(t, "both-scopes");
   await seedBothScopes(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: cwd,
@@ -133,7 +150,6 @@ test("lists every scope project-first when no scope flag narrows the listing", a
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: BOTH_SCOPE_ROWS }]);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -143,7 +159,7 @@ for (const { args, label, surplus } of [
 ]) {
   test(`drops ${surplus} and still lists every scope`, async (t) => {
     // arrange
-    const { cwd, fetchCallCount } = await createHermeticScope(t, label);
+    const { cwd } = await createHermeticScope(t, label);
     await seedBothScopes(cwd);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: cwd,
@@ -156,7 +172,6 @@ for (const { args, label, surplus } of [
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: BOTH_SCOPE_ROWS }]);
-    assert.strictEqual(fetchCallCount(), 0);
     verifyBoundary();
   });
 }
@@ -167,7 +182,7 @@ for (const { row, scope } of [
 ] satisfies readonly { readonly row: string; readonly scope: Scope }[]) {
   test(`lists the ${scope} scope alone when --scope ${scope} is supplied`, async (t) => {
     // arrange
-    const { cwd, fetchCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { cwd } = await createHermeticScope(t, `scope-${scope}`);
     await seedBothScopes(cwd);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: cwd,
@@ -180,14 +195,13 @@ for (const { row, scope } of [
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: row }]);
-    assert.strictEqual(fetchCallCount(), 0);
     verifyBoundary();
   });
 }
 
 test("drops the scope-target flag as a surplus positional and honors the scope beside it", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "scope-target");
+  const { cwd } = await createHermeticScope(t, "scope-target");
   await seedBothScopes(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: cwd,
@@ -200,13 +214,12 @@ test("drops the scope-target flag as a surplus positional and honors the scope b
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: USER_ROW }]);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
 });
 
 test("reports an unrecognised scope value with the list usage block and never lists", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "invalid-scope");
+  const { cwd } = await createHermeticScope(t, "invalid-scope");
   await seedBothScopes(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const marketplaceListHandler = makeMarketplaceListHandler(pi);
@@ -221,6 +234,5 @@ test("reports an unrecognised scope value with the list usage block and never li
       severity: "error",
     },
   ]);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
 });

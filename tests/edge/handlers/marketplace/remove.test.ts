@@ -34,11 +34,17 @@
 // whose `claude-plugins.local.json` fails schema validation, where supplying
 // the flag aborts the removal and omitting it does not.
 //
-// Every case also asserts the process-wide transport recorded zero calls. The
-// architecture suite that gates network reach names orchestrator files only and
-// says nothing about the edge tier, so NFR-5 for this path is proven here by
-// call count rather than by an error message: an error-message assertion would
-// pass for the wrong error.
+// Every case also installs a fail-fast replacement of `https.request`, the door
+// the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT. The git
+// transport IS in this handler's import graph -- `orchestrators/marketplace/
+// shared.ts` supplies the removal cascade and also re-exports the git
+// operations -- but every fixture here declares a PATH source, which never
+// reaches the transport with or without any flag, so a zero asserted over one
+// would be vacuous even with the door correct. What the replacement is, is a
+// hermeticity device: a dial-out this path acquires later fails the case where
+// it happens. See `installNetworkTrap`. The architecture suite that gates
+// network reach names orchestrator files only and says nothing about the edge
+// tier.
 //
 // No exhaustiveness claim: marketplace/remove.ts holds no switch and no
 // closed-union dispatch, so a missing-arm plant has no target here. No case
@@ -48,6 +54,7 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -92,12 +99,27 @@ const USER_ALPHA_GONE: MarketplaceFootprint = { project: ["alpha"], user: ["beta
 interface HermeticWorkspace {
   /** The project working directory the handler forwards as `ctx.cwd`. */
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the marketplace remove surface must not reach the network");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof: every fixture here is a path
+ * source, which never reaches the transport, so no count asserted against this
+ * replacement could rise, and none is. The value is that a dial-out this path
+ * acquires later fails the case where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which no removal enters.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the marketplace remove surface must not open a network connection");
+  });
 }
 
 /**
@@ -132,13 +154,8 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
-  };
+  installNetworkTrap(t);
+  return { cwd };
 }
 
 /**
@@ -238,7 +255,6 @@ for (const { args, expectedFootprint, expectedMessage, selection } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
     assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), expectedFootprint);
-    assert.strictEqual(workspace.fetchCallCount(), 0);
     verifyBoundary();
   });
 }
@@ -258,7 +274,6 @@ test("supplies the remove usage block, shown when the name positional is missing
     { message: `Missing required argument.\n\n${REMOVE_USAGE}`, severity: "error" },
   ]);
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), BOTH_SCOPES_SEEDED);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -278,7 +293,6 @@ test("removes the first positional alone, so a surplus token drops rather than r
   // assert
   assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_REMOVED }]);
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), PROJECT_ALPHA_GONE);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -319,7 +333,6 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     // assert
     assert.deepStrictEqual(notifications, [expectedNotification]);
     assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), expectedFootprint);
-    assert.strictEqual(workspace.fetchCallCount(), 0);
     verifyBoundary();
   });
 }
@@ -340,7 +353,6 @@ test("accepts a scope flag beside the scope-target flag and honors the scope it 
   // assert
   assert.deepStrictEqual(notifications, [{ message: USER_ALPHA_REMOVED }]);
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), USER_ALPHA_GONE);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -359,7 +371,6 @@ test("supplies the remove usage block beside the unknown-flag sentence and remov
     { message: `Unknown flag: "--frobnicate".\n\n${REMOVE_USAGE}`, severity: "error" },
   ]);
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), BOTH_SCOPES_SEEDED);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -381,6 +392,5 @@ test("supplies the remove usage block beside a verbatim parse diagnostic and rem
     },
   ]);
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), BOTH_SCOPES_SEEDED);
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });

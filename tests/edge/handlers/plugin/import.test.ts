@@ -61,6 +61,7 @@
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -94,12 +95,30 @@ const EMPTY_CASCADE_MESSAGE = "(no marketplaces)";
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  readonly fetchCallCount: () => number;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the import handler must reach git through the injected port");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof, and no case asserts a call count
+ * against it. Every delegating case states the import delegate as a strict mock,
+ * so no workflow runs at all; the one case that DOES run the real workflow owns
+ * a tree with no Claude settings in either scope, so its cascade is empty and
+ * nothing is ever resolved. Neither fixture can reach a transport, so a zero
+ * asserted over them could not rise. The value of the replacement is that a
+ * dial-out reached from either fixture fails the case where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which an empty cascade never enters.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the import handler must reach git through the injected port");
+  });
 }
 
 /** The cascade outcome the injected delegate promises when nothing is planned. */
@@ -149,16 +168,13 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    fetchCallCount: (): number => fetchSpy.mock.callCount(),
-  };
+  installNetworkTrap(t);
+  return { cwd };
 }
 
 test("imports the project scope before the user scope when no scope flag narrows the command", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "both-scopes");
+  const { cwd } = await createHermeticScope(t, "both-scopes");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
     value: cwd,
     reads: 1,
@@ -185,7 +201,6 @@ test("imports the project scope before the user scope when no scope flag narrows
   // assert
   assert.deepStrictEqual(notifications, []);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
   verify(importClaudeSettings);
 });
@@ -193,7 +208,7 @@ test("imports the project scope before the user scope when no scope flag narrows
 for (const scope of ["project", "user"] satisfies readonly Scope[]) {
   test(`imports the ${scope} scope alone when --scope ${scope} narrows the command`, async (t) => {
     // arrange
-    const { cwd, fetchCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { cwd } = await createHermeticScope(t, `scope-${scope}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
       value: cwd,
       reads: 1,
@@ -220,7 +235,6 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
     // assert
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(git.state.calls.clone, []);
-    assert.strictEqual(fetchCallCount(), 0);
     verifyBoundary();
     verify(importClaudeSettings);
   });
@@ -228,7 +242,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
 
 test("runs the real import workflow when the dependency object declares no delegate", async (t) => {
   // arrange
-  const { cwd, fetchCallCount } = await createHermeticScope(t, "no-delegate");
+  const { cwd } = await createHermeticScope(t, "no-delegate");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: cwd,
     reads: 1,
@@ -242,7 +256,6 @@ test("runs the real import workflow when the dependency object declares no deleg
   // assert
   assert.deepStrictEqual(notifications, [{ message: EMPTY_CASCADE_MESSAGE }]);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -252,7 +265,7 @@ for (const { args, label, tokens } of [
 ]) {
   test(`rejects ${tokens} with the import usage block and never imports`, async (t) => {
     // arrange
-    const { fetchCallCount } = await createHermeticScope(t, `positional-${label}`);
+    await createHermeticScope(t, `positional-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitOpsFake({ boundary: "memory" });
     const importClaudeSettings = mock<ImportDelegate>({
@@ -267,7 +280,6 @@ for (const { args, label, tokens } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: NO_POSITIONALS_MESSAGE, severity: "error" }]);
     assert.deepStrictEqual(git.state.calls.clone, []);
-    assert.strictEqual(fetchCallCount(), 0);
     verifyBoundary();
     verify(importClaudeSettings);
   });
@@ -275,7 +287,7 @@ for (const { args, label, tokens } of [
 
 test("reports an unrecognised scope value with the import usage block and never imports", async (t) => {
   // arrange
-  const { fetchCallCount } = await createHermeticScope(t, "invalid-scope");
+  await createHermeticScope(t, "invalid-scope");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitOpsFake({ boundary: "memory" });
   const importClaudeSettings = mock<ImportDelegate>({
@@ -290,14 +302,13 @@ test("reports an unrecognised scope value with the import usage block and never 
   // assert
   assert.deepStrictEqual(notifications, [{ message: INVALID_SCOPE_MESSAGE, severity: "error" }]);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
   verify(importClaudeSettings);
 });
 
 test("takes the scope-target flag as a positional and rejects it alongside a scope flag", async (t) => {
   // arrange
-  const { fetchCallCount } = await createHermeticScope(t, "scope-target");
+  await createHermeticScope(t, "scope-target");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitOpsFake({ boundary: "memory" });
   const importClaudeSettings = mock<ImportDelegate>({
@@ -312,7 +323,6 @@ test("takes the scope-target flag as a positional and rejects it alongside a sco
   // assert
   assert.deepStrictEqual(notifications, [{ message: NO_POSITIONALS_MESSAGE, severity: "error" }]);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(fetchCallCount(), 0);
   verifyBoundary();
   verify(importClaudeSettings);
 });

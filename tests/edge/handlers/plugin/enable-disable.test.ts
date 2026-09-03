@@ -47,6 +47,7 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -122,12 +123,30 @@ interface HermeticWorkspace {
   readonly projectRoot: string;
   /** `<HOME>/.pi/agent` -- the user scope root (SC-1). */
   readonly userRoot: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
 }
 
-function refuseNetwork(): Promise<Response> {
-  throw new Error("the enable-disable surface must not reach the network");
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof, and no case asserts a call count
+ * against it. The git transport IS in this handler's import graph -- an enable
+ * re-materializes through the install ledger -- but every plugin seeded here
+ * declares a PATH source, which resolves off disk and never reaches the
+ * transport, so a zero asserted over these fixtures could not rise even with
+ * the door correct. The value of the replacement is that a dial-out this path
+ * acquires later fails the case where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which a path-source enable never enters.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the enable-disable surface must not open a network connection");
+  });
 }
 
 /**
@@ -160,14 +179,11 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
   });
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
+  installNetworkTrap(t);
   return {
     cwd,
     projectRoot: path.join(cwd, ".pi"),
     userRoot: path.join(home, ".pi", "agent"),
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
   };
 }
 
@@ -461,7 +477,6 @@ for (const { enable, expectedFootprint, label, seedDisabled, summary } of [
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
-    assert.strictEqual(workspace.fetchCallCount(), 0);
     verifyBoundary();
   });
 }
@@ -488,7 +503,6 @@ test("drops a surplus reference token and flips only the first one (ENBL-01)", a
     userBase: ALPHA_DECLARED_DISABLED,
     userLocal: undefined,
   });
-  assert.strictEqual(workspace.fetchCallCount(), 0);
   verifyBoundary();
 });
 
@@ -522,7 +536,6 @@ for (const { args, label, selection } of [
       userBase: undefined,
       userLocal: undefined,
     });
-    assert.strictEqual(workspace.fetchCallCount(), 0);
     verifyBoundary();
   });
 }
@@ -561,7 +574,6 @@ for (const { args, label, placement } of [
       userBase: undefined,
       userLocal: ALPHA_DECLARED_DISABLED,
     });
-    assert.strictEqual(workspace.fetchCallCount(), 0);
     verifyBoundary();
   });
 }
