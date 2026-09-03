@@ -222,6 +222,32 @@ decisions rested on. The decisions stand; these are the corrections to the facts
   `package.json` lines 82 and 91 are contended by three workstreams — the one hard file collision in
   the phase. Sequence around it.
 
+### Operator decisions taken after research (2026-09-03)
+
+- **D-117-19: label the runtime honestly.** No Node 24 exists on this machine. Measure the all-pair
+  run on the runtime actually present, record that version **beside** the number, and state that
+  success criterion 3's "Node 24" result is satisfied by CI, which pins 24. **Do not label a non-24
+  run "the Node 24 all-pair result."** No local install. — **Reversibility:** reversible.
+
+- **D-117-20: COV-05 reads as 197 records plus 7 named type-only rows.** The all-pair artifact
+  carries a complete direct coverage record for each of the 197 emitting modules, and an explicit
+  `type-only` verdict **by name** for the other seven — `edge/types.ts`, `orchestrators/types.ts`,
+  `orchestrators/import/types.ts`, and `bridges/{agents,commands,mcp,skills}/types.ts`. All 204 rows
+  are accounted for and none is silent. COV-05 is reported met in substance with the exception
+  enumerated. **Not** resolved by a pragma, and **not** by weakening the other 197.
+
+- **D-117-21: D-117-07 is narrowed to what can actually fire.** Research measured that a barrel-proxy
+  owner is already rejected today (as `wrong-import`) and that path-level ambiguity is unreachable
+  under the current 1:1 mapping. So:
+  - **Add** a `proxy-owned` label to the existing barrel rejection, with a planting control, so
+    OWN-02 is named rather than incidental.
+  - **Add** planting controls for the two reachable-but-uncontrolled verdicts:
+    `Expected one LCOV record ... found 2`, and `Incomplete direct coverage for ...` — the latter is
+    the verdict the entire D-116-01a pin regime rests on and has no control at all today.
+  - **Do not add** a path-level ambiguity check. A gate that cannot fire is the exact defect
+    `import-x/no-cycle` shipped as in this repository, and adding one to satisfy a wording would
+    repeat it.
+
 ### Inherited rules that still bind — do not relitigate
 
 - **D-116-01a as amended (2026-09-02):** any pair that MEASURES an unreachable branch becomes a
