@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 12
 waived_count: 0
 fixed_count: 5
-total_count: 16
-last_updated: 2026-09-02T22:04:43.869Z
+total_count: 17
+last_updated: 2026-09-03T00:18:38.629Z
 ---
 
 # Broken Windows Ledger
@@ -31,6 +31,7 @@ last_updated: 2026-09-02T22:04:43.869Z
 | 14 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/import/execute.ts |  | WR-04: buildImportNotificationMarketplaces iterates the header map byMp and looks plugin rows up in the sibling rowsByMp map, so any row whose (scope, marketplace) key carries no header is never visited and vanishes without trace behind the ?? [] fallback. Making MarketplaceBlock.status required prevents a STATUSLESS HEADER; it does not prevent a HEADERLESS ROW. What rules that out is an invariant spanning four functions: every pushMarketplaceRow site is reachable only for a plugin that passed the blockedMarketplaces gate, and scopedPlan derives pluginsToInstall and marketplacesToEnsure from the same refs set under one scope. No structural gate was added because the check would be an arm no input can reach, which breaks the 100 percent direct-branch-coverage requirement for this pair. The overstated doc comment was corrected to describe the invariant instead of implying the type enforces it. WR-06's fix removed the one concrete near-miss (the unknown-stored branch now assigns a status). | open |  | 2026-09-02T06:22:47.283Z |  |
 | 15 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts | 41 | Usage-string collapse arm is unreachable through the module exports, so the 116-13 pair falls one branch short of complete direct coverage. NOT compiler-forced: parseCommandArgs passes the usage string only for a required positional and this schema declares its sole positional optional, so the arm is dead here and stays live for sibling handlers that declare a required one. Pinned by identity under the amended D-116-01a (commit ed0e490f); closes only by a production rewrite | open |  | 2026-09-02T22:03:02.310Z |  |
 | 16 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/completions/data.ts | 188 | Right-hand side of the nullish fallback on the last-token read is unreachable through the module exports, so the 116-03 pair falls one branch short of complete direct coverage. Compiler-forced: Array.prototype.at() is typed T or undefined by the standard library, so the fallback must exist though the array is non-empty on every path reaching it. Proved by construction, by a brute force over all 65,536 BMP code points in five shapes, and by a plant that stayed green. Pinned by identity under the amended D-116-01a (commit ed0e490f); closes only by a production rewrite | open |  | 2026-09-02T22:04:43.869Z |  |
+| 17 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/completions/provider.ts | 125 | Empty-object arm of the optionalDescription conditional is unreachable through the module exports, so the 116-05 pair falls one branch short of complete direct coverage. NOT compiler-forced; structural: the only two producers of the flagCompletions entry list are a written-out literal that carries a description and completionFlagEntries, whose every element derives from a FlagEntry whose description field is required. The declared element type keeps the field optional, so the guard must exist and nothing reachable can supply an entry without one. Proved by a plant that replaced the arm with a distinguishable description and stayed green, and by an independent route over 406 long-flag cursor prefixes spanning every top-level head, every marketplace subcommand, unknown heads and scope-, partial- and reference-bearing prefixes, which emitted 169 items with zero missing a description and zero carrying the marker. Pinned by identity under the amended D-116-01a; closes only by a production rewrite | open |  | 2026-09-03T00:18:38.629Z |  |
 
 ````json
 [
@@ -224,6 +225,18 @@ last_updated: 2026-09-02T22:04:43.869Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-02T22:04:43.869Z",
+    "resolved_at": null
+  },
+  {
+    "id": 17,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "extensions/pi-claude-marketplace/edge/completions/provider.ts",
+    "line": 125,
+    "description": "Empty-object arm of the optionalDescription conditional is unreachable through the module exports, so the 116-05 pair falls one branch short of complete direct coverage. NOT compiler-forced; structural: the only two producers of the flagCompletions entry list are a written-out literal that carries a description and completionFlagEntries, whose every element derives from a FlagEntry whose description field is required. The declared element type keeps the field optional, so the guard must exist and nothing reachable can supply an entry without one. Proved by a plant that replaced the arm with a distinguishable description and stayed green, and by an independent route over 406 long-flag cursor prefixes spanning every top-level head, every marketplace subcommand, unknown heads and scope-, partial- and reference-bearing prefixes, which emitted 169 items with zero missing a description and zero carrying the marker. Pinned by identity under the amended D-116-01a; closes only by a production rewrite",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-03T00:18:38.629Z",
     "resolved_at": null
   }
 ]

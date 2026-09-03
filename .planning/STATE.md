@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-09-PLAN.md
-last_updated: "2026-09-03T00:05:00.000Z"
+stopped_at: Completed 116-05-PLAN.md
+last_updated: "2026-09-03T00:23:04.095Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
-state_head: 844c9f3d318cc4ff613af9fcde8e798a5e646dad
+state_head: 132690965ebe16fb3a70088bddbd43856dfd8190
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 193
+  completed_plans: 194
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 18 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: the DAG-recomputed wave 4 is one plan from closing — 116-07, 116-08, 116-09 and 116-11 are done; only 116-05 (completions/provider) remains before wave 5 (the plugin handlers, with 116-17 carrying the atomic git mv)
-Last activity: 2026-09-02 — 116-11 rewrote the marketplace remove owner as 11 runtime cases from 7 marked bodies, observing the removal as the on-disk marketplace footprint of both scopes read back as one whole value. Its main finding is a case the PLAN specified that could not fail: the forwarded scope-target flag is read in exactly one place inside `removeMarketplace` — to pick `claude-plugins.local.json` over `claude-plugins.json` as the CFG-03 precondition target — while the success write-back sweeps BOTH layers unconditionally, so in a valid-config fixture `alpha`, `alpha --local` and `--local alpha` are byte-identical. The rows were rewritten against a workspace whose override layer fails schema validation, where supplying the flag aborts the removal and omitting it does not; Plant C (deleting the local spread) turns exactly the two flag-supplied rows RED and would have left the plan's version fully GREEN. A sixth `--local` outcome was measured: this shim reaches `extractLocalFlag` through the shared opener, so `--scope user --local` is ACCEPTED and both members are honored (the third acceptance, matching add and autoupdate). The arity truth split for the first time — a single REQUIRED positional DOES reject zero, so the lower half holds, while the surplus token is still DROPPED. The Group-C negative gave a fourth diagnostic pair: no catch wraps `locationsFor`, so the ctx.cwd-forwarding variant dies as `ERR_INVALID_ARG_TYPE` at `persistence/locations.ts:145` and the literal-cwd variant runs to completion and dies on the emission count at `orchestrators/marketplace/remove.ts:783`. Direct coverage went 7/7 to branches 8/8, functions 2/2, lines 46/46 — denominator and numerator rose together, no D-116-01a claim. Seven plants, all RED, all reverted; no production file touched
+Plan: 19 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: the DAG-recomputed wave 4 is CLOSED — 116-05 (completions/provider) was its last plan. Wave 5 is next: the eleven plugin handlers (116-14 … 116-22, 116-24, 116-25), with 116-17 carrying the atomic git mv; wave 6 is 116-28 (register)
+Last activity: 2026-09-02 — 116-05 replaced the phase's largest existing suite (1,670 lines, 67 cases) with 58 runtime cases from 22 marked bodies, asserting the COMPOSITION the provider owns rather than the contents of the three surfaces it composes. Direct coverage went 319/335 lines and 71/78 branches to lines 335/335, functions 11/11 and branches 79/80; the +16 lines are the enable and disable arms no case reached before, and the denominator moved 78 to 80 because V8 emits a range only for code it executed, so the two scope guards inside those arms did not exist as ranges until they ran. TWO findings. First, the plan's case list omitted the `allowMarketplaceOnly` half of each head's branch configuration: it is invisible at a plain plugin cursor and coverage cannot see it (it is data, not a branch), so the eight heads are now driven at an `@` cursor too — update, fetch and reinstall offer the bare `@<marketplace>` targets, the other five offer none, and two plants (enable flipped true, update flipped false) each turn exactly their own row RED. Second, a NEW D-116-01a claimant: the empty-object arm of `optionalDescription` at `edge/completions/provider.ts:125` is unreachable through the module's single export, because every entry `flagCompletions` builds carries a description (a written-out literal, and `completionFlagEntries` whose elements derive from a `FlagEntry` with a REQUIRED description). Structural, not compiler-forced. Proved by a plant that stayed GREEN plus an independent route over 406 long-flag cursor prefixes that emitted 169 items with zero missing a description. Pinned by identity in the plan's `must_haves` and `<verify>` link, planted in both directions (two assertion-side, three output-side, all six correct), and filed as WINDOWS.md entry 17. The plan's scope-order rationale was also wrong: `scope-order-drift.test.ts` walks `extensions/` only, and re-reading `SCOPES` would have made the order claim circular, so the scope pair is hand-authored. Five plants, four RED and one GREEN-by-design, all reverted; no production file touched
 
 Progress: [████████░░] 80%
 
@@ -170,6 +170,7 @@ evidence.
 | Phase 116 P13 | 50 min | 1 tasks | 1 files |
 | Phase 116 P07 | 35 min | 1 tasks | 1 files |
 | Phase 116 P11 | 35 min | 1 tasks | 1 files |
+| Phase 116 P05 | 30 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -376,8 +377,8 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-02T23:56:00.000Z
-Stopped at: Completed 116-11-PLAN.md
+Last session: 2026-09-03T00:23:01.677Z
+Stopped at: Completed 116-05-PLAN.md
 tests/edge/handlers/marketplace/remove.test.ts is the sole mirrored owner for the marketplace
 remove shim, at 11 runtime cases from 7 marked bodies and complete direct coverage (branches 8/8,
 functions 2/2, lines 46/46, up from 7/7). npm test 5058/5058, test:integration 31/31,
