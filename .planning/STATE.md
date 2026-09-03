@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: executing
-stopped_at: Completed 117-10-PLAN.md
-last_updated: "2026-09-03T20:25:19.832Z"
+stopped_at: "HALTED at 117-11 Task 2: the all-pair run cannot complete"
+last_updated: "2026-09-03T21:20:52.403Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 117 execution started
-state_head: 6308668988afa349a5c5383c7d80ac601e64d5c2
+state_head: eb6264ed69957dae4aad8c07cd4b0ebc65da0b18
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 220
-  completed_plans: 218
+  completed_plans: 219
 milestone_name: Unit Test Refactor
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 
 Phase: 117 (Extension Entry and Final Gate) — EXECUTING
 Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 verification measured every promise directly rather than reading the summaries. Its one gap — the two
 D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
@@ -228,6 +228,7 @@ evidence.
 | Phase 117 P08 | 22 min | 2 tasks | 4 files |
 | Phase 117 P09 | 13 min | 1 tasks | 2 files |
 | Phase 117 P10 | 12 min | 1 tasks | 1 files |
+| Phase 117 P11 | 50 min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -434,6 +435,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: The extension entry pair asserts two notifications for an unreadable install state, not one: the reconcile renders its own failure cascade for the same file before the plugin-PATH warning, and the legacy filtered assertion concealed it. — Measured on this tree; the whole two-element notification list is now compared.
 - [Phase 117]: Both entry-pair fixtures use a schema violation rather than a syntax error, because the reconcile renders the runtime JSON parser text into a user-visible message and that text is not part of any contract. — Keeps the whole-value cascade comparisons stable across Node versions; this tree runs v26.7.0 while CI pins 24.
 - [Phase 117]: Barrel-proxy ownership is named as its own gate verdict, proxy-owned, split from wrong-import and decided from the import graph the gate already builds. — D-117-21 gives the verdict its spelling; the split needs no name list, registry or exemption entry, and both sides are planted in the control.
+- [Phase 117]: COV-05's 204 rows measure as 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, not D-117-20's 197 + 7 — Measured over every row on both interpreters using the gate's own assertion; the seven short-by-one modules match the seven open D-116-01a ledger entries file for file
+- [Phase 117]: Concurrency for the all-pair run stays undecided — D-117-11 forbids an unmeasured choice and no complete all-pair duration exists, since every run aborted on the accepted shortfalls
 
 ### Pending Todos
 
@@ -448,6 +451,8 @@ None for roadmap creation.
   at phase 100. Phase 114's ROADMAP and STATE transition was therefore applied by
   hand. Phases 115 through 117 and milestone close will hit the same wall until the
   stale workstream directories are retired or v1.19 is given its own workstream.
+- Plan 117-11 HALTED: test:coverage:direct:all cannot complete. Seven of the 204 rows are the accepted D-116-01a single-branch shortfalls (ledger 15-19, 21, 22), so COV-05 is 190 complete + 7 accepted + 7 type-only, not D-117-20's 197 + 7. Needs an operator decision on how the gate represents an accepted shortfall, given the standing ban on coverage-exception pragmas.
+- PATH node upgraded v26.7.0 to v26.8.1 mid-phase; 26.7.0 is gone from the Cellar. Eleven whole-value assertions across ten suites now fail because EISDIR from reading a directory carries a path property. npm test: 5142/0 on /usr/bin/node v22.22.2, 5131 with 11 failures on v26.8.1. CI pins Node 24 and is unaffected.
 
 ## Deferred Items
 
@@ -457,9 +462,9 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-10-PLAN.md
+**Stopped at:** HALTED at 117-11 Task 2: the all-pair run cannot complete
 
-**Resume file:** None
+**Resume file:** .planning/phases/117-extension-entry-and-final-gate/117-11-SUMMARY.md
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
 lines) beside them.
 
@@ -467,7 +472,7 @@ lines) beside them.
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03T20:25:16.892Z
+Last session: 2026-09-03T21:20:20.046Z
 
 **Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
 six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
