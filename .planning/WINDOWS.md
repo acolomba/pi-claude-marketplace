@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 13
+open_count: 14
 waived_count: 0
 fixed_count: 5
-total_count: 18
-last_updated: 2026-09-03T00:44:13.846Z
+total_count: 19
+last_updated: 2026-09-03T04:09:41.716Z
 ---
 
 # Broken Windows Ledger
@@ -33,6 +33,7 @@ last_updated: 2026-09-03T00:44:13.846Z
 | 16 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/completions/data.ts | 188 | Right-hand side of the nullish fallback on the last-token read is unreachable through the module exports, so the 116-03 pair falls one branch short of complete direct coverage. Compiler-forced: Array.prototype.at() is typed T or undefined by the standard library, so the fallback must exist though the array is non-empty on every path reaching it. Proved by construction, by a brute force over all 65,536 BMP code points in five shapes, and by a plant that stayed green. Pinned by identity under the amended D-116-01a (commit ed0e490f); closes only by a production rewrite | open |  | 2026-09-02T22:04:43.869Z |  |
 | 17 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/completions/provider.ts | 125 | Empty-object arm of the optionalDescription conditional is unreachable through the module exports, so the 116-05 pair falls one branch short of complete direct coverage. NOT compiler-forced; structural: the only two producers of the flagCompletions entry list are a written-out literal that carries a description and completionFlagEntries, whose every element derives from a FlagEntry whose description field is required. The declared element type keeps the field optional, so the guard must exist and nothing reachable can supply an entry without one. Proved by a plant that replaced the arm with a distinguishable description and stayed green, and by an independent route over 406 long-flag cursor prefixes spanning every top-level head, every marketplace subcommand, unknown heads and scope-, partial- and reference-bearing prefixes, which emitted 169 items with zero missing a description and zero carrying the marker. Pinned by identity under the amended D-116-01a; closes only by a production rewrite | open |  | 2026-09-03T00:18:38.629Z |  |
 | 18 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts | 31 | String-conversion arm of the catch-block error formatter is unreachable through the module exports, so the 116-17 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the only throw reaching this catch comes from parseArgs, which constructs a new Error at both of its throw sites, but a catch binding is typed unknown under useUnknownInCatchVariables, so the residual arm must exist; narrowing it needs a type assertion, which is barred throughout extensions/. Proved by a plant that replaced the arm with a distinguishable literal and stayed green across all 8 cases, by a live-arm plant that turned the tokenizer case red, and by an independent brute force over 3615 argument strings that produced 521 throws and zero non-Error values. Pinned by identity under the amended D-116-01a; closes only by a production rewrite (routing the catch through shared/errors.ts errorMessage) | open |  | 2026-09-03T00:44:13.846Z |  |
+| 19 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts | 39 | Nullish-fallback arm on the first positional is unreachable through the module exports, so the 116-21 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the guard on the line above has already proven the positional list non-empty and parseArgs pushes only non-undefined tokens onto it, but noUncheckedIndexedAccess (tsconfig.json:12) types the index read as possibly undefined, so the fallback must exist; removing it raises TS18048 at its consumption site and narrowing it needs a non-null or type assertion, both barred throughout extensions/. Proved by a plant that replaced the fallback with a distinguishable literal and stayed green across all 15 cases, by an OBSERVABLE plant that would have named a long-flag-shaped sentinel in the emission and also stayed green, and by an independent brute force over 19530 argument strings of up to six characters drawn from the tokenizer's significant alphabet that produced zero sentinel emissions while the same brute force with the index moved out of range reported it for 136 of 155. Pinned by identity under the amended D-116-01a; closes only by a production rewrite | open |  | 2026-09-03T04:09:41.716Z |  |
 
 ````json
 [
@@ -250,6 +251,18 @@ last_updated: 2026-09-03T00:44:13.846Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-03T00:44:13.846Z",
+    "resolved_at": null
+  },
+  {
+    "id": 19,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts",
+    "line": 39,
+    "description": "Nullish-fallback arm on the first positional is unreachable through the module exports, so the 116-21 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the guard on the line above has already proven the positional list non-empty and parseArgs pushes only non-undefined tokens onto it, but noUncheckedIndexedAccess (tsconfig.json:12) types the index read as possibly undefined, so the fallback must exist; removing it raises TS18048 at its consumption site and narrowing it needs a non-null or type assertion, both barred throughout extensions/. Proved by a plant that replaced the fallback with a distinguishable literal and stayed green across all 15 cases, by an OBSERVABLE plant that would have named a long-flag-shaped sentinel in the emission and also stayed green, and by an independent brute force over 19530 argument strings of up to six characters drawn from the tokenizer's significant alphabet that produced zero sentinel emissions while the same brute force with the index moved out of range reported it for 136 of 155. Pinned by identity under the amended D-116-01a; closes only by a production rewrite",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-03T04:09:41.716Z",
     "resolved_at": null
   }
 ]
