@@ -27,6 +27,8 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
+const TEST_ROOT = "tests";
+
 const SEPARATELY_SCRIPTED_ROOTS: ReadonlySet<string> = new Set(["e2e", "integration"]);
 
 function toPosix(candidate: string): string {
@@ -34,9 +36,17 @@ function toPosix(candidate: string): string {
 }
 
 /**
- * Every path the quoted glob arguments of one npm script expand to. Both
- * scripts quote their glob arguments and nothing else, so the double-quoted
- * substrings of the script string are exactly its patterns.
+ * Every path the quoted glob arguments of one npm script expand to.
+ *
+ * The patterns are scraped as the double-quoted substrings of the script
+ * string, which only works while both scripts quote their glob arguments and
+ * nothing else. That precondition is checked rather than assumed:
+ * `test:coverage:unit` already carries five non-glob arguments that happen to
+ * be unquoted today, and quoting any one of them -- or adding a quoted
+ * `--test-name-pattern` -- would feed it to `globSync` as a pattern. The
+ * resulting failure would be a diff naming test files, which says nothing
+ * about the malformed script that caused it, so anything scraped that is not a
+ * `tests/` glob fails here instead, naming itself.
  */
 function pathsMatchedByScript(scriptName: string): string[] {
   const manifest = JSON.parse(readFileSync(path.join(REPO_ROOT, "package.json"), "utf8")) as {
@@ -48,7 +58,21 @@ function pathsMatchedByScript(scriptName: string): string[] {
     throw new Error(`package.json declares no "${scriptName}" script`);
   }
 
-  const patterns = [...script.matchAll(/"([^"]*)"/g)].map((quoted) => quoted[1] ?? "");
+  const quoted = [...script.matchAll(/"([^"]*)"/g)].map((match) => match[1] ?? "");
+  const patterns = quoted.filter((candidate) => candidate.startsWith(`${TEST_ROOT}/`));
+  const foreign = quoted.filter((candidate) => !candidate.startsWith(`${TEST_ROOT}/`));
+
+  if (foreign.length > 0) {
+    throw new Error(
+      `the "${scriptName}" script quotes an argument that is not a ${TEST_ROOT}/ glob: ` +
+        foreign.join(", "),
+    );
+  }
+
+  if (patterns.length === 0) {
+    throw new Error(`the "${scriptName}" script quotes no ${TEST_ROOT}/ glob at all`);
+  }
+
   const matched = patterns.flatMap((pattern) => globSync(pattern, { cwd: REPO_ROOT }));
 
   return [...new Set(matched.map(toPosix))].sort();
@@ -56,7 +80,7 @@ function pathsMatchedByScript(scriptName: string): string[] {
 
 /** Every unit test file that exists under `tests/`, found without a glob. */
 function unitTestFilesOnDisk(): string[] {
-  const entries = readdirSync(path.join(REPO_ROOT, "tests"), {
+  const entries = readdirSync(path.join(REPO_ROOT, TEST_ROOT), {
     recursive: true,
     withFileTypes: true,
   });
