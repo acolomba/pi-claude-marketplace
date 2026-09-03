@@ -27,6 +27,35 @@ test("parseCommandArgs returns each required positional under its declared name"
   assert.deepStrictEqual(usageErrors, []);
 });
 
+// The loop above iterates `schema.positional`, not `parsed.positional`, so an
+// index the schema does not declare is never read and a token sitting there is
+// discarded without a diagnostic. That is this module's rule and it is
+// user-visible -- a mistyped extra word is swallowed rather than reported.
+//
+// The two callers that rely on it (`tests/edge/handlers/plugin/shared.test.ts`
+// and `tests/edge/handlers/marketplace/shared.test.ts`) each keep their own
+// claim, which is that they forward the parsed value; neither owns the rule.
+//
+// The case above is the discriminator: with the same token at index 1 and a
+// schema that DOES declare it, the value comes back under its name.
+test("parseCommandArgs drops a positional the schema does not declare, with no usage error", () => {
+  // arrange
+  const usageErrors: string[] = [];
+  const schema = {
+    positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin marketplace info <name> [--scope user|project]",
+  };
+
+  // act
+  const parsedArgs = parseCommandArgs("official surplus", schema, (message) => {
+    usageErrors.push(message);
+  });
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, { marketplace: "official" });
+  assert.deepStrictEqual(usageErrors, []);
+});
+
 for (const { args, placement } of [
   { args: "--scope project official alpha", placement: "before the positionals" },
   { args: "official --scope project alpha", placement: "between the positionals" },
