@@ -144,38 +144,23 @@ function refuseNetwork(): Promise<Response> {
 }
 
 /**
- * One temporary cache root and one temporary home per case, with the
- * agent-directory variable deleted so no ambient value can redirect a write.
- * Removal, both environment restores and the process-global completion-cache
- * reset are registered before the act, so an early throw still unwinds them.
+ * One temporary cache root per case. Removal and the process-global
+ * completion-cache reset are registered before the act, so an early throw still
+ * unwinds them.
+ *
+ * No environment is substituted here. Neither `provider.ts`, `data.ts` nor
+ * `shared/completion-cache.ts` -- nor anything else in their import closure --
+ * reads `process.env`, `homedir()` or `getAgentDir()`; every path arrives
+ * through the injected resolver. A `HOME` substitution would change nothing
+ * observable, so this helper does not carry one.
  */
 async function seedResolver(t: TestContext, label: string): Promise<SeededResolver> {
   resetCompletionCache();
   const cacheRoot = await mkdtemp(path.join(tmpdir(), `provider-${label}-cache-`));
-  const home = await mkdtemp(path.join(tmpdir(), `provider-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
     resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
   });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
   const networkSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
 
   const resolver = {
