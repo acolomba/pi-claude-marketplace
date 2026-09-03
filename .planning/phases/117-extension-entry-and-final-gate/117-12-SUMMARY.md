@@ -299,3 +299,12 @@ Two things it will meet:
 ---
 *Phase: 117-extension-entry-and-final-gate*
 *Completed: 2026-09-03*
+
+## Self-Check: PASSED
+
+All five modified planning files exist on disk. All four commits
+(`e474dab7`, `6e1199f4`, `91604aa1`, `4f343a7b`) are reachable from
+`git log --oneline --all`. All three task verify chains were re-run after the
+SUMMARY landed and each exits 0, including
+`git diff --quiet -- extensions/ tests/ scripts/ package.json`: nothing outside
+the planning tree changed.
