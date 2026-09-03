@@ -100,12 +100,12 @@ import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { makeReinstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,
   mergeMarketplaceIntoState,
-} from "../../../helpers/marketplace-seed.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+} from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 

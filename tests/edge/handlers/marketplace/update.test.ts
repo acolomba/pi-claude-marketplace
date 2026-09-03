@@ -85,12 +85,9 @@ import { mock, verify, when } from "strong-mock";
 
 import { makeMarketplaceUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import {
-  mergeMarketplaceIntoState,
-  seedAutoupdateConfig,
-} from "../../../helpers/marketplace-seed.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { mergeMarketplaceIntoState, seedAutoupdateConfig } from "../marketplace-seed.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

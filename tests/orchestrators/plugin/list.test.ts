@@ -49,7 +49,7 @@ import {
   buildInstalledPluginRecord,
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
-} from "../../helpers/marketplace-seed.ts";
+} from "../../edge/handlers/marketplace-seed.ts";
 
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import type {

@@ -101,8 +101,8 @@ import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/
 import { makeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { mergeMarketplaceIntoState } from "../../../helpers/marketplace-seed.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { ScopeConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

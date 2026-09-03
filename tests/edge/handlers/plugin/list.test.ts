@@ -103,11 +103,8 @@ import { test, type TestContext } from "node:test";
 
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
-import {
-  buildInstalledPluginRecord,
-  mergeMarketplaceIntoState,
-} from "../../../helpers/marketplace-seed.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { Notification } from "../../notification-boundary.ts";

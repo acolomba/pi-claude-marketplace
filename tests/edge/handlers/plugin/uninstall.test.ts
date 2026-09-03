@@ -59,11 +59,8 @@ import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
-import {
-  buildInstalledPluginRecord,
-  mergeMarketplaceIntoState,
-} from "../../../helpers/marketplace-seed.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 

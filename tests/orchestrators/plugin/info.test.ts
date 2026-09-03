@@ -60,7 +60,7 @@ import {
   materializeMarketplaceTree,
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
-} from "../../helpers/marketplace-seed.ts";
+} from "../../edge/handlers/marketplace-seed.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 

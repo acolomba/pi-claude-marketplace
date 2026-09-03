@@ -57,8 +57,8 @@ import { test, type TestContext } from "node:test";
 import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { makeMarketplaceInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { mergeMarketplaceIntoState } from "../../../helpers/marketplace-seed.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 

@@ -1,4 +1,4 @@
-// tests/helpers/marketplace-seed.ts
+// tests/edge/handlers/marketplace-seed.ts
 //
 // Shared fixture primitives for the orchestrator suites that seed a
 // path-source marketplace into a scope's `state.json`.
@@ -15,10 +15,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { saveConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 /** The five inventory axes a persisted install record carries. */
 export interface SeededResources {
