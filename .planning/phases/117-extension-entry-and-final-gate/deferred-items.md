@@ -61,3 +61,56 @@ it and why that plan could not resolve it.
 - **Impact:** documentation only. No gate reads `TESTING.md`; the
   glob-completeness control reads the live scripts in `package.json`, which are
   correct.
+
+## 4. `--all` cannot complete: the seven D-116-01a shortfalls are accepted, and the gate has no vocabulary for them
+
+- **Found during:** 117-11 Task 2
+- **File:** `scripts/test-coverage-direct.mjs` (`assertCompleteCoverage`), against the
+  seven `edge/` modules in `.planning/WINDOWS.md` entries 15-19, 21 and 22
+- **Issue:** the all-pair run throws `Incomplete direct coverage for <source>` on the
+  first D-116-01a claimant it reaches and stops, so `--all` cannot produce a 204-row
+  result on this tree. Measured over every row on both available interpreters: the
+  same seven modules fall short, each by **exactly one branch** —
+  `edge/args.ts` 28/29, `edge/completions/data.ts` 109/110,
+  `edge/completions/provider.ts` 79/80,
+  `edge/handlers/marketplace/update.ts` 11/12,
+  `edge/handlers/plugin/import.ts` 11/12,
+  `edge/handlers/plugin/pending.ts` 9/10,
+  `edge/handlers/shared.ts` 14/15. Those are precisely the seven `open`
+  D-116-01a claimants, each already pinned by its own pair and filed in the ledger.
+  Nothing regressed; the operator accepted these shortfalls in the previous phase.
+- **Consequence for COV-05:** the true composition of the 204 rows is **190 complete
+  numeric records + 7 accepted single-branch shortfalls + 7 type-only verdicts**.
+  D-117-20 reads COV-05 as "197 numeric records plus 7 named type-only rows"; that
+  reading does not account for the seven D-116-01a rows and cannot be satisfied.
+- **Why not fixed here:** 117-11 Task 2 forbids editing the gate script, and
+  D-116-01a's standing ban — "no coverage-exception pragma, ever" — means the obvious
+  workaround (an allowlist of accepted shortfalls) is exactly the thing the phase
+  prohibits. How the all-pair gate should represent an accepted shortfall is an
+  operator decision, not an executor one.
+- **Suggested owner:** a new plan opened against the operator's answer, before the
+  117-12 sweep closes COV-05.
+
+## 5. The PATH interpreter was upgraded mid-phase and reddens 11 tests
+
+- **Found during:** 117-11 Task 2
+- **File:** ten test suites, led by
+  `tests/bridges/agents/marker.test.ts:232` ("propagates a read error for a directory
+  target")
+- **Issue:** `/home/linuxbrew/.linuxbrew/bin/node` moved from **v26.7.0** (the version
+  D-117-18 measured, and the version this phase's `npm test` baseline was taken on) to
+  **v26.8.1** during this plan's execution. The Cellar no longer holds 26.7.0.
+  On v26.8.1 an `EISDIR` error raised by `readFile` on a directory now carries a
+  `path` property; on v26.7.0 and on v22.22.2 it does not. Eleven whole-value
+  assertions compare against `path: undefined` and now fail. Measured:
+  `npm test` on v26.8.1 is **5131 pass / 11 fail**; on `/usr/bin/node` v22.22.2 the
+  same tree is **5142 pass / 0 fail**.
+- **Why not fixed here:** 117-11 forbids editing test files, the failures belong to ten
+  pairs this plan does not own, and installing a Node version is an environment
+  mutation the executor may not make unasked.
+- **Impact:** CI is unaffected — it pins Node 24 in `.github/workflows/ci.yml`
+  (`node-version: "24"` at lines 70, 91, 111 and 132). This is a local-tree hazard, and
+  the same class as D-117-18's warning: a whole-value comparison that captures a value
+  the runtime owns.
+- **Suggested owner:** the operator, for the runtime; then a plan owning those ten
+  pairs, to stop asserting a runtime-owned property.
