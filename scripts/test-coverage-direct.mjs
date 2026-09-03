@@ -292,6 +292,13 @@ function repeatedValues(records, field) {
 // The all-pair run is only a gate if it can say it visited every row. A run that quietly skipped one
 // module would otherwise report the same success as a run that covered all of them.
 //
+// The caller decides what "the run's rows" means, and only one of the two answers can catch a
+// skipped row. `runAllPairs` reads the rows back OUT of the retained report, so a lost append, a
+// truncated write or a report another process clobbered mid-run fails here. Handed the in-memory
+// array the same loop just built, the check cannot fail at all -- that array has one entry per
+// enumerated module by construction -- so a report-less run degrades this to a structural invariant
+// over the loop's own output rather than a guard over the run.
+//
 // The round-trip check is also the honest answer to COV-02's remaining half. Path-level ambiguity --
 // two production modules claiming one test, or one test claiming two modules -- is UNREACHABLE under
 // the current one-to-one name mapping, so a check written to catch it could never fire and would
@@ -392,8 +399,19 @@ async function runAllPairs(reportPath) {
     }
   }
 
+  // Read the retained report back instead of trusting the array the loop above just appended to, so
+  // the completeness check has a witness the loop did not produce. See the note on
+  // `assertReportComplete` for why the report-less arm cannot fail.
+  const written =
+    reportPath === undefined
+      ? records
+      : readFileSync(reportPath, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+
   // Unconditional: a report is how the result is retained, not what makes the run a gate.
-  assertReportComplete(records, modulePaths);
+  assertReportComplete(written, modulePaths);
 
   const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
