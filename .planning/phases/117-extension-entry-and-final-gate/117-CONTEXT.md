@@ -79,7 +79,9 @@ by grep on 2026-09-03:
 
 - **D-117-04:** Dissolve `tests/helpers/` in this phase. Two modules have an unambiguous home; the
   two cross-tier ones go beside their **dominant** consumer and the minority imports across the tier
-  boundary. Roughly 48 import lines across ~45 files. — **Reversibility:** costly — undo touches
+  boundary. **50 import lines across 35 files**, plus one load-bearing data string at
+  `tests/helpers/source-scan.test.ts:55`. (Corrected by research from the discuss-time estimate of
+  ~48 across ~45.) — **Reversibility:** costly — undo touches
   every one of those import sites again.
 
   ```text
@@ -145,7 +147,9 @@ concurrency. `test:coverage:direct:all` spawns 204 sequential `node --test` subp
   - the pair total from 203/204 to 204/204 in ROADMAP.md **and** STATE.md prose;
   - `MOD-10` closed;
   - `REQUIREMENTS.md` status drift — `MOD-07` still reads `Pending` though Phase 114 verified, and
-    the per-pair Status column lapsed at Phase 110, roughly 115 rows across Phases 110-114.
+    the per-pair Status column lapsed at Phase 110. **Measured: 154 rows read `Open`**, not the
+    ~115 estimated at discuss time — phases 110-114 are 123 rows and **phase 116's own 30 rows are
+    also still `Open`**, which the discuss-time count missed entirely.
   - ROADMAP carries the plan count in **two** places that drift independently. Fix both.
 
 - **D-117-13:** No production licence is opened. Both phase-116 licences are spent, and none was
@@ -167,6 +171,56 @@ concurrency. `test:coverage:direct:all` spawns 204 sequential `node --test` subp
   contract and the pinned registration schema. — **Reversibility:** one-way — the descriptions are
   part of a published tool contract an LLM consumes and a pinned registration schema asserts; a
   later revert is a second contract change, not an undo.
+
+### Research corrections — measured after these decisions were taken
+
+Phase 117 research (`117-RESEARCH.md`) measured against this tree and overturned four premises these
+decisions rested on. The decisions stand; these are the corrections to the facts under them.
+
+- **D-117-15 (NEW, blocking): `npm test` cannot see `tests/index.test.ts`.** Every alternative in the
+  glob `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts`
+  names a DIRECTORY, so a file at the `tests/` root matches nothing. Confirmed independently:
+  `globSync` returns **249 paths and `tests/index.test.ts` is not among them**. Because
+  `test:coverage:direct:all` enumerates production modules itself rather than through that glob, the
+  entry pair would report **green direct coverage while its owner never ran under `npm test`** — a
+  green run that checked nothing, the exact defect class this milestone exists to remove. **Both the
+  `test` and `test:coverage:unit` globs must be amended, and the amendment needs a control that fails
+  if the root file stops being matched.** This supersedes the "remove the dead `helpers` entry for
+  honesty, not for function" note above: those globs now need a functional change, not a cosmetic one.
+
+- **D-117-16 (NEW): 7 of the 204 modules are type-only, and they produce no coverage record at all.**
+  Measured — all seven are named `types.ts`: `edge/`, `orchestrators/`, `orchestrators/import/`, and
+  `bridges/{agents,commands,mcp,skills}/`. `assertCompleteCoverage` returns the string `"type-only"`
+  for them and passes unconditionally. COV-05 requires "one complete direct coverage record for each
+  of the 204 inventory rows"; for these seven there is no record to produce, because a module that
+  emits no JavaScript has no lines to cover. **The plan must state which reading of COV-05 it takes
+  and why** — it cannot be met literally for all 204. Do not resolve this by adding a pragma or by
+  weakening the other 197.
+
+- **D-117-17 (NEW): merged coverage HIDES an uncovered branch — the aggregate is wrong in the safe
+  direction, not merely weaker.** Measured on this very pair: run alone, `index-smoke` emits
+  `BRDA:118,6,0,0` (branch uncovered); merged with `index-handler`, V8 emits **no range for line 118
+  at all** and the body reads hit-count 1. This is the strongest available argument for COV-05's
+  "aggregate coverage is not a substitute", and it was measured here rather than assumed.
+
+- **D-117-07 is narrowed: barrel-proxy ownership is ALREADY rejected today, mislabelled.** Research
+  planted a barrel-proxy owner and the existing gate rejected it — as `wrong-import`, not as a proxy
+  violation. So OWN-02's substance is enforced and what is missing is the NAME, not the detection.
+  Measured further: zero of the 8 barrel-importing suites import a barrel that re-exports their own
+  pair, so the strict rule is green on today's tree. **Path-level ambiguity is unreachable** under the
+  current 1:1 mapping; record-level ambiguity (`Expected one LCOV record ... found 2`) IS reachable
+  and already guarded but has **no negative control** — as does the `Incomplete direct coverage`
+  verdict the entire D-116-01a pin regime rests on. Those two uncontrolled gates are the honest COV-04
+  target, not an invented ambiguity check.
+
+- **D-117-18 (NEW): there is no Node 24 on this machine.** Measured: `node --version` is **v26.7.0**
+  and `/usr/bin/node` is **v22.22.2**; CI pins 24. Success criterion 3 names "the Node 24 all-pair
+  result". Either a Node 24 is installed for the measurement, or the result is labelled with the
+  runtime it actually ran on. **Do not report a v26 run as a Node 24 result.**
+
+- **Blast radius corrected:** the helpers dissolution is **50 import lines across 35 files**, and
+  `package.json` lines 82 and 91 are contended by three workstreams — the one hard file collision in
+  the phase. Sequence around it.
 
 ### Inherited rules that still bind — do not relitigate
 
@@ -217,7 +271,8 @@ None folded. See Deferred Ideas.
   most expensive thing to rediscover.
 - `.planning/STATE.md` §"What Phase 117 inherits", §"Blockers/Concerns", §"Standing environment
   debts" — the environment debts are all still true.
-- `.planning/WINDOWS.md` — 23 ledger entries, 14 open. Entries 15-19, 21 and 22 are the seven
+- `.planning/WINDOWS.md` — **22 ledger entries, 17 open** (measured; the discuss-time figure of
+  23/14 was wrong on both halves). Entries 15-19, 21 and 22 are the seven
   D-116-01a coverage shortfalls; entry 20 is the stale `register.ts` comments.
 
 ### Requirements and roadmap
