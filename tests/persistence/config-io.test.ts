@@ -285,6 +285,11 @@ describe("loadConfig", () => {
     t.after(() => rm(scopeRoot, { recursive: true, force: true }));
     const filePath = path.join(scopeRoot, "claude-plugins.json");
     await mkdir(filePath);
+    // The runtime owns the errno wording and later majors append the offending path to it, so the
+    // expectation reads it back from the same failing read. What stays pinned is the prefix.
+    const readFailure = await readFile(filePath, "utf8").catch(
+      (error: unknown) => (error as Error).message,
+    );
 
     // act
     const loadedConfig = await loadConfig(filePath);
@@ -293,7 +298,7 @@ describe("loadConfig", () => {
     assert.deepStrictEqual(loadedConfig, {
       status: "invalid",
       filePath,
-      error: "read failed: EISDIR: illegal operation on a directory, read",
+      error: `read failed: ${readFailure}`,
     });
   });
 });

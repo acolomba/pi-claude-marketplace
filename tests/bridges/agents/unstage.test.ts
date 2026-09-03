@@ -294,6 +294,10 @@ test("preserves an unreadable target and records its complete filesystem failure
   const storedIndex: AgentsIndex = { schemaVersion: 1, agents: [unreadableEntry] };
   const expectedIndexBytes = `${JSON.stringify(storedIndex, null, 2)}\n`;
   await mkdir(unreadableTarget, { recursive: true });
+  // Read back the runtime's own errno wording: later majors append the offending path to it.
+  const readFailure = await readFile(unreadableTarget, "utf8").catch(
+    (error: unknown) => (error as Error).message,
+  );
   await mkdir(locations.extensionRoot, { recursive: true });
   await writeFile(locations.agentsIndexPath, JSON.stringify(storedIndex));
 
@@ -313,7 +317,7 @@ test("preserves an unreadable target and records its complete filesystem failure
       {
         generatedName: "pi-claude-marketplace-acme-directory",
         targetPath: unreadableTarget,
-        reason: "EISDIR: illegal operation on a directory, read",
+        reason: readFailure,
       },
     ],
     warnings: [],

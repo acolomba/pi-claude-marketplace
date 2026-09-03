@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -467,6 +467,10 @@ test("reports invalid environment, malformed base, and unreadable local diagnost
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
   const originalHome = captureEnvironmentProperty("HOME");
   await mkdir(localPath, { recursive: true });
+  // Read back the runtime's own errno wording: later majors append the offending path to it.
+  const readFailure = await readFile(localPath, "utf8").catch(
+    (error: unknown) => (error as Error).message,
+  );
   await writeFile(basePath, "{base", "utf8");
   let result;
 
@@ -508,7 +512,7 @@ test("reports invalid environment, malformed base, and unreadable local diagnost
         scope: "user",
         code: "settings-read-error",
         path: localPath,
-        message: `Unable to read Claude local settings file: EISDIR: illegal operation on a directory, read`,
+        message: `Unable to read Claude local settings file: ${readFailure}`,
       },
     ],
   });

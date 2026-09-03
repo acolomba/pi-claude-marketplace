@@ -5977,6 +5977,10 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const oldAgent = await readFile(agentPath, "utf8");
       await rm(locations.mcpJsonPath, { force: true });
       await mkdir(locations.mcpJsonPath, { recursive: true });
+      // Read back the runtime's own errno wording: later majors append the offending path to it.
+      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch(
+        (error: unknown) => (error as Error).message,
+      );
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -6019,9 +6023,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       assert.equal(first.partition, "failed");
       assert.equal(first.failureClass, undefined);
       assert.equal(first.reasons, undefined);
-      assert.deepStrictEqual(first.notes, [
-        retryCauseChain("EISDIR: illegal operation on a directory, read"),
-      ]);
+      assert.deepStrictEqual(first.notes, [retryCauseChain(readFailure)]);
       assert.equal(second.partition, "reinstalled");
       assert.deepStrictEqual(second.stagedMcpServerNames, ["server1"]);
       assert.deepStrictEqual(second.stagedAgentNames, [`${GENERATED_AGENT_PREFIX}hello-bot`]);

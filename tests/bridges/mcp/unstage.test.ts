@@ -203,8 +203,9 @@ test("rethrows an ordinary document read failure unchanged", async (t) => {
       assert.deepStrictEqual(
         {
           constructor: filesystemError.constructor,
+          // The errno message is not projected: later runtime majors append the offending path to
+          // it. The code, errno and syscall it derives from are the contract.
           name: filesystemError.name,
-          message: filesystemError.message,
           code: filesystemError.code,
           errno: filesystemError.errno,
           syscall: filesystemError.syscall,
@@ -212,7 +213,6 @@ test("rethrows an ordinary document read failure unchanged", async (t) => {
         {
           constructor: Error,
           name: "Error",
-          message: "EISDIR: illegal operation on a directory, read",
           code: "EISDIR",
           errno: -21,
           syscall: "read",

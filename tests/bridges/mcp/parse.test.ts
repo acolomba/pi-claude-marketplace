@@ -470,15 +470,15 @@ describe("resolvePluginMcpServers", () => {
       {
         constructorName: thrownError.constructor.name,
         name: thrownError.name,
+        // The errno path is not projected: some runtime majors attach it to an fd-based read
+        // failure and earlier ones leave it undefined. Code and syscall are the contract.
         code: (thrownError as NodeJS.ErrnoException).code,
-        path: (thrownError as NodeJS.ErrnoException).path,
         syscall: (thrownError as NodeJS.ErrnoException).syscall,
       },
       {
         constructorName: "Error",
         name: "Error",
         code: "EISDIR",
-        path: undefined,
         syscall: "read",
       },
     );

@@ -777,7 +777,6 @@ test("wraps a non-missing read failure with its filesystem cause", async (t) => 
           message: error.message,
           cause: {
             name: cause.name,
-            message: cause.message,
             code: cause.code,
             errno: cause.errno,
             syscall: cause.syscall,
@@ -785,10 +784,11 @@ test("wraps a non-missing read failure with its filesystem cause", async (t) => 
         },
         {
           name: "Error",
-          message: `Failed to read ${stateJsonPath}: EISDIR: illegal operation on a directory, read`,
+          // Composed from the cause rather than from a literal: the runtime owns the errno wording
+          // and later majors append the offending path to it. What this pins is the composition.
+          message: `Failed to read ${stateJsonPath}: ${cause.message}`,
           cause: {
             name: "Error",
-            message: "EISDIR: illegal operation on a directory, read",
             code: "EISDIR",
             errno: -21,
             syscall: "read",

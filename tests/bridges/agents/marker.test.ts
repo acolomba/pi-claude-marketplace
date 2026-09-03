@@ -247,15 +247,15 @@ test("propagates a read error for a directory target", async (t) => {
   assert.deepStrictEqual(
     {
       name: ownershipError.name,
+      // The errno path is not projected: some runtime majors attach it to an fd-based read
+      // failure and earlier ones leave it undefined. Code and syscall are the contract.
       code: (ownershipError as NodeJS.ErrnoException).code,
       syscall: (ownershipError as NodeJS.ErrnoException).syscall,
-      path: (ownershipError as NodeJS.ErrnoException).path,
     },
     {
       name: "Error",
       code: "EISDIR",
       syscall: "read",
-      path: undefined,
     },
   );
   assert.deepStrictEqual(await readdir(targetPath), []);

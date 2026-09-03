@@ -374,14 +374,14 @@ describe("prepareStageMcpServers", () => {
         const filesystemError = error as NodeJS.ErrnoException;
         assert.deepStrictEqual(
           {
+            // The errno message is not projected: later runtime majors append the offending path
+            // to it. The code and syscall it derives from are the contract.
             name: filesystemError.name,
-            message: filesystemError.message,
             code: filesystemError.code,
             syscall: filesystemError.syscall,
           },
           {
             name: "Error",
-            message: "EISDIR: illegal operation on a directory, read",
             code: "EISDIR",
             syscall: "read",
           },
@@ -737,14 +737,14 @@ describe("replacePreparedMcp", () => {
         const filesystemError = error as NodeJS.ErrnoException;
         assert.deepStrictEqual(
           {
+            // The errno message is not projected: later runtime majors append the offending path
+            // to it. The code and syscall it derives from are the contract.
             name: filesystemError.name,
-            message: filesystemError.message,
             code: filesystemError.code,
             syscall: filesystemError.syscall,
           },
           {
             name: "Error",
-            message: "EISDIR: illegal operation on a directory, read",
             code: "EISDIR",
             syscall: "read",
           },

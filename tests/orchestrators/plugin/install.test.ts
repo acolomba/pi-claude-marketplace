@@ -8915,6 +8915,10 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
       await mkdir(locations.mcpJsonPath, { recursive: true });
+      // Read back the runtime's own errno wording: later majors append the offending path to it.
+      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch(
+        (error: unknown) => (error as Error).message,
+      );
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -8960,7 +8964,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       });
 
       // assert
-      assertRetryFailure(first, "EISDIR: illegal operation on a directory, read");
+      assertRetryFailure(first, readFailure);
       assert.deepStrictEqual(second, {
         declaresAgents: true,
         declaresMcp: true,
