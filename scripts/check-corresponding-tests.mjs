@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -89,6 +89,32 @@ function importedPaths(projectRoot, testPath) {
   return paths;
 }
 
+/**
+ * Whether the module at importedPath itself imports or re-exports sourcePath, which makes it a
+ * proxy an owner test can reach its pair through instead of importing that pair directly (OWN-02).
+ *
+ * The lookup goes one level only. A module that re-exports a second module which in turn
+ * re-exports the pair does not count: a deeper answer costs a graph walk with a cycle guard and
+ * nothing in the tree needs one.
+ *
+ * A resolved specifier can name a path that is absent, is a directory, or is not TypeScript.
+ * Every such path counts as a non-match, so an unreadable import yields a verdict rather than a
+ * throw from inside the gate.
+ */
+function reachesPairThrough(projectRoot, importedPath, sourcePath) {
+  if (!importedPath.endsWith(".ts")) {
+    return false;
+  }
+
+  const stats = statSync(path.join(projectRoot, importedPath), { throwIfNoEntry: false });
+
+  if (stats === undefined || !stats.isFile()) {
+    return false;
+  }
+
+  return importedPaths(projectRoot, importedPath).includes(sourcePath);
+}
+
 function isStructuralSupplement(projectRoot, testPath) {
   const companions = supplementalCompanions(testPath);
   if (companions === undefined) {
@@ -121,8 +147,14 @@ export function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
       continue;
     }
 
-    if (!importedPaths(projectRoot, testPath).includes(sourcePath)) {
-      violations.push({ kind: "wrong-import", path: testPath });
+    const imports = importedPaths(projectRoot, testPath);
+
+    if (!imports.includes(sourcePath)) {
+      const throughProxy = imports.some((importedPath) =>
+        reachesPairThrough(projectRoot, importedPath, sourcePath),
+      );
+
+      violations.push({ kind: throughProxy ? "proxy-owned" : "wrong-import", path: testPath });
     }
   }
 
