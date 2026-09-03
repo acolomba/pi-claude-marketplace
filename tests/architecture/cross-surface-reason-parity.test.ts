@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { narrowResolverReasons } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import { narrowResolverReasons } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
-} from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+} from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 for (const { note, reason } of [
   {
