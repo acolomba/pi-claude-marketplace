@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
-status: planned
-stopped_at: Phase 117 planned - 12 plans across 6 waves
-last_updated: "2026-09-03T12:47:03.176Z"
+status: executing
+stopped_at: Completed 117-01-PLAN.md
+last_updated: "2026-09-03T17:20:06.792Z"
 last_activity: 2026-09-03
-last_activity_desc: Phase 116 complete - verification passed 6 of 6
-state_head: 9774a421a00fbb4bd5e4b55a260b8c5b3be730d9
+last_activity_desc: Phase 117 execution started
+state_head: 1b8db56b169047b4e4f35377d92575ad6df4c6f1
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 220
-  completed_plans: 208
+  completed_plans: 209
 milestone_name: Unit Test Refactor
 ---
 
@@ -30,10 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 116 (Edge Surface) — COMPLETE, verification passed 6 of 6 on 2026-09-03
+Phase: 117 (Extension Entry and Final Gate) — EXECUTING
 Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 31 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-18, 116-19, 116-20, 116-21, 116-22, 116-23, 116-24, 116-25, 116-26, 116-27, 116-28, 116-29, 116-30)
-Status: CLOSED. All 31 plans executed, all 13 code-review findings closed, all five gates green, and
+Plan: 2 of 12
+Status: Ready to execute
 verification measured every promise directly rather than reading the summaries. Its one gap — the two
 D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
 ledger — is closed; all seven shortfalls are now filed as entries 15-19, 21 and 22. MOD-09 closed, the
@@ -46,7 +46,7 @@ D-116-10's deliberate deferral to Phase 117.
 
 The history below is the per-plan record, newest first; it is retained deliberately.
 
-Last activity: 2026-09-03 — code-review gap closure part three: WR-01, the last open finding, closed across TWELVE suites with `git diff --quiet -- extensions/` clean at every commit and after every plant. The finding was twice called false on a grep for the literal string `globalThis.fetch`, which does NOT match a `t.mock.method(globalThis, "fetch", …)` installation and returns only comment prose inside the seven `https.request` suites. Grepping the installation form confirms part two's split: twelve edge suites watched `globalThis.fetch`, seven watched `https.request`, disjoint. The control settles it — a live `https.request` dial-out planted in `data.ts`'s `getMarketplaceNamesAcrossScopes`, the review's own worked example, leaves the suite 66/66 GREEN on the fetch door and turns 5 RED once the door is `https.request`. All twelve now watch `https.request` and no `globalThis.fetch` spy remains under `tests/edge/`. Each suite was classified by asking the two questions SEPARATELY — can this fixture reach the transport, and does any input turn it on — and got the matching shape. EIGHT keep the fail-fast replacement as a hermeticity device and assert NO count: `data`, `provider`, `marketplace/info` and `marketplace/list` hold no HTTP client anywhere in their import closure, and `marketplace/remove`, `plugin/enable-disable`, `plugin/import` and `register` drive path sources, a mocked delegate, or an injected port never invoked. TWO keep the zero as a measurement and were planted: deleting the `gitOps` forward makes `marketplace/add` dial its url source for real (7 of 11 RED, the fail-fast firing from `simple-get` inside `isomorphic-git/http/node`) and moves `plugin/bootstrap`'s counter to 1. TWO keep it as a labelled regression guard: `handlers/tools`, whose fixture carries a cold git source but whose parameter space has no way to turn materialization on (a planted dial-out reddens 28 of its 53 cases, so the detector is known to fire), and `marketplace/update` — the finding of this run: the same port-forward plant reddens 5 of 7 rows on their MESSAGE while the counter, probed directly, stays at exactly 0, because the refresh dies inside `isomorphic-git` on a staged clone with no configured remote, one step before the transport. 116-25's rule confirmed independently, and the review's own guess that `marketplace/update` and `plugin/import` carry positive controls is wrong on both while it missed `plugin/bootstrap`, which carries the cleanest one. All four "the count is the proof" headers are gone, and the phrase "the process-wide transport" is gone from all twelve. Gates run separately, all exit 0: typecheck, lint, fallow, `npm test` at `ℹ tests 5141` across 295 suites (UNCHANGED — assertions were removed, no case was), `test:integration` 31/31. Both D-116-01a pins re-measured and holding: `data.ts` 109/110 and `provider.ts` 79/80, lines and functions complete, uncovered-line sets empty; the 116-13 and 116-17 pins at 11/12 are unchanged. Report: `116-REVIEW-FIX-REPORT-3.md`. No new plan, no plan-count movement.
+Last activity: 2026-09-03 — Phase 117 execution started
 
 Last activity: 2026-09-03 — code-review gap closure part two: the seven findings OUTSIDE the tools.ts licence, all in test files, `git diff --quiet -- extensions/` clean at every commit. Five of the seven were this phase's own signature defect turned on its own work — a proof that cannot fail — and each was strengthened rather than deleted. WR-02: the `CATALOG_VERBS` case asserted key uniqueness (a language guarantee) and non-emptiness (a typecheck failure long before the case runs); it now pins the exported key list, in declaration order, against a hand-authored list. IN-02: the `isCatalogVerb` acceptance loop drove its input from `CATALOG_VERBS`, the same `Object.keys(CATALOG)` the guard answers from; it now iterates the same hand-authored list. The CONTROL is the measurement that matters: a coordinated removal of one verb (catalog key + union member + the drift guard's own Record row) leaves `flag-catalog-drift.test.ts` GREEN, and left the OLD derived loop green too — it simply ran one row fewer, 26 tests instead of 27. The new form reddens both cases. WR-03: the `allowMarketplaceOnly: false` case switched the mode AND the flag, landing on an empty candidate map where the result is `[]` either way; deleting the guard in `data.ts` left ALL 66 cases green. Held at the `update` mode, varying the flag alone, the same deletion reddens exactly that case. WR-06: `parseCommandArgs` iterates the SCHEMA, so a surplus positional is dropped with no diagnostic — a rule two consumer suites asserted and the producer's owner did not; the owner now carries it and the consumers keep their forwarding claim. IN-04: the offline guard came off the five pure token helpers (25 zeros that could not rise). IN-05: the HOME / PI_CODING_AGENT_DIR substitution came out of both completion `seedResolver` helpers — nothing in the import closure of `data.ts`, `provider.ts` or `completion-cache.ts` reads `process.env`, `homedir()` or `getAgentDir()`, measured by running both suites under bogus values with a positive control showing the same override moves `getAgentDir()`. IN-01: the header counted four derivations and listed five. WR-01 was NOT acted on, per instruction — but the dispatch's rebuttal is itself wrong and is reported: twelve edge suites really do install `t.mock.method(globalThis, "fetch")`, and only seven watch `https.request`. Gates run SEPARATELY: typecheck / lint / fallow 0, `npm test` 5141/5141 across 295 suites (was 5140; +1 is the new surplus-positional case), `test:integration` 31/31. All four pairs' direct-coverage gates re-measured and UNMOVED — flag-catalog 11/11 · 10/10 · 190/190, args-schema 17/17 · 2/2 · 96/96, and both D-116-01a shortfalls still exactly one branch short with lines and functions complete (data.ts 109/110, provider.ts 79/80). Report: `116-REVIEW-FIX-REPORT-2.md`.
 
@@ -218,6 +218,7 @@ evidence.
 | Phase 116 P05 | 30 min | 1 tasks | 1 files |
 | Phase 116 P17 | 40 min | 2 tasks | 1 files |
 | Phase 116 P28 | 30 min | 1 tasks | 1 files |
+| Phase 117 P01 | 11 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -408,6 +409,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 116]: 116-14: a guard order is only pinnable with an input that satisfies TWO guards at once — the plan's unrecognised-scope-with-no-positional input passes under any order, while `--scope user --local` proves the positional guard precedes the scope guard and `extra --scope nope` proves the parse failure precedes both
 - [Phase 116]: 116-14: `plugin/bootstrap.ts` calls `parseArgs`, the second handler measured to do so, and answers all three inherited questions like `plugin/import.ts` rather than like the marketplace tier — a surplus positional IS rejected, there is no arity below the accepted zero, and `--local` lands on positional
 - [Phase 116]: 116-14: a github-source workflow cannot be driven through a bare `createGitOpsFake` — the GitHub provider attaches a credential bundle whose functions are not structured-clonable and the fake's recorder clones every call, so the port must drop that downstream-owned bundle while still delegating every operation to the fake
+- [Phase 117]: The unit-suite glob control lands before the amendment it guards, so the later glob change must turn it RED and back GREEN rather than tune it to agree
 
 ### Pending Todos
 
@@ -431,9 +433,9 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Phase 117 context gathered
+**Stopped at:** Completed 117-01-PLAN.md
 
-**Resume file:** `.planning/phases/117-extension-entry-and-final-gate/117-01-PLAN.md` — the first of
+**Resume file:** None
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
 lines) beside them.
 
@@ -441,7 +443,7 @@ lines) beside them.
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03. Phase 117 context gathered — six areas discussed, all decided.
+Last session: 2026-09-03T17:19:43.514Z
 
 **Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
 six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
