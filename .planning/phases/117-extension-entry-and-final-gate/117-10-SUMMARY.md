@@ -232,6 +232,14 @@ None - no external service configuration required.
 - COV-02's remaining half — that the source-to-test mapping is injective over the whole inventory — is untouched here by design and belongs to 117-11.
 - The six uncontrolled refusal arms above are the honest residue of D-117-09. They are named, four of them with a measured reproduction command, so 117-12 or a later phase can pick them up without re-deriving reachability.
 
+## Self-Check: PASSED
+
+- `scripts/test-coverage-direct.negative.mjs` exists on disk; the control re-runs green after all commits (`Direct-coverage negative controls passed.`, exit 0).
+- All three commits are reachable: `aa193f49` (test), `63086689` (docs, this file), `e77452fd` (docs, STATE/ROADMAP).
+- `git diff --quiet -- extensions/ tests/ package.json scripts/test-coverage-direct.mjs` exits 0 after the final commit.
+- The only remaining working-tree changes are the operator's own pre-existing files (`.claude/settings.json`, `.codex/config.toml`, and the untracked scratch set). None was touched, formatted or staged.
+- The `roadmap.update-plan-progress` off-by-one the phase notes record was observed again and left alone: the plan checklist now reads `[x] 117-10-PLAN.md` while the detail bullet below still reads `[ ] **117-10**` (the same run flipped `117-09`'s bullet). 117-12 owns reconciling both lists.
+
 ---
 *Phase: 117-extension-entry-and-final-gate*
 *Completed: 2026-09-03*
