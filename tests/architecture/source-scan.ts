@@ -17,9 +17,7 @@
  * it never actually inspected; `readFile(..., "utf8")` either yields the text or
  * throws, so no target can be silently skipped.
  *
- * Sibling of the other non-test modules under `tests/helpers/`
- * (`credential-mock.ts`, `git-mock.ts`): this file registers no case of its
- * own.
+ * This file registers no case of its own.
  */
 
 import assert from "node:assert/strict";
@@ -27,7 +25,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Repository root, resolved from this module's own URL (`tests/helpers/`). */
+/** Repository root, resolved from this module's own URL (`tests/architecture/`). */
 export const REPO_ROOT: string = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",

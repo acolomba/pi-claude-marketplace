@@ -1,4 +1,4 @@
-// tests/helpers/source-scan.test.ts
+// tests/architecture/source-scan.test.ts
 //
 // Gate-the-gate coverage for the shared source-scanning mechanic in
 // `source-scan.ts`. Both architecture gates that consume it (the NFR-5
@@ -52,7 +52,7 @@ test("WR-06: an existing target is really inspected -- a forbidden pattern in it
   await assert.rejects(
     () =>
       assertNoForbiddenSurface(
-        ["tests/helpers/source-scan.ts"],
+        ["tests/architecture/source-scan.ts"],
         [{ name: "the helper's own export", pattern: /assertNoForbiddenSurface/ }],
         (offenders) => `expected-failure: ${offenders.join(", ")}`,
       ),

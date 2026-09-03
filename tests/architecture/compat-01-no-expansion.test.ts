@@ -36,7 +36,7 @@
  *   gitOps surface; this file asserts those two surfaces are still among that
  *   gate's targets, so the clause is documented here and proven there. The
  *   delegation is mechanical: both gates share the scanning helper in
- *   `tests/helpers/source-scan.ts`. This file MUST NOT import
+ *   `tests/architecture/source-scan.ts`. This file MUST NOT import
  *   `no-orchestrator-network.test.ts` -- under `node:test`, importing a module
  *   that registers cases at its top level runs those cases a SECOND time and
  *   misreports the count.
@@ -91,7 +91,8 @@ import {
   REASONS,
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
-import { REPO_ROOT, stripComments } from "../helpers/source-scan.ts";
+
+import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
