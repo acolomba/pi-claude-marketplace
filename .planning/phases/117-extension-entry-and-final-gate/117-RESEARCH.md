@@ -1221,9 +1221,13 @@ Two hermeticity properties the plan should preserve rather than introduce:
 | A4 | Reading COV-05 as "one verdict record per row" (so the 7 type-only rows pass) is acceptable | F | Medium — this is an operator-visible reading of a named requirement; the plan should state its reading explicitly |
 | A5 | The 204-pair run takes 8-9 minutes | F | Low for sizing, **high if quoted as a result** — the figure is arithmetic from a 21-pair sample. D-117-10 requires the real measurement |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Which Node runs the all-pair proof?**
+All four were closed by operator decision after research, and each names the plan that implements it.
+
+1. **Which Node runs the all-pair proof?** — RESOLVED by D-117-19: no local install; the run is
+   labelled with the runtime it actually used and CI carries the Node 24 wording. Implemented by
+   `117-11` Task 2.
    - What we know: no Node 24 is installed; PATH node is v26.7.0, `/usr/bin/node` is v22.22.2; CI
      pins 24 in four places.
    - What is unclear: whether installing Node 24 locally is in bounds.
@@ -1231,14 +1235,21 @@ Two hermeticity properties the plan should preserve rather than introduce:
      say plainly that success criterion 3's "Node 24" was met in CI rather than locally. Do not label
      a v26 measurement "the Node 24 all-pair result".
 
-2. **How is COV-05 read for the 7 type-only rows?** See A4 and §F. Operator-visible; state the
+2. **How is COV-05 read for the 7 type-only rows?** — RESOLVED by D-117-20: 197 numeric records
+   plus 7 named type-only verdicts, no pragma and no weakening of the other 197. Implemented by
+   `117-11` Tasks 1 and 2. See A4 and §F. Operator-visible; state the
    reading in the plan.
 
-3. **Does concurrency get added to the all-pair run?** D-117-11 accepts either answer but not an
+3. **Does concurrency get added to the all-pair run?** — DELIBERATELY OPEN pending measurement,
+   per D-117-11, and closed out by `117-11` Task 2, which records the decision against the number
+   the run itself printed. The default disposition is not to add it. D-117-11 accepts either answer but not an
    unmeasured one. §F found no shared-state hazard; the only cost is interleaved output, which the
    report artifact removes. Decide after the real timing.
 
-4. **Where does the ambiguity check live?** §D shows path-level ambiguity is unreachable and
+4. **Where does the ambiguity check live?** — RESOLVED by D-117-21: no path-level ambiguity check
+   is added. The barrel rejection gains a `proxy-owned` label in `117-09`, the two reachable
+   coverage verdicts gain planting controls in `117-10`, and the mapping-injectivity invariant
+   lands with the all-pair run in `117-11`. §D shows path-level ambiguity is unreachable and
    record-level ambiguity is already guarded but uncontrolled. Adding a *new* unreachable check would
    be a gate that cannot fire — the exact defect `import-x/no-cycle` shipped as. Prefer controls for
    the two existing verdicts plus a mapping-injectivity invariant.
