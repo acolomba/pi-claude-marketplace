@@ -4,6 +4,14 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # typescript-eslint's peer dependency caps typescript at <6.1.0; a
+      # TypeScript 7 bump fails npm install (ERESOLVE) until
+      # typescript-eslint adds TS 7 support, which is blocked upstream on
+      # TypeScript 7.1 shipping a stable programmatic compiler API.
+      # https://github.com/typescript-eslint/typescript-eslint/issues/12518
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
       - "npm"
