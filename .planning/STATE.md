@@ -4,8 +4,8 @@ milestone: v1.19
 current_phase: 116
 current_phase_name: Edge Surface
 status: executing
-stopped_at: Completed 116-18-PLAN.md
-last_updated: "2026-09-03T02:45:00.000Z"
+stopped_at: Completed 116-20-PLAN.md
+last_updated: "2026-09-03T03:45:00.000Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 116 execution started
 state_head: 132690965ebe16fb3a70088bddbd43856dfd8190
@@ -13,7 +13,7 @@ progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 208
-  completed_plans: 200
+  completed_plans: 201
 milestone_name: Unit Test Refactor
 ---
 
@@ -31,8 +31,10 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 116 (Edge Surface) — EXECUTING
-Plan: 25 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-18, 116-19, 116-23, 116-26, 116-27, 116-29, 116-30)
-Status: wave 5 (the eleven plugin handlers) is OPEN — 116-14, 116-15, 116-16, 116-17, 116-18 and 116-19 are done. Five remain: 116-20, 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
+Plan: 26 of 31 complete (116-00, 116-01, 116-02, 116-03, 116-04, 116-05, 116-06, 116-07, 116-08, 116-09, 116-10, 116-11, 116-12, 116-13, 116-14, 116-15, 116-16, 116-17, 116-18, 116-19, 116-20, 116-23, 116-26, 116-27, 116-29, 116-30)
+Status: wave 5 (the eleven plugin handlers) is OPEN — 116-14, 116-15, 116-16, 116-17, 116-18, 116-19 and 116-20 are done. Four remain: 116-21, 116-22, 116-24, 116-25; wave 6 is 116-28 (register)
+Last activity: 2026-09-02 — 116-20 rewrote the plugin list shim owner, the widest filter-flag family in the handler tier: 26 runtime cases from 9 marked bodies, direct coverage branches 19/19 (was 15/17), functions 2/2, lines 82/82 (was 79/82, uncovered 62-64 — the too-many-arguments rejection the old nine-case suite never drove, because every one of those cases asserted the `(no marketplaces)` empty-state sentinel and so proved nothing about any flag). FOUR findings. First, and the one to carry: the Group-C negative fires here as a CHANGED NOTIFICATION BODY, not as an emission-count failure. listPlugins wraps its whole body in a catch that turns any throw into a synthetic one-emission `(list) (failed)` row, so when the guard is deleted and the workflow runs with an unstated cwd proxy, the ERR_INVALID_ARG_TYPE from path.join never escapes — the count is still exactly one and verifyBoundary()'s emission sizing stays satisfied. What DID catch it: the hand-authored whole-value message comparison, and verifyBoundary()'s ZERO-PROBE half reporting `extension API.getAllTools()` unexpected twice. For an orchestrator that swallows its own throws the probe count is the load-bearing half of the boundary. Second, varying the SCOPE does not discriminate here either, which narrows 116-19's correction rather than repeating it: listPlugins walks BOTH scope roots regardless of opts.scope (the orphan fold needs both), so `mp other` and `mp other --scope user` produced BYTE-IDENTICAL diagnostics and only `--scope project` moved the block header. The scope discriminates only where the orchestrator's scope selection is what reaches locationsFor. Third, `--local` is REJECTED as `Unknown option: "--local".` alone and beside a scope flag — the ELEVENTH distinct --local outcome, and NOT the same rejection its rejecting siblings emit, because this shim uses the unknown-OPTION wording where fetch and plugin/info use unknown-FLAG. The arity truth is again half false: ZERO and ONE positional are both accepted, so the lower half has no target. Fourth, SC-4: the zero IS asserted in all 26 cases over a COLD git source (`https://127.0.0.1:9/far.git`, rendered `(remote)`) watching https.request rather than globalThis.fetch, so it is not the all-path-source vacuity 116-18 measured — but this verb has NO flag that turns materialization on, so there is no positive control and the zero is an NFR-5 regression guard, stated as such rather than dressed up. Five flag members classified VALUE-carrying and pinned over a fixture holding exactly one plugin per bucket; the order-independence pair was BOUNDED by a plant rather than asserted on trust. The BOOLEAN_FLAGS re-export is untouched and recorded as an observation. Five production plants, all FIVE RED, all reverted; list.ts's SHA-1 identical before the first and after the last. npm test 5101/5101 across 293 suites, integration 31/31
+
 Last activity: 2026-09-02 — 116-19 rewrote the plugin install shim owner, the largest flag matrix in the handler tier: 23 runtime cases from 10 marked bodies, direct coverage branches 17/17 (was 16/17), functions 2/2, lines 101/101 (was 99/101). THREE findings. First, and the one to carry: omitting `cwd` on a Group-C negative is NOT universally load-bearing. locationsFor is `scope === "user" ? getAgentDir() : path.join(cwd, ".pi")`, so an unstated cwd never reaches path.join on a user-scope call — plants F1 (forwarding ctx.cwd) and F2 (a literal working directory) produced the BYTE-IDENTICAL diagnostic, `ctx.ui.notify is not a function` at orchestrators/plugin/install.ts:2390, the workflow running to completion; plant F3, differing only in scope: "project", returned the other family, ERR_INVALID_ARG_TYPE at persistence/locations.ts:145. The discriminator is the SCOPE the plant targets, not whether it forwards ctx.cwd. Second, the 116-05 data-field question answered on a real matrix: four of five members the handler hands downstream are VALUE-carrying and one — applyDefaultEnabled: true — is a data field with NO branch at all, so nothing in this repo could catch it being wrong; plant B (deleting it) leaves the record enabled:true, the declaration {} instead of {enabled:false}, and the generated agent file in place, with every gate still green. The four-combination matrix runs over one plugin that is simultaneously partially-available and carries a model-bearing agent, because that is the only fixture where both downstream booleans bite. Third, `--scope project --local` is ACCEPTED and both members honoured (the fourth acceptance among handlers reaching extractLocalFlag, the tenth distinct --local outcome), so the mutually-exclusive-rejection truth is false here; the arity truth HOLDS in both halves, the second module in the phase after 116-18. The previously-uncovered install.ts:57-59 has TWO routes, not the one the plan named: a quoted long flag claimed by the second scanner, and an unrecognised scope value caught inside the same shared parse. Eleven production plants across two files, all ELEVEN RED, all reverted; `git diff --stat -- extensions/` empty. npm test 5084/5084 across 293 suites, integration 31/31
 
 Last activity: 2026-09-02 — 116-18 rewrote the plugin info shim owner: 18 runtime cases from 7 marked bodies, direct coverage held at branches 17/17, functions 2/2, lines 79/79. FOUR findings. First, a FIFTH parser/arity/flag combination, and the FIRST module in the phase where BOTH halves of the arity truth hold: this handler reaches parseArgs through withParsedArgs and then applies its own `nonFlagPositionals.length !== 1` guard, so zero positionals IS rejected and two or three ARE rejected, all four counts with the one `info requires exactly one <plugin>@<marketplace> argument.` sentence. Second, `--scope user --local` is REJECTED as `Unknown flag: "--local".` — the NINTH measured `--local` outcome and the second time the inherited mutually-exclusive-rejection truth has held. Third, and the finding worth carrying: the SC-4 offline proof as inherited is UNFALSIFIABLE. The precedent watches globalThis.fetch, but isomorphic-git reaches the wire through simple-get, which calls https.request and never fetch, so a global-fetch spy records zero whatever the handler does; and a path-source fixture never reaches the transport with or without the flag, so a zero asserted there is vacuous too. The claim is asserted on the ONE fixture where it can fail — a cold git-source plugin on a closed loopback port, watching https.request — where the flag-absent row records 0 and the same reference with the flag records 2. Plant C (an unconditional fetch spread) turns exactly that row RED with `2 !== 0` and leaves all three path-source delegating cases GREEN, which is the measurement that separates the two. Fourth, the plan's "the member is absent, not present as false" claim is not observable: getInfoFetchContext tests `opts.fetch !== true`, so an explicit false and an omitted member are indistinguishable; what IS observable is supplied versus omitted, and that is what the pair asserts. The Group-C negative produced a NINTH and TENTH diagnostic site: forwarding ctx.cwd dies as ERR_INVALID_ARG_TYPE at persistence/locations.ts:145 via orchestrators/plugin/info.ts:2257, and a literal working directory runs the projection to completion and dies as `ctx.ui.notify is not a function` at orchestrators/plugin/info.ts:2306. No on-disk footprint is asserted beside verifyBoundary(): this read-only surface persists nothing. No D-116-01a claim — coverage is complete in both directions. Six production plants, all SIX RED, all reverted; the file's md5 matches the pre-plant byte copy and `git diff --stat -- extensions/` is empty. npm test 5077/5077 across 293 suites, integration 31/31
@@ -395,15 +397,14 @@ None for roadmap creation.
 
 **Resume file:** None
 
-Last session: 2026-09-03T03:10:00.000Z
-Stopped at: Completed 116-19-PLAN.md
-tests/edge/handlers/plugin/install.test.ts is the sole mirrored owner for the install shim, at 23
-runtime cases from 10 marked bodies. Direct coverage rose to branches 17/17, functions 2/2, lines
-101/101 (was 16/17 and 99/101, uncovered 58-59), so no D-116-01a claim arises. Every flag is
-classified PATH-changing versus VALUE-carrying and each value-carrying member is pinned against a
-hand-authored on-disk footprint, because coverage cannot see a data field. npm test 5084/5084 across
-293 suites, test:integration 31/31, typecheck/lint/fallow all 0. Production is byte-identical after
-eleven plants, all eleven RED.
+Last session: 2026-09-03T03:45:00.000Z
+Stopped at: Completed 116-20-PLAN.md
+tests/edge/handlers/plugin/list.test.ts is the sole mirrored owner for the list shim, at 26 runtime
+cases from 9 marked bodies. Direct coverage rose to branches 19/19, functions 2/2, lines 82/82 (was
+15/17 and 79/82, uncovered 62-64), so no D-116-01a claim arises. All five filter flags are
+VALUE-carrying and are pinned over a fixture holding exactly one plugin per render bucket, because
+coverage cannot see a data field. npm test 5101/5101 across 293 suites, test:integration 31/31,
+typecheck/lint/fallow all 0. Production is byte-identical after five plants, all five RED.
 
 Next: Phase 116 (Edge Surface), 30 pairs. CONTEXT.md is committed with D-116-01 through
 D-116-14 locked, so discuss is done and planning runs first. Pass --skip-ui to plan-phase:
