@@ -20,13 +20,18 @@ const realSourcePath = "extensions/pi-claude-marketplace/shared/atomic-json.ts";
 // planted against a path that exists and still cannot be mapped.
 const unmappablePath = "tests/edge/notification-boundary.ts";
 
-// One LCOV record. The source field is an ABSOLUTE in-repo path on purpose: the assertion resolves
-// record paths against the module-level project root and not against its injectable root, so a
-// record pointing into a fixture tree is refused as outside the project before any verdict can be
-// reached. Concatenating two calls states the same source twice.
+/** The absolute path a real coverage run would write for an in-repo module. */
+function inRepo(relativePath) {
+  return path.join(projectRoot, relativePath);
+}
+
+// One LCOV record. The caller states the source field as an absolute path, because which root a
+// record resolves against is one of the things being planted here: a record under the injected root
+// has to be selected, and a record outside every root has to be passed over rather than refused.
+// Concatenating two calls states the same source twice.
 function lcovRecord(recordSourcePath, counts) {
   const lines = [
-    `SF:${path.join(projectRoot, recordSourcePath)}`,
+    `SF:${recordSourcePath}`,
     `BRF:${counts.branches.found}`,
     `BRH:${counts.branches.hit}`,
     `FNF:${counts.functions.found}`,
@@ -69,14 +74,15 @@ try {
   // records, which would make both throwing states below fire on the zero-record arm and measure
   // nothing.
   assert.equal(
-    assertCompleteCoverage(realSourcePath, lcovRecord(realSourcePath, completeCounts)),
+    assertCompleteCoverage(realSourcePath, lcovRecord(inRepo(realSourcePath), completeCounts)),
     "branches 4/4, functions 3/3, lines 12/12",
   );
 
   // Shortfall. Pin the verdict's SHAPE -- it names the source and reports the deficient counter as
   // hit over found, and reports only that counter -- without pinning an absolute branch pair.
   assert.throws(
-    () => assertCompleteCoverage(realSourcePath, lcovRecord(realSourcePath, shortfallCounts)),
+    () =>
+      assertCompleteCoverage(realSourcePath, lcovRecord(inRepo(realSourcePath), shortfallCounts)),
     /Incomplete direct coverage for extensions\/.+atomic-json\.ts: branches \d+\/\d+$/,
   );
 
@@ -85,9 +91,36 @@ try {
     () =>
       assertCompleteCoverage(
         realSourcePath,
-        lcovRecord(realSourcePath, completeCounts) + lcovRecord(realSourcePath, completeCounts),
+        lcovRecord(inRepo(realSourcePath), completeCounts) +
+          lcovRecord(inRepo(realSourcePath), completeCounts),
       ),
     /Expected one LCOV record for extensions\/.+atomic-json\.ts, found 2$/,
+  );
+
+  // The injected root governs record selection, not just the type-only probe. A fixture LCOV naming
+  // a fixture path reaches a verdict; a root threaded only halfway would select nothing here and
+  // answer through the type-only escape instead, which is a wrong answer shaped like a pass.
+  assert.equal(
+    assertCompleteCoverage(
+      sourcePath,
+      lcovRecord(path.join(fixtureRoot, sourcePath), completeCounts),
+      fixtureRoot,
+    ),
+    "branches 4/4, functions 3/3, lines 12/12",
+  );
+
+  // A record from outside every root is a non-match, not an abort. An LCOV carrying an out-of-tree
+  // peer dependency or a symlinked node_modules must leave the gate able to answer. The fixture
+  // source is not type-only at this point, so the answer is the zero-record refusal rather than a
+  // pass -- which is what distinguishes "passed over" from "silently accepted".
+  assert.throws(
+    () =>
+      assertCompleteCoverage(
+        sourcePath,
+        lcovRecord(path.resolve(fixtureRoot, "..", "outside-every-root/peer.ts"), completeCounts),
+        fixtureRoot,
+      ),
+    /Expected one LCOV record.*found 0/,
   );
 
   // The two mapping refusals no exported assertion can reach, driven through the command instead.

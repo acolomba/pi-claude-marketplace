@@ -244,9 +244,41 @@ function coverageCounts(record) {
   };
 }
 
+/**
+ * Resolve one LCOV record's source field against the given root, or answer `undefined` when it
+ * lands outside that root.
+ *
+ * Deliberately separate from `toProjectPath`, which throws. A path the user typed on the command
+ * line that names something outside the project is a mistake worth refusing; a coverage record for
+ * an out-of-tree module -- an out-of-tree peer dependency, a symlinked `node_modules`, a
+ * globally-resolved companion extension -- is simply not the record being selected. Filtering asks
+ * one question about one record, so a non-match has to answer "not this one" rather than take the
+ * whole gate down.
+ */
+function recordProjectPath(selectedProjectRoot, inputPath) {
+  const projectPath = path.relative(
+    selectedProjectRoot,
+    path.resolve(selectedProjectRoot, inputPath),
+  );
+
+  if (projectPath.startsWith("..") || path.isAbsolute(projectPath)) {
+    return undefined;
+  }
+
+  return projectPath.split(path.sep).join("/");
+}
+
+/**
+ * The verdict for one source-test pair's coverage, read out of the LCOV the focused run wrote.
+ *
+ * `selectedProjectRoot` governs BOTH halves of the answer -- which records belong to the module and
+ * where the type-only probe reads the module from. A root that reached only one of the two would be
+ * a trap: a caller passing a fixture root and a matching fixture LCOV would select no records and
+ * fall through to the type-only escape, which is a wrong answer wearing the shape of a pass.
+ */
 export function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot = projectRoot) {
   const records = parseLcov(lcovText).filter(
-    (record) => toProjectPath(record.get("SF")) === sourcePath,
+    (record) => recordProjectPath(selectedProjectRoot, record.get("SF")) === sourcePath,
   );
 
   if (records.length === 0 && isTypeOnlyModule(sourcePath, selectedProjectRoot)) {
