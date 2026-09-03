@@ -45,6 +45,7 @@ import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
+import { makeBrowseHandler } from "./handlers/plugin/browse.ts";
 import { makeEnableDisableHandler } from "./handlers/plugin/enable-disable.ts";
 import { makeFetchHandler } from "./handlers/plugin/fetch.ts";
 import { makeImportHandler } from "./handlers/plugin/import.ts";
@@ -76,18 +77,28 @@ const COMMAND_DESCRIPTION =
  * add/update/remove handlers per D-04 EdgeDeps.
  */
 export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
+  // Build the action handlers the browse picker dispatches into as locals,
+  // so the browse handler can close over them without a circular factory.
+  const install = makeInstallHandler(pi);
+  const uninstall = makeUninstallHandler(pi);
+  const pluginInfo = makePluginInfoHandler(pi);
+  const enable = makeEnableDisableHandler(pi, true);
+  const disable = makeEnableDisableHandler(pi, false);
+  const list = makeListHandler(pi);
+  const browse = makeBrowseHandler(pi, { list, install, uninstall, pluginInfo, enable, disable });
+
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
-    install: makeInstallHandler(pi),
-    uninstall: makeUninstallHandler(pi),
+    install,
+    uninstall,
     update: makeUpdateHandler(pi),
     fetch: makeFetchHandler(pi),
     reinstall: makeReinstallHandler(pi),
-    list: makeListHandler(pi),
-    pluginInfo: makePluginInfoHandler(pi),
+    list,
+    pluginInfo,
     pending: makePendingHandler(pi),
-    enable: makeEnableDisableHandler(pi, true),
-    disable: makeEnableDisableHandler(pi, false),
+    enable,
+    disable,
     import: makeImportHandler(pi, deps),
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi),
@@ -96,6 +107,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     marketplaceUpdate: makeMarketplaceUpdateHandler(pi, deps),
     marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
     marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),
+    browse,
   };
 
   pi.registerCommand("claude:plugin", {

@@ -146,9 +146,9 @@ test("D-04 :: registered command has a handler that routes through routeClaudePl
   assert.ok(cmd !== undefined);
   assert.equal(typeof cmd.handler, "function");
 
-  // Empty input should trigger the TOP_LEVEL_USAGE emission via
-  // routeClaudePlugin -> notifyUsageError. We assert by capturing the
-  // notify calls.
+  // An unknown subcommand routes through routeClaudePlugin ->
+  // notifyUsageError. We assert by capturing the notify calls (no disk I/O:
+  // the default branch emits usage without invoking a handler).
   const notifications: { message: string; severity?: string }[] = [];
   const ctx = {
     cwd: "/tmp",
@@ -159,12 +159,12 @@ test("D-04 :: registered command has a handler that routes through routeClaudePl
     },
   } as unknown as ExtensionContext;
 
-  await cmd.handler("", ctx);
+  await cmd.handler("unknownverb", ctx);
 
-  // routeClaudePlugin emits "Usage error.\n\n<TOP_LEVEL_USAGE>" at error severity.
+  // routeClaudePlugin emits "Unknown subcommand: ...\n\n<TOP_LEVEL_USAGE>" at error severity.
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0]?.severity, "error");
-  assert.match(notifications[0]?.message ?? "", /Usage error\./);
+  assert.match(notifications[0]?.message ?? "", /Unknown subcommand/);
   assert.match(notifications[0]?.message ?? "", /Usage: \/claude:plugin/);
 });
 

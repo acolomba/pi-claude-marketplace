@@ -94,7 +94,7 @@ async function emptyFixture(): Promise<Fixture> {
 // TC-1 -- top-level subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/pending/enable/disable/import/marketplace)", async () => {
+test("TC-1 :: first positional surfaces top-level keywords (bootstrap/browse/install/uninstall/update/reinstall/list/ls/info/pending/enable/disable/import/marketplace)", async () => {
   resetCompletionCache();
   const f = await emptyFixture();
   try {
@@ -108,6 +108,7 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
     // surface (ENBL-01..04).
     assert.deepEqual([...labels].sort(), [
       "bootstrap",
+      "browse",
       "disable",
       "enable",
       "fetch",
