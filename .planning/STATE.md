@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: executing
-stopped_at: Completed 117-04-PLAN.md
-last_updated: "2026-09-03T18:16:35.655Z"
+stopped_at: Completed 117-05-PLAN.md
+last_updated: "2026-09-03T18:33:55.663Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 117 execution started
-state_head: 45cd2b5ea9280a605b476d55c2d42793fb2cb353
+state_head: 4bca542a6a7da49158f88a51ec9f597eda07cd7f
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 220
-  completed_plans: 211
+  completed_plans: 212
 milestone_name: Unit Test Refactor
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 
 Phase: 117 (Extension Entry and Final Gate) — EXECUTING
 Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 verification measured every promise directly rather than reading the summaries. Its one gap — the two
 D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
@@ -222,6 +222,7 @@ evidence.
 | Phase 117 P02 | 15 min | 2 tasks | 10 files |
 | Phase 117 P03 | 16 min | 1 tasks | 27 files |
 | Phase 117 P04 | 22 min | 2 tasks | 2 files |
+| Phase 117 P05 | 9 min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -419,6 +420,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: 117-03: a 100 percent rename reading is only evidence once the consumer edits are confirmed staged — the identical number was false in 117-02, produced by an aborted `git add`, so cross-check it against `md5sum` and `git log --follow`
 - [Phase 117]: D-117-04a: both orphan supplements relocate to tests/architecture/ rather than fold into a mirrored owner, because each spans several production modules and none of them owns it — The correspondence gate exempts the architecture root structurally (nonCorrespondingRoots), so the relocation needed no gate change and no exemption entry -- which is what keeps the SUITE-04 ban on name-keyed opt-outs intact
 - [Phase 117]: D-117-04b: each move is one commit carrying the move plus its specifier fix, not a move commit and a rewrite commit — A pure-move commit would leave the reason-parity suite importing a path one level too deep, so it would not typecheck; git still recorded the rename at 95 percent, and the materialization-gate move at 100 percent
+- [Phase 117]: The device-flow prompt supplement folds into tests/domain/github-auth.test.ts as one case, not two: its ordering case restated the owner existing reports-denied-authorization row, so the surviving case pins the catalog byte form on the denied poll and carries both claims at once.
+- [Phase 117]: The folded case builds its transport with createDeviceFlowFake while the credential and notify ports stay strong-mocks, because the house role table makes notifying a mock and a third copy of the owner mock-DeviceFlowHttp arrange block would have risked the fallow dupes threshold of 3.
 
 ### Pending Todos
 
@@ -442,7 +445,7 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-04-PLAN.md
+**Stopped at:** Completed 117-05-PLAN.md
 
 **Resume file:** None
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
@@ -452,7 +455,7 @@ lines) beside them.
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03T18:15:58.825Z
+Last session: 2026-09-03T18:33:36.353Z
 
 **Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
 six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.

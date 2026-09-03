@@ -596,7 +596,7 @@ Plans:
 - [x] **117-01** (`117-01-PLAN.md`) - Unit-suite glob completeness control, landed while it is still green
 - [x] **117-02** (`117-02-PLAN.md`) - Relocate the source-scanning mechanic to `tests/architecture/` and the IPC stubs to `tests/integration/`
 - [x] **117-03** (`117-03-PLAN.md`) - Relocate the Pi notification boundary to `tests/edge/` and rewrite its 28 import lines
-- [ ] **117-04** (`117-04-PLAN.md`) - Relocate the two cross-module orphan supplements to `tests/architecture/`
+- [x] **117-04** (`117-04-PLAN.md`) - Relocate the two cross-module orphan supplements to `tests/architecture/`
 - [ ] **117-05** (`117-05-PLAN.md`) - Fold the device-flow prompt lock into `tests/domain/github-auth.test.ts`
 - [ ] **117-06** (`117-06-PLAN.md`) - Fold the cross-bridge cascade evidence into `tests/orchestrators/marketplace/shared.test.ts`
 - [ ] **117-07** (`117-07-PLAN.md`) - Relocate the marketplace seed, delete `tests/helpers/`, drop it from both npm globs
