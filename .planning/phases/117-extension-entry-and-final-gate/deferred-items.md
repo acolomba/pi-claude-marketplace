@@ -39,3 +39,25 @@ it and why that plan could not resolve it.
 - **Impact:** documentation only. No gate reads the cited path — `catalog-uat`
   pairs on the `catalog-state` marker, not on the prose — and the byte form is
   still locked, at its new location.
+
+## 3. Stale `tests/helpers/` references throughout the codebase map
+
+- **Found during:** 117-07 Task 1
+- **File:** `.planning/codebase/TESTING.md` (lines 16, 38, 51, 91, 93, 115, 124,
+  127, 144, 147)
+- **Issue:** the document describes `tests/helpers/` as a live directory that
+  holds every hand-written test double, quotes both unit globs with the
+  `helpers` alternative still in them, and names four modules by their old
+  paths — including `tests/helpers/marketplace-seed.ts` and
+  `tests/helpers/source-scan.ts`. Plans 117-02, 117-03, 117-04 and this plan
+  moved all four out and 117-07 deleted the directory and both glob
+  alternatives, so none of those paths exists.
+- **Why not fixed here:** 117-07's `files_modified` names only the seed, its 15
+  consumers and `package.json`. The staleness is phase-wide rather than this
+  plan's, and a single plan rewriting a shared map another plan is also about
+  to touch invites a conflict.
+- **Suggested owner:** the 117-12 closing sweep, which can re-derive the whole
+  section once every move in the phase has landed.
+- **Impact:** documentation only. No gate reads `TESTING.md`; the
+  glob-completeness control reads the live scripts in `package.json`, which are
+  correct.

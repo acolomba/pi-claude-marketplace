@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 19
+open_count: 20
 waived_count: 0
 fixed_count: 5
-total_count: 24
-last_updated: 2026-09-03T18:29:36.570Z
+total_count: 25
+last_updated: 2026-09-03T19:17:31.820Z
 ---
 
 # Broken Windows Ledger
@@ -39,6 +39,7 @@ last_updated: 2026-09-03T18:29:36.570Z
 | 22 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/shared.ts | 53 | Cross-cutting flag scanner guard at 53-55 is unreachable at runtime, so the 116-26 pair falls one branch short of complete direct coverage. COMPILER-FORCED, same class as the args.ts claimant. Pinned by identity in the 116-26 pair; original D-116-01a claimant | open |  | 2026-09-03T11:00:38.508Z |  |
 | 23 | 117 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts | 476 | Doc comment on isHooksResolverNote still cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts; 117-04 moved that suite to tests/architecture/ and may not edit production | open |  | 2026-09-03T18:15:25.451Z |  |
 | 24 | 117 | stub | docs/output-catalog.md | 2729 | Output catalog still names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock; the lock now lives in tests/domain/github-auth.test.ts | open |  | 2026-09-03T18:29:36.570Z |  |
+| 25 | 117 | deviation | .planning/codebase/TESTING.md | 124 | TESTING.md still describes tests/helpers/ as live and names four modules by their pre-move paths; the directory and both glob alternatives are gone as of 117-07 | open |  | 2026-09-03T19:17:31.820Z |  |
 
 ````json
 [
@@ -328,6 +329,18 @@ last_updated: 2026-09-03T18:29:36.570Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-03T18:29:36.570Z",
+    "resolved_at": null
+  },
+  {
+    "id": 25,
+    "kind": "deviation",
+    "phase": "117",
+    "file": ".planning/codebase/TESTING.md",
+    "line": 124,
+    "description": "TESTING.md still describes tests/helpers/ as live and names four modules by their pre-move paths; the directory and both glob alternatives are gone as of 117-07",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-03T19:17:31.820Z",
     "resolved_at": null
   }
 ]

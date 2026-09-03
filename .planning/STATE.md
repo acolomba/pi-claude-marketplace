@@ -4,16 +4,16 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: executing
-stopped_at: Completed 117-06-PLAN.md
-last_updated: "2026-09-03T18:50:54.248Z"
+stopped_at: Completed 117-07-PLAN.md
+last_updated: "2026-09-03T19:20:34.698Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 117 execution started
-state_head: 5e585dbbcc228550dd2a1622036dcf5cb46e0a15
+state_head: 5a244641a67854328486a40403cabb56a31f771f
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 220
-  completed_plans: 214
+  completed_plans: 215
 milestone_name: Unit Test Refactor
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 
 Phase: 117 (Extension Entry and Final Gate) — EXECUTING
 Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 7 of 12
+Plan: 8 of 12
 Status: Ready to execute
 verification measured every promise directly rather than reading the summaries. Its one gap — the two
 D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
@@ -224,6 +224,7 @@ evidence.
 | Phase 117 P04 | 22 min | 2 tasks | 2 files |
 | Phase 117 P05 | 9 min | 1 tasks | 2 files |
 | Phase 117 P06 | 13 min | 1 tasks | 2 files |
+| Phase 117 P07 | 28 min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -424,6 +425,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: The device-flow prompt supplement folds into tests/domain/github-auth.test.ts as one case, not two: its ordering case restated the owner existing reports-denied-authorization row, so the surviving case pins the catalog byte form on the denied poll and carries both claims at once.
 - [Phase 117]: The folded case builds its transport with createDeviceFlowFake while the credential and notify ports stay strong-mocks, because the house role table makes notifying a mock and a third copy of the owner mock-DeviceFlowHttp arrange block would have risked the fallow dupes threshold of 3.
 - [Phase 117]: 117-06: plant at the granularity the case claims — deleting the whole production step fails the case on its returned outcome, so it cannot prove an on-disk read is load-bearing — The plan's literal plant removed the cascade's hooks slot and the merged case failed on dropped.hooks, not on the readdir; deleting only the rm inside removeHookConfig left the outcome correct and failed exactly one case in the suite, on the disk read
+- [Phase 117]: The seed's own three production specifiers gained a climb because its new home is one directory deeper; no consumer rewrite reveals that, only reading the module does.
+- [Phase 117]: The helpers glob alternative was removed for honesty, not function: both globs match the same 248 paths with and without it, and the 117-01 completeness control is the independent proof.
+- [Phase 117]: Shortening an import specifier re-sorts it inside the parent group with no predictable direction: 13 handler suites moved a line, the mirror image of 117-03's effect.
 
 ### Pending Todos
 
@@ -447,7 +451,7 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-06-PLAN.md
+**Stopped at:** Completed 117-07-PLAN.md
 
 **Resume file:** None
 twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
@@ -457,7 +461,7 @@ lines) beside them.
 BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
 only its per-plan wave list is spent.
 
-Last session: 2026-09-03T18:50:40.113Z
+Last session: 2026-09-03T19:19:59.312Z
 
 **Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
 six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
