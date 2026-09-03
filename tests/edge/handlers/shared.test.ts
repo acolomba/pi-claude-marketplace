@@ -32,7 +32,7 @@ import { test } from "node:test";
 
 import { passThroughFlagNames } from "../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { extractLocalFlag } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
-import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../notification-boundary.ts";
 
 type Scan = NonNullable<ReturnType<typeof extractLocalFlag>>;
 

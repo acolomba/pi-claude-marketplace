@@ -67,7 +67,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
-import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 

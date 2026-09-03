@@ -58,7 +58,7 @@ import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/
 import { makeMarketplaceInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { mergeMarketplaceIntoState } from "../../../helpers/marketplace-seed.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 

@@ -107,10 +107,10 @@ import {
   buildInstalledPluginRecord,
   mergeMarketplaceIntoState,
 } from "../../../helpers/marketplace-seed.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { Notification } from "../../../helpers/notification-boundary.ts";
+import type { Notification } from "../../notification-boundary.ts";
 
 /** The five filters as a user types them, and the usage block this shim owns. */
 const INSTALLED_FLAG = "--installed";

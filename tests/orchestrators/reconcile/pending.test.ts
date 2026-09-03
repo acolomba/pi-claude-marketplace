@@ -23,7 +23,7 @@ import { test } from "node:test";
 
 import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";

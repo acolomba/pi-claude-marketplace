@@ -72,8 +72,8 @@ import {
   makeImportHandler,
   type ImportHandlerDeps,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 

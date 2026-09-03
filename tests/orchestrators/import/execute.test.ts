@@ -37,7 +37,7 @@ import {
   ConcurrentInstallError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createNotificationBoundary } from "../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type {

@@ -105,7 +105,7 @@ import {
   materializeMarketplaceTree,
   mergeMarketplaceIntoState,
 } from "../../../helpers/marketplace-seed.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 

@@ -50,9 +50,11 @@ import {
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { createNotificationBoundary } from "../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
+import { createNotificationBoundary } from "./notification-boundary.ts";
+
+import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { ClaudeImportExecutionResult } from "../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import type { PluginUpdateOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -62,7 +64,6 @@ import type {
   ExtensionContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Notification } from "../helpers/notification-boundary.ts";
 import type {
   AutocompleteItem,
   AutocompleteProvider,

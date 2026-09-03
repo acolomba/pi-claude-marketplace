@@ -35,7 +35,7 @@ import {
   makeSingleNameMarketplaceHandler,
   openMarketplaceCommand,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 type MarketplaceRun = Parameters<typeof makeSingleNameMarketplaceHandler>[2];
 type MarketplaceRunOptions = Parameters<MarketplaceRun>[0];

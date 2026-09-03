@@ -41,7 +41,7 @@ import {
   type ParsedPluginMarketplaceRef,
   type PluginMarketplaceRef,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 type PreludeRun<P> = Parameters<typeof withParsedArgs<P>>[2];
 type Scope = NonNullable<ParsedMapModelArgs["scope"]>;

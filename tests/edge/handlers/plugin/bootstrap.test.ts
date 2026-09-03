@@ -92,8 +92,8 @@ import { mock, verify } from "strong-mock";
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
 import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

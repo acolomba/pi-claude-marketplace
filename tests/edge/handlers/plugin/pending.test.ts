@@ -108,7 +108,7 @@ import { test, type TestContext } from "node:test";
 
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePendingHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts";
-import { createNotificationBoundary } from "../../../helpers/notification-boundary.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 const PENDING_USAGE = "Usage: /claude:plugin pending [--scope user|project]";
 

@@ -44,7 +44,8 @@ import {
   TOP_LEVEL_USAGE,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
-import { createNotificationBoundary } from "../helpers/notification-boundary.ts";
+
+import { createNotificationBoundary } from "./notification-boundary.ts";
 
 type HandlerName = keyof SubcommandHandlers;
 
