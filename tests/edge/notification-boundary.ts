@@ -57,13 +57,30 @@ export interface NotificationBoundary {
  * takes. It extends `ExtensionContext`, so a consumer handing `ctx` to an
  * orchestrator keeps compiling and no consumer needs a cast.
  *
- * `toolProbes` counts `pi.getAllTools()` reads, not emissions. `notify()` takes
- * one soft-dependency probe per emission and each probe reads `getAllTools()`
- * twice, so a `notify()` case states `emissions * 2`; `notifyUsageError` never
- * probes, so a usage-error case states 0. The count is stated rather than derived
- * because the two paths disagree, and a wrong default fails naming the probe
- * instead of the mistake. The probe reports no companion extension loaded, which
- * is what makes a row's declared agent and MCP dependencies visible as markers.
+ * `toolProbes` counts `pi.getAllTools()` reads, not emissions, and the ratio
+ * between the two is NOT fixed. `notify()` takes one soft-dependency probe per
+ * emission and each probe reads `getAllTools()` twice, so a case whose emissions
+ * all go through `notify()` states `emissions * 2`. Three paths break that
+ * arithmetic:
+ *
+ * - `notifyUsageError` writes straight to `ctx.ui.notify` and probes nothing, so
+ *   a usage-error case states 0.
+ * - `makeRawNotifyFn` does the same, so a raw-text emission -- the reconcile's
+ *   last-ditch error line and the plugin PATH warning both take this route --
+ *   raises `emissions` without raising `toolProbes`.
+ * - An emission routed through a caller-supplied `ui` (see `tests/index.test.ts`'s
+ *   `contextNotifyingThrough`) never reaches this boundary's `ui` mock, so it does
+ *   not count toward `emissions` at all while still probing through `pi`. Those
+ *   cases state `emissions` of 0 beside a non-zero `toolProbes`.
+ *
+ * So state the count the case actually observes, and when it moves, find out WHY
+ * before changing the number: refitting it until the case goes green turns the
+ * count from a claim about the soft-dependency probe into a fudge factor, and the
+ * IL-2 sizing proof this file exists to protect goes with it. The count is stated
+ * rather than derived because the paths disagree, and a wrong default fails naming
+ * the probe instead of the mistake. The probe reports no companion extension
+ * loaded, which is what makes a row's declared agent and MCP dependencies visible
+ * as markers.
  *
  * `cwd` is stated only when the case's path forwards it. An edge handler reads
  * `ctx.cwd` once on the path that reaches its orchestrator and never on a
