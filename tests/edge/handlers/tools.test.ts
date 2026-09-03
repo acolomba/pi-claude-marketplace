@@ -101,6 +101,18 @@ interface SeededPlugin {
   readonly manifestVersion?: string;
   /** Declare an unsupported component kind on the manifest entry. */
   readonly declaresUnsupported?: boolean;
+  /**
+   * The manifest entry's `source`, defaulting to the sibling path form. A git
+   * form with nothing materialized under the scope's clone root is what the
+   * list orchestrator classifies as the cold `(remote)` bucket, from the
+   * filesystem alone -- no network (RSTA-01 / NFR-5).
+   */
+  readonly source?: string;
+  /**
+   * Write `defaultEnabled: false` on the manifest entry, which is what makes a
+   * not-installed candidate row claim `{installs disabled}` (OUT-02).
+   */
+  readonly installDisabled?: boolean;
   /** Create the on-disk plugin tree (default true). */
   readonly pluginTree?: boolean;
   readonly installed?: SeededInstall;
@@ -211,9 +223,10 @@ async function layoutMarketplace(
         .filter((plugin) => plugin.inManifest !== false)
         .map((plugin) => ({
           name: plugin.name,
-          source: `./plugins/${plugin.name}`,
+          source: plugin.source ?? `./plugins/${plugin.name}`,
           ...(plugin.manifestVersion === undefined ? {} : { version: plugin.manifestVersion }),
           ...(plugin.declaresUnsupported === true ? { lspServers: { ls: {} } } : {}),
+          ...(plugin.installDisabled === true ? { defaultEnabled: false } : {}),
         })),
     }),
     "utf8",
@@ -628,6 +641,43 @@ const versionCases = [
     },
   },
   {
+    // CR-01: a cold git-source candidate. The list orchestrator gates this
+    // bucket behind its own `remote` filter, so the row only appears here
+    // because the tool forwards no filter at all when the caller sets none.
+    marketplace: "remote-mp",
+    title: "carries the declared version of a cold git-source row",
+    plugin: {
+      name: "alpha",
+      manifestVersion: "4.0.0",
+      source: "https://127.0.0.1:9/alpha.git",
+      pluginTree: false,
+    },
+    line: "  [available] alpha  4.0.0",
+    row: {
+      marketplace: "remote-mp",
+      scope: "project",
+      name: "alpha",
+      status: "available",
+      version: "4.0.0",
+    },
+  },
+  {
+    // CR-01: the second bucket with no tool parameter of its own, gated by the
+    // orchestrator's `partial` filter.
+    marketplace: "partially-available-mp",
+    title: "carries the declared version of a partially available row",
+    plugin: { name: "alpha", manifestVersion: "5.0.0", declaresUnsupported: true },
+    line: "  [unavailable] alpha  5.0.0  (lsp)",
+    row: {
+      marketplace: "partially-available-mp",
+      scope: "project",
+      name: "alpha",
+      status: "unavailable",
+      version: "5.0.0",
+      reasons: ["lsp"],
+    },
+  },
+  {
     marketplace: "unavailable-mp",
     title: "carries the declared version of an unavailable row",
     plugin: { name: "alpha", manifestVersion: "3.0.0", pluginTree: false },
@@ -656,12 +706,29 @@ const versionCases = [
   },
 ] as const satisfies readonly VersionCase[];
 
+/**
+ * One plugin per bucket the list orchestrator can put in this tool's payload:
+ * an installed record, an installable candidate, a structurally uninstallable
+ * candidate, a cold git-source candidate, and a partially available candidate.
+ *
+ * The last two carry the CR-01 weight. The orchestrator gates them behind its
+ * own `remote` and `partial` filters, and the tool declares neither parameter,
+ * so they appear in a narrowed result only if the tool sends each one alongside
+ * the coarse bucket it folds into.
+ */
 const mixedMarketplace = {
   name: "mixed-mp",
   plugins: [
     { name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } },
     { name: "bravo", manifestVersion: "2.0.0" },
     { name: "charlie", manifestVersion: "3.0.0", pluginTree: false },
+    {
+      name: "delta",
+      manifestVersion: "4.0.0",
+      source: "https://127.0.0.1:9/delta.git",
+      pluginTree: false,
+    },
+    { name: "echo", manifestVersion: "5.0.0", declaresUnsupported: true },
   ],
 } as const satisfies SeededMarketplace;
 
@@ -690,9 +757,28 @@ const unavailableRow = {
   reasons: ["unsupported source"],
 } as const satisfies ExpectedPluginRow;
 
+const remoteRow = {
+  marketplace: "mixed-mp",
+  scope: "project",
+  name: "delta",
+  status: "available",
+  version: "4.0.0",
+} as const satisfies ExpectedPluginRow;
+
+const partiallyAvailableRow = {
+  marketplace: "mixed-mp",
+  scope: "project",
+  name: "echo",
+  status: "unavailable",
+  version: "5.0.0",
+  reasons: ["lsp"],
+} as const satisfies ExpectedPluginRow;
+
 const INSTALLED_LINE = "  [installed] alpha  1.0.0";
 const AVAILABLE_LINE = "  [available] bravo  2.0.0";
 const UNAVAILABLE_LINE = "  [unavailable] charlie  3.0.0  (unsupported source)";
+const REMOTE_LINE = "  [available] delta  4.0.0";
+const PARTIALLY_AVAILABLE_LINE = "  [unavailable] echo  5.0.0  (lsp)";
 
 interface FilterCase {
   readonly title: string;
@@ -709,8 +795,14 @@ const filterCases = [
   {
     title: "renders every bucket when no filter is set",
     params: {},
-    lines: [INSTALLED_LINE, AVAILABLE_LINE, UNAVAILABLE_LINE],
-    rows: [installedRow, availableRow, unavailableRow],
+    lines: [
+      INSTALLED_LINE,
+      AVAILABLE_LINE,
+      UNAVAILABLE_LINE,
+      REMOTE_LINE,
+      PARTIALLY_AVAILABLE_LINE,
+    ],
+    rows: [installedRow, availableRow, unavailableRow, remoteRow, partiallyAvailableRow],
   },
   {
     title: "narrows to the installed bucket when only installed is set",
@@ -719,24 +811,55 @@ const filterCases = [
     rows: [installedRow],
   },
   {
+    // CR-01: the cold git-source row rides the `available` parameter, because
+    // that is the tool bucket its status projects onto.
     title: "narrows to the available bucket when only available is set",
     params: { available: true },
-    lines: [AVAILABLE_LINE],
-    rows: [availableRow],
+    lines: [AVAILABLE_LINE, REMOTE_LINE],
+    rows: [availableRow, remoteRow],
   },
   {
+    // CR-01: the partially available row rides the `unavailable` parameter, on
+    // the same rule.
     title: "narrows to the unavailable bucket when only unavailable is set",
     params: { unavailable: true },
-    lines: [UNAVAILABLE_LINE],
-    rows: [unavailableRow],
+    lines: [UNAVAILABLE_LINE, PARTIALLY_AVAILABLE_LINE],
+    rows: [unavailableRow, partiallyAvailableRow],
   },
   {
     title: "unions the available and unavailable buckets when both are set",
     params: { available: true, unavailable: true },
-    lines: [AVAILABLE_LINE, UNAVAILABLE_LINE],
-    rows: [availableRow, unavailableRow],
+    lines: [AVAILABLE_LINE, UNAVAILABLE_LINE, REMOTE_LINE, PARTIALLY_AVAILABLE_LINE],
+    rows: [availableRow, unavailableRow, remoteRow, partiallyAvailableRow],
   },
 ] as const satisfies readonly FilterCase[];
+
+/**
+ * CR-02: `PluginAvailableMessage.reasons` and `PluginRemoteMessage.reasons` are
+ * both optional and both admit the single author-declared `installs disabled`
+ * token (OUT-02 / OUT-05). The two rows differ only in whether the candidate's
+ * source is a local path or an unfetched git one, so one seed shape drives both
+ * and the source is the only column that varies.
+ */
+const installDisabledCases = [
+  {
+    marketplace: "installs-disabled-mp",
+    title: "forwards the install-time claim of an available row that declares it",
+    source: undefined,
+    line: "  [available] alpha  1.0.0  (installs disabled)",
+  },
+  {
+    marketplace: "installs-disabled-remote-mp",
+    title: "forwards the install-time claim of a cold git-source row that declares it",
+    source: "https://127.0.0.1:9/alpha.git",
+    line: "  [available] alpha  1.0.0  (installs disabled)",
+  },
+] as const satisfies readonly {
+  marketplace: string;
+  title: string;
+  source: string | undefined;
+  line: string;
+}[];
 
 describe("registerListPluginsTool", () => {
   test("registers pi_claude_marketplace_plugin_list with its filter parameters", async (t) => {
@@ -933,6 +1056,151 @@ describe("registerListPluginsTool", () => {
 
     // act
     const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("forwards the absence reason of a disabled record the manifest omits", async (t) => {
+    // arrange
+    // CR-02: `PluginDisabledMessage.reasons` is optional, and the one member it
+    // takes is the manifest-absence token a disabled record earns once its
+    // marketplace stops declaring it (ENBL-16 / D-100-07). The installed
+    // counterpart above differs from this fixture by the disabled marker alone.
+    const scope = await createHermeticScope(t, "disabled-manifest-absent");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "absent-disabled-mp",
+        plugins: [
+          { name: "alpha", inManifest: false, installed: { version: "1.0.0", disabled: true } },
+        ],
+      },
+    ]);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+      value: scope.cwd,
+      reads: 1,
+    });
+    const expectedResult = {
+      content: [
+        {
+          type: "text",
+          text: "Marketplace absent-disabled-mp (project)\n  [unavailable] alpha  1.0.0  (not in manifest)",
+        },
+      ],
+      details: {
+        plugins: [
+          {
+            marketplace: "absent-disabled-mp",
+            scope: "project",
+            name: "alpha",
+            status: "unavailable",
+            version: "1.0.0",
+            reasons: ["not in manifest"],
+          },
+        ],
+      },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.deepStrictEqual(scope.fetchCallCount(), 0);
+    verifyBoundary();
+  });
+
+  for (const { marketplace, title, source, line } of installDisabledCases) {
+    test(title, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, marketplace);
+      await seedScope(scope.cwd, "project", [
+        {
+          name: marketplace,
+          plugins: [
+            {
+              name: "alpha",
+              manifestVersion: "1.0.0",
+              installDisabled: true,
+              pluginTree: source === undefined,
+              ...(source === undefined ? {} : { source }),
+            },
+          ],
+        },
+      ]);
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+        value: scope.cwd,
+        reads: 1,
+      });
+      const expectedResult = {
+        content: [{ type: "text", text: `Marketplace ${marketplace} (project)\n${line}` }],
+        details: {
+          plugins: [
+            {
+              marketplace,
+              scope: "project",
+              name: "alpha",
+              status: "available",
+              version: "1.0.0",
+              reasons: ["installs disabled"],
+            },
+          ],
+        },
+      };
+
+      // act
+      const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+      // assert
+      assert.deepStrictEqual(listed, expectedResult);
+      assert.deepStrictEqual(scope.fetchCallCount(), 0);
+      verifyBoundary();
+    });
+  }
+
+  test("renders the header alone for a marketplace whose rows the filter empties", async (t) => {
+    // arrange
+    // WR-05: the "(no plugins)" body belongs to a marketplace that declares
+    // none. A block whose rows the TOOL-side filter removed keeps its header
+    // and gains no body, which is the shape this case pins.
+    //
+    // Reaching that shape needs a row the two filters disagree about, because
+    // a row the ORCHESTRATOR drops leaves `mp.plugins` empty and takes the
+    // "(no plugins)" branch instead. A disabled record is the disagreement:
+    // the orchestrator counts it as installed inventory, and the tool projects
+    // it onto the `unavailable` bucket `installed: true` excludes.
+    const scope = await createHermeticScope(t, "filtered-empty");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "filtered-mp",
+        plugins: [
+          {
+            name: "alpha",
+            manifestVersion: "1.0.0",
+            installed: { version: "1.0.0", disabled: true },
+          },
+        ],
+      },
+    ]);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+      value: scope.cwd,
+      reads: 1,
+    });
+    const expectedResult = {
+      content: [{ type: "text", text: "Marketplace filtered-mp (project)" }],
+      details: { plugins: [] },
+    };
+
+    // act
+    const listed = await registration.execute(
+      "call-1",
+      { installed: true },
+      undefined,
+      undefined,
+      ctx,
+    );
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
