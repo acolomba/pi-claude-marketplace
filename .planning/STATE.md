@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
-status: executing
-stopped_at: Completed 117-11-PLAN.md (halt resolved by operator decision; all-pair result retained)
-last_updated: "2026-09-03T22:11:16.917Z"
+status: complete
+stopped_at: Completed 117-12-PLAN.md — phase 117 closed and every v1.19 phase complete
+last_updated: "2026-09-03T22:30:00.000Z"
 last_activity: 2026-09-03
-last_activity_desc: Phase 117 execution started
+last_activity_desc: Phase 117 complete; closing inventory sweep landed
 state_head: ba4993de00dd822582abdd1c530cd7efdb0a4a44
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 220
-  completed_plans: 219
+  completed_plans: 220
 milestone_name: Unit Test Refactor
 ---
 
@@ -30,19 +30,26 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 117 (Extension Entry and Final Gate) — EXECUTING
-Next: Phase 117 (Extension Entry and Final Gate) — NOT STARTED, no phase directory yet
-Plan: 12 of 12
-Status: Ready to execute
-verification measured every promise directly rather than reading the summaries. Its one gap — the two
-D-116-01a claimants predating the amendment were pinned in their own pairs but never entered in the
-ledger — is closed; all seven shortfalls are now filed as entries 15-19, 21 and 22. MOD-09 closed, the
-pair total swept to 203/204, and the ROADMAP row marked Complete.
+Phase: 117 (Extension Entry and Final Gate) — COMPLETE
+Next: None. Every v1.19 phase is complete; the milestone is ready for close-out.
+Plan: 12 of 12 — 117-01 through 117-12 all have a SUMMARY on disk
+Status: Complete
 
-Closing gates, each run separately: typecheck 0, lint 0, fallow 0, `npm test` 5141/5141 across 295
-suites, `test:integration` 31/31. Zero coverage pragmas repo-wide, zero banned casts in the phase's own
-work, and all 30 edge sources mirrored — the one orphan, `tests/edge/index-handler.test.ts`, is
-D-116-10's deliberate deferral to Phase 117.
+All 204 source-test pairs are complete. The entry pair, `extensions/pi-claude-marketplace/index.ts`
+→ `tests/index.test.ts`, landed in 117-08 and the retained all-pair result records it `complete` at
+branches 15/15, functions 3/3, lines 161/161.
+
+Closing gates, each run separately and unpiped on Node v26.8.1 during 117-12: `npm test`
+5142 tests / 295 suites / 0 fail, `test:integration` 31/31, `typecheck` 0, the correspondence gate 0
+with zero violations, and both negative controls 0. `git diff --quiet 562f5d13 HEAD -- extensions/`
+exits 0: phase 117 changed no production file at all.
+
+HISTORY (Phase 116, retained): its verification measured every promise directly rather than reading
+the summaries. Its one gap — the two D-116-01a claimants predating the amendment were pinned in their
+own pairs but never entered in the ledger — was closed; all seven shortfalls are filed as entries
+15-19, 21 and 22. MOD-09 closed and the pair total stood at 203 of 204 at that point, with the one
+remaining pair the extension entry point. Its closing gates were typecheck 0, lint 0, fallow 0,
+`npm test` 5141/5141 across 295 suites, `test:integration` 31/31, and all 30 edge sources mirrored.
 
 The history below is the per-plan record, newest first; it is retained deliberately.
 
@@ -76,10 +83,12 @@ Last activity: 2026-09-02 — 116-17 moved the import suite from tests/edge/hand
 
 Last activity: 2026-09-02 — 116-14 rewrote the bootstrap shim owner: 10 runtime cases from 6 marked bodies, direct coverage branches 8/8, functions 2/2, lines 88/88. FOUR findings. First, the injected git port is proven by the clone recorder, and two GREEN plants bound that claim — a re-boxed port AND a port with one member wrapped around a delegating call both stay green, so a recorder-based forward proof is measurably WEAKER than 116-17's structural when() comparison, which goes red on the wrapped member. The claim is stated as "carried out by the injected implementation". Second, this handler calls parseArgs, so like plugin/import.ts and unlike all six marketplace siblings it rejects a surplus positional, has no arity below the accepted zero, and takes --local as an ordinary positional token. Third, the plan's guard-order input (an unrecognised scope value with NO positional) pins no ordering, because the positional guard never applies to it; two inputs that satisfy two guards at once were added instead — `--scope user --local` proves the positional guard precedes the scope guard, `extra --scope nope` proves the parse failure precedes both. Fourth, the branch DENOMINATOR moved from 11/11 to 8/8 while both readings are complete, re-measured in both directions by restoring the HEAD suite: 8 is exactly the structural count (four binary branches times two sides), so T-116-07-B's "a thinner rewrite can drop a branch" did not occur. Four production plants, two RED and two GREEN-by-design, all reverted; no production file touched. npm test 5054/5054 across 291 suites, integration 31/31
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
-Two hundred three of 204 source-test pairs are complete. The one that remains is the extension
-entry point, which Phase 117 owns.
+All 204 source-test pairs are complete: 190 carry a complete numeric direct-coverage record, 7 are
+accepted D-116-01a single-branch shortfalls pinned by identity, and 7 are type-only modules that emit
+no JavaScript. The reading is D-117-20 as amended, and the evidence is
+`.planning/phases/117-extension-entry-and-final-gate/117-ALL-PAIR-RESULT.ndjson`.
 Retired Phase 106 and 107 artifacts are history only and provide no completion
 evidence.
 
@@ -452,7 +461,7 @@ None for roadmap creation.
   at phase 100. Phase 114's ROADMAP and STATE transition was therefore applied by
   hand. Phases 115 through 117 and milestone close will hit the same wall until the
   stale workstream directories are retired or v1.19 is given its own workstream.
-- D-117-20 must be amended in 117-CONTEXT.md to read 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only. Operator decision taken in plan 117-11; the decision record still carries the superseded 197 + 7 wording. Owned by the 117-12 sweep.
+- RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
 
 ## Deferred Items
 
@@ -462,62 +471,65 @@ None for roadmap creation.
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-11-PLAN.md (halt resolved by operator decision; all-pair result retained)
+**Stopped at:** Completed 117-12-PLAN.md — the closing inventory sweep; phase 117 and every v1.19
+phase are complete.
 
 **Resume file:** None
-twelve plans. Read `117-CONTEXT.md` (decisions D-117-01..21) and `117-RESEARCH.md` (measured, 1310
-lines) beside them.
 
 **Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
-BLOCKING CONSTRAINTS, findings table, tooling defects and commit recipe all still apply to Phase 117;
-only its per-plan wave list is spent.
+BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
+per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-03T22:11:10.556Z
+Last session: 2026-09-03
 
-**Next: Phase 117 (Extension Entry and Final Gate) — PLANNED, ready to execute.** Twelve plans in
-six waves: `1:[01-06] 2:[07] 3:[08] 4:[09,10] 5:[11] 6:[12]`. Plan-checker passed after one revision.
-Continue with `/gsd-execute-phase 117`.
+**Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
+are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
+under Blockers.
 
-Plan counts here are MEASURED, not carried: 220 total and 208 complete, counted by `find` over
-`1??-??-{PLAN,SUMMARY}.md`. The prior 208/206 was stale on both halves — `total_plans` had never
-absorbed phase 117, and `completed_plans` carried the known `state.record-metric` drift. Every phase
-108-116 has a SUMMARY for every PLAN.
+Plan counts here are MEASURED, not carried: 220 total and 220 complete, counted by `find` over
+`1??-??-{PLAN,SUMMARY}.md` after this plan's SUMMARY landed. Every phase 108-117 has a SUMMARY for
+every PLAN.
 
-### What Phase 117 inherits
+### What Phase 117 delivered, and what it left open
 
-- **One pair remains**: the extension entry point. The ROADMAP shows 1 plan; the pair total is 203/204.
-- **`tests/edge/index-handler.test.ts` is an ORPHAN by design** — D-116-10 deferred it here. It is the
-  only unmirrored test in the edge tier, and it holds the 7 `as any` / `as unknown as` casts that are
-  absent from every one of phase 116's own 30 pairs.
+- **The last pair is closed.** `extensions/pi-claude-marketplace/index.ts` → `tests/index.test.ts`
+  landed in 117-08 and the pair total is 204 of 204.
+- **The `tests/edge/index-handler.test.ts` orphan is gone** — 117-08 deleted both legacy proxies
+  while writing the entry owner, so the edge tier carries no unmirrored test and none of the 7
+  `as any` / `as unknown as` casts it held.
 - **The all-pair duration blocker is discharged.** Plan 117-11 measured 533.2 s for all 204 rows on
   Node v26.8.1, read from the runner's own printed line, and decided NOT to add concurrency against
   that number. No Node 24 is installed on this machine; CI pins it.
-- **21 open Broken Windows entries.** Entries 27 and 28, opened by plan 117-11, are closed: the
-  all-pair reading was settled by operator decision, and the eleven runtime-dependent assertions were
-  hardened so the tree is green on both installed interpreters. Seven of those are D-116-01a coverage
-  shortfalls (15-19, 21, 22) — argued, pinned, and closable only by a production rewrite. Entry 20 is
-  different: two production comments in `edge/register.ts` (18-20 and 104-106) assert a
-  registration-time `process.cwd()` capture the code does not make; `process.cwd()` is evaluated inside
-  the completion arrow, so it is read per invocation. No licence remained to fix them in 116.
+- **22 open Broken Windows entries** out of 29 rows, counted in 117-12 by a script that tallies the
+  rows rather than reading the header. Seven are the D-116-01a coverage shortfalls (15-19, 21, 22),
+  pinned by identity and closable only by a production rewrite; they must stay open. Entry 20 is the
+  two `edge/register.ts` comments (18-20 and 104-106) asserting a registration-time `process.cwd()`
+  capture the code does not make — it is read inside the completion arrow, per invocation. Entries
+  23-26 and 29 are stale documentation references this phase created or found; entries 27 and 28,
+  opened and closed by 117-11, are the all-pair reading and the errno hardening.
 - **`BOOLEAN_FLAGS` is still re-exported from `edge/handlers/plugin/list.ts`** solely for
-  `tests/architecture/flag-catalog-drift.test.ts`. Recorded as an observation for the phase that owns
-  the repository-wide gates.
+  `tests/architecture/flag-catalog-drift.test.ts` (`list.ts:82`, consumed at
+  `flag-catalog-drift.test.ts:48`). Verified still present in 117-12 and left alone under D-117-13,
+  which opened no production licence.
 - **`tests/orchestrators/edge-deps.test.ts` still watches `globalThis.fetch`** — the precedent that
   spread the wrong door across twelve edge suites. It sits outside the edge tier so phase 116 left it;
   the git transport reaches the wire through `simple-get` → `https.request`, and `globalThis.fetch` has
   exactly one production caller (`domain/github-auth.ts`'s device flow, correctly watched by
   `tests/domain/github-auth.test.ts`).
 
-### Two open operator decisions
+### One open operator decision
 
 1. **The tool's `available` / `unavailable` parameter DESCRIPTIONS** now admit a bucket their wording
    does not mention, after D-116-15's CR-01 fix made the `remote` and `partially-available` arms
-   reachable. Changing them alters the LLM-facing contract and the pinned registration schema, which
-   the fixer judged past its licence. Left for a deliberate decision.
-2. **REQUIREMENTS.md status drift.** MOD-07 (Phase 114) still reads `Pending` despite that phase being
-   verified complete, and the per-pair Status column lapsed at Phase 110 — roughly 115 rows across
-   phases 110-114. Phase 116 swept only what it owned (MOD-09). Bookkeeping fix or milestone-audit
-   item, your call.
+   reachable. Changing them alters the LLM-facing contract and the pinned registration schema. Held
+   open deliberately by D-117-14: the change is ONE-WAY, so a later revert is a second contract
+   change rather than an undo. 117-12 records it and does NOT decide it.
+
+**Closed by 117-12:** the REQUIREMENTS.md status drift. Measured before the sweep at **154** rows
+reading `Open` — across phases 110, 111, 112, 113, 114, **116** and the phase-117 entry row, not the
+~115 across 110-114 the earlier estimate claimed, because phase 116's own 30 rows were missed
+entirely. All 154 are closed, and MOD-07 and MOD-10 are closed in both the checklist and the
+requirement-to-phase mapping.
 
 ### Standing environment debts — all still true
 
@@ -531,7 +543,8 @@ absorbed phase 117, and `completed_plans` carried the known `state.record-metric
 - **This shell does not word-split**, and backticks inside `git commit -m` execute — use `git commit -F`.
 - **`workflow.use_worktrees=false`**, so executors run sequentially on the shared tree, one at a time.
 - **`phase.complete` cannot write the root planning files** under workstream mode — neither workstream
-  holds v1.19 — so every phase transition is hand-applied. 114, 115 and 116 all were.
+  holds v1.19 — so every phase transition is hand-applied. 114, 115, 116 and 117 all were, and the
+  milestone close will be too.
 - **`roadmap.update-plan-progress` mangles ROADMAP.md every single time** (31 for 31 in phase 116):
   hand-edit instead. ROADMAP carries the plan count in TWO places that drift independently.
 - **`state.record-metric` double-increments `completed_plans`**; `state.update-progress` writes nothing;

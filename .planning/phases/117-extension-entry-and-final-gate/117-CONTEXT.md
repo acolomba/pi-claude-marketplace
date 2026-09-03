@@ -229,12 +229,22 @@ decisions rested on. The decisions stand; these are the corrections to the facts
   success criterion 3's "Node 24" result is satisfied by CI, which pins 24. **Do not label a non-24
   run "the Node 24 all-pair result."** No local install. — **Reversibility:** reversible.
 
-- **D-117-20: COV-05 reads as 197 records plus 7 named type-only rows.** The all-pair artifact
-  carries a complete direct coverage record for each of the 197 emitting modules, and an explicit
-  `type-only` verdict **by name** for the other seven — `edge/types.ts`, `orchestrators/types.ts`,
+- **D-117-20 (AMENDED 2026-09-03 after plan 117-11 measured it): COV-05 reads as 190 complete
+  numeric records + 7 accepted D-116-01a shortfalls + 7 named type-only rows.** The original wording —
+  197 numeric records plus 7 type-only — did not account for the seven D-116-01a claimants and cannot
+  be satisfied on this tree. The all-pair artifact carries a complete numeric direct coverage record
+  for each of the 190 emitting modules that reach it, an `accepted-shortfall` verdict for the seven
+  D-116-01a claimants (`edge/args.ts`, `edge/completions/data.ts`, `edge/completions/provider.ts`,
+  `edge/handlers/marketplace/update.ts`, `edge/handlers/plugin/import.ts`,
+  `edge/handlers/plugin/pending.ts`, `edge/handlers/shared.ts` — ledger entries 15-19, 21 and 22,
+  each short by one branch, two of them also short on lines), and an explicit `type-only` verdict
+  **by name** for the other seven — `edge/types.ts`, `orchestrators/types.ts`,
   `orchestrators/import/types.ts`, and `bridges/{agents,commands,mcp,skills}/types.ts`. All 204 rows
-  are accounted for and none is silent. COV-05 is reported met in substance with the exception
-  enumerated. **Not** resolved by a pragma, and **not** by weakening the other 197.
+  are accounted for and none is silent. COV-05 is reported met in substance with the exceptions
+  enumerated. **Not** resolved by a pragma, **not** by a ledger-keyed verdict (which would be
+  D-116-01a's banned pragma wearing a different hat), and **not** by weakening the other 190. The
+  gate is deliberately unchanged and still refuses a shortfall. Evidence:
+  `117-ALL-PAIR-RESULT.ndjson` and `117-ALL-PAIR-RESULT.md`.
 
 - **D-117-21: D-117-07 is narrowed to what can actually fire.** Research measured that a barrel-proxy
   owner is already rejected today (as `wrong-import`) and that path-level ambiguity is unreachable
