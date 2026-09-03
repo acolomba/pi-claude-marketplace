@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 17
+open_count: 18
 waived_count: 0
 fixed_count: 5
-total_count: 22
-last_updated: 2026-09-03T11:00:38.508Z
+total_count: 23
+last_updated: 2026-09-03T18:15:25.451Z
 ---
 
 # Broken Windows Ledger
@@ -37,6 +37,7 @@ last_updated: 2026-09-03T11:00:38.508Z
 | 20 | 116 | deviation | extensions/pi-claude-marketplace/edge/register.ts | 18 | Two production comments assert a property the code does not have: register.ts:18-20 ("The cwd captured here is per-command-registration") and register.ts:104-106 ("Captured at registration time; threads through every keystroke's completion lookup via the closed-over resolver") both claim the working directory is read ONCE when the command is registered. It is not. process.cwd() is evaluated INSIDE the getArgumentCompletions arrow (register.ts:107-108), so it is read on every completion invocation and nothing is closed over. Measured by the 116-28 owner: registering under one hermetic root, moving the process into a second root, then driving the captured callback returns the SECOND root's marketplace names; Plant C, which hoists the read above pi.registerCommand into a registrationCwd binding, turns exactly that case RED. The plan's own must_haves inherited the comment's claim as a truth to prove, and its literal Plant 3 ("move the working-directory read from registration time into the completion callback") has NO TARGET because the read is already there. Behaviourally harmless today, because index.ts registers once per session and Pi does not chdir; it needs an operator decision on which of the two is authoritative. Not fixed: both production licences for this phase (116-06 flag-catalog.ts, 116-27 tools.ts) are spent and no remaining plan may edit a production file. | open |  | 2026-09-03T06:11:16.092Z |  |
 | 21 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/args.ts | 34 | Index-read guard at 34-37 is unreachable at runtime, so the 116-02 pair falls one branch short of complete direct coverage. COMPILER-FORCED: noUncheckedIndexedAccess (tsconfig.json:12) types every index read as T or undefined, so a loop whose bounds already guarantee the read must still carry a guard the loop can never enter. Removing it needs a non-null assertion, which is an error throughout extensions under strictTypeChecked. Pinned by identity in the 116-02 pair; original D-116-01a claimant | open |  | 2026-09-03T11:00:38.155Z |  |
 | 22 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/shared.ts | 53 | Cross-cutting flag scanner guard at 53-55 is unreachable at runtime, so the 116-26 pair falls one branch short of complete direct coverage. COMPILER-FORCED, same class as the args.ts claimant. Pinned by identity in the 116-26 pair; original D-116-01a claimant | open |  | 2026-09-03T11:00:38.508Z |  |
+| 23 | 117 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts | 476 | Doc comment on isHooksResolverNote still cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts; 117-04 moved that suite to tests/architecture/ and may not edit production | open |  | 2026-09-03T18:15:25.451Z |  |
 
 ````json
 [
@@ -302,6 +303,18 @@ last_updated: 2026-09-03T11:00:38.508Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-03T11:00:38.508Z",
+    "resolved_at": null
+  },
+  {
+    "id": 23,
+    "kind": "deviation",
+    "phase": "117",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
+    "line": 476,
+    "description": "Doc comment on isHooksResolverNote still cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts; 117-04 moved that suite to tests/architecture/ and may not edit production",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-03T18:15:25.451Z",
     "resolved_at": null
   }
 ]
