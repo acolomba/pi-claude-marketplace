@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-09-04T22:06:13.064Z"
+stopped_at: Completed 01-12-PLAN.md
+last_updated: "2026-09-04T22:12:00.469Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: b839ca76a2630238fcc32706eb25539f3535d332
+state_head: d8c5988ecb52580ee888a8a559a6e50ba8f05c0c
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 12 of 69
+Plan: 13 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -195,6 +195,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P09 | 15min | 2 tasks | 2 files |
 | Phase 01 P10 | 6min | 2 tasks | 1 files |
 | Phase 01 P11 | 8min | 1 tasks | 1 files |
+| Phase 01 P12 | 12min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -426,6 +427,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Keep unreachable async-rewake fallback and CR-01 element-validation policy claims as operator decisions.
 - [Phase 01]: Preserve hooks-dispatch corpus overlaps as explicit duplicate findings rather than deleting historical claim identities.
 - [Phase 01]: Close the hooks event-router duplicate-import claim as stale only after current replacement inspection and focused rerun.
+- [Phase 01]: Keep unquoted compound command-substitution semantics as an operator decision because upstream parity is not established by repository evidence.
+- [Phase 01]: Treat dead defensive compiler catches as an operator choice between deletion and explicitly accepted uncovered lines.
 
 ### Pending Todos
 
@@ -478,7 +481,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-11-PLAN.md
+**Stopped at:** Completed 01-12-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -487,7 +490,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T22:06:12.974Z
+Last session: 2026-09-04T22:12:00.374Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
