@@ -67,6 +67,33 @@ function packetBytes(body: Uint8Array): Buffer {
   ]);
 }
 
+/**
+ * Removes the `agent=` capability from a pkt-line body.
+ *
+ * isomorphic-git advertises its own package version in that capability, so a
+ * byte-exact body assertion would otherwise pin these tests to whichever
+ * version happens to be installed.
+ */
+function withoutAgentPacket(body: Buffer): Buffer {
+  const kept: Buffer[] = [];
+  let offset = 0;
+
+  while (offset + 4 <= body.length) {
+    const declared = Number.parseInt(body.toString("utf8", offset, offset + 4), 16);
+    // A flush ("0000") and a delimiter ("0001") declare no payload of their own.
+    const size = declared < 4 ? 4 : declared;
+    const line = body.subarray(offset, offset + size);
+
+    if (!line.toString("utf8", 4).startsWith("agent=")) {
+      kept.push(line);
+    }
+
+    offset += size;
+  }
+
+  return Buffer.concat(kept);
+}
+
 function advertisementBody(): Buffer {
   return Buffer.concat([
     packet("# service=git-upload-pack\n"),
@@ -95,7 +122,6 @@ function uploadPackAdvertisementBody(oid: string): Buffer {
 function expectedListRefsBody(): Buffer {
   return Buffer.concat([
     packet("command=ls-refs\n"),
-    packet("agent=git/isomorphic-git@1.41.8\n"),
     DELIM,
     packet("peel"),
     packet("symrefs"),
@@ -149,7 +175,7 @@ function installRemoteTransport(
       url: request.url,
       method: request.method,
       headers: { ...(request.headers ?? {}) },
-      body,
+      body: withoutAgentPacket(body),
     });
 
     const infoUrl = `${REMOTE_URL}/info/refs?service=git-upload-pack`;
