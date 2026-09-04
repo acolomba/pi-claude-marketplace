@@ -326,4 +326,60 @@ export default tseslint.config(
     files: ["eslint.config.js"],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // The repository gate scripts.
+    files: ["scripts/**/*.mjs"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: {
+        ...globals.node,
+      },
+    },
+    plugins: {
+      "@stylistic": stylistic,
+      "import-x": importX,
+      sonarjs,
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      "no-console": "warn",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-empty-function": ["error", { allow: ["arrowFunctions"] }],
+      "import-x/order": [
+        "error",
+        {
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            "parent",
+            "sibling",
+            "index",
+            "object",
+            "type",
+          ],
+          "newlines-between": "always",
+          alphabetize: { order: "asc", caseInsensitive: true },
+        },
+      ],
+      "@stylistic/padding-line-between-statements": [
+        "error",
+        { blankLine: "always", prev: "block-like", next: "*" },
+      ],
+      "prefer-object-has-own": "error",
+      "sonarjs/cognitive-complexity": ["error", 15],
+      "sonarjs/no-identical-functions": "error",
+      "sonarjs/no-inverted-boolean-check": "error",
+      "sonarjs/no-nested-conditional": "error",
+      "sonarjs/no-nested-template-literals": "error",
+      curly: ["error", "all"],
+      // `process.stdout.write` is how a command-line gate reports its verdict.
+      // The IL-2 ban on it is scoped to extensions/**, which these are not.
+      "no-restricted-syntax": "off",
+    },
+  },
 );

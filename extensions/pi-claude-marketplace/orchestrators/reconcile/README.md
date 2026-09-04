@@ -79,4 +79,4 @@ The planner and the apply path coordinate via one structural sentinel, plus one 
 
 ## Analog modules
 
-`orchestrators/import/execute.ts` is the closest cascade analog -- its `buildImportNotificationMarketplaces` is the byte-stable template the reconcile notify projection mirrors (same `MarketplaceBlock` shape, same `ensureMarketplaceBlock(byMp, scope, mpName)` factory, same `compareByNameThenScope` final sort). `orchestrators/marketplace/info.ts` is the closest read-only orchestrator analog -- its IL-2 single-notify discipline and NFR-5 no-network grep-gate annotation are the template `preview.ts` mirrors.
+`orchestrators/import/execute.ts` is the closest cascade analog -- its `buildImportNotificationMarketplaces` is the byte-stable template the reconcile notify projection mirrors (same accumulate-blocks-then-sort structure, same `compareByNameThenScope` final sort). `orchestrators/marketplace/info.ts` is the closest read-only orchestrator analog -- its IL-2 single-notify discipline and NFR-5 no-network grep-gate annotation are the template `preview.ts` mirrors.

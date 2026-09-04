@@ -59,9 +59,9 @@ const IDEMPOTENT_REASON_SET: ReadonlySet<Reason> = new Set(IDEMPOTENT_REASONS);
  * the reasons the producer is about to stamp. A skip whose reasons are ALL
  * idempotent no-ops (the resource already matches the requested state) is
  * benign -> `info`; any non-idempotent reason -- or a missing/empty reason set
- * that cannot be PROVEN benign -- is actionable -> `warning`. This is the
- * producer-local replacement for the former centralized benign-reason lookup:
- * the command stamps its own desired-vs-actual judgment at the emit site.
+ * that cannot be PROVEN benign -- is actionable -> `warning`. The judgment is
+ * producer-local: the command stamps its own desired-vs-actual verdict at the
+ * emit site.
  */
 export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "warning" {
   return reasons !== undefined &&
@@ -186,8 +186,8 @@ export type DegradeKind = "skill" | "command";
  * The closed map from a degraded component kind to its one failure-class token.
  * A `Record<DegradeKind, FailureReason>` (via `satisfies`) so a new kind added to
  * `DegradeKind` fails to compile here until it is given a token -- the single
- * exhaustiveness guard replacing the two hand-maintained per-kind `if` ladders
- * the install and reconcile surfaces used to keep in sync by convention.
+ * exhaustiveness guard that keeps the install and reconcile surfaces from
+ * drifting out of per-kind sync.
  */
 const MALFORMED_REASON_BY_KIND = {
   skill: "malformed skill",
@@ -266,5 +266,5 @@ type CommandPrivateReason =
 type _AssertNever<T extends never> = T;
 type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
 type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
-// fallow-ignore-next-line unused-type, private-type-leak -- OUT-08 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredReason` / `_ExtraReason` are the proof's own internals, meaningless to a caller.
+// fallow-ignore-next-line private-type-leak -- OUT-08 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredReason` / `_ExtraReason` are the proof's own internals, meaningless to a caller.
 export type _ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];

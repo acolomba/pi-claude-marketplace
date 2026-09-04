@@ -20,7 +20,13 @@
 //     first load (gate-closed scrub in migrate.ts) so this projection can
 //     capture it before the next load scrubs it.
 
-import { loadConfig, saveConfig, type ScopeConfig } from "./config-io.ts";
+import {
+  loadConfig,
+  saveConfig,
+  type MarketplaceConfigEntry,
+  type PluginConfigEntry,
+  type ScopeConfig,
+} from "./config-io.ts";
 
 import type { ScopedLocations } from "./locations.ts";
 import type { ExtensionState } from "./state-io.ts";
@@ -102,9 +108,13 @@ export type MigrateFirstRunResult =
  *
  * Return shape includes `schemaVersion: 1` per D-11 (self-documenting).
  */
-export function buildConfigFromState(state: ExtensionState): ScopeConfig {
-  const marketplaces: NonNullable<ScopeConfig["marketplaces"]> = {};
-  const plugins: NonNullable<ScopeConfig["plugins"]> = {};
+export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
+  readonly schemaVersion: 1;
+  readonly marketplaces: NonNullable<ScopeConfig["marketplaces"]>;
+  readonly plugins: NonNullable<ScopeConfig["plugins"]>;
+} {
+  const marketplaceEntries: Array<[string, MarketplaceConfigEntry]> = [];
+  const pluginEntries: Array<[string, PluginConfigEntry]> = [];
 
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
     // SP-7: the raw verbatim user input is the contract.
@@ -135,15 +145,17 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
       entry.autoupdate = false;
     }
 
-    marketplaces[mpName] = entry;
+    marketplaceEntries.push([mpName, entry]);
 
     // Iterate plugins UNCONDITIONALLY -- soft-degraded entries
     // (compatibility.installable === false) MUST appear in the projection.
     for (const pluginName of Object.keys(mp.plugins)) {
-      plugins[`${pluginName}@${mpName}`] = {};
+      pluginEntries.push([`${pluginName}@${mpName}`, {}]);
     }
   }
 
+  const marketplaces = Object.fromEntries(marketplaceEntries);
+  const plugins = Object.fromEntries(pluginEntries);
   return { schemaVersion: 1, marketplaces, plugins };
 }
 
@@ -182,8 +194,7 @@ export async function migrateFirstRunConfig(
   }
 
   const config = buildConfigFromState(state);
-  const entryCount =
-    Object.keys(config.marketplaces ?? {}).length + Object.keys(config.plugins ?? {}).length;
+  const entryCount = Object.keys(config.marketplaces).length + Object.keys(config.plugins).length;
   if (entryCount === 0) {
     // UAT-01: nothing to capture -- an empty-but-present
     // state.json must NOT spawn an empty claude-plugins.json in every scope

@@ -2,347 +2,430 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
   CONFIG_VALIDATOR,
-  type ConfigLoadResult,
+  type PluginConfigEntry,
   type ScopeConfig,
+  isDeclaredEnabled,
   loadConfig,
   saveConfig,
 } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
-/**
- * CFG-01 (typebox-validated load/save round-trip) + CFG-03 (absent/invalid/valid
- * trichotomy; 0-byte file is invalid, NOT valid-with-empty-defaults) + SPLIT-02
- * write-site containment (saveConfig refuses paths escaping scopeRoot).
- *
- * Mirrors `tests/persistence/state-io.test.ts` for scaffolding:
- * isolated tmp scopeRoot per test, retry-cleanup loop, no shared fixtures.
- *
- * A 0-byte `claude-plugins.json` MUST land in the
- * `invalid` arm, never `valid` with empty desired state. The renderer that
- * encoded the violation as GREEN at v1.10/v1.11 must not recur here.
- */
+void ({
+  schemaVersion: 1,
+  marketplaces: { tools: { source: "acme/tools", autoupdate: true } },
+  plugins: { "reviewer@tools": { enabled: false } },
+} satisfies ScopeConfig);
+// @ts-expect-error schema version 2 belongs to a successor file
+void ({ schemaVersion: 2 } satisfies ScopeConfig);
 
-async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-config-test-"));
-  const scopeRoot = path.join(dir, ".pi");
-  await mkdir(scopeRoot, { recursive: true });
-  // Cleanup retries with a short sleep -- mirrors state-io.test.ts to absorb
-  // any racing background persists; this seam has no fire-and-forget persist
-  // but the convention is cheap and forward-compatible.
-  const cleanup = async (): Promise<void> => {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        await rm(dir, { recursive: true, force: true });
-        return;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOTEMPTY" && attempt < 9) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 25));
-          continue;
-        }
+describe("isDeclaredEnabled", () => {
+  test("treats an absent flag as enabled", () => {
+    // arrange
+    const entry = {} satisfies PluginConfigEntry;
 
-        throw err;
-      }
+    // act
+    const enabled = isDeclaredEnabled(entry);
+
+    // assert
+    assert.strictEqual(enabled, true);
+  });
+
+  test("treats a true flag as enabled", () => {
+    // arrange
+    const entry = { enabled: true } as const;
+
+    // act
+    const enabled = isDeclaredEnabled(entry);
+
+    // assert
+    assert.strictEqual(enabled, true);
+  });
+
+  test("treats only a false flag as disabled", () => {
+    // arrange
+    const entry = { enabled: false } as const;
+
+    // act
+    const enabled = isDeclaredEnabled(entry);
+
+    // assert
+    assert.strictEqual(enabled, false);
+  });
+});
+
+describe("CONFIG_VALIDATOR", () => {
+  test("accepts a complete version-1 config", () => {
+    // arrange
+    const config = {
+      schemaVersion: 1,
+      marketplaces: { tools: { source: "acme/tools", autoupdate: true } },
+      plugins: { "reviewer@tools": { enabled: true } },
+    } as const;
+
+    // act
+    const accepted = CONFIG_VALIDATOR.Check(config);
+
+    // assert
+    assert.strictEqual(accepted, true);
+  });
+});
+
+describe("loadConfig", () => {
+  test("returns the complete absent result for a missing file", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-absent-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, { status: "absent" });
+  });
+
+  test("returns a complete ordinary version-1 config", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-valid-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(
+      filePath,
+      `{
+  "schemaVersion": 1,
+  "marketplaces": {
+    "tools": {
+      "source": "acme/tools",
+      "autoupdate": false
     }
-  };
-
-  return { scopeRoot, cleanup };
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// A. loadConfig trichotomy (CFG-03 / D-15)
-// ──────────────────────────────────────────────────────────────────────────
-
-test("CFG-03 loadConfig on missing file returns { status: 'absent' }", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    const got: ConfigLoadResult = await loadConfig(filePath);
-    assert.equal(got.status, "absent");
-  } finally {
-    await cleanup();
-  }
-});
-
-test("CFG-03: loadConfig on 0-byte file lands in 'invalid' (never 'valid' with empty config)", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, "");
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "invalid");
-    if (got.status === "invalid") {
-      assert.equal(got.filePath, filePath);
-      assert.match(got.error, /JSON parse|Unexpected end of JSON input/);
+  },
+  "plugins": {
+    "reviewer@tools": {
+      "enabled": true
     }
-  } finally {
-    await cleanup();
   }
-});
+}`,
+    );
+    const expectedConfig = {
+      schemaVersion: 1,
+      marketplaces: { tools: { source: "acme/tools", autoupdate: false } },
+      plugins: { "reviewer@tools": { enabled: true } },
+    };
 
-test("CFG-03 loadConfig on malformed JSON returns 'invalid' with JSON parse error", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "valid",
+      filePath,
+      config: expectedConfig,
+    });
+  });
+
+  test("keeps unknown top-level and entry fields visible", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-forward-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
     const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, "{not json");
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "invalid");
-    if (got.status === "invalid") {
-      assert.match(got.error, /JSON parse/);
+    await writeFile(
+      filePath,
+      `{
+  "futureRoot": "retained",
+  "marketplaces": {
+    "tools": {
+      "source": "acme/tools",
+      "futureMarketplace": 7
     }
-  } finally {
-    await cleanup();
-  }
-});
-
-test("CFG-03 loadConfig on JSON-valid but schema-invalid (marketplaces: string) returns 'invalid'", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, JSON.stringify({ marketplaces: "not an object" }));
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "invalid");
-    if (got.status === "invalid") {
-      assert.match(got.error, /schema/i);
+  },
+  "plugins": {
+    "reviewer@tools": {
+      "futurePlugin": true
     }
-  } finally {
-    await cleanup();
   }
-});
+}`,
+    );
+    const expectedConfig = {
+      futureRoot: "retained",
+      marketplaces: {
+        tools: { source: "acme/tools", futureMarketplace: 7 },
+      },
+      plugins: {
+        "reviewer@tools": { futurePlugin: true },
+      },
+    };
 
-test("D-11 loadConfig with schemaVersion: 2 lands in 'invalid' (only literal 1 accepted)", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, JSON.stringify({ schemaVersion: 2 }));
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "invalid");
-  } finally {
-    await cleanup();
-  }
-});
+    // act
+    const loadedConfig = await loadConfig(filePath);
 
-// ──────────────────────────────────────────────────────────────────────────
-// B. loadConfig valid cases (CFG-01)
-// ──────────────────────────────────────────────────────────────────────────
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "valid",
+      filePath,
+      config: expectedConfig,
+    });
+  });
 
-test("CFG-01 / D-05 loadConfig on minimal-valid {} returns 'valid' with undefined records", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
+  test("returns a complete valid result for an empty object", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-empty-object-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
     const filePath = path.join(scopeRoot, "claude-plugins.json");
     await writeFile(filePath, "{}");
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "valid");
-    if (got.status === "valid") {
-      assert.equal(got.filePath, filePath);
-      assert.equal(got.config.marketplaces, undefined);
-      assert.equal(got.config.plugins, undefined);
-    }
-  } finally {
-    await cleanup();
-  }
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "valid",
+      filePath,
+      config: {},
+    });
+  });
+
+  test("returns a complete parse failure for a zero-byte file", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-zero-byte-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(filePath, "");
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "invalid",
+      filePath,
+      error: "JSON parse failed: Unexpected end of JSON input",
+    });
+  });
+
+  test("returns a complete parse failure for malformed JSON", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-malformed-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(filePath, "{not json");
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "invalid",
+      filePath,
+      error:
+        "JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+    });
+  });
+
+  test("returns the root validator detail for null", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-null-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(filePath, "null");
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "invalid",
+      filePath,
+      error: "schema validation failed: <root>: must be object",
+    });
+  });
+
+  test("rejects the adjacent schema version with its complete detail", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-version-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(filePath, '{"schemaVersion":2}');
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "invalid",
+      filePath,
+      error: "schema validation failed: /schemaVersion: must be equal to constant",
+    });
+  });
+
+  test("uses the no-detail fallback when validation exposes no errors", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-no-detail-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(filePath, "null");
+    t.mock.method(CONFIG_VALIDATOR, "Errors", () => []);
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "invalid",
+      filePath,
+      error: "schema validation failed: (no detail available)",
+    });
+  });
+
+  test("returns the complete ordinary read failure", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-read-failure-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await mkdir(filePath);
+    // The runtime owns the errno wording and later majors append the offending path to it, so the
+    // expectation reads the sentence back from the same failing read. The failure's IDENTITY is not
+    // runtime-owned and is pinned here rather than left to the composition: the probe is the same
+    // read production makes, so it moves with whatever is on disk. A fixture that drifted to a
+    // missing file would report ENOENT on both sides and leave this case green against a different
+    // failure entirely.
+    const readFailure = await readFile(filePath, "utf8").catch((error: unknown) => {
+      const errno = error as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        { code: errno.code, syscall: errno.syscall },
+        { code: "EISDIR", syscall: "read" },
+      );
+      return errno.message;
+    });
+
+    // act
+    const loadedConfig = await loadConfig(filePath);
+
+    // assert
+    assert.deepStrictEqual(loadedConfig, {
+      status: "invalid",
+      filePath,
+      error: `read failed: ${readFailure}`,
+    });
+  });
 });
 
-test("CFG-01 / D-04 loadConfig on CONTEXT specifics example (autoupdate/enabled undefined at load)", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    const example = {
-      marketplaces: { "acme-tools": { source: "acme/claude-tools" } },
-      plugins: { "code-reviewer@acme-tools": {} },
-    };
-    await writeFile(filePath, JSON.stringify(example));
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "valid");
-    if (got.status === "valid") {
-      assert.equal(got.config.marketplaces?.["acme-tools"]?.source, "acme/claude-tools");
-      // D-04: defaults applied at consume time, NOT at load. autoupdate/enabled
-      // are absent in the file and remain `undefined` after load.
-      assert.equal(got.config.marketplaces?.["acme-tools"]?.autoupdate, undefined);
-      assert.equal(got.config.plugins?.["code-reviewer@acme-tools"]?.enabled, undefined);
-    }
-  } finally {
-    await cleanup();
-  }
-});
-
-test("D-09 loadConfig accepts unknown top-level keys (lenient)", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, JSON.stringify({ marketplaces: {}, typo: 1, future_field: "x" }));
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "valid");
-  } finally {
-    await cleanup();
-  }
-});
-
-test("D-09 loadConfig accepts unknown entry-level fields (lenient)", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    const withExtras = {
-      marketplaces: {
-        mp: { source: "a/b", futureField: "x", extraTag: true },
-      },
-      plugins: {
-        "p@mp": { enabled: true, futureField: 42 },
-      },
-    };
-    await writeFile(filePath, JSON.stringify(withExtras));
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "valid");
-  } finally {
-    await cleanup();
-  }
-});
-
-test("D-11 loadConfig accepts explicit schemaVersion: 1", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, JSON.stringify({ schemaVersion: 1, marketplaces: {} }));
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "valid");
-  } finally {
-    await cleanup();
-  }
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// C. saveConfig round-trip (CFG-01)
-// ──────────────────────────────────────────────────────────────────────────
-
-test("CFG-01 saveConfig + loadConfig round-trip preserves shape", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    const config: ScopeConfig = {
+describe("saveConfig", () => {
+  test("writes exact two-space JSON bytes inside the scope root", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-save-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "nested", "claude-plugins.json");
+    await mkdir(path.dirname(filePath), { recursive: true });
+    const config = {
       schemaVersion: 1,
       marketplaces: {
-        "acme-tools": { source: "acme/claude-tools", autoupdate: true },
+        tools: { source: "acme/tools", autoupdate: true },
       },
       plugins: {
-        "code-reviewer@acme-tools": { enabled: true },
+        "reviewer@tools": { enabled: false },
       },
-    };
-    await saveConfig(filePath, config, scopeRoot);
-    const onDisk = await readFile(filePath, "utf8");
-    // Byte-stable round-trip modulo trailing "\n" (atomicWriteJson appends one).
-    assert.equal(onDisk, JSON.stringify(config, null, 2) + "\n");
-
-    const reloaded = await loadConfig(filePath);
-    assert.equal(reloaded.status, "valid");
-    if (reloaded.status === "valid") {
-      assert.deepEqual(reloaded.config, config);
+    } satisfies ScopeConfig;
+    const expectedBytes = `{
+  "schemaVersion": 1,
+  "marketplaces": {
+    "tools": {
+      "source": "acme/tools",
+      "autoupdate": true
     }
-  } finally {
-    await cleanup();
+  },
+  "plugins": {
+    "reviewer@tools": {
+      "enabled": false
+    }
   }
-});
+}
+`;
 
-test("CFG-01 saveConfig refuses in-memory value that fails schema validation", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    // marketplaces value is a string, not a Record -- schema-invalid.
-    const bad = { marketplaces: "not an object" };
-    await assert.rejects(
-      () => saveConfig(filePath, bad as unknown as ScopeConfig, scopeRoot),
-      /saveConfig refused/,
+    // act
+    await saveConfig(filePath, config, scopeRoot);
+    const configBytes = await readFile(filePath, "utf8");
+
+    // assert
+    assert.strictEqual(configBytes, expectedBytes);
+  });
+
+  test("rejects invalid data before containment and preserves existing bytes", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "config-io-invalid-save-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const scopeRoot = path.join(directory, "scope");
+    const filePath = path.join(directory, "outside", "claude-plugins.json");
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, "unchanged invalid save\n");
+    const invalidConfig: ScopeConfig = {};
+    Object.assign(invalidConfig, { marketplaces: "not an object" });
+    let saveError: unknown;
+
+    // act
+    try {
+      await saveConfig(filePath, invalidConfig, scopeRoot);
+    } catch (error) {
+      saveError = error;
+    }
+
+    const configBytes = await readFile(filePath, "utf8");
+
+    // assert
+    assert.ok(saveError instanceof Error);
+    assert.deepStrictEqual(
+      { name: saveError.name, message: saveError.message },
+      {
+        name: "Error",
+        message:
+          "saveConfig refused: in-memory config failed schema validation: /marketplaces: must be object",
+      },
     );
-  } finally {
-    await cleanup();
-  }
-});
+    assert.strictEqual(configBytes, "unchanged invalid save\n");
+  });
 
-// ──────────────────────────────────────────────────────────────────────────
-// D. saveConfig NFR-10 containment (SPLIT-02 write-site)
-// ──────────────────────────────────────────────────────────────────────────
+  test("rejects an escaping path before replacement and preserves existing bytes", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "config-io-containment-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const scopeRoot = path.join(directory, "scope");
+    const filePath = path.join(directory, "outside", "claude-plugins.json");
+    await mkdir(scopeRoot, { recursive: true });
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, "unchanged containment\n");
+    const config = { schemaVersion: 1 } satisfies ScopeConfig;
+    const expectedError = {
+      name: "PathContainmentError",
+      message: `saveConfig escapes ${scopeRoot} (resolved: ${filePath}).`,
+      parent: scopeRoot,
+      child: filePath,
+    };
+    let containmentError: unknown;
 
-test("NFR-10 / SPLIT-02 saveConfig refuses filePath that escapes scopeRoot", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    // Construct an escapingPath that climbs above scopeRoot:
-    //   scopeRoot   = <tmpdir>/<scope>
-    //   escapingPath = <tmpdir>/<scope>/../elsewhere/claude-plugins.json
-    // path.relative(scopeRoot, escapingPath) starts with "..".
-    const escapingPath = path.join(scopeRoot, "..", "elsewhere", "claude-plugins.json");
-    const validConfig: ScopeConfig = { schemaVersion: 1, marketplaces: {} };
-    await assert.rejects(() => saveConfig(escapingPath, validConfig, scopeRoot), /escapes/);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("NFR-10 saveConfig succeeds when filePath is inside scopeRoot", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    const config: ScopeConfig = { schemaVersion: 1 };
-    await saveConfig(filePath, config, scopeRoot);
-    // Verify it actually wrote.
-    const raw = await readFile(filePath, "utf8");
-    assert.equal(raw, JSON.stringify(config, null, 2) + "\n");
-  } finally {
-    await cleanup();
-  }
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// CONFIG_VALIDATOR exported as a JIT-compiled typebox validator (D-07 mirror).
-// ──────────────────────────────────────────────────────────────────────────
-
-test("CONFIG_VALIDATOR exports a JIT-compiled validator (D-07 mirror)", () => {
-  assert.equal(typeof CONFIG_VALIDATOR.Check, "function");
-  assert.equal(CONFIG_VALIDATOR.Check({}), true);
-  assert.equal(CONFIG_VALIDATOR.Check({ schemaVersion: 1 }), true);
-  assert.equal(CONFIG_VALIDATOR.Check({ schemaVersion: 2 }), false);
-  assert.equal(CONFIG_VALIDATOR.Check({ marketplaces: "x" }), false);
-});
-
-test("T6 / PR #51 / CFG-03: loadConfig non-ENOENT read-failure arm (EISDIR) returns 'invalid' with a `read failed:` error -- portable via a DIRECTORY named claude-plugins.json", async () => {
-  // Pre-T6 the loadConfig non-ENOENT read-failure arm at
-  // config-io.ts:128-133 (the `catch` that returns `invalid` with a
-  // `read failed: <message>` error string for any non-ENOENT readFile
-  // error) had no test hit. The portable way to drive it without chmod
-  // tricks is to create a DIRECTORY at the target path: Node's readFile
-  // against a directory throws EISDIR with `.code === "EISDIR"`, which is
-  // non-ENOENT and so routes through the read-failure arm rather than the
-  // `absent` arm. (chmod 0o000 is not portable on root-owned CI tmpdirs;
-  // EISDIR works on every platform we ship to.)
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    // Directory at the target path -- readFile against it throws EISDIR
-    // (verified: Node 22.x consistently surfaces err.code === "EISDIR").
-    await mkdir(filePath, { recursive: true });
-    const got = await loadConfig(filePath);
-    assert.equal(got.status, "invalid");
-    if (got.status === "invalid") {
-      assert.equal(got.filePath, filePath);
-      // The read-failure arm prefixes the underlying message with
-      // `read failed:` -- this distinguishes it from the JSON-parse arm
-      // (`JSON parse failed:`) and the schema-validation arm
-      // (`schema validation failed:`).
-      assert.match(
-        got.error,
-        /^read failed: /,
-        `T6: expected the read-failure arm prefix; got error=${got.error}`,
-      );
-      // EISDIR is the underlying Node error -- pin it explicitly so a
-      // future refactor that swallows the cause stringification trips this
-      // test instead of silently flattening the diagnostic.
-      assert.match(
-        got.error,
-        /EISDIR/,
-        `T6: expected EISDIR in the cause text; got error=${got.error}`,
-      );
+    // act
+    try {
+      await saveConfig(filePath, config, scopeRoot);
+    } catch (error) {
+      containmentError = error;
     }
-  } finally {
-    await cleanup();
-  }
+
+    const configBytes = await readFile(filePath, "utf8");
+
+    // assert
+    assert.ok(containmentError instanceof Error);
+    assert.ok("parent" in containmentError);
+    assert.ok("child" in containmentError);
+    assert.deepStrictEqual(
+      {
+        name: containmentError.name,
+        message: containmentError.message,
+        parent: containmentError.parent,
+        child: containmentError.child,
+      },
+      expectedError,
+    );
+    assert.strictEqual(configBytes, "unchanged containment\n");
+  });
 });

@@ -1,13 +1,5 @@
-// PURL-04 / D-77-04 source-addressed cache-key tests.
-//
-// `pluginCloneKey(canonicalUrl, fullSha)` derives a fixed-length,
-// filesystem-safe key `<12hex(sha256(canonicalUrl))>-<sha12>`. The key is the
-// single dedup identity shared by the clone seam and install: two differently
-// named plugins pointing at the same canonical url+sha share one clone.
-
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
   canonicalCloneUrl,
@@ -15,80 +7,160 @@ import {
   pluginMirrorKey,
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 
-const URL_A = "https://github.com/o/r";
-const URL_B = "https://github.com/o/other";
-const SHA = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+describe("pluginCloneKey", () => {
+  test("returns the same clone key for identical URL and SHA inputs", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r";
+    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
 
-function expectedLeft(url: string): string {
-  return createHash("sha256").update(url).digest("hex").slice(0, 12);
-}
+    // act
+    const cloneKeys = [
+      pluginCloneKey(canonicalUrl, fullSha),
+      pluginCloneKey(canonicalUrl, fullSha),
+    ];
 
-test("PURL-04 pluginCloneKey returns <12hex>-<sha12> with the sha256(url) left half", () => {
-  const key = pluginCloneKey(URL_A, SHA);
-  assert.equal(key.length, 25);
-  assert.equal(key, `${expectedLeft(URL_A)}-${SHA.slice(0, 12)}`);
+    // assert
+    assert.deepStrictEqual(cloneKeys, ["97393e7e6b5a-a1b2c3d4e5f6", "97393e7e6b5a-a1b2c3d4e5f6"]);
+  });
+
+  test("changes the URL half after a one-character canonical URL change", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r";
+    const adjacentCanonicalUrl = "https://github.com/o/s";
+    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+
+    // act
+    const cloneKeys = {
+      canonical: pluginCloneKey(canonicalUrl, fullSha),
+      adjacent: pluginCloneKey(adjacentCanonicalUrl, fullSha),
+    };
+
+    // assert
+    assert.deepStrictEqual(cloneKeys, {
+      canonical: "97393e7e6b5a-a1b2c3d4e5f6",
+      adjacent: "360941761bef-a1b2c3d4e5f6",
+    });
+  });
+
+  test("changes the SHA half after a one-character resolved commit change", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r";
+    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+    const adjacentFullSha = "a1b2c3d4e5f7a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+
+    // act
+    const cloneKeys = {
+      canonical: pluginCloneKey(canonicalUrl, fullSha),
+      adjacent: pluginCloneKey(canonicalUrl, adjacentFullSha),
+    };
+
+    // assert
+    assert.deepStrictEqual(cloneKeys, {
+      canonical: "97393e7e6b5a-a1b2c3d4e5f6",
+      adjacent: "97393e7e6b5a-a1b2c3d4e5f7",
+    });
+  });
+
+  test("hashes the caller's URL verbatim", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r.git";
+    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+
+    // act
+    const cloneKey = pluginCloneKey(canonicalUrl, fullSha);
+
+    // assert
+    assert.strictEqual(cloneKey, "bc3fbd4dd8db-a1b2c3d4e5f6");
+  });
 });
 
-test("PURL-04 pluginCloneKey is deterministic across calls", () => {
-  assert.equal(pluginCloneKey(URL_A, SHA), pluginCloneKey(URL_A, SHA));
+describe("pluginMirrorKey", () => {
+  test("returns the same mirror key for an identical URL", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r";
+
+    // act
+    const mirrorKeys = [pluginMirrorKey(canonicalUrl), pluginMirrorKey(canonicalUrl)];
+
+    // assert
+    assert.deepStrictEqual(mirrorKeys, ["97393e7e6b5a", "97393e7e6b5a"]);
+  });
+
+  test("changes after a one-character canonical URL change", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r";
+    const adjacentCanonicalUrl = "https://github.com/o/s";
+
+    // act
+    const mirrorKeys = {
+      canonical: pluginMirrorKey(canonicalUrl),
+      adjacent: pluginMirrorKey(adjacentCanonicalUrl),
+    };
+
+    // assert
+    assert.deepStrictEqual(mirrorKeys, {
+      canonical: "97393e7e6b5a",
+      adjacent: "360941761bef",
+    });
+  });
+
+  test("hashes the caller's URL verbatim", () => {
+    // arrange
+    const canonicalUrl = "https://github.com/o/r.git";
+
+    // act
+    const mirrorKey = pluginMirrorKey(canonicalUrl);
+
+    // assert
+    assert.strictEqual(mirrorKey, "bc3fbd4dd8db");
+  });
 });
 
-test("PURL-04 / D-77-04 different canonical urls produce different left halves", () => {
-  const a = pluginCloneKey(URL_A, SHA);
-  const b = pluginCloneKey(URL_B, SHA);
-  assert.notEqual(a, b);
-  // Same url + same sha -> identical key (cross-shape dedup foundation).
-  assert.equal(pluginCloneKey(URL_A, SHA), pluginCloneKey(URL_A, SHA));
-});
+describe("canonicalCloneUrl", () => {
+  test("builds a GitHub repository URL", () => {
+    // arrange
+    const source = {
+      kind: "github",
+      raw: "o/r",
+      owner: "o",
+      repo: "r",
+    } as const;
 
-test("PURL-04 pluginCloneKey is filesystem-safe: no separators, matches the fixed shape", () => {
-  const key = pluginCloneKey(URL_A, SHA);
-  assert.doesNotMatch(key, /[/\\]/);
-  assert.match(key, /^[0-9a-f]{12}-[0-9a-f]{12}$/);
-});
+    // act
+    const cloneUrl = canonicalCloneUrl(source);
 
-test("MIRR-01 pluginMirrorKey returns a bare 12-hex key with no sha suffix", () => {
-  const key = pluginMirrorKey(URL_A);
-  assert.match(key, /^[0-9a-f]{12}$/);
-  assert.doesNotMatch(key, /-/);
-});
+    // assert
+    assert.strictEqual(cloneUrl, "https://github.com/o/r");
+  });
 
-test("MIRR-01 pluginMirrorKey equals the sha256(url) left half of pluginCloneKey", () => {
-  assert.equal(pluginMirrorKey(URL_A), expectedLeft(URL_A));
-  assert.ok(pluginCloneKey(URL_A, SHA).startsWith(pluginMirrorKey(URL_A) + "-"));
-});
-
-test("MIRR-01 pluginMirrorKey is deterministic and URL-sensitive", () => {
-  assert.equal(pluginMirrorKey(URL_A), pluginMirrorKey(URL_A));
-  assert.notEqual(pluginMirrorKey(URL_A), pluginMirrorKey(URL_B));
-});
-
-// D-77-06 / PURL-07: canonicalCloneUrl is the single url reconstruction both
-// key halves hash over -- the clone seam and the fs-only presence probe import
-// THIS function, so the exact strings below are the clone-key identity
-// contract per source kind.
-test("D-77-06 canonicalCloneUrl pins the canonical clone url for each git source kind", () => {
-  assert.equal(
-    canonicalCloneUrl({ kind: "github", raw: "o/r", owner: "o", repo: "r" }),
-    "https://github.com/o/r",
-  );
-  assert.equal(
-    canonicalCloneUrl({
+  test("returns a URL source without changing it", () => {
+    // arrange
+    const source = {
       kind: "url",
       raw: "https://gitlab.com/acme/mp.git",
       url: "https://gitlab.com/acme/mp",
-    }),
-    "https://gitlab.com/acme/mp",
-    "url kind returns the parse-time canonical source.url verbatim",
-  );
-  assert.equal(
-    canonicalCloneUrl({
+    } as const;
+
+    // act
+    const cloneUrl = canonicalCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://gitlab.com/acme/mp");
+  });
+
+  test("returns a git-subdir repository root without its plugin path", () => {
+    // arrange
+    const source = {
       kind: "git-subdir",
       raw: "https://example.com/mono",
       url: "https://example.com/mono",
       path: "plugins/p",
-    }),
-    "https://example.com/mono",
-    "git-subdir clone url is the repo root; the subdir path never participates",
-  );
+    } as const;
+
+    // act
+    const cloneUrl = canonicalCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://example.com/mono");
+  });
 });

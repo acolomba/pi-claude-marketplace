@@ -1,4 +1,3 @@
-import { assertNever } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 import {
@@ -224,8 +223,7 @@ function isManualRecoveryOutcome(
  *
  * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
  * takes the info -> warning raise, exactly as on the install, enable and backfill
- * arms. `reinstall` was the last ledger-driven verb whose outcome carried the
- * signal but whose row discarded it -- a bare `(reinstalled)` row over a record
+ * arms. Discarding the signal here would leave a bare `(reinstalled)` row that
  * `list` renders as degraded one command later. A clean reinstall composes no
  * reasons and stays info, so its row is byte-identical to before (NREG-01).
  *
@@ -344,9 +342,6 @@ export function outcomeToPluginMessage(
       };
       return failed;
     }
-
-    default:
-      return assertNever(outcome);
   }
 }
 
@@ -440,10 +435,10 @@ function narrowReason(note: string): ContentReason {
   }
 
   // ATTR-09 / D-47-B: last-resort fallback for a genuinely unrecognized note.
-  // The cascade could not read/reconcile the on-disk state for this row;
-  // `"unreadable"` is the truthful existing member. The former
-  // `"not in manifest"` LIED that the plugin was absent from the manifest for
-  // any cascade/IO failure whose typed dispatch (`reasonsFromTypedError`)
-  // missed. No new `REASONS` member is introduced (ContentReason only).
+  // The cascade could not read/reconcile the on-disk state for this row --
+  // that is not a manifest absence, so the truthful member is `"unreadable"`
+  // and not `"not in manifest"`, for any cascade/IO failure whose typed
+  // dispatch (`reasonsFromTypedError`) missed. No new `REASONS` member is
+  // introduced (ContentReason only).
   return "unreadable";
 }

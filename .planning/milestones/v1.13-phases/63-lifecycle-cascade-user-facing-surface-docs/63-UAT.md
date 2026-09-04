@@ -3,6 +3,7 @@ status: passed
 previous_status: "gaps_found"
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
+
   - 63-01-SUMMARY.md
   - 63-02-SUMMARY.md
   - 63-03-SUMMARY.md
@@ -14,8 +15,13 @@ source:
   - 63-09-SUMMARY.md
   - 63-10-SUMMARY.md
   - 63-11-SUMMARY.md
+
 started: 2026-06-16T18:23:24Z
 updated: 2026-06-17T10:00:00Z
+audit_acknowledged:
+  milestone: v1.19
+  at: 2026-09-04
+  gap_snapshot: "passed::scenarios=0"
 ---
 
 ## Current Test
@@ -25,6 +31,7 @@ updated: 2026-06-17T10:00:00Z
 ## Tests
 
 ### 1. Cold-start smoke against the pi-uat sandbox
+
 expected: |
   Kill any running pi process. From the repo root:
 
@@ -37,6 +44,7 @@ expected: |
 result: pass
 
 ### 2. `npm run check` regression sweep is GREEN
+
 expected: |
   From the repo root, run `npm run check`. Typecheck + ESLint + Prettier
   format check + unit tests + integration tests all pass. Baseline is
@@ -50,6 +58,7 @@ why_human: |
 result: pass
 
 ### 3. Install a hooks-declaring plugin produces (installed) row + on-disk hooks.json + reload hint
+
 expected: |
   In the Pi REPL launched by `scripts/pi.sh --home tmp/pi-uat`:
 
@@ -137,6 +146,7 @@ reported_pre_fix: |
 severity: blocker
 
 ### 4. `info <plugin>` for the installed hookify plugin renders a multi-line hooks: block in the alphabetical slot
+
 expected: |
   In the Pi REPL:
 
@@ -199,6 +209,7 @@ note: |
   recorded against test 3.
 
 ### 5. Uninstall hookify removes the on-disk hook config and surfaces (uninstalled) + reload hint
+
 expected: |
   In the Pi REPL:
 
@@ -237,6 +248,7 @@ note: |
   gap — root cause is the resolver flip recorded against test 3.
 
 ### 6. Symlink-escape inside a fake plugin's hooks/ is rejected at install with a notify error
+
 expected: |
   Hand-build a tiny fake plugin source that buries a symbolic link inside
   its `hooks/` subtree pointing OUTSIDE the plugin root, wire it up as a
@@ -297,6 +309,7 @@ note: |
   contract is satisfied.
 
 ### 7. `docs/hooks.md` is reader-discoverable from README and covers the support story without internal jargon
+
 expected: |
   Open the repository in a file viewer (or `less`):
 
@@ -325,6 +338,7 @@ note: |
   support. Recorded as a minor gap below (cosmetic / docs touch-up).
 
 ### 8. A hooks-only installed plugin renders `(installed)` -- not `(disabled)` -- on `/claude:plugin list`
+
 expected: |
   Test added during post-code-review UAT re-run on 2026-06-16. Pick a
   plugin from `claude-plugins-official` whose only declared artifacts are
@@ -440,6 +454,7 @@ note: |
   `(installed)`.
 
 ### 9. A hooks-only user-scope plugin's SessionStart handler fires at Pi launch
+
 expected: |
   Test added on 2026-06-17 after the test-8 runtime UAT closed and a
   follow-on runtime probe surfaced a second, root-cause-independent
@@ -530,6 +545,7 @@ evidence: |
   line.
 
 ### 10. SessionStart additionalContext injects into the agent turn's system prompt
+
 expected: |
   Test added on 2026-06-17 after the test-9 routing-table fix closed
   the dispatch-side gap. With the SessionStart handler now firing

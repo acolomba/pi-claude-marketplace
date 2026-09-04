@@ -431,27 +431,3 @@ function reenter(pi: ExtensionAPI, content: string, pluginId: string): void {
     hookDebugLog(`settle: sendMessage threw (${pluginId}): ${errorMessage(err)}`);
   }
 }
-
-/**
- * Read the cached last-assistant cell. The cell is module-private, so this is
- * the one way to observe it. NOT re-exported from `bridges/hooks/index.ts`:
- * the read surface is for this module's own tests, not for the bridge's
- * consumers.
- */
-export function settleCacheSnapshot(): AssistantMessage | undefined {
-  return cachedLastAssistant;
-}
-
-/**
- * Read the STOP-07 loop-protection cells as one snapshot. Bundled rather than
- * exposed one cell at a time because they are only meaningful together -- a
- * reader deciding whether the cap fired needs all three. NOT re-exported from
- * `bridges/hooks/index.ts`.
- */
-export function loopProtectionState(): {
-  readonly stopHookActive: boolean;
-  readonly consecutiveBlockCount: number;
-  readonly capNotifiedThisSession: boolean;
-} {
-  return { stopHookActive, consecutiveBlockCount, capNotifiedThisSession };
-}

@@ -13,9 +13,7 @@
 // exists -- the fixture is NOT failing because of a missing file; it's
 // failing because edge/ may not import from bridges/ per D-11. The canary
 // zone's `from` is the whole `bridges/` tree, so any real file under it
-// serves; this used to point at an aggregate `bridges/index.ts` barrel that
-// was removed because its `export *` lines blinded fallow's unused-export
-// detection across all five per-kind barrels.
+// serves.
 
 import "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 

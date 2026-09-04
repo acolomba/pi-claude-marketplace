@@ -5,8 +5,9 @@
 //
 // WR-01: async-rewake re-dispatches the SAME handler declaration the sync lane
 // spawned, so the two lanes' environments must be identical by construction.
-// They were previously two copies of this builder that a comment asked future
-// readers to keep in sync by hand; this leaf makes the agreement structural.
+// This leaf is the single builder both lanes call, so the agreement is
+// structural rather than resting on a comment asking two copies to be kept
+// in sync by hand.
 
 import path from "node:path";
 

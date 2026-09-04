@@ -68,16 +68,17 @@ interface TestCtx {
 
 function makeCtx(cwd: string): TestCtx {
   const notifications: NotifyRecord[] = [];
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+  const pi = {
+    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
+  } as ExtensionAPI;
   const ctx = {
     cwd,
-    pi,
     ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+      notify(message: string, severity?: string): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
-  } as unknown as ExtensionContext;
+  } as ExtensionContext;
   return { ctx, pi, notifications };
 }
 
@@ -169,18 +170,20 @@ function captureLastSuccess(notifications: readonly NotifyRecord[]): string {
 // ---------------------------------------------------------------------------
 
 test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope marketplace folds under the user-scope marketplace header on list", async () => {
+  // arrange
   const env = await setupHermeticEnv("pi-cm-fold-adopt-p1-");
   try {
-    // Seed a path-source marketplace fixture inside the temp root.
     const officialRoot = await seedPathMarketplaceFixture(
       env.home,
       "official",
       "official",
       "1.0.0",
     );
-
-    // Step 1: addMarketplace --scope user using the path source.
     const userAdd = makeCtx(env.cwd);
+    const installCtx = makeCtx(env.cwd);
+    const listCtx = makeCtx(env.cwd);
+
+    // act
     await addMarketplace({
       ctx: userAdd.ctx,
       pi: userAdd.pi,
@@ -188,14 +191,6 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
       cwd: env.cwd,
       rawSource: officialRoot,
     });
-    const userAddOk = userAdd.notifications.some(
-      (n) => n.severity === undefined && /● official \[user\]/.exec(n.message) !== null,
-    );
-    assert.ok(userAddOk, `marketplace add (user) failed: ${JSON.stringify(userAdd.notifications)}`);
-
-    // Step 2: installPlugin --scope project alpha@official.
-    // CMP-3 cross-scope: project install reads the user-scope marketplace.
-    const installCtx = makeCtx(env.cwd);
     await installPlugin({
       ctx: installCtx.ctx,
       pi: installCtx.pi,
@@ -204,34 +199,29 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
       marketplace: "official",
       plugin: "alpha",
     });
+    await listPlugins({ ctx: listCtx.ctx, pi: listCtx.pi, cwd: env.cwd });
+    const output = captureLastSuccess(listCtx.notifications);
+
+    // assert
+    const userAddOk = userAdd.notifications.some(
+      (notification) =>
+        notification.severity === undefined &&
+        /● official \[user\]/.exec(notification.message) !== null,
+    );
+    assert.ok(userAddOk, `marketplace add (user) failed: ${JSON.stringify(userAdd.notifications)}`);
     const installOk = installCtx.notifications.some(
-      (n) =>
-        n.severity === undefined &&
-        n.message.includes("● official [project]") &&
-        n.message.includes("  ● alpha v1.0.0 (installed)"),
+      (notification) =>
+        notification.severity === undefined &&
+        notification.message.includes("● official [project]") &&
+        notification.message.includes("  ● alpha v1.0.0 (installed)"),
     );
     assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
-
-    // Step 3: listPlugins (bare; both scopes walked).
-    const listCtx = makeCtx(env.cwd);
-    await listPlugins({ ctx: listCtx.ctx, pi: listCtx.pi, cwd: env.cwd });
-    const out = captureLastSuccess(listCtx.notifications);
-
-    // CMC-21 / D-13-17 invariant: project-scope `alpha` plugin (an orphan
-    // from the project-scope perspective -- no independent project-scope
-    // `official` marketplace exists; the project state only carries the
-    // CLONED record from install) folds under the user-scope `official`
-    // header. D-13-18: the plugin row's [<scope>] bracket is [project]
-    // (the ACTUAL install scope).
-    assert.match(out, /● official \[user\]/);
-    assert.match(out, /● alpha \[project\] v1\.0\.0 \(installed\)/);
-    // The project-scope marketplace block is NOT emitted separately
-    // (the project record is a clone of the user record; the renderer
-    // suppresses the duplicate header per D-13-19).
+    assert.match(output, /● official \[user\]/);
+    assert.match(output, /● alpha \[project\] v1\.0\.0 \(installed\)/);
     assert.equal(
-      out.includes("● official [project]"),
+      output.includes("● official [project]"),
       false,
-      `expected no project-scope official header in cloned-state phase: ${out}`,
+      `expected no project-scope official header in cloned-state phase: ${output}`,
     );
   } finally {
     await env.cleanup();
@@ -243,6 +233,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
 // ---------------------------------------------------------------------------
 
 test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is added (different source), the renderer surfaces both blocks; no state mutation in marketplace-add required for adoption", async () => {
+  // arrange
   const env = await setupHermeticEnv("pi-cm-fold-adopt-p2-");
   try {
     // Seed two distinct marketplace fixtures with DIFFERENT names so
@@ -269,72 +260,60 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
       "official-project",
       "0.9.0",
     );
+    const userAdd = makeCtx(env.cwd);
+    const installCtx = makeCtx(env.cwd);
+    const beforeListCtx = makeCtx(env.cwd);
+    const projectAdd = makeCtx(env.cwd);
+    const afterListCtx = makeCtx(env.cwd);
 
-    // Step 2a: user-scope addMarketplace + project-scope cross-scope install.
-    {
-      const userAdd = makeCtx(env.cwd);
-      await addMarketplace({
-        ctx: userAdd.ctx,
-        pi: userAdd.pi,
-        scope: "user",
-        cwd: env.cwd,
-        rawSource: userOfficialRoot,
-      });
-    }
+    // act
+    await addMarketplace({
+      ctx: userAdd.ctx,
+      pi: userAdd.pi,
+      scope: "user",
+      cwd: env.cwd,
+      rawSource: userOfficialRoot,
+    });
+    await installPlugin({
+      ctx: installCtx.ctx,
+      pi: installCtx.pi,
+      scope: "project",
+      cwd: env.cwd,
+      marketplace: "official-user",
+      plugin: "alpha",
+    });
+    await listPlugins({ ctx: beforeListCtx.ctx, pi: beforeListCtx.pi, cwd: env.cwd });
+    const beforeOutput = captureLastSuccess(beforeListCtx.notifications);
+    await addMarketplace({
+      ctx: projectAdd.ctx,
+      pi: projectAdd.pi,
+      scope: "project",
+      cwd: env.cwd,
+      rawSource: projectOfficialRoot,
+    });
+    await listPlugins({ ctx: afterListCtx.ctx, pi: afterListCtx.pi, cwd: env.cwd });
+    const afterOutput = captureLastSuccess(afterListCtx.notifications);
 
-    {
-      const installCtx = makeCtx(env.cwd);
-      await installPlugin({
-        ctx: installCtx.ctx,
-        pi: installCtx.pi,
-        scope: "project",
-        cwd: env.cwd,
-        marketplace: "official-user",
-        plugin: "alpha",
-      });
-      const installOk = installCtx.notifications.some(
-        (n) => n.severity === undefined && /\(installed\)/.exec(n.message) !== null,
-      );
-      assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
-    }
+    // assert
+    const installOk = installCtx.notifications.some(
+      (notification) =>
+        notification.severity === undefined && /\(installed\)/.exec(notification.message) !== null,
+    );
+    assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
+    assert.match(beforeOutput, /● official-user \[user\]/);
+    assert.match(beforeOutput, /● alpha \[project\] v1\.0\.0 \(installed\)/);
+    assert.equal(beforeOutput.includes("● official-user [project]"), false, beforeOutput);
+    const addOk = projectAdd.notifications.some(
+      (notification) =>
+        notification.severity === undefined &&
+        /● official-project \[project\] \(added\)/.exec(notification.message) !== null,
+    );
+    assert.ok(
+      addOk,
+      `independent project-scope marketplace add failed: ${JSON.stringify(projectAdd.notifications)}`,
+    );
 
-    // Step 2a sanity: alpha folds under official-user [user]; no
-    // independent project-scope official-user header is emitted (the
-    // project state carries the cloned record).
-    {
-      const listCtx = makeCtx(env.cwd);
-      await listPlugins({ ctx: listCtx.ctx, pi: listCtx.pi, cwd: env.cwd });
-      const out = captureLastSuccess(listCtx.notifications);
-      assert.match(out, /● official-user \[user\]/);
-      assert.match(out, /● alpha \[project\] v1\.0\.0 \(installed\)/);
-      assert.equal(out.includes("● official-user [project]"), false, out);
-    }
-
-    // Step 2b: add an INDEPENDENT project-scope marketplace with a
-    // different name + different source. ZERO state mutation in
-    // marketplace-add is required for adoption (D-13-17): the next list
-    // render picks up the new record.
-    {
-      const projectAdd = makeCtx(env.cwd);
-      await addMarketplace({
-        ctx: projectAdd.ctx,
-        pi: projectAdd.pi,
-        scope: "project",
-        cwd: env.cwd,
-        rawSource: projectOfficialRoot,
-      });
-      const addOk = projectAdd.notifications.some(
-        (n) =>
-          n.severity === undefined &&
-          /● official-project \[project\] \(added\)/.exec(n.message) !== null,
-      );
-      assert.ok(
-        addOk,
-        `independent project-scope marketplace add failed: ${JSON.stringify(projectAdd.notifications)}`,
-      );
-    }
-
-    // Step 2c: re-render list. The new project-scope `official-project`
+    // The new project-scope `official-project`
     // marketplace shows as its own block; because its manifest declares
     // `alpha` AND alpha is not installed in project scope under THIS
     // marketplace (it is installed under the cloned `official-user`
@@ -347,30 +326,15 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     // Catalog reference: lines 174-184 ("single marketplace, mixed plugin
     // statuses") -- (available) rows OMIT the [<scope>] bracket per
     // MSG-PL-6 carve-out.
-    {
-      const listCtx = makeCtx(env.cwd);
-      await listPlugins({ ctx: listCtx.ctx, pi: listCtx.pi, cwd: env.cwd });
-      const out = captureLastSuccess(listCtx.notifications);
-      // Independent project-scope block (path source -> no autoupdate marker).
-      assert.match(out, /● official-project \[project\]/);
-      // alpha appears as (available) under the new project-scope block
-      // because the manifest declares it but it's not installed in this
-      // marketplace's plugin set yet.
-      assert.match(out, /● official-project \[project\]\n {2}○ alpha v0\.9\.0 \(available\)/);
-      // Cross-scope cloned `official-user` block still folds the
-      // project-installed alpha under its user-scope header
-      // (D-13-18: per-row [project] reflects ACTUAL install scope).
-      assert.match(out, /● official-user \[user\]/);
-      assert.match(out, /● alpha \[project\] v1\.0\.0 \(installed\)/);
-      // The duplicate (available) row under official-user [user] is
-      // suppressed by the exclude-from-available rule (the folded row
-      // is the canonical one for this name).
-      assert.equal(
-        /● official-user \[user\][\s\S]*○ alpha v1\.0\.0 \(available\)/.test(out),
-        false,
-        `unexpected duplicate available row under official-user [user]: ${out}`,
-      );
-    }
+    assert.match(afterOutput, /● official-project \[project\]/);
+    assert.match(afterOutput, /● official-project \[project\]\n {2}○ alpha v0\.9\.0 \(available\)/);
+    assert.match(afterOutput, /● official-user \[user\]/);
+    assert.match(afterOutput, /● alpha \[project\] v1\.0\.0 \(installed\)/);
+    assert.equal(
+      /● official-user \[user\][\s\S]*○ alpha v1\.0\.0 \(available\)/.test(afterOutput),
+      false,
+      `unexpected duplicate available row under official-user [user]: ${afterOutput}`,
+    );
   } finally {
     await env.cleanup();
   }

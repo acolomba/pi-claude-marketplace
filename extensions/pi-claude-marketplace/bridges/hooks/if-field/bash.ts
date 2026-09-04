@@ -419,7 +419,7 @@ export function parseBashSubcommands(command: string): ParseResult {
     }
 
     const stripped = recursed.map((s) => stripWrappers(s)).filter((s) => s.length > 0);
-    return { ok: true, subcommands: stripped, hasInterpolation };
+    return { ok: true, subcommands: [...new Set(stripped)], hasInterpolation };
   } catch (err) {
     return { ok: false, reason: errorMessage(err) };
   }

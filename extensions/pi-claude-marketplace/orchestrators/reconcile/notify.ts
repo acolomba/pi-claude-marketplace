@@ -40,7 +40,6 @@
 // advisory takes precedence.
 
 import { resolveStrict } from "../../domain/resolver.ts";
-import { assertNever } from "../../shared/errors.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -73,16 +72,16 @@ import type { Scope } from "../../shared/types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /
- * applied-cascade projections actually assign. The pending list no longer
- * assigns any marketplace-level status (add is immediate -> dropped; remove is
+ * applied-cascade projections actually assign. The pending list never assigns
+ * any marketplace-level status (add is immediate -> dropped; remove is
  * surfaced as per-plugin `will uninstall` child rows under a bare header --
  * WILL-01 / WILL-03 / D-65.1-02 / D-65.1-03), so only the apply-cascade
  * transition tokens (`"added"` / `"removed"` / `"failed"`) remain. The
  * `"updated"` / `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"`
  * members of `MarketplaceStatus` belong to other surfaces (autoupdate flip,
- * marketplace update); the reconcile projection never sets them, so the
- * previous defensive runtime throw at `blockToMarketplaceMessage` is replaced
- * by this type narrowing.
+ * marketplace update); the reconcile projection never sets them, so this type
+ * narrowing enforces the closed set at compile time rather than a runtime
+ * throw at `blockToMarketplaceMessage`.
  */
 type ReconcileBlockStatus = Extract<MarketplaceStatus, "added" | "removed" | "failed">;
 
@@ -140,6 +139,17 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
   // deleted; `MarketplaceBlock.status` is now narrowed to
   // `ReconcileBlockStatus` so any attempt to assign one of those tokens here
   // is a compile error caught at edit time instead of a runtime signal.
+  //
+  // D-05: the list arm is an early return rather than a `case undefined:` so the
+  // switch below runs over the three-token closed union alone. TypeScript proves
+  // THAT switch exhaustive (it does not credit a `case undefined:` arm towards
+  // exhaustiveness), so a fourth `ReconcileBlockStatus` member fails to compile
+  // here -- which is what makes a defensive `default` arm unreachable dead code
+  // rather than the safety net.
+  if (block.status === undefined) {
+    return { name, scope, plugins };
+  }
+
   switch (block.status) {
     case "added":
       // RECON-04: realized apply-time transition token.
@@ -157,10 +167,6 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
         plugins,
         ...(block.reasons !== undefined && { reasons: block.reasons }),
       };
-    case undefined:
-      return { name, scope, plugins };
-    default:
-      assertNever(block.status);
   }
 }
 
@@ -639,6 +645,13 @@ function backfilledRowFromOutcome(
 /**
  * Apply a MARKETPLACE-subject outcome: the block header's own status and
  * reasons, plus the two arms that also push a synthetic plugin child.
+ *
+ * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
+ * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
+ * declared return type forces a value on every path, so this same switch in a
+ * `void` function would let a newly-added `PerEntryOutcome` kind fall through
+ * and silently drop the row. Answering with the mutated block makes that
+ * TS2366 at the edit site. The caller discards the value.
  */
 function applyMarketplaceOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
@@ -655,26 +668,26 @@ function applyMarketplaceOutcomeToBlock(
         | "invalid-block";
     }
   >,
-): void {
+): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "mp-added":
       block.status = "added";
-      return;
+      return block;
     case "mp-removed":
       block.status = "removed";
-      return;
+      return block;
     case "mp-add-failed":
     case "mp-remove-failed":
       block.status = "failed";
       block.reasons = reasonAsContent(outcome.reason);
-      return;
+      return block;
     case "mp-remove-partial":
       // I1 / PR #51: bare `(failed)` mp header -- the per-plugin children
       // carry the granular reasons (mirrors the standalone CMC-31 PARTIAL
       // byte form). Do NOT set block.reasons; the renderer's MpFailed arm
       // collapses to `⊘ <name> [<scope>] (failed)` when reasons is absent.
       block.status = "failed";
-      return;
+      return block;
     case "source-mismatch":
       block.status = "failed";
       if (outcome.cause === "dangling-reference") {
@@ -694,7 +707,7 @@ function applyMarketplaceOutcomeToBlock(
         block.reasons = ["source mismatch"];
       }
 
-      return;
+      return block;
     case "invalid-block":
       // CFG-03 row: the row subject IS the file basename (T-55-02-01).
       // The block is keyed by (scope, basename) so multiple invalid files in
@@ -722,16 +735,20 @@ function applyMarketplaceOutcomeToBlock(
         });
       }
 
-      return;
-    default:
-      // The caller's own `assertNever` only proves the OUTER union is fully
-      // routed; without this arm a newly-added marketplace-subject kind would
-      // be widened into the `Extract<>` above and silently no-op the row.
-      assertNever(outcome);
+      return block;
   }
 }
 
-/** Apply a PLUGIN-subject outcome: one row pushed onto the block's children. */
+/**
+ * Apply a PLUGIN-subject outcome: one row pushed onto the block's children.
+ *
+ * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
+ * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
+ * declared return type forces a value on every path, so this same switch in a
+ * `void` function would let a newly-added `PerEntryOutcome` kind fall through
+ * and silently drop the row. Answering with the mutated block makes that
+ * TS2366 at the edit site. The caller discards the value.
+ */
 function applyPluginOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: Extract<
@@ -749,13 +766,13 @@ function applyPluginOutcomeToBlock(
         | "plugin-disable-failed";
     }
   >,
-): void {
+): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "plugin-installed":
       // D-03/D-06 realized install row; WARN-01 / D-86-03 raises it to warning
       // with the failure-class token when the outcome carries degradedKinds.
       block.plugins.push(installedRowFromOutcome(outcome));
-      return;
+      return block;
     case "plugin-backfilled":
       // BFILL-01 / D-68-04: a load-time backfill re-materialized the plugin in
       // place. The re-resolved `installable` selects the row: a fully promoted
@@ -764,7 +781,7 @@ function applyPluginOutcomeToBlock(
       // degraded) renders a `partially-installed` row. Both fold into THIS single
       // applied cascade -- no second notify() (RECON-04).
       block.plugins.push(backfilledRowFromOutcome(outcome));
-      return;
+      return block;
     case "plugin-uninstalled":
       block.plugins.push({
         status: "uninstalled",
@@ -774,7 +791,7 @@ function applyPluginOutcomeToBlock(
         severity: "info",
         needsReload: true,
       });
-      return;
+      return block;
     case "plugin-enabled":
       // Reuse existing transition tokens (no new closed-set literal). The
       // enable branch re-materializes via runInstallLedger so the realized
@@ -801,7 +818,7 @@ function applyPluginOutcomeToBlock(
       // `warning` -- WARN-01 parity with the install row for the same ledger
       // run. Both are composed by `enabledRowFromOutcome`.
       block.plugins.push(enabledRowFromOutcome(outcome));
-      return;
+      return block;
     case "plugin-disabled":
       block.plugins.push({
         status: "disabled",
@@ -818,7 +835,7 @@ function applyPluginOutcomeToBlock(
         severity: "info",
         needsReload: true,
       });
-      return;
+      return block;
     case "plugin-install-failed":
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
@@ -831,19 +848,25 @@ function applyPluginOutcomeToBlock(
         severity: "error",
         needsReload: false,
       });
-      return;
-    default:
-      // The caller's own `assertNever` only proves the OUTER union is fully
-      // routed; without this arm a newly-added plugin-subject kind would be
-      // widened into the `Extract<>` above and silently drop the row.
-      assertNever(outcome);
+      return block;
   }
 }
 
+/**
+ * Route one per-entry outcome to the marketplace-subject or plugin-subject
+ * applier.
+ *
+ * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
+ * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
+ * declared return type forces a value on every path, so this same switch in a
+ * `void` function would let a newly-added `PerEntryOutcome` kind fall through
+ * and silently drop the row. Answering with the mutated block makes that
+ * TS2366 at the edit site. The caller discards the value.
+ */
 function applyOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: PerEntryOutcome,
-): void {
+): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "mp-added":
     case "mp-removed":
@@ -852,8 +875,7 @@ function applyOutcomeToBlock(
     case "mp-remove-partial":
     case "source-mismatch":
     case "invalid-block":
-      applyMarketplaceOutcomeToBlock(block, outcome);
-      return;
+      return applyMarketplaceOutcomeToBlock(block, outcome);
     case "plugin-installed":
     case "plugin-backfilled":
     case "plugin-uninstalled":
@@ -863,10 +885,7 @@ function applyOutcomeToBlock(
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
     case "plugin-disable-failed":
-      applyPluginOutcomeToBlock(block, outcome);
-      return;
-    default:
-      assertNever(outcome);
+      return applyPluginOutcomeToBlock(block, outcome);
   }
 }
 

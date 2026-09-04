@@ -13,11 +13,8 @@
 // oriented, NOT byte-equality on notify output).
 
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
-import {
-  makeNotifyCollectingCtx,
-  makeStubPi,
-  type NotificationRecord,
-} from "../helpers/ipc-child.ts";
+
+import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
 
 interface StartMessage {
   readonly cwd: string;

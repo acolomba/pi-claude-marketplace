@@ -6,9 +6,11 @@
 /.pi/git/
 /.pi/npm/
 /.pi/sessions/
+/.pi-lens
 
 # gsd
 /.gsd
+/.planning/research/.cache/
 
 # claude
 /.claude/.gsd-profile

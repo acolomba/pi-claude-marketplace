@@ -1,350 +1,348 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test, type TestContext } from "node:test";
 
-import * as git from "isomorphic-git";
-
-import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { garbageCollectPluginClones } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
-import { probeManifestEntry } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-const SHA_A = "1111111111111111111111111111111111111111";
-const SHA_B = "2222222222222222222222222222222222222222";
+const SHA_ALPHA = "1111111111111111111111111111111111111111";
+const SHA_BETA = "2222222222222222222222222222222222222222";
 
-type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type PluginRecord = MarketplaceRecord["plugins"][string];
 
-/** Build a ScopedLocations pointing at a per-test tmpdir. */
-async function freshLocations(): Promise<ScopedLocations> {
+async function freshLocations(t: TestContext): Promise<ScopedLocations> {
   const cwd = await mkdtemp(path.join(tmpdir(), "clone-gc-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   return locations;
 }
 
-/**
- * Build a git-source install record. When `key` is given, resolvedSource is
- * `<pluginClonesDir>/<key>` (optionally with a trailing subdir) and resolvedSha
- * is set, so the record contributes a live clone key. When `key` is undefined,
- * the record models a path/github-name plugin: no resolvedSha, resolvedSource
- * points outside the clone cache.
- */
-function makeRecord(
-  locations: ScopedLocations,
-  opts: { key?: string; subdir?: string; sha?: string } = {},
-): PluginRecord {
-  const resolvedSource =
-    opts.key === undefined
-      ? "/some/local/path"
-      : opts.subdir === undefined
-        ? path.join(locations.pluginClonesDir, opts.key)
-        : path.join(locations.pluginClonesDir, opts.key, opts.subdir);
-
-  const record: PluginRecord = {
+function pluginRecord({
+  resolvedSource,
+  resolvedSha,
+}: {
+  readonly resolvedSource: string;
+  readonly resolvedSha?: string;
+}): PluginRecord {
+  return {
     version: "0.0.1",
     resolvedSource,
+    ...(resolvedSha === undefined ? {} : { resolvedSha }),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
-
-  if (opts.key !== undefined) {
-    record.resolvedSha = opts.sha ?? SHA_A;
-  }
-
-  return record;
 }
 
-/** Persist a state.json with the given plugin records under one marketplace. */
+function marketplace(
+  locations: ScopedLocations,
+  name: string,
+  plugins: Record<string, PluginRecord>,
+): MarketplaceRecord {
+  return {
+    name,
+    scope: locations.scope,
+    source: { kind: "path", raw: `./${name}` },
+    addedFromCwd: path.dirname(locations.scopeRoot),
+    manifestPath: path.join(locations.extensionRoot, `${name}.json`),
+    marketplaceRoot: path.join(locations.extensionRoot, name),
+    plugins,
+  };
+}
+
 async function seedState(
   locations: ScopedLocations,
-  plugins: Record<string, PluginRecord>,
+  marketplaces: Record<string, MarketplaceRecord>,
 ): Promise<void> {
-  const state: ExtensionState = {
-    schemaVersion: 2,
-    marketplaces: {
-      mp: {
-        name: "mp",
-        scope: locations.scope,
-        source: { kind: "path", raw: "./src" },
-        addedFromCwd: "/tmp",
-        manifestPath: "/tmp/marketplace.json",
-        marketplaceRoot: "/tmp",
-        plugins,
-      },
-    },
-  };
-  await saveState(locations.extensionRoot, state);
+  await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces });
 }
 
-/** Create on-disk plugin-clones/<key> dirs so GC has something to sweep. */
-async function seedCloneDirs(locations: ScopedLocations, keys: string[]): Promise<void> {
+async function seedCloneDirectories(
+  locations: ScopedLocations,
+  keys: readonly string[],
+): Promise<void> {
   for (const key of keys) {
     await mkdir(path.join(locations.pluginClonesDir, key), { recursive: true });
+    await writeFile(path.join(locations.pluginClonesDir, key, "sentinel.txt"), key);
   }
 }
 
-async function listCloneKeys(locations: ScopedLocations): Promise<string[]> {
+async function cloneEntries(locations: ScopedLocations): Promise<string[]> {
   try {
-    const entries = await readdir(locations.pluginClonesDir);
-    return entries.sort();
-  } catch {
-    return [];
-  }
-}
-
-void test("derives live keys and deletes only unreferenced clone dirs", async () => {
-  const locations = await freshLocations();
-  await seedState(locations, {
-    alpha: makeRecord(locations, { key: "keyA" }),
-    // keyB record references a subdirectory under the clone (git-subdir plugin).
-    beta: makeRecord(locations, { key: "keyB", subdir: "plugins/beta", sha: SHA_B }),
-  });
-  await seedCloneDirs(locations, ["keyA", "keyB", "keyC"]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  assert.deepEqual(await listCloneKeys(locations), ["keyA", "keyB"]);
-});
-
-void test("keeps a shared clone alive while any record references it", async () => {
-  const locations = await freshLocations();
-  await seedState(locations, {
-    alpha: makeRecord(locations, { key: "keyShared", sha: SHA_A }),
-    beta: makeRecord(locations, { key: "keyShared", sha: SHA_A }),
-  });
-  await seedCloneDirs(locations, ["keyShared"]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  assert.deepEqual(await listCloneKeys(locations), ["keyShared"]);
-});
-
-void test("deletes a clone once its last referencer is gone", async () => {
-  const locations = await freshLocations();
-  // No record references keyOrphan.
-  await seedState(locations, {
-    alpha: makeRecord(locations, { key: "keyLive" }),
-  });
-  await seedCloneDirs(locations, ["keyLive", "keyOrphan"]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  assert.deepEqual(await listCloneKeys(locations), ["keyLive"]);
-});
-
-void test("is idempotent: a second pass over a swept cache is a no-op", async () => {
-  const locations = await freshLocations();
-  await seedState(locations, {
-    alpha: makeRecord(locations, { key: "keyLive" }),
-  });
-  await seedCloneDirs(locations, ["keyLive", "keyOrphan"]);
-
-  await garbageCollectPluginClones(locations);
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  assert.deepEqual(await listCloneKeys(locations), ["keyLive"]);
-});
-
-void test("returns [] when the plugin-clones dir is absent (ENOENT no-op)", async () => {
-  const locations = await freshLocations();
-  await seedState(locations, {
-    alpha: makeRecord(locations, { key: "keyLive" }),
-  });
-  // Intentionally do NOT create pluginClonesDir on disk.
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-});
-
-void test("routes every delete target through the pluginCloneDir chokepoint", async () => {
-  const locations = await freshLocations();
-  await seedState(locations, {});
-  await seedCloneDirs(locations, ["keyToSweep"]);
-
-  // A well-formed key is deletable and lands exactly at pluginCloneDir(key),
-  // proving the containment chokepoint is the composer of the delete target.
-  const expected = await locations.pluginCloneDir("keyToSweep");
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  assert.equal(expected, path.join(locations.pluginClonesDir, "keyToSweep"));
-  assert.deepEqual(await listCloneKeys(locations), []);
-});
-
-void test("a record without resolvedSha contributes no live key", async () => {
-  const locations = await freshLocations();
-  // path/github-name plugin: no resolvedSha, resolvedSource outside the cache.
-  await seedState(locations, {
-    alpha: makeRecord(locations, {}),
-  });
-  await seedCloneDirs(locations, ["keyC"]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  // The path plugin protects nothing, so keyC is swept.
-  assert.deepEqual(await listCloneKeys(locations), []);
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// MIRR-04 / MIRR-06 -- mirror-anchored records (bare <urlhash12> key) coexist
-// with old-design per-sha records. deriveLiveCloneKeys' first-path-segment
-// derivation protects the bare mirror key exactly like a per-sha key; an
-// orphaned per-sha clone of a re-anchored unpinned source is swept.
-// ───────────────────────────────────────────────────────────────────────────
-
-const MIRROR_URL = "https://example.com/org/repo";
-
-void test("MIRR-04: a mirror-anchored record protects its bare 12-hex clone dir while an orphaned per-sha clone is swept", async () => {
-  const locations = await freshLocations();
-  const mirrorKey = pluginMirrorKey(MIRROR_URL);
-  // The record re-anchored to the bare mirror key; its old per-sha clone is
-  // now unreferenced.
-  await seedState(locations, {
-    gp: makeRecord(locations, { key: mirrorKey }),
-  });
-  await seedCloneDirs(locations, [mirrorKey, `${mirrorKey}-${SHA_A.slice(0, 12)}`]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  // The bare mirror dir survives (protected by the record); the per-sha orphan
-  // is swept (no surviving record references it).
-  assert.deepEqual(await listCloneKeys(locations), [mirrorKey]);
-});
-
-void test("MIRR-04: a git-subdir mirror record (resolvedSource = mirror root + subdir) still protects the bare mirror root", async () => {
-  const locations = await freshLocations();
-  const mirrorKey = pluginMirrorKey(MIRROR_URL);
-  await seedState(locations, {
-    gp: makeRecord(locations, { key: mirrorKey, subdir: "packages/gp" }),
-  });
-  await seedCloneDirs(locations, [mirrorKey]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  // First-path-segment derivation yields the bare mirror root, not the subdir.
-  assert.deepEqual(await listCloneKeys(locations), [mirrorKey]);
-});
-
-void test("MIRR-06: an old-design record still referencing its per-sha clone protects that per-sha dir (coexistence, not yet re-anchored)", async () => {
-  const locations = await freshLocations();
-  const mirrorKey = pluginMirrorKey(MIRROR_URL);
-  const perShaKey = `${mirrorKey}-${SHA_A.slice(0, 12)}`;
-  // The record has NOT been re-anchored: it still points at the per-sha clone.
-  await seedState(locations, {
-    gp: makeRecord(locations, { key: perShaKey }),
-  });
-  await seedCloneDirs(locations, [perShaKey]);
-
-  const leaks = await garbageCollectPluginClones(locations);
-
-  assert.deepEqual(leaks, []);
-  // The still-referenced per-sha clone survives (coexistence).
-  assert.deepEqual(await listCloneKeys(locations), [perShaKey]);
-});
-
-void test("a per-dir rm failure is swallowed -- GC never throws", async () => {
-  const locations = await freshLocations();
-  await seedState(locations, {});
-  await seedCloneDirs(locations, ["keyLocked"]);
-
-  // Chmod the clone dir's parent read-only (0o500) so the child rm fails with
-  // EACCES on platforms that honor the bit. The contract under test is
-  // unconditional: GC NEVER throws -- it either records the rm failure as a
-  // leak string or (where the permission bit is ignored, e.g. running as
-  // root) sweeps clean.
-  const keyDir = path.join(locations.pluginClonesDir, "keyLocked");
-  const { chmod } = await import("node:fs/promises");
-  await chmod(locations.pluginClonesDir, 0o500);
-  try {
-    const leaks = await garbageCollectPluginClones(locations);
-    // On systems where root ignores the read-only bit, rm may succeed and the
-    // leak array is empty; accept either the swallow (leak recorded) or the
-    // clean sweep, but NEVER a throw.
-    assert.ok(Array.isArray(leaks));
-    if (leaks.length > 0) {
-      assert.match(leaks[0] ?? "", /keyLocked/);
+    return (await readdir(locations.pluginClonesDir)).sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
     }
-  } finally {
-    await chmod(locations.pluginClonesDir, 0o700);
-    await rm(keyDir, { recursive: true, force: true });
-  }
-});
 
-// ───────────────────────────────────────────────────────────────────────────
-// FTCH-05 -- a fetched-but-uninstalled clone is derive-not-persist state: no
-// install record references it, so GC sweeps it, and the entry's next probe
-// self-heals to `remote` (the cold-source classification). No fetch registry
-// exists; nothing persists the fetch, so there is no code change to make GC
-// aware of it -- the existing live-key derivation already excludes it.
-// ───────────────────────────────────────────────────────────────────────────
-
-type ManifestEntry = MarketplaceManifest["plugins"][number];
-
-async function dirExists(target: string): Promise<boolean> {
-  try {
-    return (await stat(target)).isDirectory();
-  } catch {
-    return false;
+    throw error;
   }
 }
 
-void test("FTCH-05: a fetched-but-uninstalled clone is swept and the entry self-heals to `remote`", async () => {
-  const locations = await freshLocations();
-  // A fetch materializes the URL-keyed mirror WITHOUT writing a state record --
-  // fetch never installs. Use a canonical url (no `.git` suffix) so the mirror
-  // key matches the parse-time canonical url the presence probe hashes over.
-  const cloneUrl = "https://example.com/fetched-plugin";
-  const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-  await mkdir(path.join(mirrorDir, ".claude-plugin"), { recursive: true });
-  await writeFile(
-    path.join(mirrorDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "fetched-plugin" }),
-  );
-  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: mirrorDir,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
+test("preserves SHA-backed clone roots and removes stale directories", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    alpha: marketplace(locations, "alpha", {
+      direct: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "alpha-live"),
+        resolvedSha: SHA_ALPHA,
+      }),
+    }),
+    beta: marketplace(locations, "beta", {
+      nested: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "beta-live", "packages", "nested"),
+        resolvedSha: SHA_BETA,
+      }),
+    }),
   });
+  await seedCloneDirectories(locations, ["alpha-live", "beta-live", "gamma-stale"]);
 
-  // State carries no record for this clone: it was fetched, never installed.
-  await seedState(locations, {});
-
-  const entry: ManifestEntry = { name: "fetched-plugin", source: cloneUrl };
-
-  // (a) the fetched clone is materialized and the warm entry classifies away
-  // from `remote` before GC (it is `available` -- the tree is installable).
-  assert.equal(await dirExists(mirrorDir), true);
-  assert.equal(await probeManifestEntry(entry, "/nonexistent/mp/root", locations), "available");
-
+  // act
   const leaks = await garbageCollectPluginClones(locations);
 
-  // (b) GC sweeps the unreferenced clone dir.
-  assert.deepEqual(leaks, []);
-  assert.equal(await dirExists(mirrorDir), false);
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), ["alpha-live", "beta-live"]);
+  assert.strictEqual(
+    await readFile(path.join(locations.pluginClonesDir, "alpha-live", "sentinel.txt"), "utf8"),
+    "alpha-live",
+  );
+  assert.strictEqual(
+    await readFile(path.join(locations.pluginClonesDir, "beta-live", "sentinel.txt"), "utf8"),
+    "beta-live",
+  );
+});
 
-  // (c) the next probe self-heals to `remote` -- the cold-source classification,
-  // derived fresh with no persisted fetch state.
-  assert.equal(await probeManifestEntry(entry, "/nonexistent/mp/root", locations), "remote");
+test("keeps a shared clone while any surviving record references it", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    alpha: marketplace(locations, "alpha", {
+      first: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "shared-live"),
+        resolvedSha: SHA_ALPHA,
+      }),
+      second: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "shared-live", "plugin"),
+        resolvedSha: SHA_BETA,
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, ["shared-live"]);
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), ["shared-live"]);
+});
+
+test("removes an in-cache source when its record has no resolved SHA", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    alpha: marketplace(locations, "alpha", {
+      local: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "unprotected-clone"),
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, ["unprotected-clone"]);
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), []);
+});
+
+test("ignores SHA-backed records at and outside the clone root", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    alpha: marketplace(locations, "alpha", {
+      exactRoot: pluginRecord({
+        resolvedSource: locations.pluginClonesDir,
+        resolvedSha: SHA_ALPHA,
+      }),
+      outsideRoot: pluginRecord({
+        resolvedSource: path.join(locations.extensionRoot, "outside-clone"),
+        resolvedSha: SHA_BETA,
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, ["alpha-stale", "beta-stale"]);
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), []);
+});
+
+test("returns an empty leak list when the clone cache is absent", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {});
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), []);
+});
+
+test("rethrows a non-ENOENT clone-cache read failure without changing the file", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {});
+  await writeFile(locations.pluginClonesDir, "not a directory");
+  let caught: unknown;
+
+  // act
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch (error) {
+    caught = error;
+  }
+
+  // assert
+  assert.ok(caught instanceof Error);
+  assert.strictEqual(caught.name, "Error");
+  assert.strictEqual((caught as NodeJS.ErrnoException).code, "ENOTDIR");
+  assert.strictEqual(await readFile(locations.pluginClonesDir, "utf8"), "not a directory");
+});
+
+test("deletes every stale clone again after a completed sweep", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {});
+  await seedCloneDirectories(locations, ["alpha-stale", "beta-stale"]);
+
+  // act
+  const firstLeaks = await garbageCollectPluginClones(locations);
+  const secondLeaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(firstLeaks, []);
+  assert.deepStrictEqual(secondLeaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), []);
+});
+
+test("rejects an unsafe clone key before deleting its directory", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const unsafeKey = "unsafe\nkey";
+  await seedState(locations, {});
+  await seedCloneDirectories(locations, [unsafeKey]);
+  let caught: unknown;
+
+  // act
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch (error) {
+    caught = error;
+  }
+
+  // assert
+  assert.ok(caught instanceof Error);
+  assert.strictEqual(caught.name, "Error");
+  assert.strictEqual(
+    caught.message,
+    `pluginCloneDir clone key "${unsafeKey}" "${unsafeKey}" must not contain ASCII control characters.`,
+  );
+  assert.deepStrictEqual(await cloneEntries(locations), [unsafeKey]);
+  assert.strictEqual(
+    await readFile(path.join(locations.pluginClonesDir, unsafeKey, "sentinel.txt"), "utf8"),
+    unsafeKey,
+  );
+});
+
+test("rejects a symlinked clone entry before touching its external target", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const externalDirectory = path.join(path.dirname(locations.scopeRoot), "external-clone");
+  const externalSentinel = path.join(externalDirectory, "sentinel.txt");
+  const linkPath = path.join(locations.pluginClonesDir, "linked-clone");
+  await seedState(locations, {});
+  await mkdir(locations.pluginClonesDir, { recursive: true });
+  await mkdir(externalDirectory, { recursive: true });
+  await writeFile(externalSentinel, "external");
+  await symlink(externalDirectory, linkPath, "dir");
+  let caught: unknown;
+
+  // act
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch (error) {
+    caught = error;
+  }
+
+  // assert
+  assert.ok(caught instanceof Error);
+  assert.strictEqual(caught.name, "SymlinkRefusedError");
+  assert.strictEqual(
+    caught.message,
+    `pluginCloneDir(linked-clone) contains symlink ${linkPath} -> ${externalDirectory} (parent: ${locations.pluginClonesDir}, target: ${linkPath}).`,
+  );
+  assert.deepStrictEqual(await cloneEntries(locations), ["linked-clone"]);
+  assert.strictEqual(await readFile(externalSentinel, "utf8"), "external");
+});
+
+test("records removal leaks in cache order and continues deleting later clones", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  await seedState(locations, {
+    alpha: marketplace(locations, "alpha", {
+      live: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, "omega-live"),
+        resolvedSha: SHA_ALPHA,
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, ["alpha-stale", "beta-stale", "gamma-stale", "omega-live"]);
+  const cloneKeys: string[] = [];
+  const failureLocations = Object.freeze({
+    ...locations,
+    async pluginCloneDir(key: string): Promise<string> {
+      cloneKeys.push(key);
+      if (key === "alpha-stale" || key === "gamma-stale") {
+        return `blocked-${key}\0path`;
+      }
+
+      return locations.pluginCloneDir(key);
+    },
+  }) satisfies ScopedLocations;
+  const invalidPathMessage = (key: string) =>
+    `The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'blocked-${key}\\x00path'`;
+
+  // act
+  const leaks = await garbageCollectPluginClones(failureLocations);
+
+  // assert
+  assert.deepStrictEqual(leaks, [
+    `alpha-stale: ${invalidPathMessage("alpha-stale")}`,
+    `gamma-stale: ${invalidPathMessage("gamma-stale")}`,
+  ]);
+  assert.deepStrictEqual(await cloneEntries(locations), [
+    "alpha-stale",
+    "gamma-stale",
+    "omega-live",
+  ]);
+  assert.deepStrictEqual(cloneKeys, ["alpha-stale", "beta-stale", "gamma-stale"]);
 });

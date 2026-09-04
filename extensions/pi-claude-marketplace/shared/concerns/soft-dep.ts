@@ -23,9 +23,9 @@ import type { Reason } from "../notify.ts";
  * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
  * `requires pi-mcp` reason emission).
  *
- * Spelled out as a literal union. A runtime `DEPENDENCIES` tuple used to back
- * it via indexed access, but nothing iterated the tuple, so it was removed and
- * the union became the sole declaration site.
+ * Spelled out as a literal union rather than a runtime `DEPENDENCIES` tuple:
+ * nothing iterates the members at runtime, so the union type alone is the
+ * sole declaration site.
  */
 export type Dependency = "agents" | "mcp";
 

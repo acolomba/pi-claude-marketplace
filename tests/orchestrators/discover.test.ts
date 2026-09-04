@@ -1,160 +1,249 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  aggregateDiscoveredResources,
-  type DiscoveredResources,
-} from "../../extensions/pi-claude-marketplace/orchestrators/discover.ts";
+import { aggregateDiscoveredResources } from "../../extensions/pi-claude-marketplace/orchestrators/discover.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AggregateResourcesDiscoverError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { cleanupStaging } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { TestContext } from "node:test";
 
-function makeLocations(scope: Scope, root: string): ScopedLocations {
-  const extensionRoot = path.join(root, "pi-claude-marketplace");
+interface TestLocations {
+  readonly root: string;
+  readonly user: ScopedLocations;
+  readonly project: ScopedLocations;
+}
+
+async function makeTestLocations(t: TestContext, prefix: string): Promise<TestLocations> {
+  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+  let user: ScopedLocations;
+  try {
+    process.env.PI_CODING_AGENT_DIR = path.join(root, "user");
+    user = locationsFor("user", root);
+  } finally {
+    if (previousAgentDirectory === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+    }
+  }
+
   return {
-    scope,
-    scopeRoot: root,
-    extensionRoot,
-    stateJsonPath: path.join(extensionRoot, "state.json"),
-    agentsDir: path.join(root, "agents"),
-    agentsStagingDir: path.join(extensionRoot, "agents-staging"),
-    agentsIndexPath: path.join(extensionRoot, "agents-index.json"),
-    mcpJsonPath: path.join(root, "mcp.json"),
-    skillsStagingDir: path.join(extensionRoot, "skills-staging"),
-    commandsStagingDir: path.join(extensionRoot, "commands-staging"),
-    skillsTargetDir: path.join(extensionRoot, "resources", "skills"),
-    promptsTargetDir: path.join(extensionRoot, "resources", "prompts"),
-    dataRoot: path.join(extensionRoot, "data"),
-    sourcesDir: path.join(extensionRoot, "sources"),
-    cacheDir: path.join(extensionRoot, "cache"),
-    marketplaceNamesCacheFile: path.join(extensionRoot, "cache", "marketplace-names.json"),
-    pluginDataDir: () => Promise.resolve(path.join(extensionRoot, "data", "mp", "plugin")),
-    marketplaceDataDir: () => Promise.resolve(path.join(extensionRoot, "data", "mp")),
-    sourceCloneDir: () => Promise.resolve(path.join(extensionRoot, "sources", "mp")),
-    sourcesStagingDir: () => Promise.resolve(path.join(extensionRoot, "sources-staging", "uuid")),
-    pluginCacheFile: () => Promise.resolve(path.join(extensionRoot, "cache", "plugins", "mp.json")),
-  } as unknown as ScopedLocations;
+    root,
+    user,
+    project: locationsFor("project", path.join(root, "project")),
+  };
 }
 
-async function stageSkill(locations: ScopedLocations, name: string): Promise<string> {
-  const dir = path.join(locations.skillsTargetDir, name);
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "SKILL.md"), `---\nname: ${name}\n---\nbody`);
-  return dir;
+async function stageSkill(locations: ScopedLocations, name: string): Promise<void> {
+  const skillDirectory = path.join(locations.skillsTargetDir, name);
+  await mkdir(skillDirectory, { recursive: true });
+  await writeFile(
+    path.join(skillDirectory, "SKILL.md"),
+    `---
+name: ${name}
+---
+body`,
+  );
 }
 
-async function stagePrompt(locations: ScopedLocations, name: string): Promise<string> {
-  const file = path.join(locations.promptsTargetDir, `${name}.md`);
+async function stagePrompt(locations: ScopedLocations, name: string): Promise<void> {
   await mkdir(locations.promptsTargetDir, { recursive: true });
-  await writeFile(file, `# ${name}\n`);
-  return file;
+  await writeFile(
+    path.join(locations.promptsTargetDir, `${name}.md`),
+    `# ${name}
+`,
+  );
 }
 
-async function stageWorkflowDecoy(
-  locations: ScopedLocations,
-  name: string,
-  contents: string,
-): Promise<string> {
-  const file = path.join(locations.extensionRoot, "resources", "workflows", name);
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, contents);
-  return file;
+function errorCode(cause: unknown): string | undefined {
+  if (
+    typeof cause !== "object" ||
+    cause === null ||
+    !("code" in cause) ||
+    typeof cause.code !== "string"
+  ) {
+    return undefined;
+  }
+
+  return cause.code;
 }
 
-test("resources_discover returns empty lists when staged resource directories are missing", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "resources-discover-missing-"));
-  try {
-    const user = makeLocations("user", path.join(tmp, "user"));
-    const project = makeLocations("project", path.join(tmp, "project"));
+test("aggregateDiscoveredResources keeps scope order and sorts within each resource directory", async (t) => {
+  // arrange
+  const { user, project } = await makeTestLocations(t, "resources-discover-order-");
+  await stageSkill(user, "zulu");
+  await stageSkill(user, "alpha");
+  await stageSkill(project, "aardvark");
+  await stagePrompt(user, "zulu");
+  await stagePrompt(user, "alpha");
+  await stagePrompt(project, "aardvark");
 
-    const result = await aggregateDiscoveredResources(user, project);
-    assert.deepEqual(result, { skillPaths: [], promptPaths: [] } satisfies DiscoveredResources);
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+  // act
+  const result = await aggregateDiscoveredResources(user, project);
+
+  // assert
+  assert.deepEqual(result, {
+    skillPaths: [
+      path.join(user.skillsTargetDir, "alpha"),
+      path.join(user.skillsTargetDir, "zulu"),
+      path.join(project.skillsTargetDir, "aardvark"),
+    ],
+    promptPaths: [
+      path.join(user.promptsTargetDir, "alpha.md"),
+      path.join(user.promptsTargetDir, "zulu.md"),
+      path.join(project.promptsTargetDir, "aardvark.md"),
+    ],
+  });
+  assert.equal(Object.isFrozen(result.skillPaths), true);
+  assert.equal(Object.isFrozen(result.promptPaths), true);
 });
 
-test("resources_discover returns deterministic user and project skill and prompt paths", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "resources-discover-staged-"));
-  try {
-    const user = makeLocations("user", path.join(tmp, "user"));
-    const project = makeLocations("project", path.join(tmp, "project"));
-    const userSkillB = await stageSkill(user, "same-name");
-    const userSkillA = await stageSkill(user, "alpha");
-    const projectSkill = await stageSkill(project, "same-name");
-    const userPrompt = await stagePrompt(user, "same-name");
-    const projectPrompt = await stagePrompt(project, "same-name");
-    const executionSentinel = path.join(tmp, "workflow-command-executed");
-    const userWorkflow = await stageWorkflowDecoy(
-      user,
-      "user.workflow.yml",
-      "{ this is not valid workflow data",
-    );
-    const projectWorkflow = await stageWorkflowDecoy(
-      project,
-      "project.workflow.yml",
-      "steps:\n" +
-        `  - run: ${JSON.stringify(
-          `${process.execPath} -e ${JSON.stringify(
-            `require("node:fs").writeFileSync(${JSON.stringify(executionSentinel)}, "executed")`,
-          )}`,
-        )}\n`,
-    );
-    await writeFile(path.join(user.promptsTargetDir, "not-a-prompt.txt"), "ignore me");
+test("aggregateDiscoveredResources excludes hidden, nonmatching, nondirectory, and symlink entries", async (t) => {
+  // arrange
+  const { root, user, project } = await makeTestLocations(t, "resources-discover-filter-");
+  await stageSkill(user, "visible-skill");
+  await stageSkill(user, ".hidden-skill");
+  await writeFile(path.join(user.skillsTargetDir, "regular-file"), "not a skill directory");
 
-    assert.equal((await stat(userWorkflow)).isFile(), true);
-    assert.equal((await stat(projectWorkflow)).isFile(), true);
-    const result = await aggregateDiscoveredResources(user, project);
+  await mkdir(path.join(user.skillsTargetDir, "missing-skill-file"), { recursive: true });
+  await mkdir(path.join(user.skillsTargetDir, "skill-file-directory", "SKILL.md"), {
+    recursive: true,
+  });
 
-    assert.deepEqual(result, {
-      skillPaths: [userSkillA, userSkillB, projectSkill],
-      promptPaths: [userPrompt, projectPrompt],
-    } satisfies DiscoveredResources);
-    assert.deepEqual(Object.keys(result), ["skillPaths", "promptPaths"]);
-    await assert.rejects(stat(executionSentinel), { code: "ENOENT" });
-    assert.equal(
-      [...result.skillPaths, ...result.promptPaths].some(
-        (resourcePath) => resourcePath === userWorkflow || resourcePath === projectWorkflow,
-      ),
-      false,
-    );
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+  const linkedSkillFileSource = path.join(root, "linked-skill-file-source.md");
+  const skillFileLinkDirectory = path.join(user.skillsTargetDir, "skill-file-link");
+  await writeFile(linkedSkillFileSource, "linked skill body");
+  await mkdir(skillFileLinkDirectory, { recursive: true });
+  await symlink(linkedSkillFileSource, path.join(skillFileLinkDirectory, "SKILL.md"), "file");
+
+  const linkedSkillDirectorySource = path.join(user.skillsTargetDir, ".linked-skill-source");
+  await stageSkill(user, ".linked-skill-source");
+  await symlink(
+    linkedSkillDirectorySource,
+    path.join(user.skillsTargetDir, "linked-skill-directory"),
+    "junction",
+  );
+
+  await stagePrompt(user, "visible-prompt");
+  await stagePrompt(user, ".hidden-prompt");
+  await writeFile(path.join(user.promptsTargetDir, "wrong-extension.txt"), "not markdown");
+  await mkdir(path.join(user.promptsTargetDir, "prompt-directory.md"));
+  const linkedPromptSource = path.join(user.promptsTargetDir, ".linked-prompt-source.md");
+  await writeFile(linkedPromptSource, "linked prompt body");
+  await symlink(linkedPromptSource, path.join(user.promptsTargetDir, "linked-prompt.md"), "file");
+
+  // act
+  const result = await aggregateDiscoveredResources(user, project);
+
+  // assert
+  assert.deepEqual(result, {
+    skillPaths: [path.join(user.skillsTargetDir, "visible-skill")],
+    promptPaths: [path.join(user.promptsTargetDir, "visible-prompt.md")],
+  });
 });
 
-test("resources_discover aggregates non-missing filesystem failures after both scopes are attempted", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod permission semantics differ on Windows");
-    return;
-  }
+test("aggregateDiscoveredResources soft-skips missing resource directories", async (t) => {
+  // arrange
+  const { user, project } = await makeTestLocations(t, "resources-discover-missing-");
 
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "resources-discover-error-"));
-  const user = makeLocations("user", path.join(tmp, "user"));
-  const project = makeLocations("project", path.join(tmp, "project"));
-  try {
-    await mkdir(user.skillsTargetDir, { recursive: true });
-    await chmod(user.skillsTargetDir, 0o000);
-    const projectPrompt = await stagePrompt(project, "still-attempted");
+  // act
+  const result = await aggregateDiscoveredResources(user, project);
 
-    await assert.rejects(aggregateDiscoveredResources(user, project), (err: unknown) => {
-      assert.ok(err instanceof AggregateResourcesDiscoverError);
-      assert.equal(err.failures.length, 1);
-      assert.equal(err.failures[0]!.scope, "user");
-      assert.equal(err.failures[0]!.kind, "skills");
-      assert.equal(err.failures[0]!.path, user.skillsTargetDir);
-      assert.ok(err.cause instanceof Error);
-      return true;
-    });
+  // assert
+  assert.deepEqual(result, { skillPaths: [], promptPaths: [] });
+  assert.equal(Object.isFrozen(result.skillPaths), true);
+  assert.equal(Object.isFrozen(result.promptPaths), true);
+});
 
-    assert.equal(projectPrompt.endsWith("still-attempted.md"), true);
-  } finally {
-    await chmod(user.skillsTargetDir, 0o700).catch(() => undefined);
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+test("aggregateDiscoveredResources soft-skips resource paths below a regular file", async (t) => {
+  // arrange
+  const { user, project } = await makeTestLocations(t, "resources-discover-not-directory-");
+  await mkdir(user.extensionRoot, { recursive: true });
+  await writeFile(path.dirname(user.skillsTargetDir), "not a resource directory");
+
+  // act
+  const result = await aggregateDiscoveredResources(user, project);
+
+  // assert
+  assert.deepEqual(result, { skillPaths: [], promptPaths: [] });
+});
+
+test("aggregateDiscoveredResources aggregates all four hard read failures in traversal order", async (t) => {
+  // arrange
+  const { root, user, project } = await makeTestLocations(t, "resources-discover-errors-");
+  const invalidTargets = {
+    userSkills: path.join(root, "user-skills\0"),
+    userPrompts: path.join(root, "user-prompts\0"),
+    projectSkills: path.join(root, "project-skills\0"),
+    projectPrompts: path.join(root, "project-prompts\0"),
+  };
+  const invalidUser = Object.freeze({
+    ...user,
+    skillsTargetDir: invalidTargets.userSkills,
+    promptsTargetDir: invalidTargets.userPrompts,
+  });
+  const invalidProject = Object.freeze({
+    ...project,
+    skillsTargetDir: invalidTargets.projectSkills,
+    promptsTargetDir: invalidTargets.projectPrompts,
+  });
+
+  // act
+  const error: unknown = await aggregateDiscoveredResources(invalidUser, invalidProject).then(
+    () => undefined,
+    (cause: unknown) => cause,
+  );
+
+  // assert
+  assert.ok(error instanceof AggregateResourcesDiscoverError);
+  assert.deepEqual(
+    error.failures.map((failure) => ({
+      scope: failure.scope,
+      kind: failure.kind,
+      path: failure.path,
+      causeType: failure.cause instanceof TypeError ? "TypeError" : "unexpected",
+      causeCode: errorCode(failure.cause),
+    })),
+    [
+      {
+        scope: "user",
+        kind: "skills",
+        path: invalidTargets.userSkills,
+        causeType: "TypeError",
+        causeCode: "ERR_INVALID_ARG_VALUE",
+      },
+      {
+        scope: "user",
+        kind: "prompts",
+        path: invalidTargets.userPrompts,
+        causeType: "TypeError",
+        causeCode: "ERR_INVALID_ARG_VALUE",
+      },
+      {
+        scope: "project",
+        kind: "skills",
+        path: invalidTargets.projectSkills,
+        causeType: "TypeError",
+        causeCode: "ERR_INVALID_ARG_VALUE",
+      },
+      {
+        scope: "project",
+        kind: "prompts",
+        path: invalidTargets.projectPrompts,
+        causeType: "TypeError",
+        causeCode: "ERR_INVALID_ARG_VALUE",
+      },
+    ],
+  );
+  assert.strictEqual(error.cause, error.failures[0]?.cause);
+  assert.equal(Object.isFrozen(error.failures), true);
 });

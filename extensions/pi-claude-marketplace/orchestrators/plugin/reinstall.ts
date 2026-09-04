@@ -88,7 +88,6 @@ import {
 } from "../../bridges/skills/index.ts";
 import { pluginMirrorKey } from "../../domain/clone-key.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
@@ -96,7 +95,6 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   composeErrorWithCauseChain,
   errorMessage,
@@ -144,6 +142,7 @@ import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/age
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
+import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -334,7 +333,7 @@ export async function reinstallPlugin(
       opts.__deps?.stateTransaction,
     );
   } catch (err) {
-    return handleSinglePluginFailure(opts, err, render);
+    return handleSinglePluginFailure(opts, err as Error, render);
   }
 
   if (locked.outcome.partition !== "reinstalled") {
@@ -458,7 +457,7 @@ export async function reinstallPlugin(
  */
 function handleSinglePluginFailure(
   opts: ReinstallPluginOptions,
-  err: unknown,
+  err: Error,
   render: "default" | "none",
 ): ReinstallFailedOutcome {
   const { ctx, pi, scope, marketplace, plugin } = opts;
@@ -468,7 +467,7 @@ function handleSinglePluginFailure(
   // `composeErrorWithCauseChain(err)` text still feeds the orchestrated-mode
   // `notes` field below (consumers outside the notify path).
   const message = composeErrorWithCauseChain(err);
-  const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
+  const causeErr = err;
   const typedReasons = reasonsFromTypedError(err);
   const isManualRecovery = findManualRecoveryError(err) !== undefined;
   const reasons: readonly ContentReason[] = isManualRecovery
@@ -523,7 +522,7 @@ export async function reinstallPlugins(
   try {
     targets = await enumerateReinstallTargets(opts);
   } catch (err) {
-    await handleEnumerationFailure(opts, err);
+    await handleEnumerationFailure(opts, err as Error);
     return [];
   }
 
@@ -547,50 +546,22 @@ export async function reinstallPlugins(
   // at most once (the same bulk-storm guard install/update use).
   const authMemo = new Map<string, AuthAttemptResult>();
   for (const target of targets) {
-    try {
-      outcomes.push(
-        await reinstallPlugin({
-          ctx,
-          pi,
-          scope: target.scope,
-          cwd,
-          marketplace: target.marketplace,
-          plugin: target.plugin,
-          render: "none",
-          ...(opts.local === true && { local: true }),
-          ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
-          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-          authMemo,
-          ...(opts.__deps !== undefined && { __deps: opts.__deps }),
-        }),
-      );
-    } catch (err) {
-      // `notes` is consumed outside the notify path; compose the trailer
-      // inline. CMC-16: structural failure-class tag so
-      // the cascade payload maps to `(failed) {rollback partial}` /
-      // `(manual recovery) {rollback partial}` without substring-matching
-      // the legacy ES-5 marker text in `notes`.
-      //
-      // ALSO pre-narrow the closed-set Reason via
-      // `reasonsFromTypedError(err)` so EACCES / EPERM / ENOENT and the
-      // typed error classes (PluginShapeError / ManualRecoveryError /
-      // MarketplaceNotFoundError) surface as their precise closed Reason
-      // instead of degrading to the permissive `not in manifest` fallback
-      // inside `narrowReason`. When the typed dispatch returns
-      // `undefined`, the consumer falls back to substring matching.
-      const typedReasons = reasonsFromTypedError(err);
-      outcomes.push({
-        partition: "failed",
-        name: target.plugin,
-        marketplace: target.marketplace,
+    outcomes.push(
+      await reinstallPlugin({
+        ctx,
+        pi,
         scope: target.scope,
-        notes: [composeErrorWithCauseChain(err)],
-        ...(findManualRecoveryError(err) !== undefined && {
-          failureClass: "manual-recovery" as const,
-        }),
-        ...(typedReasons !== undefined && { reasons: typedReasons }),
-      });
-    }
+        cwd,
+        marketplace: target.marketplace,
+        plugin: target.plugin,
+        render: "none",
+        ...(opts.local === true && { local: true }),
+        ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        authMemo,
+        ...(opts.__deps !== undefined && { __deps: opts.__deps }),
+      }),
+    );
   }
 
   renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
@@ -650,10 +621,7 @@ function surfaceReinstallDiscoveryWarnings(
  *     trailer (marketplace-level rows carry no cause per SNM-10). Severity
  *     (`error`) + no reload-hint are computed by notify().
  */
-async function handleEnumerationFailure(
-  opts: ReinstallPluginsOptions,
-  err: unknown,
-): Promise<void> {
+async function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: Error): Promise<void> {
   const { ctx, pi, cwd } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
@@ -664,7 +632,7 @@ async function handleEnumerationFailure(
   const typedReasons = reasonsFromTypedError(err);
   const reasons: readonly ContentReason[] =
     typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
-  const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
+  const causeErr = err;
   const targetingScope = opts.scope ?? "user";
   const targetingMp = opts.target.kind === "all" ? "(reinstall)" : opts.target.marketplace;
   const failedRow: PluginFailedMessage = {
@@ -731,8 +699,8 @@ async function enumerateMarketplaceReinstallTargets(
   // three forms (explicit-scope-plugin, explicit-scope-marketplace, bare).
   // A miss raises `MarketplaceNotAddedSignal` -- caught at the
   // `reinstallPlugins` entrypoint and re-attributed to the standalone
-  // `{marketplace not added}` variant -- instead of the former per-form divergence
-  // (synthesized phantom target / raw `MarketplaceNotFoundError`/`Error`).
+  // `{marketplace not added}` variant, so all three forms attribute the miss
+  // identically.
   const resolved = await resolveMarketplaceReinstallScope(cwd, marketplace, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
@@ -809,11 +777,10 @@ async function resolveMarketplaceReinstallScope(
   if (explicitScope !== undefined) {
     // WR-03: reuse the discriminated `resolveInstalledMarketplaceTarget` (the
     // resolver update.ts uses) so reinstall's explicit-scope cross-scope read
-    // is consistent with update. Byte-neutral for the operator: a `resolved`
-    // arm yields the same (scope, locations) the former inline guard returned;
-    // both the `marketplace-absent` and `other-scope` arms (which carry the
-    // REQUESTED scope) collapse to the same `{marketplace not added} [requestedScope]`
-    // bracket-only emission per resolved Open Question #1.
+    // is consistent with update. A `resolved` arm yields the (scope,
+    // locations) pair; both the `marketplace-absent` and `other-scope` arms
+    // (which carry the REQUESTED scope) collapse to the same
+    // `{marketplace not added} [requestedScope]` bracket-only emission.
     const resolution = await resolveInstalledMarketplaceTarget({
       cwd,
       marketplace,
@@ -872,8 +839,7 @@ function sortReinstallTargets(
  * Typed-dispatch narrow for thrown errors captured by the reinstall catch
  * sites. Mirrors the
  * `orchestrators/marketplace/remove.ts::narrowCascadeFailure` pattern:
- * check the typed `PluginShapeError` / `ManualRecoveryError` /
- * `MarketplaceNotFoundError` shape first, then errno codes
+ * check the typed `PluginShapeError` / `ManualRecoveryError` shape first, then errno codes
  * (`EACCES`/`EPERM` -> permission denied; `ENOENT`/`ENOTDIR` ->
  * source missing), and only at the bottom fall through to `undefined`
  * (NOT a misleading closed-set member). When `undefined` is returned,
@@ -887,37 +853,13 @@ function sortReinstallTargets(
  */
 function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
-    // switch on `err.shape.kind` so a future
-    // shape variant addition fails at compile time (the discriminator
-    // is the typed shape's field, not the convenience top-level
-    // shortcut).
-    switch (err.shape.kind) {
-      case "no-longer-installable":
-        return ["no longer installable"] as const;
-      case "not-installable":
-        // Source classification changed since install -- the catalog
-        // form is `(failed) {source mismatch}` for that case.
-        return ["source mismatch"] as const;
-      case "not-in-manifest":
-        return ["not in manifest"] as const;
-      case "already-installed":
-        return ["already installed"] as const;
-    }
+    // Reinstall's sole producer is requirePartialInstallable(..., "install"),
+    // whose only failure kind is `not-installable`.
+    return ["source mismatch"] as const;
   }
 
   if (err instanceof ManualRecoveryError) {
     return ["rollback partial"] as const;
-  }
-
-  // IN-03: dead defensive coverage. Post-WR-03 the marketplace-existence case
-  // no longer reaches here -- `resolveScopeFromState`'s `MarketplaceNotFoundError`
-  // is caught inside `resolveMarketplaceReinstallScope` and re-attributed to the
-  // no-bracket `MarketplaceNotAddedSignal`. Kept (NOT removed) so any FUTURE
-  // `MarketplaceNotFoundError` that slips through a different code path still maps
-  // to a typed `{not found}` reason rather than degrading to the `narrowReasons`
-  // substring fallback. No live non-mp-existence caller exists today.
-  if (err instanceof MarketplaceNotFoundError) {
-    return ["not found"] as const;
   }
 
   if (err instanceof Error) {
@@ -1062,34 +1004,28 @@ async function runLockedReinstall(
     // factory-time hydrate (D-59-03) rebuilds the cache from disk.
     // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
     // is the same defensive shape `install.ts` uses (failures route
-    // through hookDebugLog and the next `/reload` rehydrates).
+    // through the hooks helper's debug log and the next `/reload` rehydrates).
     //
     // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
     // mirrors install.ts's WR-02. A throw here would surface as
     // `(manual recovery)` while state.json already persisted the new
     // record (state divergence). `/reload`'s factory-time hydrate
     // (D-59-03) rebuilds the cache from state.json. Failures route
-    // through `hookDebugLog`.
-    try {
-      removePluginConfigFromCache(scope, marketplace, plugin);
-      if (installable.hooksConfigPath !== undefined) {
-        await readAndCachePluginHooks({
-          scope,
-          marketplace,
-          plugin,
-          resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
-          hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
-          cwd,
-          logPrefix: "reinstall",
-        });
-      }
-
-      rebuildRoutingTables();
-    } catch (cacheErr) {
-      hookDebugLog(
-        `reinstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
-      );
+    // through the hooks helper's debug log.
+    removePluginConfigFromCache(scope, marketplace, plugin);
+    if (installable.hooksConfigPath !== undefined) {
+      await readAndCachePluginHooks({
+        scope,
+        marketplace,
+        plugin,
+        resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+        hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
+        cwd,
+        logPrefix: "reinstall",
+      });
     }
+
+    rebuildRoutingTables();
   } catch (err) {
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
   }
@@ -1114,12 +1050,6 @@ async function loadCachedEntry(
   if (entryRaw === undefined) {
     throw new Error(
       `Plugin "${plugin}" not found in cached manifest for marketplace "${marketplace}".`,
-    );
-  }
-
-  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
-    throw new Error(
-      `Plugin entry for "${plugin}" in marketplace "${marketplace}" failed schema validation.`,
     );
   }
 
@@ -1552,15 +1482,11 @@ function resourcesChanged(
     next.prompts.length > 0 ||
     next.agents.length > 0 ||
     next.mcpServers.length > 0 ||
-    !sameStrings(oldResources.skills, next.skills) ||
-    !sameStrings(oldResources.prompts, next.prompts) ||
-    !sameStrings(oldResources.agents, next.agents) ||
-    !sameStrings(oldResources.mcpServers, next.mcpServers)
+    oldResources.skills.length > 0 ||
+    oldResources.prompts.length > 0 ||
+    oldResources.agents.length > 0 ||
+    oldResources.mcpServers.length > 0
   );
-}
-
-function sameStrings(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function splitHandleWarnings(handles: PreparedHandles): {
@@ -1605,12 +1531,8 @@ async function rollbackReplacements(
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of [...replacements].reverse()) {
-    try {
-      for (const leak of await rollbackReplacement(replacement)) {
-        leaks.push(`${replacement.phase}: ${leak}`);
-      }
-    } catch (err) {
-      leaks.push(`${replacement.phase}: rollback threw: ${errorMessage(err)}`);
+    for (const leak of await rollbackReplacement(replacement)) {
+      leaks.push(`${replacement.phase}: ${leak}`);
     }
   }
 
@@ -1635,12 +1557,8 @@ async function finalizeReplacements(
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of replacements) {
-    try {
-      for (const leak of await finalizeReplacement(replacement)) {
-        leaks.push(`${replacement.phase}: ${leak}`);
-      }
-    } catch (err) {
-      leaks.push(`${replacement.phase}: finalize threw: ${errorMessage(err)}`);
+    for (const leak of await finalizeReplacement(replacement)) {
+      leaks.push(`${replacement.phase}: ${leak}`);
     }
   }
 
