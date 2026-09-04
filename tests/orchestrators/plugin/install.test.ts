@@ -7360,7 +7360,7 @@ test("runInstallLedger projects a complete empty-plugin summary and preserves a 
         summary: {
           frontmatterDegradations: [],
           resolved: {
-            componentPaths: { agents: [], commands: [], skills: [] },
+            componentPaths: { agents: [], commands: [], skills: [], workflows: [] },
             defaultEnabled: true,
             installable: true,
             mcpServers: {},

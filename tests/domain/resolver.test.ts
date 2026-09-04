@@ -3403,7 +3403,7 @@ test("resolveStrict returns the complete installable true arm", async () => {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   });
@@ -3429,7 +3429,7 @@ test("resolveStrict returns the complete partially-available true arm", async ()
     supported: [],
     unsupported: ["themes"],
     notes: ["contains themes"],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   });
@@ -3482,6 +3482,7 @@ test("resolveStrict preserves declared-first implicit-last ordering with first-w
       skills: ["entry-only", "shared", "manifest-only", "skills"],
       commands: [],
       agents: [],
+      workflows: [],
     },
     mcpServers: {},
     defaultEnabled: true,
@@ -3674,7 +3675,7 @@ test("resolveStrict reads a real manifest through the default file reader", asyn
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: false,
   });
@@ -3819,7 +3820,7 @@ test("resolveStrict unwraps a standalone mcpServers document", async () => {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: { srv: { command: "node" } },
     defaultEnabled: true,
   });
