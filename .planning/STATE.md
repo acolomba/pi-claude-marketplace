@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: planning
-last_updated: "2026-09-04T18:33:23.634Z"
+last_updated: "2026-09-04T14:40:02-04:00"
 last_activity: 2026-09-04
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,15 +22,15 @@ See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone. v1.19 Unit Test Refactor shipped
-2026-09-04 and is archived under `.planning/milestones/v1.19-*`.
+**Current focus:** Revalidate the complete unit-test adversarial-review corpus
+against the post-v1.19 tree before authorizing implementation work.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 of 9 (Live Evidence Revalidation)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-09-04 — Milestone refine-unit-tests started
+Status: Ready to discuss and plan
+Last activity: 2026-09-04 — Milestone refine-unit-tests roadmap drafted
 
 ## Performance Metrics
 

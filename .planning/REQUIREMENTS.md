@@ -116,14 +116,46 @@ Roadmap creation assigns each requirement to exactly one phase.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
+| RVAL-01 | Phase 1 | Pending |
+| RVAL-02 | Phase 1 | Pending |
+| RVAL-03 | Phase 1 | Pending |
+| RVAL-04 | Phase 1 | Pending |
+| PDEF-01 | Phase 3 | Pending |
+| PDEF-02 | Phase 2 | Pending |
+| PDEF-03 | Phase 2 | Pending |
+| PDEF-04 | Phase 2 | Pending |
+| PDEF-05 | Phase 3 | Pending |
+| PDEF-06 | Phase 3 | Pending |
+| PDEF-07 | Phase 3 | Pending |
+| PDEF-08 | Phase 3 | Pending |
+| AUTH-01 | Phase 4 | Pending |
+| TREF-01 | Phase 4 | Pending |
+| TREF-02 | Phase 4 | Pending |
+| TREF-03 | Phase 4 | Pending |
+| TREF-04 | Phase 5 | Pending |
+| TREF-05 | Phase 5 | Pending |
+| TREF-06 | Phase 5 | Pending |
+| TREF-07 | Phase 6 | Pending |
+| TREF-08 | Phase 6 | Pending |
+| TREF-09 | Phase 6 | Pending |
+| GGAT-01 | Phase 7 | Pending |
+| GGAT-02 | Phase 7 | Pending |
+| GGAT-03 | Phase 7 | Pending |
+| GGAT-04 | Phase 7 | Pending |
+| RCOV-01 | Phase 8 | Pending |
+| RCOV-02 | Phase 8 | Pending |
+| RCOV-03 | Phase 8 | Pending |
+| RCOV-04 | Phase 8 | Pending |
+| CLOSE-01 | Phase 9 | Pending |
+| CLOSE-02 | Phase 9 | Pending |
 
 **Coverage:**
 
 - refine-unit-tests requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32
+- Mapped to phases: 32
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-09-04_
-_Last updated: 2026-09-04 after initial definition_
+_Last updated: 2026-09-04 after roadmap creation_
