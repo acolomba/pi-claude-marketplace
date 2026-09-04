@@ -175,14 +175,14 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
    workflow-bearing plugins degrade is corrected in this phase, not a later one.
 6. `npm run check` is green.
 
-**Plans**: 1/5 plans executed in 4 waves
+**Plans**: 2/5 plans executed in 4 waves
 **Wave 1**
 
 - [x] 109-01-PLAN.md — Turn the five locking gates and the published catalog contract, and observe each one RED
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 109-02-PLAN.md — Move the kind across the closed sets and retire the dedicated reason, in two atomic commits
+- [x] 109-02-PLAN.md — Move the kind across the closed sets and retire the dedicated reason, in two atomic commits
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -396,7 +396,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 109. Kind inversion | 1/5 | In Progress|  |
+| 109. Kind inversion | 2/5 | In Progress|  |
 | 110. Domain and platform modules | 0/? | Not started | - |
 | 111. Workflows bridge | 0/? | Not started | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |

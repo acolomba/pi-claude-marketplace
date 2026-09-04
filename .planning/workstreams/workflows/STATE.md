@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 109
 current_phase_name: kind-inversion
-current_plan: 02
+current_plan: 03
 status: in_progress
-stopped_at: Completed 109-01-PLAN.md
-last_updated: "2026-09-04T23:16:36.873Z"
+stopped_at: Completed 109-02-PLAN.md
+last_updated: "2026-09-04T23:33:31.585Z"
 last_activity: 2026-09-04
-last_activity_desc: Phase 109 Plan 01 executed — six locking gates turned and observed RED
-state_head: ec399bc8a66348db6c8ab8adf5a0f3af1d324fff
+last_activity_desc: Phase 109 Plan 02 executed — the kind crossed the closed sets and the dedicated reason was retired
+state_head: f46beb5305ddee7dc551d3bfbdacf4fdb39bc5b3
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -36,13 +36,17 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 109 (kind-inversion) — IN PROGRESS
-Plan: 1/5 complete (109-01 done; 109-02 is next, Wave 2)
-Status: The red slice landed. All five locking gates and the published byte
-contract now state the post-inversion reading of `workflows`, and each was
-observed failing against unmodified production code with its output captured in
-`109-01-SUMMARY.md`. No byte under `extensions/` has moved yet.
-Last activity: 2026-09-04 — 109-01 executed; three commits, six RED gates,
-`partial-vocabulary-guard` green
+Plan: 2/5 complete (109-01, 109-02 done; 109-03 is next, Wave 3)
+Status: The inversion is live in production code. `workflows` sits in both
+supported tuples and in neither unsupported structure,
+`componentPaths.workflows` exists, and the dedicated `{workflows}` reason is
+retired from all four declaration sites. Five of the six gates 109-01 turned red
+are green; `catalog-uat` stays red until 109-04 turns its three fixture payloads.
+`npm run typecheck` reports zero errors under `extensions/` and 131 under
+`tests/` — the widening work list enumerated in `109-02-SUMMARY.md`, owned by
+109-03 (127) and 109-04 (4).
+Last activity: 2026-09-04 — 109-02 executed; two commits, the closed-set move and
+the reason retirement each atomic
 
 **The D-109-06 window is now open.** Until Phase 111 lands, a workflow-bearing
 plugin resolves `installable`, renders `● (installed)` with no brace, and
@@ -54,7 +58,7 @@ anything).
 ## Progress
 
 **Phases Complete:** 0/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 109-02 (109-01 of 5 complete)
+**Current Plan:** 109-03 (2 of 5 complete)
 
 ```text
 [----------] 0%
@@ -62,7 +66,7 @@ anything).
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 109 | Kind inversion | In progress (1/5 plans) |
+| 109 | Kind inversion | In progress (2/5 plans) |
 | 110 | Domain and platform modules | Not started |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
@@ -166,12 +170,14 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-04T23:16:36.814Z
+**Last session:** 2026-09-04T23:33:31.585Z
 
-**Stopped At:** Completed 109-01-PLAN.md
+**Stopped At:** Completed 109-02-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 109` — Wave 2 is `109-02`, the production
-edits the six red gates now demand.
+**Next Action:** `/gsd-execute-phase 109` — Wave 3 is `109-03`, the 127
+`componentPaths` widening sites enumerated in `109-02-SUMMARY.md`. The whole-tree
+`npm run typecheck` and `npm test` stay red until 109-03 and 109-04 land; that is
+by plan design, not a regression.
 
 **Where the work lives:** the worktree
 `/home/acolomba/pi-claude-marketplace-workflows` on branch `features/workflow`.
@@ -242,11 +248,13 @@ re-persists `harness-worktree` as a side effect.
 |------|----------|-------|-------|
 | — | — | — | — |
 | Phase 109 P01 | 22 min | 3 tasks | 7 files |
+| Phase 109 P02 | 11 min | 2 tasks | 6 files |
 
 ## Decisions
 
 _Recorded per phase as the milestone proceeds._
 
+- [Phase 109]: The closed-set move is one commit, never two. T-02-25 warns that a kind in neither closed set is silently ignored, so the removal from `UNSUPPORTED_COMPONENT_KINDS` and the additions to both supported tuples landed together in `f23d964d`. — A tidier two-commit split would have published an intermediate tree carrying the exact defect the security note exists to prevent.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps
