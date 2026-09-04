@@ -396,6 +396,12 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 106. Install-time admission-gate warnings | 0/? | Not started | - |
-| 107. Load-time workflow convergence | 0/? | Not started | - |
-| 108. Measured `agent()` failure evidence | 0/? | Not started | - |
+| 109. Kind inversion | 0/5 | Ready to execute | - |
+| 110. Domain and platform modules | 0/? | Not started | - |
+| 111. Workflows bridge | 0/? | Not started | - |
+| 112. Install and removal lifecycle | 0/? | Not started | - |
+| 113. Update, enable/disable, reconcile | 0/? | Not started | - |
+| 114. Degradation and documentation | 0/? | Not started | - |
+| 115. Install-time admission-gate warnings | 0/? | Not started | - |
+| 116. Load-time workflow convergence | 0/? | Not started | - |
+| 117. Measured `agent()` failure evidence | 0/? | Not started | - |
