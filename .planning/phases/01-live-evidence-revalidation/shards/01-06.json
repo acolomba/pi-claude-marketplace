@@ -35,6 +35,38 @@
       ],
       "reviewStatus": "complete",
       "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-023"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
     }
   ],
   "sourceClaims": [
@@ -61,7 +93,30 @@
     { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md#ACUA-021", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md", "label": "ACUA-021", "findingId": "ACUA-021" },
     { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md#ACUA-022", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md", "label": "ACUA-022", "findingId": "ACUA-022" },
     { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md#ACUA-023", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md", "label": "ACUA-023", "findingId": "ACUA-023" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md#ACUA-024", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md", "label": "ACUA-024", "findingId": "ACUA-024" }
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md#ACUA-024", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md", "label": "ACUA-024", "findingId": "ACUA-024" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-001", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-001", "findingId": "ACUB-001" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-002", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-002", "findingId": "ACUB-002" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-003", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-003", "findingId": "ACUB-003" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-004", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-004", "findingId": "ACUB-004" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-005", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-005", "findingId": "ACUB-005" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-006", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-006", "findingId": "ACUB-006" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-007", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-007", "findingId": "ACUB-007" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-008", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-008", "findingId": "ACUB-008" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-009", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-009", "findingId": "ACUB-009" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-010", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-010", "findingId": "ACUB-010" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-011", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-011", "findingId": "ACUB-011" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-012", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-012", "findingId": "ACUB-012" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-013", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-013", "findingId": "ACUB-013" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-014", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-014", "findingId": "ACUB-014" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-015", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-015", "findingId": "ACUB-015" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-016", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-016", "findingId": "ACUB-016" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-017", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-017", "findingId": "ACUB-017" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-018", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-018", "findingId": "ACUB-018" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-019", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-019", "findingId": "ACUB-019" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-020", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-020", "findingId": "ACUB-020" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-021", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-021", "findingId": "ACUB-021" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-022", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-022", "findingId": "ACUB-022" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-023", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md", "label": "ACUB-023", "findingId": "ACUB-023" }
   ],
   "findings": [
     {
@@ -207,6 +262,144 @@
       "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "tests/architecture/hooks-cap-notify.test.ts" }, { "path": "tests/architecture/source-scan.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
       "validation": { "method": "static-proof", "tool": "current architecture-gate pattern inspection", "observed": "The production-entry-point mismatch, duplicated catalog fence walk, and usefulness of isolated parser mutations remain current cross-cutting evidence; the proposed split still needs a section-emitter interface before fixture extraction." },
       "rationale": "These are broader fixing-sequence and gate-audit lessons, not reasons to silently discard the report's meta-level prescriptions.", "destination": "Backlog a production-entry-point census, shared catalog reader, and emitter-first catalog UAT split.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-001", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-001"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current fixture-to-driver data-flow", "observed": "The B report independently identifies the same dead duplicated skip-partially-upgradable-bulk message/emit payload preserved in ACUA-010." },
+      "rationale": "The source claim remains independently traceable but reconciles to the same live defect.", "destination": "Apply the ACUA-010 fixture/emitter repair.", "duplicateOf": "ACUA-010"
+    },
+    {
+      "id": "ACUB-002", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-002"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "N/A", "reason": "Comment wording is statically observable." }],
+      "validation": { "method": "static-proof", "tool": "current source search", "observed": "Both Phase-73 comments remain and are already reconciled with the driver Plan references in ACUA-009." },
+      "rationale": "This report's claim is distinct historical evidence for the same comment cleanup.", "destination": "Apply ACUA-009.", "duplicateOf": "ACUA-009"
+    },
+    {
+      "id": "ACUB-003", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-003"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current header, emit, and helper-use census", "observed": "The header still says notify() exclusively and pure literal messages, while four emit overrides and two narrowUnsupportedKinds calls remain." },
+      "rationale": "Both blanket scope claims remain contradicted by current fixture code.", "destination": "State the notify/context split and the two deliberate classifier seams explicitly.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-004", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-004"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts" }, { "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "docs/output-catalog.md" }], "testRefs": [{ "path": "tests/architecture/compat-01-no-expansion.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current closed-set to parsed-catalog census", "observed": "The eleven named live reasons still have no occurrence in a gated catalog body; compile-time membership and generic rendering remain covered elsewhere but documentation omission is not gated." },
+      "rationale": "A quarter of the closed user-facing reason vocabulary still lacks catalog byte examples or an explicit allow-list.", "destination": "Add a planted closed-set catalog census with a documented exclusion list.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-005", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-005"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current annotation occurrence census", "observed": "Forty-one satisfies NotificationMessage expressions remain under an already NotificationMessage-typed field and remain inconsistently applied." },
+      "rationale": "The annotations add no checking and imply a distinction that does not exist.", "destination": "Remove the redundant field-value annotations.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-006", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-006"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current reconcile fixture comparison", "observed": "invalid-config-row-with-cause still omits needsReload while its three sibling failed marketplace fixtures explicitly set false; rendering remains byte-identical because the field is optional." },
+      "rationale": "The modeled payload is structurally inconsistent in a way runtime byte assertions cannot expose.", "destination": "Set needsReload false consistently across the four sibling fixtures.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-007", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-007"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "docs/output-catalog.md" }, { "path": "extensions/pi-claude-marketplace/edge/router.ts" }], "testRefs": [{ "path": "tests/shared/notify.test.ts" }],
+      "validation": { "method": "behavioral-probe", "command": "node --test tests/architecture/catalog-uat.test.ts", "exitCode": 0, "observed": "The current catalog gate passes while excluding usage-error; live catalog text still lists a short obsolete verb set, whereas current TOP_LEVEL_USAGE includes fetch, info, pending, enable, and disable." },
+      "rationale": "The documented usage bytes are both ungated by this suite and stale against production.", "destination": "Replace the block with current TOP_LEVEL_USAGE bytes and lock it directly, or remove its state annotation and mark it illustrative.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-008", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-008"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "docs/output-catalog.md" }, { "path": "extensions/pi-claude-marketplace/shared/notify.ts" }], "testRefs": [{ "path": "tests/domain/github-auth.test.ts" }, { "path": "tests/shared/notify.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current path-existence and test-content check", "observed": "The catalog still names nonexistent tests/shared/device-flow-prompt.test.ts and notify.ts still names nonexistent tests/shared/notify-v2.test.ts; the actual locks remain in the two referenced existing tests." },
+      "rationale": "Wrong gate pointers obscure ownership and already sit adjacent to one genuinely ungated block.", "destination": "Retarget both comments and sweep documentation test-path claims for existence.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-009", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-009"], "evidenceStatus": "confirmed", "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "docs/output-catalog.md" }, { "path": "extensions/pi-claude-marketplace/edge/router.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "behavioral-probe", "command": "node --test tests/architecture/catalog-uat.test.ts", "exitCode": 0, "observed": "The live gate passes and current key inspection retains 182 routed examples, 182 fixture keys, bidirectional parity, no duplicate keys, and coverage for every router verb section." },
+      "rationale": "The fixture corpus remains structurally complete even though the driver uses the wrong production seam for many rows.", "destination": "Preserve key parity and inverse-walk behavior during the emitter repair.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-010", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-010"], "evidenceStatus": "confirmed", "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current fixture discriminator and reason census", "observed": "All notification status and top-level kind members remain represented, all soft-dependency combinations and severity forms remain exercised, and eleven of 44 reasons remain the explicitly recorded gap." },
+      "rationale": "The positive closed-set ownership facts must remain distinct from ACUB-004's missing reason subset.", "destination": "Retain the complete status/kind matrix and extend or explicitly scope reason coverage.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-011", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-011"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current cast census", "observed": "The fixture-half report confirms the same live as-never boundary defect recorded in ACUA-014." },
+      "rationale": "Independent historical claim, same current root cause.", "destination": "Apply ACUA-014.", "duplicateOf": "ACUA-014"
+    },
+    {
+      "id": "ACUB-012", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-012"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current import and case inspection", "observed": "The process-wide mock claim remains identical to ACUA-015." },
+      "rationale": "Distinct claim identity maps to the same defect.", "destination": "Apply ACUA-015.", "duplicateOf": "ACUA-015"
+    },
+    {
+      "id": "ACUB-013", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-013"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current driver local inspection", "observed": "The bare actual claim remains identical to ACUA-016." },
+      "rationale": "Distinct claim identity maps to the same naming defect.", "destination": "Apply ACUA-016.", "duplicateOf": "ACUA-016"
+    },
+    {
+      "id": "ACUB-014", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-014"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current case inspection", "observed": "The missing AAA claim remains identical to ACUA-017." },
+      "rationale": "Distinct claim identity maps to the same structural defect.", "destination": "Apply ACUA-017.", "duplicateOf": "ACUA-017"
+    },
+    {
+      "id": "ACUB-015", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-015"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current driver loop inspection", "observed": "The one-test 182-row loop remains identical to ACUA-018." },
+      "rationale": "Distinct claim identity maps to the same reporting/independence defect.", "destination": "Apply ACUA-018.", "duplicateOf": "ACUA-018"
+    },
+    {
+      "id": "ACUB-016", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-016"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }], "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current field-use inspection", "observed": "The dead MockTool.sourceInfo claim remains identical to ACUA-020, while its production branch remains covered by its owner test." },
+      "rationale": "Distinct claim identity maps to the same dead double field.", "destination": "Apply ACUA-020.", "duplicateOf": "ACUA-020"
+    },
+    {
+      "id": "ACUB-017", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-017"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }, { "path": "extensions/pi-claude-marketplace/shared/notify-context.ts" }], "testRefs": [{ "path": "tests/shared/notify.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current signature inspection", "observed": "The full external SDK parameter claim remains identical to ACUA-021." },
+      "rationale": "Distinct claim identity maps to the same production design defect.", "destination": "Apply ACUA-021.", "duplicateOf": "ACUA-021"
+    },
+    {
+      "id": "ACUB-018", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-018"], "evidenceStatus": "duplicate", "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify-context.ts" }], "testRefs": [{ "path": "tests/shared/notify-context.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current subsystem callback naming inspection", "observed": "The overstated p naming claim is the same non-actionable consistency observation positively closed in ACUA-022." },
+      "rationale": "Distinct historical claim, same stale local remediation.", "destination": "Close with ACUA-022.", "duplicateOf": "ACUA-022"
+    },
+    {
+      "id": "ACUB-019", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-019"], "evidenceStatus": "confirmed", "route": "operator decision",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current file and fixture section census", "observed": "The test remains 5,442 lines with 20 separable fixture sections; splitting it is still architectural sequencing work, and the production-emitter interface must be chosen first." },
+      "rationale": "A split affects module ownership and should not be silently folded into test cleanup.", "destination": "Operator decides split scope after accepting the section-emitter design.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-020", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-020"], "evidenceStatus": "duplicate", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }], "testRefs": [{ "path": "N/A", "reason": "Comment wording is statically observable." }],
+      "validation": { "method": "static-proof", "tool": "current Plan and Phase token search", "observed": "The first-pass clean claim remains refuted by the same three live planning references recorded in ACUA-009." },
+      "rationale": "This preserves the B report's clean-claim correction without creating a second remediation.", "destination": "Apply ACUA-009.", "duplicateOf": "ACUA-009"
+    },
+    {
+      "id": "ACUB-021", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-021"], "evidenceStatus": "confirmed", "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "docs/output-catalog.md" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "behavioral-probe", "command": "node --test tests/architecture/catalog-uat.test.ts", "exitCode": 0, "observed": "The current suite passes and retains whole-body byte equality, severity bidirectionality, exact single emission, summary and reload variants, soft-dependency combinations, empty-brace collapse, exact-count under-scan protection, and orphan-fixture detection." },
+      "rationale": "These positive mutation-resistant corpus properties remain current and constrain later fixes.", "destination": "Retain all named strengths during Phase 2 changes.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-022", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-022"], "evidenceStatus": "confirmed", "route": "deferred backlog",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current fixture and orchestrator spot-check", "observed": "The gate still proves renderer bytes rather than whether orchestrators construct each fixture payload; the documented pending transition remains hand-constructed and the sampled version-less autoupdate payload still matches its producer." },
+      "rationale": "Payload-to-producer fidelity is a distinct uncompleted audit, not grounds to invalidate the renderer corpus.", "destination": "Backlog a per-section orchestrator payload census after production emitter routing is established.", "duplicateOf": null
+    },
+    {
+      "id": "ACUB-023", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md#ACUB-023"], "evidenceStatus": "confirmed", "route": "deferred backlog",
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }, { "path": "tests/architecture/hooks-cap-notify.test.ts" }, { "path": "docs/output-catalog.md" }], "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current parser, documentation pointer, and closed-set inspection", "observed": "The catalog fence walk remains duplicated in hooks-cap-notify.test.ts, two checked documentation gate paths remain wrong, and closed-set corpus diffs remain an effective mechanical audit technique." },
+      "rationale": "All three cross-cutting prescriptions remain actionable beyond this shard's direct fixes.", "destination": "Sweep documented test paths, extract a shared catalog reader during the split, and apply closed-set censuses to other enumerable contracts.", "duplicateOf": null
     }
   ],
   "decisions": [],
