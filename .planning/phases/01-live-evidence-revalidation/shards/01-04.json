@@ -25,8 +25,8 @@
       "category": "control",
       "assignedPlan": "01-04",
       "claimIds": [],
-      "reviewStatus": "pending",
-      "outcome": "unreviewed"
+      "reviewStatus": "complete",
+      "outcome": "control document"
     }
   ],
   "sourceClaims": [
