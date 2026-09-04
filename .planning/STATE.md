@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-09-04T21:42:57.950Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-09-04T21:50:57.507Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: ea7b5850bdbbd861622fb4782d785202051b6a23
+state_head: 305028d6583c7aec72229019dbc8a1f58e59b70c
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 9 of 69
+Plan: 10 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -192,6 +192,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P06 | 10min | 2 tasks | 2 files |
 | Phase 01 P07 | 6min | 1 tasks | 2 files |
 | Phase 01 P08 | 12min | 2 tasks | 1 files |
+| Phase 01 P09 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -417,6 +418,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Keep the HOOKS_CONFIG_SCHEMA test-only-export question routed to operator decision while routing the inert-gate repair to Phase 2.
 - [Phase 01]: Preserve each architecture-gate report bullet as an independent namespaced claim, including clean and correction evidence.
 - [Phase 01]: Keep evidence status independent from remediation routing for the 01-08 shard.
+- [Phase 01]: Keep multi-directory agents discovery versus single-directory production wiring as an operator decision.
+- [Phase 01]: Classify artificial coverage as dead defensive code, compiler-forced narrowing, or reachable behavior with an unsuitable seam.
 
 ### Pending Todos
 
@@ -469,7 +472,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-08-PLAN.md
+**Stopped at:** Completed 01-09-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -478,7 +481,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T21:42:57.857Z
+Last session: 2026-09-04T21:50:57.418Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
