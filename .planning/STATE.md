@@ -4,12 +4,12 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
-status: planning
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-09-04T20:12:20.424Z"
+last_updated: "2026-09-04T20:14:27.832Z"
 last_activity: 2026-09-04
-last_activity_desc: Milestone refine-unit-tests roadmap drafted
-state_head: c0d5e284ec2e95f30269ecfb4adb5473087c8e31
+last_activity_desc: Phase 01 execution started
+state_head: 711c9ab1bc570bed95d847f1c3a3583b41174fe8
 progress:
   total_phases: 9
   completed_phases: 0
@@ -27,15 +27,15 @@ See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Revalidate the complete unit-test adversarial-review corpus
+**Current focus:** Phase 01 — Live Evidence Revalidation
 against the post-v1.19 tree before authorizing implementation work.
 
 ## Current Position
 
-Phase: 01 (Live Evidence Revalidation) — READY TO EXECUTE
-Plan: —
-Status: Ready to discuss and plan
-Last activity: 2026-09-04 — Milestone refine-unit-tests roadmap drafted
+Phase: 01 (Live Evidence Revalidation) — EXECUTING
+Plan: 1 of 69
+Status: Executing Phase 01
+Last activity: 2026-09-04 — Phase 01 execution started
 
 ## Performance Metrics
 
