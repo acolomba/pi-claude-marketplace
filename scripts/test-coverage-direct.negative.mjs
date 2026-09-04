@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertCompleteCoverage, assertReportComplete } from "./test-coverage-direct.mjs";
+import { verdictFor } from "./test-coverage-direct.report.mjs";
 
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "direct-coverage-gate-"));
 const sourceDirectory = path.join(fixtureRoot, "extensions/pi-claude-marketplace/domain");
@@ -234,6 +235,55 @@ try {
     {
       message: "Expected 3 all-pair records, found 4",
     },
+  );
+
+  // The report's verdict rule. It is the one place a refusal is recorded instead of propagated, so
+  // what it records and what it still refuses to record both have to be planted.
+  //
+  // The two accepting states come first and are not decoration: without them the three refusals
+  // below could all be firing on an answer the rule never understood rather than on the property
+  // each one claims.
+  assert.deepEqual(verdictFor(realSourcePath, "branches 4/4, functions 3/3, lines 12/12"), {
+    verdict: "complete",
+    coverage: "branches 4/4, functions 3/3, lines 12/12",
+    exitCode: 0,
+  });
+
+  assert.deepEqual(verdictFor(sourcePath, "type-only"), {
+    verdict: "type-only",
+    coverage: "type-only",
+    exitCode: 0,
+  });
+
+  // A shortfall becomes a row carrying the deficient counters, rather than ending the run.
+  assert.deepEqual(
+    verdictFor(
+      realSourcePath,
+      new Error(`Incomplete direct coverage for ${realSourcePath}: branches 28/29, lines 86/89`),
+    ),
+    {
+      verdict: "accepted-shortfall",
+      coverage: "branches 28/29, lines 86/89",
+      exitCode: 1,
+    },
+  );
+
+  // A shortfall message naming some other module is not this row's verdict. Without this state the
+  // rule could file one module's reading against another and still look right.
+  assert.throws(
+    () =>
+      verdictFor(
+        realSourcePath,
+        new Error("Incomplete direct coverage for extensions/elsewhere.ts: branches 1/2"),
+      ),
+    { message: "Incomplete direct coverage for extensions/elsewhere.ts: branches 1/2" },
+  );
+
+  // A focused test that failed is not a coverage verdict. Recording it as one would be the report
+  // answering for a pair it never measured.
+  assert.throws(
+    () => verdictFor(realSourcePath, new Error(`Focused test failed: ${unmappablePath}`)),
+    { message: `Focused test failed: ${unmappablePath}` },
   );
 
   process.stdout.write("Direct-coverage negative controls passed.\n");

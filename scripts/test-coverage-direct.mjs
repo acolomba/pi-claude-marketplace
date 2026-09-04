@@ -45,7 +45,7 @@ function testToSource(testPath) {
   return `${productionRoot}/${relativePath}.ts`;
 }
 
-function pairForPath(inputPath) {
+export function pairForPath(inputPath) {
   const projectPath = toProjectPath(inputPath);
   let sourcePath;
   let testPath;
@@ -69,7 +69,7 @@ function pairForPath(inputPath) {
   return { sourcePath, testPath };
 }
 
-function productionPaths() {
+export function productionPaths() {
   const absoluteRoot = path.join(projectRoot, productionRoot);
 
   return readdirSync(absoluteRoot, { recursive: true, withFileTypes: true })
@@ -368,7 +368,7 @@ export function assertReportComplete(records, modulePaths) {
   }
 }
 
-async function runPair({ sourcePath, testPath }) {
+export async function runPair({ sourcePath, testPath }) {
   const coverageDirectory = await mkdtemp(path.join(tmpdir(), "pi-claude-direct-"));
   const lcovPath = path.join(coverageDirectory, "pair.lcov");
   const startedAt = process.hrtime.bigint();

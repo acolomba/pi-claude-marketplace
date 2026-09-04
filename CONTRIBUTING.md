@@ -66,3 +66,15 @@ Both stop at the first pair that falls short of complete direct coverage. Seven 
 Stopping on one of those, with that exact reading, is the expected outcome rather than a regression. Each is pinned by identity in its own pair, and each is filed in the project's broken-windows ledger with the reason the arm is unreachable. A stop on any other module -- or on one of these reporting different numbers -- is a real failure.
 
 The gate is deliberately not taught this list: an exception list inside the gate is a coverage pragma by another name, and the seven are already pinned where they live. That is also why neither script has a CI job, since a job that is red every run reports nothing.
+
+### The whole-tree report (manual, not a gate)
+
+Because both sweeps stop at the first shortfall, neither can say what the rest of the tree reads. This does:
+
+```bash
+npm run test:coverage:direct:report   # every pair, recorded rather than enforced
+```
+
+It runs the same one focused test per pair, records the gate's verdict for each, and writes one JSON row per pair to `coverage/all-pairs-report.ndjson`. It is a reporting tool, not a gate: it does not stop at a shortfall, and its exit code is not a coverage verdict -- a zero says the report was written, nothing more. Only the two commands above decide whether coverage is complete, and both still refuse a shortfall. It is as slow as they are, so it too has no CI job.
+
+Each row carries a `verdict` of `complete`, `type-only` or `accepted-shortfall`. The report does not read the broken-windows ledger, so `accepted-shortfall` says only that the gate refused the row. Read the refused rows against the table above: seven rows carrying those readings is the expected result today, and an eighth row -- or one of the seven reading differently -- is a real failure. Anything else that goes wrong, such as a focused test that failed, fails the report rather than filing a coverage verdict for a pair it never measured.
