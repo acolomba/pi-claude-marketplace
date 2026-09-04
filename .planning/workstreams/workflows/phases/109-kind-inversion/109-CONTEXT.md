@@ -170,6 +170,51 @@ read.
 
 </decisions>
 
+<amendments>
+## Amendments from Research (2026-09-04)
+
+`109-RESEARCH.md` applied the full production change to a scratch tree and ran
+every gate, then reverted. Four findings refine the decisions above. None
+reverses one; each is now part of the locked set.
+
+- **A-01 — five locking tests go red, not three.** Criterion 4 and D-109-04 name
+  `compat-01-no-expansion`, `catalog-uat` and `notify-closed-set-locks`. Two more
+  fail and must be turned with them: `tests/architecture/hooks-foundation.test.ts:199`
+  pins `SUPPORTED_COMPONENT_KINDS` as an exact 4-tuple, and
+  `tests/shared/notify.test.ts:5008` carries a **second** `REASONS.length === 44`
+  assertion. Both are measured red. The `hooks-foundation` turn is also the
+  natural home for the optional positive mirror
+  (`UNSUPPORTED_COMPONENT_KINDS` does NOT contain `workflows`) that the
+  Claude's-Discretion list leaves open — take it; the `hooks` precedent sits at
+  line 207 of the same file.
+
+- **A-02 — turn the catalog doc blocks BEFORE the production change.**
+  `catalog-uat`'s three workflow fixtures pass `reasons: ["workflows"]` as string
+  literals and the renderer prints what it is handed, so with only production
+  edited the test is red at `tsc` but **green at runtime**. Editing the doc
+  blocks first is what makes the failure observable, which is what criterion 4
+  actually asks for. Rename each state's id in both homes in the same edit — the
+  inverse-walk gate fails on a fixture id with no annotation.
+
+- **A-03 — do not bump `EXTENSION_VERSION` during the 109-111 window.** A second,
+  independent reason for D-109-06's "cut no release". `orchestrators/reconcile/backfill.ts:343`
+  runs `supportedSetGrew` over records at `installable: false`, which is exactly
+  where a pre-inversion `--partial`-installed workflow-bearing record sits. Its
+  supported set now grows by `workflows`, so the scan would reinstall it — but
+  the scan is gated on `state.lastReconciledExtensionVersion === EXTENSION_VERSION`
+  (`backfill.ts:76`), and the version stays `0.18.1` through this phase, so it
+  never runs. A version bump inside the window would fire that convergence while
+  no bridge exists to materialize anything. Record this in the SUMMARY.
+
+- **A-04 — State 1's id is `workflow-available-inventory`.** D-109-05's example
+  `workflow-installed-inventory` sits above a block that renders `(available)`,
+  not `(installed)` — the not-installed inventory row. The ids in D-109-05 are
+  marked "e.g.", so this settles a naming choice inside the decision rather than
+  changing it. Use the id that matches the bytes, which is the whole point of
+  D-109-05.
+
+</amendments>
+
 <canonical_refs>
 ## Canonical References
 
