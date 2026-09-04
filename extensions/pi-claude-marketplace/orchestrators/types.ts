@@ -291,10 +291,10 @@ export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
  * preflight skipped paths (marketplace-missing / record-missing) have no
  * install record to read a version from; the manifest-skipped paths
  * (entry-missing / entry-invalid / no-longer-installable) do. `reasons`
- * is REQUIRED on skipped (one of the closed `not in manifest` /
- * `not installed` / `invalid manifest` / `no longer installable`
- * values). `notes` carries the free-form cause-chain text consumed by
- * the notify trailer.
+ * is REQUIRED on skipped and carries the `ContentReason[]` values emitted
+ * by the live membership, transport/auth, degradation, installability,
+ * disabled, unchanged, and typed/phase-failure producers. `notes` carries
+ * the free-form cause-chain text consumed by the notify trailer.
  *
  * XSURF-03: `partialUpgradable` marks the partially-upgradable manual update-decline
  * (the resolver verdict was `partially-available`, so `--partial` could degrade-update

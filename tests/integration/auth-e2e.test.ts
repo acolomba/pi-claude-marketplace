@@ -7,7 +7,7 @@
  *   buildAuthCallbacks (platform/git.ts)
  *     -> onAuth / onAuthFailure closures
  *       -> initiateDeviceFlow (domain/github-auth.ts)
- *         -> CredentialOps (tests/helpers/credential-mock.ts)
+ *         -> CredentialOps (tests/platform/credential-ops-fake.ts)
  *         -> notifyFn (shared/notify.ts makeRawNotifyFn)
  *
  * Tests:
@@ -28,8 +28,87 @@ import {
   type OnAuthRequiredFn,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import { makeRawNotifyFn } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
-import { makeMockCredentialOps } from "../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../helpers/device-flow-mock.ts";
+import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
+
+import type {
+  DeviceCodeResponse,
+  PollResult,
+} from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
+import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+
+interface CredentialAdapterOptions {
+  readonly store?: ReadonlyMap<string, GitCredentials>;
+  readonly fillThrows?: Error;
+  readonly approveThrows?: Error;
+  readonly rejectThrows?: Error;
+}
+
+function makeMockCredentialOps(initial: CredentialAdapterOptions = {}) {
+  const credentials = createCredentialOpsFake({
+    boundary: "memory",
+    credentials: [...(initial.store ?? new Map<string, GitCredentials>()).entries()],
+    ...(initial.fillThrows === undefined ? {} : { fillError: initial.fillThrows }),
+    ...(initial.approveThrows === undefined ? {} : { approveError: initial.approveThrows }),
+    ...(initial.rejectThrows === undefined ? {} : { rejectError: initial.rejectThrows }),
+  });
+
+  return {
+    credOps: credentials.credentialOps,
+    state: {
+      store: { has: (host: string) => credentials.storedCredential(host) !== null },
+      get fillCalls() {
+        return credentials.calls.fill;
+      },
+      get approveCalls() {
+        return credentials.calls.approve.map(({ host, credential: cred }) => ({ host, cred }));
+      },
+      get rejectCalls() {
+        return credentials.calls.reject.map(({ host, credential: cred }) => ({ host, cred }));
+      },
+    },
+  };
+}
+
+interface DeviceFlowAdapterOptions {
+  readonly deviceCode?: DeviceCodeResponse;
+  readonly pollQueue?: readonly PollResult[];
+  readonly defaultPoll?: PollResult;
+  readonly requestCodeThrows?: Error;
+  readonly pollTokenThrows?: Error;
+}
+
+function makeMockDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: initial.deviceCode ?? {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    ...(initial.pollQueue === undefined ? {} : { pollResponses: initial.pollQueue }),
+    ...(initial.defaultPoll === undefined ? {} : { defaultPoll: initial.defaultPoll }),
+    ...(initial.requestCodeThrows === undefined
+      ? {}
+      : { requestCodeError: initial.requestCodeThrows }),
+    ...(initial.pollTokenThrows === undefined ? {} : { pollTokenError: initial.pollTokenThrows }),
+  });
+
+  return {
+    http: deviceFlow.http,
+    state: {
+      get requestCodeCalls() {
+        return deviceFlow.calls.requestCode;
+      },
+      get pollTokenCalls() {
+        return deviceFlow.calls.pollToken;
+      },
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Shared notify infrastructure

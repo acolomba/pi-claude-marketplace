@@ -167,8 +167,8 @@ export interface ResolvedScopedPluginTarget {
  *
  * The NFR-7 discriminated-union precedent (`installable: true | false`)
  * applied to lifecycle scope resolution: the chokepoint distinguishes
- * three outcomes a single `undefined`/raw-throw return previously
- * collapsed.
+ * three outcomes that a single `undefined`/raw-throw return would
+ * collapse.
  *
  *   - `resolved`: the marketplace CONTAINER exists in the chosen scope
  *     (the plugin row may or may not be present -- the caller's
@@ -370,13 +370,13 @@ export async function missIsNotInstalled(opts: {
 /**
  * SCOPE-01 / D-01: the reason set every absent-target lifecycle row carries.
  *
- * Two misses used to render byte-identically. "The marketplace is here and you
- * never installed this plugin" and "the marketplace is one scope over, so
- * nothing of it is installed here" are different situations with different
- * remedies -- install the plugin, versus target the other scope or add the
- * marketplace at the one you named -- and a row that states neither cannot be
- * acted on. The cross-scope arm names the container's actual scope; the
- * in-scope arm stays the bare `{not installed}` it always was.
+ * "The marketplace is here and you never installed this plugin" and "the
+ * marketplace is one scope over, so nothing of it is installed here" are
+ * different situations with different remedies -- install the plugin, versus
+ * target the other scope or add the marketplace at the one you named -- and a
+ * row that states neither cannot be acted on. The cross-scope arm names the
+ * container's actual scope; the in-scope arm carries the bare
+ * `{not installed}`.
  *
  * `notInstalledAt` is `missIsNotInstalled`'s answer: the scope the operator
  * NAMED, returned ONLY when the container is registered in the other one. Both
@@ -804,8 +804,8 @@ export async function resolveInstalledPluginTarget(opts: {
 /**
  * SCOPE-01 / ATTR-02 / D-47-C discriminated `@marketplace` lifecycle target
  * resolution. The NFR-7 discriminated-union precedent applied to the update
- * direct path: the chokepoint distinguishes the three outcomes the former
- * `undefined`/raw-`MarketplaceNotFoundError` return collapsed (M11).
+ * direct path: the chokepoint distinguishes three outcomes that a plain
+ * `undefined` or a raw `MarketplaceNotFoundError` return cannot (M11).
  *
  *   - `resolved`: the marketplace CONTAINER exists in the chosen scope (CMP-5
  *     precedence preserved -- see `resolveInstalledMarketplaceTarget`).
@@ -1231,8 +1231,7 @@ export function applyPartialCascadeFold(
  * `MarketplaceNotAddedMessage` row and `undefined`, because the row IS the
  * outcome on that path.
  *
- * `uninstall.ts` and `enable-disable.ts` both reach this state and previously
- * carried byte-identical copies of it under two different names. The routing
+ * `uninstall.ts` and `enable-disable.ts` both reach this state. The routing
  * policy is one decision, so it lives here once; the return shape is the
  * `failed` arm both `UninstallPluginOutcome` and `EnableDisablePluginOutcome`
  * already declare, so neither union is widened by sharing it.

@@ -1,407 +1,529 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "node:test";
 
 import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import {
   runPhases,
   type Phase,
+  type RollbackPartial,
+  type RunPhasesResult,
 } from "../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 
-/**
- * D-01 / AS-4 / PI-14 -- runPhases ledger semantics.
- *
- * The ledger primitive is the seam every install/update/uninstall
- * orchestrator reuses. Tests focus on the three contracts that orchestrators
- * rely on: reverse-order undo (D-01), aggregated undo failures (AS-4), and
- * the loud PathContainmentError re-throw path (PI-14) that signals state
- * corruption rather than a routine cleanup miss.
- *
- * Test phases use `() => Promise.resolve()` instead of `async () => {}`
- * to satisfy `@typescript-eslint/require-await` -- the Phase<C> contract
- * is `() => Promise<void>`, and an empty resolved promise is the cheapest
- * legal body.
- */
+const PRODUCTION_PHASE_NAMES = ["skills", "commands", "agents", "hooks", "mcp", "state"] as const;
 
-interface TraceCtx {
-  trace: string[];
+type PhaseName = (typeof PRODUCTION_PHASE_NAMES)[number];
+
+interface LedgerContext {
+  readonly operations: string[];
+  readonly active: PhaseName[];
 }
 
-interface CountCtx {
-  count: number;
+interface ScheduleOptions {
+  readonly forwardFailure?: {
+    readonly phase: PhaseName;
+    readonly error: unknown;
+  };
+  readonly undoFailures?: Readonly<Partial<Record<PhaseName, unknown>>>;
+  readonly phasesWithoutUndo?: ReadonlySet<PhaseName>;
 }
 
-interface TaggedOpsCtx {
-  tag: string;
-  ops: string[];
+interface ForwardFailureCase {
+  readonly name: string;
+  readonly phase: PhaseName;
+  readonly expectedOperations: readonly string[];
 }
 
-const noopAsync = (): Promise<void> => Promise.resolve();
-const throwAsync = (msg: string): (() => Promise<void>) => {
-  return () => Promise.reject(new Error(msg));
-};
+const FORWARD_FAILURE_CASES = [
+  {
+    name: "compensates a skills failure before later phases run",
+    phase: "skills",
+    expectedOperations: ["do:skills", "undo:skills"],
+  },
+  {
+    name: "compensates a commands failure own-first and newest-first",
+    phase: "commands",
+    expectedOperations: ["do:skills", "do:commands", "undo:commands", "undo:skills"],
+  },
+  {
+    name: "compensates an agents failure own-first and newest-first",
+    phase: "agents",
+    expectedOperations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+  },
+  {
+    name: "compensates a hooks failure own-first and newest-first",
+    phase: "hooks",
+    expectedOperations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "undo:hooks",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+  },
+  {
+    name: "compensates an mcp failure own-first and newest-first",
+    phase: "mcp",
+    expectedOperations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "do:mcp",
+      "undo:mcp",
+      "undo:hooks",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+  },
+  {
+    name: "compensates a state failure own-first and newest-first",
+    phase: "state",
+    expectedOperations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "do:mcp",
+      "do:state",
+      "undo:state",
+      "undo:mcp",
+      "undo:hooks",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+  },
+] satisfies readonly ForwardFailureCase[];
 
-test("D-01 runPhases: 4 phases, phase 3 throws -> reverse-order undo of phases 1+2", async () => {
-  const ctx: TraceCtx = { trace: [] };
-  const phases: Phase<TraceCtx>[] = [
-    {
-      name: "p1",
-      do: (c) => {
-        c.trace.push("do:p1");
+const SCHEDULE_TYPE_EVIDENCE = PRODUCTION_PHASE_NAMES.map((name) => ({
+  name,
+  do: () => Promise.resolve(),
+})) satisfies readonly Phase<LedgerContext>[];
+void SCHEDULE_TYPE_EVIDENCE;
+
+function rejectUnknown(error: unknown): Promise<never> {
+  // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the ledger explicitly normalizes non-Error throws.
+  return Promise.reject(error);
+}
+
+function createSchedule(options: ScheduleOptions = {}): readonly Phase<LedgerContext>[] {
+  return PRODUCTION_PHASE_NAMES.map((name) => {
+    const phase: Phase<LedgerContext> = {
+      name,
+      do: (context) => {
+        context.operations.push(`do:${name}`);
+        context.active.push(name);
+        return options.forwardFailure?.phase === name
+          ? rejectUnknown(options.forwardFailure.error)
+          : Promise.resolve();
+      },
+      undo: (context) => {
+        context.operations.push(`undo:${name}`);
+        const undoFailure = options.undoFailures?.[name];
+        if (undoFailure !== undefined) {
+          return rejectUnknown(undoFailure);
+        }
+
+        const activeIndex = context.active.lastIndexOf(name);
+        assert.notStrictEqual(activeIndex, -1);
+        context.active.splice(activeIndex, 1);
         return Promise.resolve();
       },
-      undo: (c) => {
-        c.trace.push("undo:p1");
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p2",
-      do: (c) => {
-        c.trace.push("do:p2");
-        return Promise.resolve();
-      },
-      undo: (c) => {
-        c.trace.push("undo:p2");
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p3",
-      do: throwAsync("boom"),
-    },
-    {
-      name: "p4",
-      do: (c) => {
-        c.trace.push("do:p4");
-        return Promise.resolve();
-      },
-    },
-  ];
-  const result = await runPhases(phases, ctx);
-  assert.equal(result.ok, false);
-  assert.equal(result.error?.message, "boom");
-  assert.deepEqual(ctx.trace, ["do:p1", "do:p2", "undo:p2", "undo:p1"], "reverse-order undo");
-  assert.equal(result.rollbackPartials.length, 0);
+    };
+
+    return options.phasesWithoutUndo?.has(name) === true
+      ? { name: phase.name, do: phase.do }
+      : phase;
+  });
+}
+
+test("runs the complete install schedule successfully in production order", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: true,
+    rollbackPartials: [],
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases(createSchedule(), context);
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "do:commands", "do:agents", "do:hooks", "do:mcp", "do:state"],
+    active: ["skills", "commands", "agents", "hooks", "mcp", "state"],
+  });
 });
 
-test("AS-4 runPhases: undo failure aggregated with phase name", async () => {
-  const phases: Phase<object>[] = [
-    {
-      name: "p1",
-      do: noopAsync,
-      undo: throwAsync("rm leak"),
-    },
-    {
-      name: "p2",
-      do: throwAsync("boom"),
-    },
-  ];
-  const result = await runPhases(phases, {});
-  assert.equal(result.ok, false);
-  assert.equal(result.error?.message, "boom");
-  // RollbackPartial preserves the original undo throw via `cause`.
-  // Assert field-by-field instead of a deep-equal on the whole row so
-  // the test does not encode the Error instance identity into the
-  // fixture.
-  assert.equal(result.rollbackPartials.length, 1);
-  const first = result.rollbackPartials[0];
-  assert.ok(first !== undefined);
-  assert.equal(first.phase, "p1");
-  assert.equal(first.msg, "rm leak");
-  assert.ok(first.cause instanceof Error);
-  assert.equal(first.cause.message, "rm leak");
+for (const { name, phase, expectedOperations } of FORWARD_FAILURE_CASES) {
+  test(name, async () => {
+    // arrange
+    const context: LedgerContext = { operations: [], active: [] };
+    const forwardError = new Error(`${phase} forward failed`);
+    const expectedLedgerResult: RunPhasesResult = {
+      ok: false,
+      error: forwardError,
+      rollbackPartials: [],
+      leaks: [],
+    };
+
+    // act
+    const ledgerResult = await runPhases(
+      createSchedule({ forwardFailure: { phase, error: forwardError } }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+    assert.strictEqual(ledgerResult.error, forwardError);
+    assert.deepStrictEqual(context, { operations: expectedOperations, active: [] });
+  });
+}
+
+test("returns a complete no-op result for an empty schedule", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: true,
+    rollbackPartials: [],
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases([], context);
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.deepStrictEqual(context, { operations: [], active: [] });
 });
 
-test("AS-4 runPhases: multiple undo failures aggregated in reverse order", async () => {
-  const phases: Phase<object>[] = [
-    {
-      name: "p1",
-      do: noopAsync,
-      undo: throwAsync("p1 undo failed"),
-    },
-    {
-      name: "p2",
-      do: noopAsync,
-      undo: throwAsync("p2 undo failed"),
-    },
-    {
-      name: "p3",
-      do: throwAsync("boom"),
-    },
-  ];
-  const result = await runPhases(phases, {});
-  assert.equal(result.ok, false);
-  // undo runs reverse order: p2 first, then p1 -> partials in that order
-  assert.equal(result.rollbackPartials.length, 2);
-  const [first, second] = result.rollbackPartials;
-  assert.ok(first !== undefined && second !== undefined);
-  assert.equal(first.phase, "p2");
-  assert.equal(first.msg, "p2 undo failed");
-  assert.ok(first.cause instanceof Error);
-  assert.equal(second.phase, "p1");
-  assert.equal(second.msg, "p1 undo failed");
-  assert.ok(second.cause instanceof Error);
-});
+test("leaves a completed phase active when it has no undo", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("agents forward failed");
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: forwardError,
+    rollbackPartials: [],
+    leaks: [],
+  };
 
-test("PI-14 runPhases: PathContainmentError from undo is RE-THROWN (not folded into rollback partial)", async () => {
-  const phases: Phase<object>[] = [
-    {
-      name: "p1",
-      do: noopAsync,
-      undo: () =>
-        Promise.reject(new PathContainmentError("/parent", "/parent/../escape", "test undo")),
-    },
-    {
-      name: "p2",
-      do: throwAsync("boom"),
-    },
-  ];
-  await assert.rejects(
-    () => runPhases(phases, {}),
-    (err: unknown) => err instanceof PathContainmentError,
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({
+      forwardFailure: { phase: "agents", error: forwardError },
+      phasesWithoutUndo: new Set(["commands"]),
+    }),
+    context,
   );
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.strictEqual(ledgerResult.error, forwardError);
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "do:commands", "do:agents", "undo:agents", "undo:skills"],
+    active: ["commands"],
+  });
 });
 
-test("D-01 runPhases: all-phases-success returns ok=true with empty partials/leaks", async () => {
-  const ctx: CountCtx = { count: 0 };
-  const phases: Phase<CountCtx>[] = [
-    {
-      name: "p1",
-      do: (c) => {
-        c.count++;
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p2",
-      do: (c) => {
-        c.count++;
-        return Promise.resolve();
-      },
-    },
-  ];
-  const result = await runPhases(phases, ctx);
-  assert.equal(result.ok, true);
-  assert.deepEqual([...result.rollbackPartials], []);
-  assert.deepEqual([...result.leaks], []);
-  assert.equal(ctx.count, 2);
-});
+test("skips own undo when the failing phase has no undo", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("agents forward failed");
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: forwardError,
+    rollbackPartials: [],
+    leaks: [],
+  };
 
-test("D-01 runPhases: empty phases array is a no-op (ok=true)", async () => {
-  const result = await runPhases([], {});
-  assert.equal(result.ok, true);
-  assert.deepEqual([...result.rollbackPartials], []);
-});
-
-test("D-01 runPhases: phase WITHOUT undo is silently skipped during rollback", async () => {
-  const ctx: TraceCtx = { trace: [] };
-  const phases: Phase<TraceCtx>[] = [
-    {
-      name: "p1",
-      do: (c) => {
-        c.trace.push("do:p1");
-        return Promise.resolve();
-      },
-      // intentionally no undo -- ledger should silently skip on rollback.
-    },
-    {
-      name: "p2",
-      do: (c) => {
-        c.trace.push("do:p2");
-        return Promise.resolve();
-      },
-      undo: (c) => {
-        c.trace.push("undo:p2");
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p3",
-      do: throwAsync("boom"),
-    },
-  ];
-  const result = await runPhases(phases, ctx);
-  assert.equal(result.ok, false);
-  // p1 has no undo -> not invoked. p2.undo IS invoked.
-  assert.deepEqual(ctx.trace, ["do:p1", "do:p2", "undo:p2"]);
-  assert.equal(result.rollbackPartials.length, 0);
-});
-
-test("D-01 runPhases: ctx threaded to every do AND undo call", async () => {
-  const ctx: TaggedOpsCtx = { tag: "mytag", ops: [] };
-  const phases: Phase<TaggedOpsCtx>[] = [
-    {
-      name: "p1",
-      do: (c) => {
-        c.ops.push(`do:p1:${c.tag}`);
-        return Promise.resolve();
-      },
-      undo: (c) => {
-        c.ops.push(`undo:p1:${c.tag}`);
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p2",
-      do: throwAsync("boom"),
-    },
-  ];
-  await runPhases(phases, ctx);
-  assert.deepEqual(ctx.ops, ["do:p1:mytag", "undo:p1:mytag"]);
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// RollbackPartial preserves the original undo throw's Error.cause chain so
-// the presentation layer can surface the depth-5 walk to the user.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("undo error's Error.cause is preserved on the RollbackPartial.cause field", async () => {
-  const innermost = new Error("disk write failed");
-  const undoErr = new Error("rm leak", { cause: innermost });
-  const phases: Phase<object>[] = [
-    {
-      name: "p1",
-      do: noopAsync,
-      undo: () => Promise.reject(undoErr),
-    },
-    {
-      name: "p2",
-      do: throwAsync("boom"),
-    },
-  ];
-  const result = await runPhases(phases, {});
-  assert.equal(result.ok, false);
-  assert.equal(result.rollbackPartials.length, 1);
-  const first = result.rollbackPartials[0];
-  assert.ok(first !== undefined);
-  assert.equal(first.phase, "p1");
-  assert.equal(first.msg, "rm leak");
-  // The Error INSTANCE is preserved (not just the message text) so the
-  // depth-5 cause-chain walker at the presentation layer can traverse
-  // .cause to surface the originating "disk write failed" message.
-  assert.ok(first.cause instanceof Error);
-  assert.equal(first.cause, undoErr);
-  assert.equal((first.cause as Error & { cause?: unknown }).cause, innermost);
-});
-
-test("260525-cjr C1: undo throw of a non-Error (defensive) leaves RollbackPartial.cause undefined", async () => {
-  const phases: Phase<object>[] = [
-    {
-      name: "p1",
-      do: noopAsync,
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- 260525-cjr C1: deliberately reject with a non-Error to exercise the defensive `instanceof Error` guard on RollbackPartial.cause population.
-      undo: () => Promise.reject("string throw, not an Error"),
-    },
-    {
-      name: "p2",
-      do: throwAsync("boom"),
-    },
-  ];
-  const result = await runPhases(phases, {});
-  assert.equal(result.rollbackPartials.length, 1);
-  const first = result.rollbackPartials[0];
-  assert.ok(first !== undefined);
-  assert.equal(first.cause, undefined);
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// TR-02: failing-phase own-undo invocation (separate catch-block
-// call site). The failing phase's undo runs FIRST in the catch block, BEFORE
-// rollbackExecuted walks executed[] in reverse. PathContainmentError still
-// re-throws (PI-14). Failing-phase RollbackPartial sorts to index 0 (AS-4).
-// ───────────────────────────────────────────────────────────────────────────
-
-test("TR-02 runPhases: failing-phase undo runs BEFORE reverse-walk, exactly once each", async () => {
-  const ctx: TraceCtx = { trace: [] };
-  const phases: Phase<TraceCtx>[] = [
-    {
-      name: "p0",
-      do: (c) => {
-        c.trace.push("do:p0");
-        return Promise.resolve();
-      },
-      undo: (c) => {
-        c.trace.push("undo:p0");
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p1",
-      do: (c) => {
-        c.trace.push("do:p1");
-        return Promise.resolve();
-      },
-      undo: (c) => {
-        c.trace.push("undo:p1");
-        return Promise.resolve();
-      },
-    },
-    {
-      name: "p2",
-      do: (c) => {
-        c.trace.push("do:p2");
-        throw new Error("boom");
-      },
-      undo: (c) => {
-        c.trace.push("undo:p2");
-        return Promise.resolve();
-      },
-    },
-  ];
-  const result = await runPhases(phases, ctx);
-  assert.equal(result.ok, false);
-  assert.equal(result.error?.message, "boom");
-  // EXACT expected sequence: failing phase's own undo FIRST, then reverse
-  // walk over executed[] = [p0, p1]. Each undo invoked EXACTLY ONCE (no
-  // double-rollback per the over-correction guard).
-  assert.deepEqual(
-    ctx.trace,
-    ["do:p0", "do:p1", "do:p2", "undo:p2", "undo:p1", "undo:p0"],
-    "failing-phase undo first, then reverse-walk over executed[], each exactly once",
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({
+      forwardFailure: { phase: "agents", error: forwardError },
+      phasesWithoutUndo: new Set(["agents"]),
+    }),
+    context,
   );
-  assert.equal(result.rollbackPartials.length, 0);
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.strictEqual(ledgerResult.error, forwardError);
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "do:commands", "do:agents", "undo:commands", "undo:skills"],
+    active: ["agents"],
+  });
 });
 
-test("PI-14 runPhases: PathContainmentError from FAILING phase's own undo is RE-THROWN", async () => {
-  const phases: Phase<object>[] = [
-    {
-      name: "p1",
-      do: noopAsync,
-      undo: noopAsync,
-    },
-    {
-      name: "p2",
-      do: throwAsync("boom"),
-      undo: () =>
-        Promise.reject(new PathContainmentError("/parent", "/parent/../escape", "p2 undo")),
-    },
-  ];
-  await assert.rejects(
-    () => runPhases(phases, {}),
-    (err: unknown) => err instanceof PathContainmentError,
+test("reports an ordinary failing-phase undo error before reverse failures", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("agents forward failed");
+  const ownUndoError = new Error("agents undo failed", { cause: new Error("agent cleanup") });
+  const expectedRollbackPartials = [
+    { phase: "agents", msg: "agents undo failed", cause: ownUndoError },
+  ] satisfies readonly RollbackPartial[];
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: forwardError,
+    rollbackPartials: expectedRollbackPartials,
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({
+      forwardFailure: { phase: "agents", error: forwardError },
+      undoFailures: { agents: ownUndoError },
+    }),
+    context,
   );
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.strictEqual(ledgerResult.error, forwardError);
+  assert.strictEqual(ledgerResult.rollbackPartials[0]?.cause, ownUndoError);
+  assert.deepStrictEqual(context, {
+    operations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+    active: ["agents"],
+  });
 });
 
-test("AS-4 runPhases: failing-phase undo failure is FIRST in rollbackPartials[]", async () => {
-  const phases: Phase<object>[] = [
-    { name: "p0", do: noopAsync, undo: throwAsync("p0 undo failed") },
-    { name: "p1", do: noopAsync, undo: throwAsync("p1 undo failed") },
-    { name: "p2", do: throwAsync("boom"), undo: throwAsync("p2 undo failed") },
-  ];
-  const result = await runPhases(phases, {});
-  assert.equal(result.ok, false);
-  assert.equal(result.error?.message, "boom");
-  assert.equal(result.rollbackPartials.length, 3);
-  // Newest first: failing phase (p2), then reverse-walk (p1, p0).
-  const [zero, one, two] = result.rollbackPartials;
-  assert.ok(zero !== undefined && one !== undefined && two !== undefined);
-  assert.equal(zero.phase, "p2");
-  assert.equal(zero.msg, "p2 undo failed");
-  assert.ok(zero.cause instanceof Error);
-  assert.equal(one.phase, "p1");
-  assert.equal(one.msg, "p1 undo failed");
-  assert.ok(one.cause instanceof Error);
-  assert.equal(two.phase, "p0");
-  assert.equal(two.msg, "p0 undo failed");
-  assert.ok(two.cause instanceof Error);
+test("omits the cause when a failing-phase undo rejects a non-Error", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("skills forward failed");
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: forwardError,
+    rollbackPartials: [{ phase: "skills", msg: "plain own undo failure" }],
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({
+      forwardFailure: { phase: "skills", error: forwardError },
+      undoFailures: { skills: "plain own undo failure" },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.strictEqual(ledgerResult.error, forwardError);
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "undo:skills"],
+    active: ["skills"],
+  });
+});
+
+test("reports one completed-phase undo failure with its cause", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("hooks forward failed");
+  const commandsUndoError = new Error("commands undo failed");
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: forwardError,
+    rollbackPartials: [
+      { phase: "commands", msg: "commands undo failed", cause: commandsUndoError },
+    ],
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({
+      forwardFailure: { phase: "hooks", error: forwardError },
+      undoFailures: { commands: commandsUndoError },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.strictEqual(ledgerResult.error, forwardError);
+  assert.strictEqual(ledgerResult.rollbackPartials[0]?.cause, commandsUndoError);
+  assert.deepStrictEqual(context, {
+    operations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "undo:hooks",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+    active: ["commands"],
+  });
+});
+
+test("reports several completed-phase undo failures newest-first", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("state forward failed");
+  const mcpUndoError = new Error("mcp undo failed");
+  const agentsUndoError = new Error("agents undo failed", { cause: new Error("agent cleanup") });
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: forwardError,
+    rollbackPartials: [
+      { phase: "mcp", msg: "mcp undo failed", cause: mcpUndoError },
+      { phase: "agents", msg: "agents undo failed", cause: agentsUndoError },
+      { phase: "skills", msg: "plain reverse undo failure" },
+    ],
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({
+      forwardFailure: { phase: "state", error: forwardError },
+      undoFailures: {
+        skills: "plain reverse undo failure",
+        agents: agentsUndoError,
+        mcp: mcpUndoError,
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.strictEqual(ledgerResult.error, forwardError);
+  assert.strictEqual(ledgerResult.rollbackPartials[0]?.cause, mcpUndoError);
+  assert.strictEqual(ledgerResult.rollbackPartials[1]?.cause, agentsUndoError);
+  assert.deepStrictEqual(context, {
+    operations: [
+      "do:skills",
+      "do:commands",
+      "do:agents",
+      "do:hooks",
+      "do:mcp",
+      "do:state",
+      "undo:state",
+      "undo:mcp",
+      "undo:hooks",
+      "undo:agents",
+      "undo:commands",
+      "undo:skills",
+    ],
+    active: ["skills", "agents", "mcp"],
+  });
+});
+
+test("rethrows a failing phase own-undo containment error by identity", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("agents forward failed");
+  const containmentError = new PathContainmentError("/scope", "/scope/../escape", "agents undo");
+  let thrown: unknown;
+
+  // act
+  try {
+    await runPhases(
+      createSchedule({
+        forwardFailure: { phase: "agents", error: forwardError },
+        undoFailures: { agents: containmentError },
+      }),
+      context,
+    );
+  } catch (error) {
+    thrown = error;
+  }
+
+  // assert
+  assert.strictEqual(thrown, containmentError);
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "do:commands", "do:agents", "undo:agents"],
+    active: ["skills", "commands", "agents"],
+  });
+});
+
+test("rethrows a completed phase undo containment error before older compensation", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const forwardError = new Error("agents forward failed");
+  const containmentError = new PathContainmentError("/scope", "/scope/../escape", "commands undo");
+  let thrown: unknown;
+
+  // act
+  try {
+    await runPhases(
+      createSchedule({
+        forwardFailure: { phase: "agents", error: forwardError },
+        undoFailures: { commands: containmentError },
+      }),
+      context,
+    );
+  } catch (error) {
+    thrown = error;
+  }
+
+  // assert
+  assert.strictEqual(thrown, containmentError);
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "do:commands", "do:agents", "undo:agents", "undo:commands"],
+    active: ["skills", "commands"],
+  });
+});
+
+test("normalizes a non-Error forward throw into the complete public result", async () => {
+  // arrange
+  const context: LedgerContext = { operations: [], active: [] };
+  const expectedLedgerResult: RunPhasesResult = {
+    ok: false,
+    error: new Error("plain forward failure"),
+    rollbackPartials: [],
+    leaks: [],
+  };
+
+  // act
+  const ledgerResult = await runPhases(
+    createSchedule({ forwardFailure: { phase: "skills", error: "plain forward failure" } }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(ledgerResult, expectedLedgerResult);
+  assert.deepStrictEqual(
+    {
+      errorType: ledgerResult.error?.constructor,
+      errorName: ledgerResult.error?.name,
+      errorMessage: ledgerResult.error?.message,
+      errorCause: ledgerResult.error?.cause,
+    },
+    {
+      errorType: Error,
+      errorName: "Error",
+      errorMessage: "plain forward failure",
+      errorCause: undefined,
+    },
+  );
+  assert.deepStrictEqual(context, {
+    operations: ["do:skills", "undo:skills"],
+    active: [],
+  });
 });

@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { describe, test } from "node:test";
 
 import {
   firstBodyParagraph,
@@ -11,292 +8,413 @@ import {
   synthesizeUnparseableSkill,
   truncate1536,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts";
-import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-// Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.resolve(__dirname, "..", "_fixtures");
+describe("synthesizeUnparseableSkill", () => {
+  for (const { description, body, generatedName, expectedContent } of [
+    {
+      description: "a multiline markdown body",
+      body: "# Real Body\n\nThe original markdown, preserved verbatim.\n",
+      generatedName: "acme-helper",
+      expectedContent:
+        "---\n" +
+        "name: acme-helper\n" +
+        "description: Source frontmatter could not be parsed.\n" +
+        "disable-model-invocation: true\n" +
+        "---\n\n" +
+        "# Real Body\n\nThe original markdown, preserved verbatim.\n",
+    },
+    {
+      description: "an empty body",
+      body: "",
+      generatedName: "empty-helper",
+      expectedContent:
+        "---\n" +
+        "name: empty-helper\n" +
+        "description: Source frontmatter could not be parsed.\n" +
+        "disable-model-invocation: true\n" +
+        "---\n\n",
+    },
+  ]) {
+    test(`emits exact fallback metadata and preserves ${description}`, () => {
+      // arrange
+      const expectedSkillContent = expectedContent;
 
-function readFixture(dir: string): Promise<string> {
-  return readFile(path.join(FIXTURES, dir, "SKILL.md"), "utf8");
-}
+      // act
+      const skillContent = synthesizeUnparseableSkill(body, generatedName);
 
-// ---------------------------------------------------------------------------
-// SKILL-01: synthesizeUnparseableSkill
-// ---------------------------------------------------------------------------
-
-test("SKILL-01: synthesizeUnparseableSkill emits a disable-model-invocation block with the generated name and the body verbatim", () => {
-  const body = "# Real Body\n\nThe original markdown, preserved verbatim.\n";
-  const out = synthesizeUnparseableSkill(body, "acme-helper");
-
-  // The synthesized block re-parses cleanly via Pi's own parser.
-  const { frontmatter, body: parsedBody } = parseFrontmatter<{
-    name: string;
-    description: string;
-    "disable-model-invocation": boolean;
-  }>(out);
-  assert.equal(frontmatter.name, "acme-helper");
-  assert.equal(typeof frontmatter.description, "string");
-  assert.ok(frontmatter.description.length > 0, "placeholder description must be non-empty");
-  assert.equal(frontmatter["disable-model-invocation"], true);
-
-  // Body is preserved verbatim (the parser trims, so compare against trimmed).
-  assert.equal(parsedBody, body.trim());
-  // The raw output carries the body bytes unchanged after the closing delimiter.
-  assert.ok(out.endsWith(body), "body must be appended verbatim");
-});
-
-// ---------------------------------------------------------------------------
-// SKILL-02 / D-86-06: firstBodyParagraph
-// ---------------------------------------------------------------------------
-
-test("SKILL-02 / D-86-06: firstBodyParagraph skips blank lines, ATX headings, and fenced code blocks, then returns the first prose paragraph", async () => {
-  const { body } = parseFrontmatter(await readFixture("skill-heading-codeblock-body"));
-  const para = firstBodyParagraph(body);
-  assert.equal(
-    para,
-    "The first genuine prose paragraph after the heading and code block.\nSecond line of that same paragraph.",
-  );
-});
-
-test("SKILL-02 / D-86-06: firstBodyParagraph stops at the first blank line (does not run into a later paragraph)", async () => {
-  const { body } = parseFrontmatter(await readFixture("skill-no-description"));
-  const para = firstBodyParagraph(body);
-  assert.equal(
-    para,
-    "This is the first real body paragraph that the fallback should pick up.\nIt continues on a second line of the same paragraph.",
-  );
-  assert.ok(!para.includes("later paragraph"), "must not capture a later paragraph");
-});
-
-test("SKILL-02: firstBodyParagraph returns empty string for a body with no prose", () => {
-  assert.equal(firstBodyParagraph(""), "");
-  assert.equal(firstBodyParagraph("\n\n   \n"), "");
-  assert.equal(firstBodyParagraph("# Only a heading\n\n## Another heading\n"), "");
-  assert.equal(firstBodyParagraph("```\nonly a fence\n```\n"), "");
-});
-
-test("SKILL-02: firstBodyParagraph skips a ~~~ (tilde) fenced block and returns the first prose after it", () => {
-  const body = "~~~\ncode in a tilde fence\n~~~\n\nReal prose here.\n";
-  assert.equal(firstBodyParagraph(body), "Real prose here.");
-});
-
-test("SKILL-02: firstBodyParagraph returns empty when an unterminated fence swallows the rest of the body", () => {
-  const body = "```\nnever closed\nstill inside the fence\n";
-  assert.equal(firstBodyParagraph(body), "");
-});
-
-// ---------------------------------------------------------------------------
-// WTU-01: foldWhenToUse
-// ---------------------------------------------------------------------------
-
-test("WTU-01: foldWhenToUse with an empty or absent when_to_use returns the description unchanged (no trailing separator)", () => {
-  assert.equal(foldWhenToUse("a description", ""), "a description");
-  assert.equal(foldWhenToUse("a description", undefined), "a description");
-  // No trailing newline introduced.
-  assert.ok(!foldWhenToUse("a description", "").endsWith("\n"));
-});
-
-test("WTU-01 (A1): foldWhenToUse joins description and when_to_use with a single \\n separator", () => {
-  assert.equal(foldWhenToUse("desc", "use when X"), "desc\nuse when X");
-});
-
-test("WTU-01: foldWhenToUse with an empty description and a non-empty when_to_use yields a leading-\\n join", () => {
-  assert.equal(foldWhenToUse("", "use when X"), "\nuse when X");
-});
-
-test("WTU-01: foldWhenToUse operates on JS string .length (UTF-16 code units) with no byte reinterpretation", () => {
-  // A non-BMP emoji is two UTF-16 code units; the fold must not reinterpret it.
-  const desc = "d\u{1F600}"; // "d" + emoji
-  const wtu = "w";
-  const folded = foldWhenToUse(desc, wtu);
-  assert.equal(folded, `${desc}\n${wtu}`);
-  assert.equal(folded.length, desc.length + 1 + wtu.length);
-});
-
-// ---------------------------------------------------------------------------
-// WTU-02 (A2): truncate1536
-// ---------------------------------------------------------------------------
-
-test("WTU-02: truncate1536 leaves text of length <= 1536 unchanged", () => {
-  const at1535 = "a".repeat(1535);
-  const at1536 = "a".repeat(1536);
-  assert.equal(truncate1536(at1535), at1535);
-  assert.equal(truncate1536(at1536), at1536);
-  assert.equal(truncate1536(at1536).length, 1536);
-});
-
-test("WTU-02: truncate1536 hard-cuts a 1537-char string to exactly 1536 code units (no ellipsis)", () => {
-  const at1537 = "b".repeat(1537);
-  const cut = truncate1536(at1537);
-  assert.equal(cut.length, 1536);
-  assert.equal(cut, "b".repeat(1536));
-  assert.ok(!cut.endsWith("..."), "no ellipsis on a hard cut");
-});
-
-test("WTU-02: truncate1536 measures 1536 in UTF-16 code units", () => {
-  // 768 non-BMP emoji = 1536 UTF-16 code units exactly -> unchanged.
-  const exactly1536 = "\u{1F600}".repeat(768);
-  assert.equal(exactly1536.length, 1536);
-  assert.equal(truncate1536(exactly1536), exactly1536);
-  // One more emoji pushes to 1538 code units -> cut at 1536.
-  const over = "\u{1F600}".repeat(769);
-  assert.equal(truncate1536(over).length, 1536);
-});
-
-test("WTU-02: truncate1536 on empty combined text returns empty without crashing", () => {
-  assert.equal(truncate1536(""), "");
-});
-
-test("WTU-02: truncate1536 cutting through a surrogate pair yields exactly 1536 code units", () => {
-  // 1535 BMP chars + one astral char (U+1F600 = 2 code units at indices 1535,1536).
-  // The 1536-code-unit hard cut keeps index 1535 (the HIGH surrogate) and drops its
-  // LOW half -- a lone surrogate, length exactly 1536, no throw.
-  const text = "a".repeat(1535) + "\u{1F600}";
-  assert.equal(text.length, 1537);
-  const cut = truncate1536(text);
-  assert.equal(cut.length, 1536);
-  const lastUnit = cut.charCodeAt(1535);
-  assert.ok(lastUnit >= 0xd800 && lastUnit <= 0xdbff, "trailing unit is a lone high surrogate");
-});
-
-// ---------------------------------------------------------------------------
-// SKILL-03 class: setDescriptionScalar (full node-span replacement)
-// ---------------------------------------------------------------------------
-
-test("SKILL-03: setDescriptionScalar replaces a `>-` block-scalar description with a single safe scalar and leaves sibling keys unchanged", async () => {
-  const source = await readFixture("skill-block-scalar-description");
-  const out = setDescriptionScalar(source, "A single-line replacement description.");
-
-  const { frontmatter } = parseFrontmatter<{
-    name: string;
-    description: string;
-    version: string;
-    tags: string;
-  }>(out);
-  assert.equal(frontmatter.description, "A single-line replacement description.");
-  // Sibling keys survive the node-span replacement intact.
-  assert.equal(frontmatter.name, "block-desc");
-  assert.equal(frontmatter.version, "2.3.1");
-  assert.equal(frontmatter.tags, "alpha, beta");
-
-  // The multi-line block-scalar continuation lines are gone (no orphaned prose).
-  assert.ok(!out.includes("spans several source lines"), "old scalar body must be removed");
-});
-
-test("SKILL-03: setDescriptionScalar replaces an inline description without touching siblings", () => {
-  const source = "---\nname: inline\ndescription: old inline value\nversion: 9.9.9\n---\n\nBody.\n";
-  const out = setDescriptionScalar(source, "new value");
-  const { frontmatter } = parseFrontmatter<{ name: string; description: string; version: string }>(
-    out,
-  );
-  assert.equal(frontmatter.description, "new value");
-  assert.equal(frontmatter.name, "inline");
-  assert.equal(frontmatter.version, "9.9.9");
-});
-
-test("SKILL-03 (AG-8 class): setDescriptionScalar emits an author value as a safe double-quoted scalar that cannot re-form a new YAML key", () => {
-  const source = "---\nname: safe\ndescription: placeholder\n---\n\nBody.\n";
-  // A value containing a colon+newline that, emitted naively, would re-form a
-  // sibling key. The safe emitter must collapse the newline and quote it.
-  const hostile = "evil: value\nmalicious-key: injected";
-  const out = setDescriptionScalar(source, hostile);
-  const { frontmatter } = parseFrontmatter(out);
-  assert.equal(frontmatter.description, "evil: value malicious-key: injected");
-  assert.equal(frontmatter["malicious-key"], undefined, "no injected sibling key");
-  assert.equal(frontmatter.name, "safe");
-});
-
-test("SKILL-03 (AG-8 class): setDescriptionScalar escapes embedded quotes and backslashes so the value round-trips through parseFrontmatter", () => {
-  const source = "---\nname: safe\ndescription: placeholder\nversion: 1\n---\n\nBody.\n";
-  // The two characters emitSafeDoubleQuotedScalar exists to escape: a literal
-  // double-quote, a literal backslash (e.g. a Windows path), and the pre-formed
-  // `\"` sequence -- the last proves backslash is escaped BEFORE quote (so the
-  // author `"` is not double-processed). Each must decode back byte-identically.
-  for (const value of ['He said "hi" to me', "a path\\to\\thing", 'mix \\" of both']) {
-    const out = setDescriptionScalar(source, value);
-    const { frontmatter } = parseFrontmatter<{
-      name: string;
-      description: string;
-      version: number;
-    }>(out);
-    assert.equal(frontmatter.description, value);
-    // No injected sibling key and existing siblings intact.
-    assert.equal(frontmatter.name, "safe");
-    assert.equal(frontmatter.version, 1);
+      // assert
+      assert.strictEqual(skillContent, expectedSkillContent);
+    });
   }
 });
 
-test("CR-01: setDescriptionScalar replaces a multi-line PLAIN scalar description spanning its full node (no orphaned continuation lines)", () => {
-  // A valid, gate-1-parseable source whose `description` is a multi-line PLAIN
-  // scalar (indented continuation). Augmentation fires (folded when_to_use), so
-  // the description value changes. A lone `description:` line replace would
-  // orphan `  plain scalar that wraps`, producing invalid YAML that gate-2
-  // rejects and that hard-fails an otherwise-valid install.
-  const source =
-    "---\nname: my-skill\ndescription: This is a fairly long\n  plain scalar that wraps\n" +
-    "when_to_use: Use for X\n---\n\nBody.\n";
-  const out = setDescriptionScalar(
-    source,
-    "This is a fairly long plain scalar that wraps\nUse for X",
-  );
+describe("firstBodyParagraph", () => {
+  for (const { description, body, expectedParagraph } of [
+    {
+      description: "blank lines, headings, and a backtick fence",
+      body:
+        "\n# A Leading Heading\n\n```bash\necho skipped\n# still fenced\n```\n\n" +
+        "The first genuine prose paragraph.\nSecond line of that paragraph.\n\nLater prose.",
+      expectedParagraph: "The first genuine prose paragraph.\nSecond line of that paragraph.",
+    },
+    {
+      description: "a tilde fence",
+      body: "~~~\ncode in a tilde fence\n~~~\n\nReal prose here.\n",
+      expectedParagraph: "Real prose here.",
+    },
+    {
+      description: "an immediate paragraph",
+      body: "First line.\nSecond line.\n\nLater paragraph.",
+      expectedParagraph: "First line.\nSecond line.",
+    },
+    {
+      description: "an empty body",
+      body: "",
+      expectedParagraph: "",
+    },
+    {
+      description: "whitespace only",
+      body: "\n\n   \n",
+      expectedParagraph: "",
+    },
+    {
+      description: "headings only",
+      body: "# One\n\n###### Six\n",
+      expectedParagraph: "",
+    },
+    {
+      description: "a closed fence with no following prose",
+      body: "```\nonly a fence\n```\n",
+      expectedParagraph: "",
+    },
+    {
+      description: "an unterminated fence",
+      body: "```\nnever closed\nstill inside the fence\n",
+      expectedParagraph: "",
+    },
+  ]) {
+    test(`returns the first prose paragraph after ${description}`, () => {
+      // arrange
+      const expectedBodyParagraph = expectedParagraph;
 
-  // Gate-2: the staged bytes re-parse cleanly (no throw on orphaned lines).
-  assert.doesNotThrow(() => parseFrontmatter(out));
+      // act
+      const bodyParagraph = firstBodyParagraph(body);
 
-  const { frontmatter } = parseFrontmatter<{
-    name: string;
-    description: string;
-    when_to_use: string;
-  }>(out);
-  // The folded description is emitted as a single safe scalar (newline collapsed).
-  assert.equal(frontmatter.description, "This is a fairly long plain scalar that wraps Use for X");
-  // Sibling keys survive intact.
-  assert.equal(frontmatter.name, "my-skill");
-  assert.equal(frontmatter.when_to_use, "Use for X");
-  // The plain-scalar continuation line is gone (no orphaned prose).
-  assert.ok(!out.includes("  plain scalar that wraps"), "continuation line must be removed");
+      // assert
+      assert.strictEqual(bodyParagraph, expectedBodyParagraph);
+    });
+  }
+
+  test("treats sparse split entries inside a fence as blank lines", (t) => {
+    // arrange
+    const body = "sparse fenced body";
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (this === body) {
+        const lines: string[] = [];
+        lines.length = 4;
+        lines[0] = "```";
+        lines[2] = "```";
+        lines[3] = "Body prose.";
+        return lines;
+      }
+
+      return [this];
+    });
+
+    // act
+    const bodyParagraph = firstBodyParagraph(body);
+
+    // assert
+    assert.strictEqual(bodyParagraph, "Body prose.");
+  });
+
+  test("treats a sparse leading split entry as a blank line", (t) => {
+    // arrange
+    const body = "sparse leading body";
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (this === body) {
+        const lines: string[] = [];
+        lines.length = 2;
+        lines[1] = "Body prose.";
+        return lines;
+      }
+
+      return [this];
+    });
+
+    // act
+    const bodyParagraph = firstBodyParagraph(body);
+
+    // assert
+    assert.strictEqual(bodyParagraph, "Body prose.");
+  });
+
+  test("treats a disappearing split entry as an empty paragraph line", (t) => {
+    // arrange
+    const body = "volatile split body";
+    let reads = 0;
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (this === body) {
+        const lines: string[] = [];
+        lines.length = 2;
+        Object.defineProperty(lines, "0", {
+          configurable: true,
+          enumerable: true,
+          get() {
+            reads += 1;
+            return reads < 3 ? "Body prose." : undefined;
+          },
+        });
+        return lines;
+      }
+
+      return [this];
+    });
+
+    // act
+    const bodyParagraph = firstBodyParagraph(body);
+
+    // assert
+    assert.strictEqual(bodyParagraph, "");
+  });
 });
 
-test("CR-01: setDescriptionScalar replaces a multi-line DOUBLE-QUOTED scalar description spanning its full node", () => {
-  // A multi-line double-quoted `description` scalar. Same defect class as the
-  // plain-scalar case: the inline value starts with `"` (not `>`/`|`), so a
-  // block-scalar-only span detector would orphan the continuation line.
-  const source =
-    '---\nname: quoted-skill\ndescription: "This is a fairly long\n  quoted scalar that wraps"\n' +
-    "version: 1.2.3\n---\n\nBody.\n";
-  const out = setDescriptionScalar(source, "A single-line replacement.");
+describe("foldWhenToUse", () => {
+  for (const { description, whenToUse, expectedDescription } of [
+    {
+      description: "A description.",
+      whenToUse: undefined,
+      expectedDescription: "A description.",
+    },
+    {
+      description: "A description.",
+      whenToUse: "",
+      expectedDescription: "A description.",
+    },
+    {
+      description: "A description.",
+      whenToUse: "Use for exact folding.",
+      expectedDescription: "A description.\nUse for exact folding.",
+    },
+    {
+      description: "",
+      whenToUse: "Use without a description.",
+      expectedDescription: "\nUse without a description.",
+    },
+    {
+      description: "Emoji 😀",
+      whenToUse: "Use with Unicode 🧪",
+      expectedDescription: "Emoji 😀\nUse with Unicode 🧪",
+    },
+  ]) {
+    test(`folds ${JSON.stringify(whenToUse)} into ${JSON.stringify(description)}`, () => {
+      // arrange
+      const expectedFoldedDescription = expectedDescription;
 
-  assert.doesNotThrow(() => parseFrontmatter(out));
+      // act
+      const foldedDescription = foldWhenToUse(description, whenToUse);
 
-  const { frontmatter } = parseFrontmatter<{
-    name: string;
-    description: string;
-    version: string;
-  }>(out);
-  assert.equal(frontmatter.description, "A single-line replacement.");
-  assert.equal(frontmatter.name, "quoted-skill");
-  assert.equal(frontmatter.version, "1.2.3");
-  assert.ok(!out.includes("  quoted scalar that wraps"), "continuation line must be removed");
+      // assert
+      assert.strictEqual(foldedDescription, expectedFoldedDescription);
+    });
+  }
 });
 
-test("setDescriptionScalar returns content unchanged when there is no opening `---` fence", () => {
-  const content = "no frontmatter here\n\nbody paragraph.\n";
-  assert.equal(setDescriptionScalar(content, "ignored"), content);
+describe("truncate1536", () => {
+  for (const { description, text, expectedText } of [
+    {
+      description: "an empty string",
+      text: "",
+      expectedText: "",
+    },
+    {
+      description: "1,535 code units",
+      text: "a".repeat(1535),
+      expectedText: "a".repeat(1535),
+    },
+    {
+      description: "exactly 1,536 code units",
+      text: "b".repeat(1536),
+      expectedText: "b".repeat(1536),
+    },
+    {
+      description: "1,537 code units",
+      text: `${"c".repeat(1536)}x`,
+      expectedText: "c".repeat(1536),
+    },
+    {
+      description: "768 astral characters",
+      text: "😀".repeat(768),
+      expectedText: "😀".repeat(768),
+    },
+    {
+      description: "a surrogate pair crossing the cap",
+      text: `${"d".repeat(1535)}😀`,
+      expectedText: `${"d".repeat(1535)}\ud83d`,
+    },
+  ]) {
+    test(`returns the exact hard-cut value for ${description}`, () => {
+      // arrange
+      const expectedTruncatedText = expectedText;
+
+      // act
+      const truncatedText = truncate1536(text);
+
+      // assert
+      assert.strictEqual(truncatedText, expectedTruncatedText);
+    });
+  }
 });
 
-test("setDescriptionScalar replaces the description when the block has no closing `---` (block-end falls back to EOF)", () => {
-  const content = "---\ndescription: old value\nname: acme-skill";
-  const out = setDescriptionScalar(content, "new value");
-  assert.match(out, /^---\ndescription: "new value"\n/);
-  assert.ok(!out.includes("old value"), "old description must be replaced");
-  assert.ok(out.includes("name: acme-skill"), "sibling key survives");
-});
+describe("setDescriptionScalar", () => {
+  test("replaces a folded block scalar and preserves every other document byte", () => {
+    // arrange
+    const sourceContent =
+      "---\n" +
+      "name: block-desc\n" +
+      "description: >-\n" +
+      "  This is a folded block scalar description\n" +
+      "  that spans several source lines.\n" +
+      "version: 2.3.1\n" +
+      "tags: alpha, beta\n" +
+      "---\n\n" +
+      "# Block Scalar Skill\n\n" +
+      "Body prose.\n";
+    const expectedContent =
+      "---\n" +
+      "name: block-desc\n" +
+      'description: "A single-line replacement description."\n' +
+      "version: 2.3.1\n" +
+      "tags: alpha, beta\n" +
+      "---\n\n" +
+      "# Block Scalar Skill\n\n" +
+      "Body prose.\n";
 
-test("setDescriptionScalar spans a description value interrupted by a blank line (blank continuation skipped)", () => {
-  const content = "---\ndescription: old\n\n  wrapped continuation\nname: acme-skill\n---\nbody.\n";
-  const out = setDescriptionScalar(content, "single line");
-  assert.match(out, /description: "single line"/);
-  assert.ok(!out.includes("wrapped continuation"), "the absorbed continuation line is removed");
-  assert.ok(out.includes("name: acme-skill"), "the first column-0 sibling key survives");
+    // act
+    const skillContent = setDescriptionScalar(
+      sourceContent,
+      "A single-line replacement description.",
+    );
+
+    // assert
+    assert.strictEqual(skillContent, expectedContent);
+  });
+
+  test("inserts a missing description as the final frontmatter key", () => {
+    // arrange
+    const sourceContent = "---\nname: no-desc\nversion: 1.0.0\n---\n\nBody.\n";
+    const expectedContent =
+      '---\nname: no-desc\nversion: 1.0.0\ndescription: "Body fallback."\n---\n\nBody.\n';
+
+    // act
+    const skillContent = setDescriptionScalar(sourceContent, "Body fallback.");
+
+    // assert
+    assert.strictEqual(skillContent, expectedContent);
+  });
+
+  for (const { description, sourceContent, expectedContent } of [
+    {
+      description: "an inline plain scalar",
+      sourceContent:
+        "---\nname: inline\ndescription: old inline value\nversion: 9.9.9\n---\n\nBody.\n",
+      expectedContent:
+        '---\nname: inline\ndescription: "new value"\nversion: 9.9.9\n---\n\nBody.\n',
+    },
+    {
+      description: "a literal block scalar",
+      sourceContent:
+        "---\nname: literal\ndescription: |\n  first source line\n  second source line\nversion: 2\n---\nBody.\n",
+      expectedContent: '---\nname: literal\ndescription: "new value"\nversion: 2\n---\nBody.\n',
+    },
+    {
+      description: "a multiline plain scalar with a blank continuation",
+      sourceContent:
+        "---\ndescription: old value\n\n  wrapped continuation\nname: plain\n---\nBody.\n",
+      expectedContent: '---\ndescription: "new value"\nname: plain\n---\nBody.\n',
+    },
+    {
+      description: "a multiline double-quoted scalar",
+      sourceContent:
+        '---\nname: quoted\ndescription: "first source line\n  second source line"\nversion: 3\n---\nBody.\n',
+      expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 3\n---\nBody.\n',
+    },
+    {
+      description: "a multiline single-quoted scalar",
+      sourceContent:
+        "---\nname: quoted\ndescription: 'first source line\n  second source line'\nversion: 4\n---\nBody.\n",
+      expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 4\n---\nBody.\n',
+    },
+  ]) {
+    test(`replaces ${description} across its complete node span`, () => {
+      // arrange
+      const expectedSkillContent = expectedContent;
+
+      // act
+      const skillContent = setDescriptionScalar(sourceContent, "new value");
+
+      // assert
+      assert.strictEqual(skillContent, expectedSkillContent);
+    });
+  }
+
+  test("collapses newlines and escapes quotes and backslashes in hostile input", () => {
+    // arrange
+    const sourceContent = "---\nname: safe\ndescription: placeholder\nversion: 1\n---\n\nBody.\n";
+    const description = 'evil: value\r\nmalicious-key: "injected" at C:\\skills';
+    const expectedContent =
+      '---\nname: safe\ndescription: "evil: value malicious-key: \\"injected\\" at C:\\\\skills"\nversion: 1\n---\n\nBody.\n';
+
+    // act
+    const skillContent = setDescriptionScalar(sourceContent, description);
+
+    // assert
+    assert.strictEqual(skillContent, expectedContent);
+  });
+
+  test("returns a document without an opening fence byte-for-byte", () => {
+    // arrange
+    const sourceContent = "description: old\n\nBody description: preserved.\n";
+
+    // act
+    const skillContent = setDescriptionScalar(sourceContent, "ignored");
+
+    // assert
+    assert.strictEqual(skillContent, sourceContent);
+  });
+
+  test("replaces a description in an unclosed frontmatter block through end of file", () => {
+    // arrange
+    const sourceContent = "---\ndescription: old value\nname: acme-skill";
+    const expectedContent = '---\ndescription: "new value"\nname: acme-skill';
+
+    // act
+    const skillContent = setDescriptionScalar(sourceContent, "new value");
+
+    // assert
+    assert.strictEqual(skillContent, expectedContent);
+  });
+
+  test("treats a sparse frontmatter split entry as an absent description", (t) => {
+    // arrange
+    const sourceContent = "sparse frontmatter";
+    t.mock.method(String.prototype, "split", function (this: string) {
+      if (this === sourceContent) {
+        const lines: string[] = [];
+        lines.length = 3;
+        lines[0] = "---";
+        lines[2] = "---";
+        return lines;
+      }
+
+      return [this];
+    });
+    const expectedContent = '---\n\ndescription: "new value"\n---';
+
+    // act
+    const skillContent = setDescriptionScalar(sourceContent, "new value");
+
+    // assert
+    assert.strictEqual(skillContent, expectedContent);
+  });
 });

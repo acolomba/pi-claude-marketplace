@@ -97,13 +97,14 @@ import {
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { InstallFailureCapture } from "./install.ts";
+import type { InstallFailureCapture, InstallLedgerResult } from "./install.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { UnstageOutcome } from "../marketplace/shared.ts";
 
 /**
  * RECON-03: controls how `setPluginEnabled` surfaces
@@ -115,6 +116,20 @@ import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
  */
 export type EnableDisablePluginNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
+
+type InstalledEnableLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
+
+/**
+ * The surrounding transaction already found the marketplace and plugin in
+ * `state`, then passes that same state object synchronously to the ledger.
+ * Its sole marketplace-absent producer rereads that identical marketplace
+ * slot, so this enable-only call path cannot produce the absent arm.
+ */
+function assertRecordedStateLedgerInstalled(
+  _result: InstallLedgerResult,
+): asserts _result is InstalledEnableLedgerResult {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
+}
 
 /**
  * The degradation signals a re-enable's ledger run produces. An alias of the
@@ -278,16 +293,7 @@ async function runEnableBranch(
       },
       capture,
     );
-    if (result.kind === "marketplace-absent") {
-      // Defensive: the caller already verified the marketplace container is
-      // recorded in this scope's state, so the CMP-2..4 source resolution
-      // should never miss. Surface a failed row rather than wedging.
-      return {
-        kind: "enable-failed",
-        cause: new Error(`Marketplace "${opts.marketplace}" is not added in the ${scope} scope.`),
-        recordedVersion,
-      };
-    }
+    assertRecordedStateLedgerInstalled(result);
 
     // ENBL-07 / FSTAT-07 / D-66-04 / SURF-05 / WARN-01: thread the LIVE
     // degradation signals out of the ledger. The enable branch runs the SAME
@@ -349,7 +355,7 @@ async function runDisableBranch(
 ): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean; disabled?: DisabledPluginRecord }> {
   const recordedVersion = installed.version;
   const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
-  if (!cascade.ok) {
+  if (isFailedUnstageOutcome(cascade)) {
     // I3: cascade.dropped lists artifacts already unstaged before the throw.
     // Fold them into the record so state.json never claims artifacts gone
     // from disk (NFR-3 fail-clean). Uses the shared applyPartialCascadeFold
@@ -369,7 +375,7 @@ async function runDisableBranch(
     return {
       outcome: {
         kind: "disable-failed",
-        cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${opts.plugin}".`),
+        cause: cascade.cause,
         recordedVersion,
       },
       saveShrunken: true,
@@ -400,6 +406,31 @@ async function runDisableBranch(
   dropCachedHooks(scope, opts.marketplace, opts.plugin, "", true);
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false, disabled };
+}
+
+type FailedUnstageOutcome = UnstageOutcome & {
+  readonly ok: false;
+  readonly cause: Error;
+};
+
+/** `cascadeUnstagePlugin` normalizes every `ok: false` result to an Error cause. */
+function isFailedUnstageOutcome(outcome: UnstageOutcome): outcome is FailedUnstageOutcome {
+  return !outcome.ok;
+}
+
+type NonEmptyContentReasons = readonly [ContentReason, ...ContentReason[]];
+
+/** `narrowDisableFailure` returns one singleton reason from every control-flow arm. */
+function assertDisableFailureReasonsNonEmpty(
+  _reasons: readonly ContentReason[],
+): asserts _reasons is NonEmptyContentReasons {
+  // Evidence-backed type narrowing only; the producer is total and nonempty.
+}
+
+function primaryDisableFailureReason(cause: Error): ContentReason {
+  const reasons = narrowDisableFailure(cause);
+  assertDisableFailureReasonsNonEmpty(reasons);
+  return reasons[0];
 }
 
 /**
@@ -592,11 +623,24 @@ async function emitUnresolvedTarget(args: {
  * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
  * Mirrors the `AddMarketplaceNotifications` discriminant pattern. The
  * standalone arm keeps `| undefined` because it fires its own `notify()` and
- * the caller has nothing to consume. The reconcile cascade
- * (`applyPluginToggles`) used to carry an `if (result === undefined) continue`
- * guard that silently dropped the row -- the overload makes that branch a
+ * the caller has nothing to consume. In the reconcile cascade
+ * (`applyPluginToggles`), an absent-outcome guard (`if (result === undefined)
+ * continue`) would silently drop the row -- the overload makes that branch a
  * compile error so the cascade always materialises a row (closes S6's fourth
- * loop in the same edit).
+ * loop).
+ *
+ * WR-01: what the overload proves and what it does not. It removes the
+ * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
+ * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * TypeScript checks an overload signature against the implementation only
+ * loosely, and a narrower overload return is accepted with no diagnostic even
+ * when the implementation demonstrably returns the excluded value on that path.
+ * The narrowing is therefore an ASSERTION about this module, relocated from the
+ * consumer to the producer's signature -- not a proof. Every orchestrated arm
+ * below does return a defined outcome today, and the reconcile owner suite
+ * drives this entrypoint in orchestrated mode across its whole outcome matrix
+ * and asserts the complete cascade, so a regression on an exercised path fails
+ * there. An arm the matrix does not reach is not covered by either.
  */
 export function setPluginEnabled(
   opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
@@ -666,7 +710,7 @@ export async function setPluginEnabled(
   // the pre-assignment value is never wrong and the type stays definite.
   let configBasename = path.basename(locations.configJsonPath);
 
-  let outcome: SetEnabledOutcome | undefined;
+  let outcome: SetEnabledOutcome;
   const write: EnabledFlagWriteTarget = {
     marketplace,
     plugin,
@@ -681,97 +725,99 @@ export async function setPluginEnabled(
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
     // UAT-05 config write-back; keeping that order visible here is what makes
     // the save-vs-throw discipline auditable.
-    await withLockedStateTransaction(locations, async (tx) => {
-      // D-103-13: ONE selection, made before anything reads a config path, so
-      // the ordinary write-back and the config-truth promotion below cannot
-      // drift onto different files. It runs inside the lock because it READS
-      // the local config -- the WB-01 discipline that sibling reads happen
-      // fresh under the lock the write also holds. UAT-05: the sibling path is
-      // the scope's OTHER file, for the merged-view membership test only.
-      const selection = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: opts.local,
-        key: `${plugin}@${marketplace}`,
-      });
+    outcome = await withLockedStateTransaction(
+      locations,
+      async (tx): Promise<SetEnabledOutcome> => {
+        // D-103-13: ONE selection, made before anything reads a config path, so
+        // the ordinary write-back and the config-truth promotion below cannot
+        // drift onto different files. It runs inside the lock because it READS
+        // the local config -- the WB-01 discipline that sibling reads happen
+        // fresh under the lock the write also holds. UAT-05: the sibling path is
+        // the scope's OTHER file, for the merged-view membership test only.
+        const selection = await selectDeclaringConfigWriteTarget({
+          locations,
+          local: opts.local,
+          key: `${plugin}@${marketplace}`,
+        });
 
-      const state = tx.state;
-      // CFG-03: the arm covers the TARGETED file being unreadable and, on the
-      // flagless path, the local file being unreadable while the base file is
-      // fine -- the local file is what DECIDES the destination there, so an
-      // unreadable one leaves the destination unknown. The row names the file
-      // that could not be read; writing to the file CFG-02 would then shadow
-      // would report a flip that moves no merged value.
-      if (selection.kind === "unreadable") {
-        configBasename = path.basename(selection.filePath);
-        outcome = { kind: "invalid-config" };
-        return;
-      }
-
-      // Both physical files were parsed ONCE by the selector, and the whole
-      // selection travels to the write arms below: the target config steers
-      // every one of them, the sibling serves the UAT-05 membership gate, and
-      // no two decisions in this closure rest on different bytes of the same
-      // file.
-      configBasename = path.basename(selection.targetConfigPath);
-
-      const mp = state.marketplaces[marketplace];
-      const installed = mp?.plugins[plugin];
-      if (mp === undefined || installed === undefined) {
-        outcome = { kind: "not-recorded" };
-        return;
-      }
-
-      // ENBL-05 idempotency: the explicit `enabled: false` marker, read
-      // through the single predicate. Availability is not consulted, so a
-      // disabled PARTIAL record is idempotent on `disable` and re-materializes
-      // on `enable`, at parity with the canonical disabled record.
-      if (isRecordedButDisabled(installed) === !enable) {
-        outcome = await resolveIdempotentOutcome(write, selection, state, installed);
-        return;
-      }
-
-      if (enable) {
-        outcome = await runEnableBranch(opts, scope, locations, state, installed);
-      } else {
-        const disableResult = await runDisableBranch(opts, scope, locations, installed);
-        outcome = disableResult.outcome;
-        // ENBL-02: on a clean disable, replace the map slot with the branded
-        // `DisabledPluginRecord` the branch built via `toDisabledRecord`
-        // (rather than mutating `installed` in place). The terminal
-        // `tx.save()` below persists tx.state with the replaced slot.
-        if (disableResult.disabled !== undefined) {
-          mp.plugins[plugin] = disableResult.disabled;
+        const state = tx.state;
+        // CFG-03: the arm covers the TARGETED file being unreadable and, on the
+        // flagless path, the local file being unreadable while the base file is
+        // fine -- the local file is what DECIDES the destination there, so an
+        // unreadable one leaves the destination unknown. The row names the file
+        // that could not be read; writing to the file CFG-02 would then shadow
+        // would report a flip that moves no merged value.
+        if (selection.kind === "unreadable") {
+          configBasename = path.basename(selection.filePath);
+          return { kind: "invalid-config" };
         }
 
-        // I3: a partial disable cascade mutated `installed.resources.*` in
-        // place to drop the artifacts already removed before the throw.
-        // Persist the shrunken record so state.json never claims artifacts
-        // gone from disk (NFR-3 fail-clean), THEN fall through to the
-        // post-guard branch that surfaces the failed row.
-        if (disableResult.saveShrunken) {
-          await tx.save();
-          return;
+        // Both physical files were parsed ONCE by the selector, and the whole
+        // selection travels to the write arms below: the target config steers
+        // every one of them, the sibling serves the UAT-05 membership gate, and
+        // no two decisions in this closure rest on different bytes of the same
+        // file.
+        configBasename = path.basename(selection.targetConfigPath);
+
+        const mp = state.marketplaces[marketplace];
+        const installed = mp?.plugins[plugin];
+        if (mp === undefined || installed === undefined) {
+          return { kind: "not-recorded" };
         }
-      }
 
-      if (outcome.kind !== "fresh") {
-        return;
-      }
+        // ENBL-05 idempotency: the explicit `enabled: false` marker, read
+        // through the single predicate. Availability is not consulted, so a
+        // disabled PARTIAL record is idempotent on `disable` and re-materializes
+        // on `enable`, at parity with the canonical disabled record.
+        if (isRecordedButDisabled(installed) === !enable) {
+          return resolveIdempotentOutcome(write, selection, state, installed);
+        }
 
-      // RECON-03: the write-back is SKIPPED in orchestrated mode. A
-      // reconcile-driven call derives the desired state FROM the merged
-      // config (base + local), so the declaration already exists by
-      // construction -- possibly ONLY in `claude-plugins.local.json`, the
-      // per-machine override. Writing it back here would copy the local
-      // override's `enabled` flag into the shared BASE file and clobber a
-      // user-authored base declaration. The config is the reconcile's INPUT;
-      // only standalone commands author declarations.
-      if (!orchestrated) {
-        await writeEnabledFlagBack(write, selection, state);
-      }
+        let branchOutcome: SetEnabledOutcome;
+        if (enable) {
+          branchOutcome = await runEnableBranch(opts, scope, locations, state, installed);
+        } else {
+          const disableResult = await runDisableBranch(opts, scope, locations, installed);
+          branchOutcome = disableResult.outcome;
+          // ENBL-02: on a clean disable, replace the map slot with the branded
+          // `DisabledPluginRecord` the branch built via `toDisabledRecord`
+          // (rather than mutating `installed` in place). The terminal
+          // `tx.save()` below persists tx.state with the replaced slot.
+          if (disableResult.disabled !== undefined) {
+            mp.plugins[plugin] = disableResult.disabled;
+          }
 
-      await tx.save();
-    });
+          // I3: a partial disable cascade mutated `installed.resources.*` in
+          // place to drop the artifacts already removed before the throw.
+          // Persist the shrunken record so state.json never claims artifacts
+          // gone from disk (NFR-3 fail-clean), THEN fall through to the
+          // post-guard branch that surfaces the failed row.
+          if (disableResult.saveShrunken) {
+            await tx.save();
+            return branchOutcome;
+          }
+        }
+
+        if (branchOutcome.kind !== "fresh") {
+          return branchOutcome;
+        }
+
+        // RECON-03: the write-back is SKIPPED in orchestrated mode. A
+        // reconcile-driven call derives the desired state FROM the merged
+        // config (base + local), so the declaration already exists by
+        // construction -- possibly ONLY in `claude-plugins.local.json`, the
+        // per-machine override. Writing it back here would copy the local
+        // override's `enabled` flag into the shared BASE file and clobber a
+        // user-authored base declaration. The config is the reconcile's INPUT;
+        // only standalone commands author declarations.
+        if (!orchestrated) {
+          await writeEnabledFlagBack(write, selection, state);
+        }
+
+        await tx.save();
+        return branchOutcome;
+      },
+    );
   } catch (err) {
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
     if (orchestrated) {
@@ -822,10 +868,8 @@ export async function setPluginEnabled(
  * ladder the standalone disable arm uses (permission denied / source
  * missing / unreadable).
  */
-function classifyTransactionThrow(cause: Error): Reason {
-  return cause instanceof StateLockHeldError
-    ? "lock held"
-    : (narrowDisableFailure(cause)[0] ?? "unreadable");
+function classifyTransactionThrow(cause: Error): ContentReason {
+  return cause instanceof StateLockHeldError ? "lock held" : primaryDisableFailureReason(cause);
 }
 
 /**
@@ -852,10 +896,7 @@ function emitResolutionFailure(args: {
 }): EnableDisablePluginOutcome | undefined {
   const { ctx, pi, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
   const sanitized = sanitizeStateLoadError(cause);
-  // classifyTransactionThrow returns a `Reason` (closed set including
-  // "lock held"); none of the narrower outputs are the structural
-  // "marketplace not added" sentinel, so a ContentReason cast is sound here.
-  const reason: ContentReason = classifyTransactionThrow(sanitized) as ContentReason;
+  const reason = classifyTransactionThrow(sanitized);
   if (orchestrated) {
     return {
       status: "failed",
@@ -978,16 +1019,9 @@ function outcomeToTypedResult(args: {
   plugin: string;
   enable: boolean;
   configBasename: string;
-  outcome: SetEnabledOutcome | undefined;
+  outcome: SetEnabledOutcome;
 }): EnableDisablePluginOutcome {
   const { plugin, enable, configBasename, outcome } = args;
-  if (outcome === undefined) {
-    const err = new Error(
-      `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
-    );
-    return { status: "failed", reason: "unreadable", error: err, cause: errorMessage(err) };
-  }
-
   switch (outcome.kind) {
     case "invalid-config": {
       const err = new Error(`Config file "${configBasename}" failed schema validation.`);
@@ -1028,7 +1062,7 @@ function outcomeToTypedResult(args: {
     case "disable-failed": {
       return {
         status: "failed",
-        reason: narrowDisableFailure(outcome.cause)[0] ?? "unreadable",
+        reason: primaryDisableFailureReason(outcome.cause),
         error: outcome.cause,
         cause: errorMessage(outcome.cause),
       };
@@ -1053,7 +1087,7 @@ function dispatchOutcome(args: {
   readonly plugin: string;
   readonly enable: boolean;
   readonly configBasename: string;
-  readonly outcome: SetEnabledOutcome | undefined;
+  readonly outcome: SetEnabledOutcome;
 }): void {
   const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
   // SEV-01: the single sanctioned companion probe, taken once here -- the same
@@ -1066,7 +1100,7 @@ function dispatchOutcome(args: {
     outcome,
     probe: softDepStatus(pi),
   });
-  // RLD-05 / D-07: the disable verb no longer threads a distinguishing cascade
+  // RLD-05 / D-07: the disable verb does not thread a distinguishing cascade
   // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
   // artifacts were unstaged -- SNM-33), so the `/reload to pick up changes`
   // trailer fires via the RLD-02 OR-reduce of the per-row stamps. The disable
@@ -1223,25 +1257,11 @@ function composeOutcomeRow(args: {
   readonly plugin: string;
   readonly enable: boolean;
   readonly configBasename: string;
-  readonly outcome: SetEnabledOutcome | undefined;
+  readonly outcome: SetEnabledOutcome;
   /** SEV-01: the caller's `softDepStatus(pi)` snapshot -- this composer is pure. */
   readonly probe: SoftDepStatus;
 }): EnableMsg | DisableMsg {
   const { plugin, enable, configBasename, outcome, probe } = args;
-  if (outcome === undefined) {
-    return {
-      status: "failed",
-      name: plugin,
-      reasons: [] as const,
-      cause: new Error(
-        `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
-      ),
-      // D-03/D-06: enable/disable failure -> error, no reload.
-      severity: "error",
-      needsReload: false,
-    };
-  }
-
   switch (outcome.kind) {
     case "invalid-config":
       return {
@@ -1303,9 +1323,8 @@ function composeOutcomeRow(args: {
       };
     case "fresh":
       // UAT-04: the fresh-enable header is the BARE always-marketplace-header
-      // form (no `(added)` token -- that header belongs to `marketplace add`;
-      // the former `(added)` leaked from reusing the install-cascade header
-      // shape with mp.status "added"). UAT-03: the fresh-disable row carries
+      // form. It carries no `(added)` token -- that header belongs to
+      // `marketplace add`. UAT-03: the fresh-disable row carries
       // the closed-set `(disabled)` token -- same glyph + token as the
       // disabled-inventory row, version slot kept -- instead of
       // `(uninstalled)`. RLD-05 / D-07: the reload-hint fires via the

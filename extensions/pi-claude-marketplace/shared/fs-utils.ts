@@ -18,7 +18,7 @@
 // callers cannot enter a cleanup retry loop. Bounded by single
 // rm({recursive:true,force:true}) call.
 
-import { lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { errorMessage } from "./errors.ts";
@@ -39,7 +39,7 @@ import type { Dirent } from "node:fs";
  */
 export async function cleanupStaging(dir: string, label: string): Promise<string | undefined> {
   try {
-    await rm(dir, { recursive: true, force: true });
+    await fs.rm(dir, { recursive: true, force: true });
     return undefined;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -60,7 +60,7 @@ export async function cleanupStaging(dir: string, label: string): Promise<string
  */
 export async function pathExists(p: string): Promise<boolean> {
   try {
-    await lstat(p);
+    await fs.lstat(p);
     return true;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -106,11 +106,11 @@ export async function pathExists(p: string): Promise<boolean> {
  */
 export async function removeOrphanIfPresent(target: string, mode: "file" | "tree"): Promise<void> {
   try {
-    const s = await stat(target);
+    const s = await fs.stat(target);
     if (mode === "tree" && s.isDirectory()) {
-      await rm(target, { recursive: true, force: true });
+      await fs.rm(target, { recursive: true, force: true });
     } else if (mode === "file" && s.isFile()) {
-      await rm(target);
+      await fs.rm(target);
     }
     // Mismatched kind: leave alone. Subsequent rename will surface
     // ENOTDIR/ENOTEMPTY -- preserves PUP-6 phase-3 failure trigger.
@@ -193,7 +193,7 @@ export async function rollbackReplacementCommon(
 
   for (const pair of [...input.renamed].reverse()) {
     try {
-      await rm(pair.to, rmOptions);
+      await fs.rm(pair.to, rmOptions);
     } catch (err) {
       leaks.push(
         `failed to remove ${input.labels.replacement} at ${pair.to}: ${errorMessage(err)}`,
@@ -203,8 +203,8 @@ export async function rollbackReplacementCommon(
 
   for (const backup of [...input.backups].reverse()) {
     try {
-      await mkdir(path.dirname(backup.from), { recursive: true });
-      await rename(backup.to, backup.from);
+      await fs.mkdir(path.dirname(backup.from), { recursive: true });
+      await fs.rename(backup.to, backup.from);
     } catch (err) {
       leaks.push(
         `failed to restore ${input.labels.previous} ${backup.name} from ${backup.to} to ${backup.from}: ${errorMessage(err)}`,
@@ -275,7 +275,7 @@ export async function resolveGitSubdirRoot(
  */
 export async function readDirEntriesTolerant(dir: string): Promise<Dirent[]> {
   try {
-    return await readdir(dir, { withFileTypes: true, encoding: "utf8" });
+    return await fs.readdir(dir, { withFileTypes: true, encoding: "utf8" });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") {
@@ -308,6 +308,6 @@ export async function isPlainMarkdownFile(dir: string, entry: Dirent): Promise<b
     return false;
   }
 
-  const stat = await lstat(path.join(dir, entry.name));
+  const stat = await fs.lstat(path.join(dir, entry.name));
   return !stat.isSymbolicLink();
 }

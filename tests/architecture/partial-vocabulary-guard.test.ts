@@ -341,10 +341,9 @@ test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / 
 });
 
 // ---------------------------------------------------------------------------
-// PRD surface (docs/prd/pi-claude-marketplace-prd.md). The PRD prose was the
-// last holdout of the retired plugin-level force/unsupported vocabulary. It is
-// scanned SEPARATELY from GUARDED_SOURCES because it legitimately spells two
-// OUT-of-scope homonyms an allowlist must preserve:
+// PRD surface (docs/prd/pi-claude-marketplace-prd.md), scanned SEPARATELY
+// from GUARDED_SOURCES because it legitimately spells two OUT-of-scope
+// homonyms an allowlist must preserve:
 //   - the stable requirement/decision IDs `FORCE-01..05` / `FSTAT-01..07`
 //     (incl. the `01a` / `03a` suffixed rows) -- identifiers, not vocabulary;
 //   - the component-level `unsupported <kind>` reasons (`unsupported source`,

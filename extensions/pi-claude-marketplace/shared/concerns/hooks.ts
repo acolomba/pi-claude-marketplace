@@ -49,9 +49,9 @@
 //
 // The payload boundary carries the raw `readonly HookSummaryEntry[]` shape
 // directly (see `PluginInfoComponentsResolved.components.hooks?` in
-// notify.ts). A `HookSummary` wrapper interface used to sit alongside it as a
-// labelled handle, but no consumer ever named the wrapper, so it is gone and
-// the raw array is the only summary shape.
+// notify.ts). No `HookSummary` wrapper interface sits alongside it -- no
+// consumer needs a labelled handle, so the raw array is the only summary
+// shape.
 // ---------------------------------------------------------------------------
 
 export type ClaudeHookEvent =

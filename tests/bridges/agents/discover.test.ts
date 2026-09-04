@@ -1,200 +1,257 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { test } from "node:test";
 
 import { discoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 
-// AG-1 / AG-6: discoverPluginAgents -- frontmatter parse, sourceHash, AG-1
-// elision, dotfile + non-md + symlink skip.
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TEST_PLUGIN_FIXTURE = path.resolve(HERE, "../_fixtures/test-plugin/agents");
-
-async function makeTmpDir(): Promise<{ dir: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-discover-test-"));
-  return {
-    dir,
-    cleanup: async (): Promise<void> => {
-      await rm(dir, { recursive: true, force: true });
-    },
+test("discovers flat markdown agents in source order with complete records", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-flat-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const agentsDirectory = path.join(directory, "agents");
+  const nestedDirectory = path.join(agentsDirectory, "nested");
+  await mkdir(nestedDirectory, { recursive: true });
+  const helperPath = path.join(agentsDirectory, "a-helper.md");
+  const fallbackPath = path.join(agentsDirectory, "z-last.md");
+  const helperBytes = Buffer.from(
+    "---\r\nname: acme-helper\r\ndescription: Helpful agent\r\ntools: Read, Write\r\n---\r\n\r\nHelp carefully.\r\n",
+  );
+  const fallbackBytes = Buffer.from("﻿Plain body\r\n");
+  await writeFile(helperPath, helperBytes);
+  await writeFile(fallbackPath, fallbackBytes);
+  await writeFile(path.join(agentsDirectory, ".hidden.md"), "---\nname: hidden\n---\n");
+  await writeFile(path.join(agentsDirectory, "notes.txt"), "not an agent\n");
+  await writeFile(path.join(nestedDirectory, "nested.md"), "---\nname: nested\n---\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "acme-helper",
+        generatedName: "pi-claude-marketplace-acme-helper",
+        sourcePath: helperPath,
+        sourceHash: "af6c30f084d68c095f606272c9e31a10f3aafc0e8796e2a167be6ebd46f8106c",
+        raw: {
+          name: "acme-helper",
+          description: "Helpful agent",
+          tools: "Read, Write",
+        },
+        body: "\nHelp carefully.\r\n",
+      },
+      {
+        sourceName: "z-last",
+        generatedName: "pi-claude-marketplace-acme-z-last",
+        sourcePath: fallbackPath,
+        sourceHash: "908a44e1f16dd6260a671a79b5a1c2280db6ba2f9edb78ad004009d4e3258894",
+        raw: {},
+        body: "﻿Plain body\r\n",
+      },
+    ],
+    warnings: [],
   };
-}
 
-test("AG-6 discoverPluginAgents parses frontmatter from real fixtures (test-plugin/agents/)", async () => {
-  const { discovered: got } = await discoverPluginAgents({
+  // act
+  const discovery = await discoverPluginAgents({
     pluginName: "acme",
-    agentsDirs: [TEST_PLUGIN_FIXTURE],
+    agentsDirs: [agentsDirectory],
   });
-  assert.equal(got.length, 2);
-  // Sorted by filename: acme-helper.md before bot.md
-  assert.equal(got[0]?.sourceName, "acme-helper");
-  assert.equal(got[1]?.sourceName, "bot");
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+  assert.strictEqual(Object.isFrozen(discovery.discovered), true);
+  assert.strictEqual(Object.isFrozen(discovery.warnings), true);
 });
 
-test("AG-1 generatedName for source 'bot' under plugin 'acme' is 'pi-claude-marketplace-acme-bot'", async () => {
-  const { discovered: got } = await discoverPluginAgents({
+test("skips a missing agents directory", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-missing-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const missingDirectory = path.join(directory, "missing", "agents");
+  const expectedDiscovery = { discovered: [], warnings: [] };
+
+  // act
+  const discovery = await discoverPluginAgents({
     pluginName: "acme",
-    agentsDirs: [TEST_PLUGIN_FIXTURE],
+    agentsDirs: [missingDirectory],
   });
-  const bot = got.find((d) => d.sourceName === "bot");
-  assert.ok(bot);
-  assert.equal(bot.generatedName, "pi-claude-marketplace-acme-bot");
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("AG-1 generatedName elides plugin prefix: source 'acme-helper' under plugin 'acme' is 'pi-claude-marketplace-acme-helper'", async () => {
-  const { discovered: got } = await discoverPluginAgents({
+test("skips an agents path below a regular file", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-not-directory-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const filePath = path.join(directory, "plugin.txt");
+  await writeFile(filePath, "plugin source\n");
+  const agentsPath = path.join(filePath, "agents");
+  const expectedDiscovery = { discovered: [], warnings: [] };
+
+  // act
+  const discovery = await discoverPluginAgents({
     pluginName: "acme",
-    agentsDirs: [TEST_PLUGIN_FIXTURE],
+    agentsDirs: [agentsPath],
   });
-  const helper = got.find((d) => d.sourceName === "acme-helper");
-  assert.ok(helper);
-  // AG-1 elision: 'acme-helper' starts with 'acme-', so suffix = 'helper'.
-  // Result: 'pi-claude-marketplace-acme-helper' (NOT 'pi-claude-marketplace-acme-acme-helper').
-  assert.equal(helper.generatedName, "pi-claude-marketplace-acme-helper");
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("discoverPluginAgents computes sourceHash over raw bytes (BOM-tolerant)", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    // Two files with the SAME utf8 content but different byte sequences (BOM vs no-BOM).
-    const noBom = "---\nname: bot\ntools: Read\n---\nbody\n";
-    const withBom = "﻿" + noBom;
-    await writeFile(path.join(dir, "a.md"), noBom, "utf8");
-    await writeFile(path.join(dir, "b.md"), withBom, "utf8");
-    const { discovered: got } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [dir],
-    });
-    assert.equal(got.length, 2);
-    assert.notEqual(got[0]?.sourceHash, got[1]?.sourceHash);
-  } finally {
-    await cleanup();
-  }
+test("rejects an unreadable markdown entry with the filesystem error", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-unreadable-"));
+  const sourcePath = path.join(directory, "private.md");
+  t.after(async () => {
+    await chmod(sourcePath, 0o600).catch(() => undefined);
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await writeFile(sourcePath, "---\nname: private\n---\nbody\n");
+  await chmod(sourcePath, 0o000);
+
+  // act & assert
+  await assert.rejects(
+    () => discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          code: (error as NodeJS.ErrnoException).code,
+          path: (error as NodeJS.ErrnoException).path,
+          syscall: (error as NodeJS.ErrnoException).syscall,
+        },
+        {
+          name: "Error",
+          message: `EACCES: permission denied, open '${sourcePath}'`,
+          code: "EACCES",
+          path: sourcePath,
+          syscall: "open",
+        },
+      );
+      return true;
+    },
+  );
 });
 
-test("discoverPluginAgents returns [] when agents dir missing (ENOENT)", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    const { discovered: got } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [path.join(dir, "no-such-dir")],
-    });
-    assert.deepEqual([...got], []);
-  } finally {
-    await cleanup();
-  }
+test("skips a symlinked markdown entry without following its target", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-symlink-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const agentsDirectory = path.join(directory, "agents");
+  await mkdir(agentsDirectory, { recursive: true });
+  const outsidePath = path.join(directory, "outside.md");
+  const sourcePath = path.join(agentsDirectory, "kept.md");
+  await writeFile(outsidePath, "---\nname: outside\n---\noutside body\n");
+  await symlink(outsidePath, path.join(agentsDirectory, "linked.md"));
+  await writeFile(sourcePath, "---\nname: kept\n---\nkept body\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "kept",
+        generatedName: "pi-claude-marketplace-acme-kept",
+        sourcePath,
+        sourceHash: "bbe7287acdb000edf946936f859dbe1acdd8b6d7f74032fbc27b0c9050c591b9",
+        raw: { name: "kept" },
+        body: "kept body\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [agentsDirectory],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("discoverPluginAgents skips dotfiles and non-md files", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    await writeFile(path.join(dir, ".hidden.md"), "---\nname: a\n---\nb\n");
-    await writeFile(path.join(dir, "not-md.txt"), "x");
-    await writeFile(path.join(dir, "real.md"), "---\nname: real\ntools: Read\n---\nbody\n");
-    const { discovered: got } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [dir],
-    });
-    assert.equal(got.length, 1);
-    assert.equal(got[0]?.sourceName, "real");
-  } finally {
-    await cleanup();
-  }
+test("keeps the first generated name across agent directories and reports the duplicate", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-duplicate-dirs-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const firstDirectory = path.join(directory, "first");
+  const secondDirectory = path.join(directory, "second");
+  await mkdir(firstDirectory, { recursive: true });
+  await mkdir(secondDirectory, { recursive: true });
+  const firstPath = path.join(firstDirectory, "shared.md");
+  await writeFile(firstPath, "---\nname: shared\ntools: Read\n---\nfirst body\n");
+  await writeFile(
+    path.join(secondDirectory, "shared.md"),
+    "---\nname: shared\ntools: Write\n---\nsecond body\n",
+  );
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "shared",
+        generatedName: "pi-claude-marketplace-acme-shared",
+        sourcePath: firstPath,
+        sourceHash: "b3cb6f4230d18ef3de5efe1044403c789ee53585128c72ce45883660a361453d",
+        raw: { name: "shared", tools: "Read" },
+        body: "first body\n",
+      },
+    ],
+    warnings: [
+      `agent source "shared" in "${secondDirectory}" elides to generated name "pi-claude-marketplace-acme-shared" already produced by an earlier componentPaths.agents entry; ignoring duplicate.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [firstDirectory, secondDirectory],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("discoverPluginAgents skips symlinked .md files (T-03-27)", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    // Create a target outside the agents dir, then symlink it in.
-    const outside = path.join(dir, "outside");
-    await mkdir(outside, { recursive: true });
-    const realPath = path.join(outside, "real.md");
-    await writeFile(realPath, "---\nname: target\n---\n");
-    const agentsDir = path.join(dir, "agents");
-    await mkdir(agentsDir, { recursive: true });
-    await symlink(realPath, path.join(agentsDir, "linked.md"));
-    // And one regular file we want kept.
-    await writeFile(path.join(agentsDir, "real.md"), "---\nname: real\ntools: Read\n---\n");
+test("keeps the first source when distinct names collide after plugin-prefix elision", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-elided-collision-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const firstPath = path.join(directory, "a-prefixed.md");
+  await writeFile(firstPath, "---\nname: acme-reviewer\n---\nfirst\n");
+  await writeFile(path.join(directory, "b-short.md"), "---\nname: reviewer\n---\nsecond\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "acme-reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: firstPath,
+        sourceHash: "4f1a28213ca1cd2f183a5679dd53221a9a7842eab3f713a0626cddecce6bfe65",
+        raw: { name: "acme-reviewer" },
+        body: "first\n",
+      },
+    ],
+    warnings: [
+      `agent source "reviewer" in "${directory}" elides to generated name "pi-claude-marketplace-acme-reviewer" already produced by an earlier componentPaths.agents entry; ignoring duplicate.`,
+    ],
+  };
 
-    const { discovered: got } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [agentsDir],
-    });
-    assert.equal(got.length, 1);
-    assert.equal(got[0]?.sourceName, "real");
-  } finally {
-    await cleanup();
-  }
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [directory],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("discoverPluginAgents falls back to filename stem when frontmatter has no name field", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    await writeFile(path.join(dir, "stem-name.md"), "---\ntools: Read\n---\nbody\n");
-    const { discovered: got } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [dir],
-    });
-    assert.equal(got.length, 1);
-    assert.equal(got[0]?.sourceName, "stem-name");
-  } finally {
-    await cleanup();
-  }
-});
+test("rejects a source name that elides to an empty generated suffix", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-empty-elision-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  await writeFile(path.join(directory, "empty.md"), "---\nname: acme-\n---\nbody\n");
 
-// ──────────────────────────────────────────────────────────────────────────
-// D-07 (COMP-01): agentsDirs is `readonly string[]`. Multi-element
-// arrays iterate per-dir; first-wins dedup by generated name surfaces a
-// warning rather than throwing.
-// ──────────────────────────────────────────────────────────────────────────
-
-test("D-07 discoverPluginAgents iterates multi-element agentsDirs (no collision)", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    const a = path.join(dir, "a");
-    const b = path.join(dir, "b");
-    await mkdir(a, { recursive: true });
-    await mkdir(b, { recursive: true });
-    await writeFile(path.join(a, "one.md"), "---\nname: one\ntools: Read\n---\nbody\n");
-    await writeFile(path.join(b, "two.md"), "---\nname: two\ntools: Read\n---\nbody\n");
-
-    const { discovered: got, warnings } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [a, b],
-    });
-    const names = got.map((d) => d.sourceName).sort();
-    assert.deepEqual(names, ["one", "two"]);
-    assert.deepEqual([...warnings], [], "no warnings when generated names disjoint");
-  } finally {
-    await cleanup();
-  }
-});
-
-test("D-07 discoverPluginAgents first-wins dedup across array elements (collision -> warning)", async () => {
-  const { dir, cleanup } = await makeTmpDir();
-  try {
-    // Both dirs declare an agent with frontmatter name 'shared'. Generated
-    // name is `pi-claude-marketplace-p-shared`; first-wins keeps dir `a`.
-    const a = path.join(dir, "a");
-    const b = path.join(dir, "b");
-    await mkdir(a, { recursive: true });
-    await mkdir(b, { recursive: true });
-    await writeFile(path.join(a, "shared.md"), "---\nname: shared\ntools: Read\n---\nfrom-a\n");
-    await writeFile(path.join(b, "shared.md"), "---\nname: shared\ntools: Read\n---\nfrom-b\n");
-
-    const { discovered: got, warnings } = await discoverPluginAgents({
-      pluginName: "p",
-      agentsDirs: [a, b],
-    });
-    assert.equal(got.length, 1, "first-wins keeps only one");
-    assert.equal(got[0]!.sourcePath, path.join(a, "shared.md"), "dir 'a' wins");
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /elides to generated name "pi-claude-marketplace-p-shared"/);
-    assert.match(warnings[0]!, /ignoring duplicate/);
-  } finally {
-    await cleanup();
-  }
+  // act & assert
+  await assert.rejects(
+    () => discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] }),
+    { name: "Error", message: "Name must be a non-empty string." },
+  );
 });

@@ -43,7 +43,7 @@ import { readFile } from "node:fs/promises";
 
 import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
-import { assertNever, errorMessage } from "../../../shared/errors.ts";
+import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
@@ -62,7 +62,13 @@ import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
-import { readPidTable, writePidTable, unlinkPidTable, type PidTableEntry } from "./pid-table.ts";
+import {
+  pidTablePath,
+  readPidTable,
+  unlinkPidTable,
+  writePidTable,
+  type PidTableEntry,
+} from "./pid-table.ts";
 import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts";
 
 import type { BucketAEvent, DispatchableEvent } from "../../../domain/components/hook-events.ts";
@@ -118,6 +124,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  * mutable internally (write() appends bytes) but the entry's reference
  * to them is fixed.
  */
+// fallow-ignore-next-line unused-type -- WR-01 compatibility: preserve the published registry row type; it remains internally consumed and has no replacement public binding.
 export interface AsyncRewakeEntry {
   readonly dispatchId: string;
   readonly pid: number;
@@ -139,17 +146,15 @@ export interface AsyncRewakeEntry {
 // ──────────────────────────────────────────────────────────────────────────
 // Module state
 //
-// The registry Map and the default orphan probes are the only module-level
-// cells left here. The `spawn` implementation and the dispatchId generator
-// used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
-// both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
-// `dispatch-exec.ts` threads through from its own `deps` argument. The two
-// surviving observer exports are read-only, not seams: they let a
-// test assert on the Map and drain the in-flight pid-table persist without
-// reaching into module scope.
+// The registry Map, per-table persistence chains, and default orphan probes are
+// the only module-level cells left here. The `spawn` implementation and dispatchId
+// generator are parameters (`SpawnDeps` below) rather than test-only module-global
+// setters, so `dispatchHookExec` in `dispatch-exec.ts` threads them through from
+// its own `deps` argument.
 // ──────────────────────────────────────────────────────────────────────────
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
+const pidTableOperations = new Map<string, Promise<void>>();
 
 /**
  * The two process probes the orphan reap needs: a liveness/kill signal and a
@@ -175,33 +180,6 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
   environReader: (pid) => readFile(`/proc/${pid}/environ`, "utf8"),
 };
 
-/**
- * Read-only view of the in-memory registry. The `asyncRewakeRegistry` cell is
- * module-private, so this is the one way to observe it, mirroring the read
- * accessors `routing-state.ts` exposes over its own cells. Its only caller
- * today is test assertion, which is what a read surface is for.
- */
-export function asyncRewakeEntries(): ReadonlyMap<string, AsyncRewakeEntry> {
-  return asyncRewakeRegistry;
-}
-
-// Tracks the most recent fire-and-forget pid-table persist so tests can
-// drain it in cleanup before removing the temp directory, avoiding ENOTEMPTY
-// races with write-file-atomic's in-flight atomic rename on macOS.
-let _lastPidTablePersist: Promise<void> = Promise.resolve();
-
-/**
- * Await the most recent fire-and-forget pid-table persist.
- *
- * The persist is deliberately not awaited on the spawn path, so a caller that
- * needs the write settled -- a teardown removing the directory underneath it --
- * has no other way to know. Without it, write-file-atomic's in-flight rename
- * races the removal and surfaces as ENOTEMPTY on macOS.
- */
-export function awaitPidTablePersist(): Promise<void> {
-  return _lastPidTablePersist;
-}
-
 // ──────────────────────────────────────────────────────────────────────────
 // Public surface: spawnAndRegister
 // ──────────────────────────────────────────────────────────────────────────
@@ -214,6 +192,7 @@ export function awaitPidTablePersist(): Promise<void> {
 export interface SpawnDeps {
   readonly spawnImpl?: typeof spawn;
   readonly dispatchId?: () => string;
+  readonly pidTableWriter?: typeof writePidTable;
 }
 
 /**
@@ -240,6 +219,7 @@ export async function spawnAndRegister(
 ): Promise<void> {
   const spawnImpl = deps.spawnImpl ?? spawn;
   const makeDispatchId = deps.dispatchId ?? (() => randomUUID());
+  const pidTableWriter = deps.pidTableWriter ?? writePidTable;
   // D-87-04: narrow the admitted event to the dispatchable subset before
   // indexing the translator table. `Stop` / `StopFailure` never reach this
   // path -- no Pi event routes them to an async-rewake spawn (their entries in
@@ -287,6 +267,16 @@ export async function spawnAndRegister(
 
     const pid = child.pid;
     if (pid === undefined) {
+      const onSpawnError = (err: Error): void => {
+        hookDebugLog(
+          `async-rewake: spawn failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+        );
+      };
+
+      child.once("error", onSpawnError);
+      child.once("close", () => {
+        child.removeListener("error", onSpawnError);
+      });
       hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
       try {
         child.kill("SIGKILL");
@@ -299,9 +289,8 @@ export async function spawnAndRegister(
 
     const stderrBuffer = new RingBuffer(STDERR_CAP_BYTES);
     const stdoutBuffer = new RingBuffer(STDOUT_CAP_BYTES);
-    // Each `ChildProcess` is its own EventEmitter; the five listeners
-    // we attach (stderr.data, stdout.data, stdin.error, child.exit,
-    // child.error) all live on independent emitters. Node's default
+    // Each `ChildProcess` is its own EventEmitter; its lifecycle listeners and
+    // the owned-stream listeners live on their respective emitters. Node's default
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
@@ -340,11 +329,50 @@ export async function spawnAndRegister(
 
     asyncRewakeRegistry.set(dispatchId, asyncEntry);
 
+    let exitOutcome:
+      { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined;
+    let finalized = false;
+    let stderrEnded = child.stderr === null || child.stderr.readableEnded;
+    let stdoutEnded = child.stdout === null || child.stdout.readableEnded;
+
+    const finalizeOnce = (
+      outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
+    ): void => {
+      if (finalized) {
+        return;
+      }
+
+      finalized = true;
+      finalizeChild(dispatchId, outcome, ctx, pi, pidTableWriter);
+    };
+
+    const finalizeAfterOwnedStreams = (): void => {
+      if (exitOutcome !== undefined && stdoutEnded && stderrEnded) {
+        finalizeOnce(exitOutcome);
+      }
+    };
+
+    child.stderr?.once("end", () => {
+      stderrEnded = true;
+      finalizeAfterOwnedStreams();
+    });
+    child.stdout?.once("end", () => {
+      stdoutEnded = true;
+      finalizeAfterOwnedStreams();
+    });
     child.once("exit", (code, signal) => {
-      onChildExit(dispatchId, code, signal, ctx, pi);
+      ladder.cancel();
+      exitOutcome = { code, signal };
+      finalizeAfterOwnedStreams();
+    });
+    child.once("close", (code, signal) => {
+      ladder.cancel();
+      finalizeOnce(exitOutcome ?? { code, signal });
     });
     child.once("error", (err) => {
-      onChildError(dispatchId, err);
+      ladder.cancel();
+      hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
+      finalizeOnce(undefined);
     });
 
     // EPIPE defense: attach the stdin error listener BEFORE the write
@@ -361,7 +389,7 @@ export async function spawnAndRegister(
     // a recoverable record. Fire-and-forget at the body's tail -- the
     // sync spawn + register has already completed; awaiting here only
     // bounds the resolve latency on the I/O.
-    await persistPidTableForLoc(loc);
+    await persistPidTableForLoc(loc, pidTableWriter);
   } catch (err) {
     hookDebugLog(
       `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
@@ -373,31 +401,32 @@ export async function spawnAndRegister(
 // Per-child exit / error handlers
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * NFR-7 exhaustiveness gate for the three exit outcomes. Even though
- * only the `inject` arm calls `pi.sendMessage`, encoding the union
- * makes the silent / noop arms explicit at the type level.
- */
-type OutcomeKind = "inject" | "silent" | "noop";
-
-function onChildExit(
+function finalizeChild(
   dispatchId: string,
-  code: number | null,
-  signal: NodeJS.Signals | null,
+  outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  pidTableWriter: typeof writePidTable,
 ): void {
   const entry = asyncRewakeRegistry.get(dispatchId);
   if (entry === undefined) {
-    // Double-fire guard: `exit` and `error` may both fire; whichever
-    // arrives first removes the entry and the second observes absent.
+    // Defensive guard for cleanup paths that removed the entry before a
+    // terminal child event reached this closure.
     return;
   }
 
-  entry.ladder.cancel();
   asyncRewakeRegistry.delete(dispatchId);
-  _lastPidTablePersist = persistPidTableForLoc(entry.loc);
-  void _lastPidTablePersist;
+  void persistPidTableForLoc(entry.loc, pidTableWriter).catch((err: unknown) => {
+    hookDebugLog(
+      `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
+    );
+  });
+
+  if (outcome === undefined) {
+    return;
+  }
+
+  const { code, signal } = outcome;
 
   // D-62-03 / D-59-03 captured-epoch zombie defense. A slow child from
   // a prior `/reload` cycle must not inject into the freshly-hydrated
@@ -407,8 +436,6 @@ function onChildExit(
       `async-rewake: stale exit from prior load -- dispatchId=${dispatchId} ` +
         `capturedEpoch=${entry.capturedEpoch} currentEpoch=${currentEpoch()}`,
     );
-    const outcome: OutcomeKind = "noop";
-    assertOutcome(outcome);
     return;
   }
 
@@ -430,8 +457,6 @@ function onChildExit(
       `async-rewake: silent completion code=${code ?? "null"} signal=${signal ?? "null"} ` +
         `dispatchId=${dispatchId} plugin=${entry.pluginId}`,
     );
-    const outcome: OutcomeKind = "silent";
-    assertOutcome(outcome);
     return;
   }
 
@@ -440,8 +465,6 @@ function onChildExit(
   const body = stderrText.length > 0 ? stderrText : stdoutText;
   if (body.length === 0) {
     hookDebugLog(`async-rewake: exit 2 with empty body -- no injection (${entry.pluginId})`);
-    const outcome: OutcomeKind = "silent";
-    assertOutcome(outcome);
     return;
   }
 
@@ -465,22 +488,6 @@ function onChildExit(
   } catch (err) {
     hookDebugLog(`async-rewake: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
   }
-
-  const outcome: OutcomeKind = "inject";
-  assertOutcome(outcome);
-}
-
-function onChildError(dispatchId: string, err: unknown): void {
-  hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
-  const entry = asyncRewakeRegistry.get(dispatchId);
-  if (entry === undefined) {
-    return;
-  }
-
-  entry.ladder.cancel();
-  asyncRewakeRegistry.delete(dispatchId);
-  _lastPidTablePersist = persistPidTableForLoc(entry.loc);
-  void _lastPidTablePersist;
 }
 
 /**
@@ -500,22 +507,6 @@ function buildInjectionContent(
   }
 
   return bodyWithMarker;
-}
-
-/**
- * NFR-7 exhaustiveness pin. The three OutcomeKind arms drive every
- * branch in `onChildExit`; adding a fourth requires updating this
- * switch and gets a `tsc` error at the `assertNever` arm.
- */
-function assertOutcome(outcome: OutcomeKind): void {
-  switch (outcome) {
-    case "inject":
-    case "silent":
-    case "noop":
-      return;
-    default:
-      assertNever(outcome);
-  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -560,36 +551,38 @@ export async function reapOrphans(
   loc: ScopedLocations,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<void> {
-  const entries = await readPidTable(loc);
-  for (const tableEntry of entries) {
-    if (!isPidAlive(tableEntry.pid, probes)) {
-      continue;
-    }
+  await enqueuePidTableOperation(loc, async () => {
+    const entries = await readPidTable(loc);
+    for (const tableEntry of entries) {
+      if (!isPidAlive(tableEntry.pid, probes)) {
+        continue;
+      }
 
-    if (process.platform === "linux") {
-      const marker = await readProcEnvironMarker(tableEntry.pid, probes);
-      if (marker !== tableEntry.dispatchId) {
+      if (process.platform === "linux") {
+        const marker = await readProcEnvironMarker(tableEntry.pid, probes);
+        if (marker !== tableEntry.dispatchId) {
+          hookDebugLog(
+            `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
+              `(got=${marker ?? "(none)"} want=${tableEntry.dispatchId})`,
+          );
+          continue;
+        }
+      } else {
         hookDebugLog(
-          `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
-            `(got=${marker ?? "(none)"} want=${tableEntry.dispatchId})`,
+          `async-rewake: orphan ${tableEntry.pid} marker-check skipped (platform=${process.platform})`,
         );
         continue;
       }
-    } else {
-      hookDebugLog(
-        `async-rewake: orphan ${tableEntry.pid} marker-check skipped (platform=${process.platform})`,
-      );
-      continue;
+
+      try {
+        probes.killProbe(tableEntry.pid, "SIGKILL");
+      } catch (err) {
+        hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
+      }
     }
 
-    try {
-      probes.killProbe(tableEntry.pid, "SIGKILL");
-    } catch (err) {
-      hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
-    }
-  }
-
-  await unlinkPidTable(loc);
+    await unlinkPidTable(loc);
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -638,22 +631,46 @@ async function prepareAsyncEnv(
  * directory does not yet exist is handled without an explicit
  * `ensureSharedDataDir` call here.
  */
-async function persistPidTableForLoc(loc: ScopedLocations): Promise<void> {
-  const snapshot: PidTableEntry[] = [];
-  for (const entry of asyncRewakeRegistry.values()) {
-    if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
-      snapshot.push({
-        pid: entry.pid,
-        dispatchId: entry.dispatchId,
-        scope: entry.scope,
-        marketplace: entry.marketplace,
-        plugin: entry.pluginId,
-        spawnedAt: entry.spawnedAt,
-      });
-    }
-  }
+function enqueuePidTableOperation(
+  loc: ScopedLocations,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const key = pidTablePath(loc);
+  const previous = pidTableOperations.get(key) ?? Promise.resolve();
+  const operationPromise = previous.then(operation, operation);
+  const queueTail = operationPromise
+    .catch(() => undefined)
+    .finally(() => {
+      if (pidTableOperations.get(key) === queueTail) {
+        pidTableOperations.delete(key);
+      }
+    });
 
-  await writePidTable(loc, snapshot);
+  pidTableOperations.set(key, queueTail);
+  return operationPromise;
+}
+
+async function persistPidTableForLoc(
+  loc: ScopedLocations,
+  pidTableWriter: typeof writePidTable = writePidTable,
+): Promise<void> {
+  await enqueuePidTableOperation(loc, async () => {
+    const snapshot: PidTableEntry[] = [];
+    for (const entry of asyncRewakeRegistry.values()) {
+      if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
+        snapshot.push({
+          pid: entry.pid,
+          dispatchId: entry.dispatchId,
+          scope: entry.scope,
+          marketplace: entry.marketplace,
+          plugin: entry.pluginId,
+          spawnedAt: entry.spawnedAt,
+        });
+      }
+    }
+
+    await pidTableWriter(loc, snapshot);
+  });
 }
 
 /**
@@ -693,10 +710,6 @@ async function readProcEnvironMarker(
   pid: number,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<string | undefined> {
-  if (process.platform !== "linux") {
-    return undefined;
-  }
-
   try {
     const raw = await probes.environReader(pid);
     for (const pair of raw.split("\0")) {

@@ -1,231 +1,339 @@
-# Stack Research — v1.13 Claude Hook Bridge
+# Stack Research — v1.19 Unit Test Refactor
 
-**Domain:** Pi extension milestone (incremental — hook-bridge component added to an
-already-shipped successor architecture)
-**Researched:** 2026-06-13
+**Project:** pi-claude-marketplace
+**Domain:** Brownfield TypeScript unit-test migration
+**Researched:** 2026-08-28
 **Confidence:** HIGH
 
-## Scope of this research
+## Recommendation
 
-This is a **subsequent-milestone STACK delta**. The existing v1.0–v1.12 stack is
-locked and authoritative (see `.planning/milestones/v1.12-research/STACK.md`
-for the rationale; the `package.json` snapshot at the top of this milestone
-is the binding inventory). The question answered here is **only**: what
-additions, version bumps, or new dev-tool choices are required *specifically*
-to implement the v1.13 hook bridge?
+Keep the current production stack. Do not add a test framework or coverage
+package. Use Node 24, `node:test`, `node:assert/strict`, and Node's built-in V8
+coverage. Use `strong-mock` only for typed behavior-heavy ports.
 
-The 7 focus areas in the research brief are mapped section-by-section below.
-Each item is marked **NEW**, **NO CHANGE — already in stack**, or
-**VERSION BUMP**. Items mapped to roadmap phases call out which bridge phase
-the dependency unblocks.
+Each executable plan and commit must own one production source file and its one
+mirrored test file. Retained source or test commits are only the brownfield
+baseline. They are never completion evidence for v1.19.
 
-## Recommended Stack (delta only)
+## Brownfield Baseline
 
-### Core Technologies
+The production root contains 204 TypeScript modules. The live pair audit at
+`/tmp/pi-cm-pair-audit.CJWiph/results.tsv` reports:
 
-| Technology | Version | Status | Purpose | Why Recommended |
-|------------|---------|--------|---------|-----------------|
-| **Node.js** | `>=20.19.0` (effective `>=22.18` for native TS strip; no further floor change in v1.13) | **NO CHANGE — already in stack** | Runtime | `chokidar@^5` engines `>=20.19.0` aligns exactly with the existing NFR-4 floor — no additional floor required. `@parcel/watcher` would have been the only candidate that materially relaxed the floor, and it's rejected on other grounds (see Alternatives). |
-| **TypeScript** | `^6.0.3` | **NO CHANGE — already in stack** | Language; strict-mode discriminated unions for the 16-arm `HookEventPayload` union (focus area 4) | Already declared. The hook-bridge payload union pattern is structurally identical to v1.4's `PluginNotificationMessage` / v1.10's `MarketplaceNotificationMessage` discriminated unions; no new TS feature is needed. |
-| **typebox** | `*` peer dep, `^1.1.38` dev | **NO CHANGE — already in stack** | Runtime validation of `hooks/hooks.json` per-plugin manifests + the discriminated `HookEventPayload` union at the bridge boundary (focus area 4) | TypeBox 1.x's native `Type.Union([...], { discriminator: 'hook_event_name' })` is exactly the shape needed for the 16-arm payload union; JIT-compiled validators (`Schema.Compile`) keep the per-tool-call hot path (`PreToolUse`/`PostToolUse` dispatch) cheap. Already the contract validator for `state.json` / `claude-plugins.json` / `marketplace.json` — same idiom, same package. **Confirmed: a JSON-Schema-only validator (Ajv) is the wrong choice here because the bridge needs the static TS type out the back of the schema declaration to type-narrow inside each per-event payload translator.** |
-| **@earendil-works/pi-coding-agent** | `>=0.74.0` peer (dev pin `^0.79.0`) | **NO CHANGE — already in stack** | Host API surface: `pi.on(event, handler)`, `pi.events`, `pi.sendUserMessage(content, opts)`, `ctx.ui.notify`. | `ReplacedSessionContext.sendUserMessage(content, { deliverAs?: "steer" \| "followUp" }): Promise<void>` is declared at `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:292` and re-declared at `:865`. This is the load-bearing API for bucket-D `Stop` synthesis (canary plugin `ralph-wiggum`) — verified present at the v0.79.0 dev pin and the `>=0.74.0` peer floor. **No version bump required for the hook bridge.** Whether to tighten the peer floor again for v1.13 is a NFR-11 question, not a hook-bridge stack question. |
+| Pair result     |   Count | Meaning for v1.19                                         |
+| --------------- | ------: | --------------------------------------------------------- |
+| `PASS`          |      59 | Candidate baseline only. Reprove the pair in its plan.    |
+| `COVERAGE_FAIL` |      83 | The mirrored test does not give complete direct coverage. |
+| `MISSING`       |      60 | The mirrored test file is absent.                         |
+| `TEST_FAIL`     |       2 | The mirrored test fails when it runs as the direct pair.  |
+| **Total**       | **204** | All modules remain open until v1.19 records new proof.    |
 
-### Supporting Libraries
+The audit ran locally with Node 26.7.0. CI uses Node 24. Coverage closure must
+run on Node 24 because V8 coverage data can change between Node releases.
 
-| Library | Version | Status | Purpose | When to Use |
-|---------|---------|--------|---------|-------------|
-| **chokidar** | `^5.0.0` | **NEW** | `fs.watch`-backed cross-platform file-system watcher with debounce, atomic-write awareness, ignore-list filtering, and stable rename/replace semantics. Used by bucket-B `FileChanged` synthesis. | One watcher instance per bridge process, established at load-time with the union of all enabled plugins' `FileChanged` matcher patterns. Cross-cutting between **bridge dispatch core** and **bucket-B synthesis** phases (see Roadmap implications below). |
-| **node:child_process** (built-in) | bundled | **NO CHANGE — already in stack** | Spawning hook commands (`hooks/*.sh` / `hooks/*.py` / etc.) as child processes per the Claude Code hook contract (focus area 6) | Use `spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], cwd, env, timeout })`. Feed the hook's input JSON on stdin; read stdout to EOF, then `JSON.parse` the captured stdout buffer. **`execa` rejected** — see "What NOT to Use". The bridge needs stdout buffering and exit-code/timeout handling, both of which `spawn` provides natively; the only `execa` value-add (cross-platform shell quoting) is irrelevant here because hook commands are always invoked by absolute path with explicit `args`, not via a shell string. |
-| **node:fs/promises** (built-in) | bundled | **NO CHANGE — already in stack** | Reading per-plugin `hooks/hooks.json`; `chmod` of hook scripts on Unix at install time (operational gotcha #1 from the authority doc); per-plugin `hooks/` subtree containment checks (NFR-10 extension). | Already used pervasively. The chokidar watcher does its own `fs` calls internally. |
-| **node:crypto** (built-in) | bundled | **NO CHANGE — already in stack** | If the dispatch table grows a "fingerprint-of-installed-plugin-hooks" key for the `/reload` cache invalidation, use `createHash('sha256')` on the sorted hook-entry list. | Already required by PI-7 hash-versioning; reusing the same import keeps the dep surface flat. |
-| **node:timers** (built-in `setTimeout`/`clearTimeout`) | bundled | **NO CHANGE — already in stack** | Manual debounce for the bucket-D `PostToolBatch` safety-net timer (focus area 2) | Pi's existing pattern uses inline `setTimeout` for the rare debounce case (see `manifest-cache` post-load re-stat, `bridges/transaction/rollback.ts`). **`p-debounce` / `lodash.debounce` rejected** — chokidar already debounces FS events via its `awaitWriteFinish` option (the only place a real debounce primitive matters in v1.13); the `PostToolBatch` safety-net is a single-shot "fire if not already fired after N ms" timer, which is one `setTimeout` + one boolean flag, not a debounce. Adding a dep for that is overhead. |
-| **proper-lockfile** | `^4.1.2` | **NO CHANGE — already in stack** | Cross-process exclusivity of `state.json` mutation when a `hooks/` subtree is being extracted during install (the existing v1.7 `withLockedStateTransaction` path picks this up for free). | Hook-bridge state changes (install / uninstall / enable / disable) go through the same v1.12 reconcile path — the lock is already held. |
-| **write-file-atomic** | `^8.0.0` | **NO CHANGE — already in stack** | Atomic writes to `state.json` and `claude-plugins.json` when the v1.13 schema gains the `hooks` component arm. | NFR-1 atomicity is already enforced via this dep for all four scope-rooted JSON files. The hook-bridge component just adds another array slot under the existing `plugins[<id>]` record. |
+## Recommended Stack
 
-### Development Tools
+### Core Runtime and Language
 
-| Tool | Version | Status | Purpose | Notes |
-|------|---------|--------|---------|-------|
-| **`@types/chokidar`** | — | **NOT NEEDED** | chokidar v4+ ships its own `.d.ts`. | Bundled types since v3.5.x; v5 keeps them. Do NOT install a separate `@types/chokidar`. |
-| **eslint + typescript-eslint + stylistic + import-x + sonarjs** | (existing pins) | **NO CHANGE — already in stack** | Lint discipline on the new `bridges/hooks/*.ts` tree. | The existing 8-zone import-direction rule (BLOCK C) covers the new `bridges/hooks/` directory automatically — no new lint config required. |
-| **node:test** | bundled | **NO CHANGE — already in stack** | Unit/integration coverage of the dispatch table, payload translators, matcher compiler, bucket-B `FileChanged` synthesis, bucket-D `Stop` round-trip. | Test the chokidar layer behind a `WatchHost` seam so unit tests can drive synthetic events without real disk I/O. |
-| **memfs** | `^4.57.2` | **NO CHANGE — already in stack** | In-memory fs for unit tests of the per-plugin `hooks/hooks.json` parser and the `chmod` install step. | Already used pervasively in `tests/persistence/` and `tests/bridges/`. Note: chokidar does NOT respect `memfs` (it uses `node:fs.watch` directly), so chokidar-backed FS-watch tests need real tempdirs or a `WatchHost` mock — pick the mock seam path for unit tests; reserve real tempdir tests for the integration tier. |
+| Technology         | Version         | Purpose                                            | Why                                                                                                                     |
+| ------------------ | --------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Node.js            | CI 24.x         | Execute source and TypeScript tests                | This is the repository's current CI runtime. Node 24 includes stable `node:test` and native TypeScript type stripping.  |
+| TypeScript         | 6.0.3 locked    | Strict static checks and structural script parsing | The repository already uses strict `NodeNext`, `noEmit`, and explicit `.ts` imports. No compiler migration is required. |
+| ECMAScript modules | Native Node ESM | Production and test module system                  | `package.json` uses `type: module`. Source and tests already use explicit `.ts` relative imports.                       |
+
+The product contract still states Node `>=20.19.0`. That floor does not define
+the test migration runtime. Use Node 24 for reproducible v1.19 proof.
+
+### Test and Mock Tools
+
+| Technology                | Version                     | Purpose                                          | When to Use                                                                                                                      |
+| ------------------------- | --------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `node:test`               | Bundled with Node 24        | Test runner, per-test context, spies, and timers | Use for every mirrored unit test. Prefer `t.mock` and `t.mock.timers` for case-owned state.                                      |
+| `node:assert/strict`      | Bundled with Node 24        | Assertions                                       | Assert public results, effects, protocol payloads, and error identity.                                                           |
+| `strong-mock`             | 9.2.2 locked                | Typed mocks for behavior-heavy ports             | Use when exact calls, arguments, or call order are part of the public contract. Use `mock`, `when`, `verify`, and `exactParams`. |
+| Real temporary filesystem | Node `fs`, `os`, and `path` | Filesystem behavior                              | Use fresh case-owned directories and real path semantics. Do not add an in-memory filesystem.                                    |
+
+Use literal fakes for simple collaborators. Keep a fake in its concern-local
+test module when several nearby tests share the same protocol. Do not create a
+generic helper inventory that hides subjects, inputs, or expected values.
+
+### Verification and Quality Tools
+
+| Tool                    | Declared or locked version | Purpose                                   | v1.19 role                                                                           |
+| ----------------------- | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| Node V8 coverage        | Bundled with Node 24       | Line, function, and branch coverage       | Enforce 100% for the paired production source during the paired test run.            |
+| TypeScript compiler API | 6.0.3 locked               | Parse imports and exports                 | Power small fail-closed structural checks without another parser package.            |
+| ESLint                  | 10.8.1 locked              | Typed lint and architecture boundaries    | Keep the current strict configuration. Test relaxations remain narrow.               |
+| Fallow                  | 3.17.0 locked              | Dead-code, health, and duplication checks | Enable production dead-code analysis without using tests as production reachability. |
+| Prettier                | 3.9.6 locked               | Formatting                                | Keep the existing format gate.                                                       |
+| SonarQube input         | Existing LCOV flow         | Aggregate repository reporting            | Keep for project reporting. Do not use aggregate coverage as pair proof.             |
+
+There is no database or service infrastructure for this milestone. Tests must
+stay local and deterministic. Unit tests must not use the network, user state,
+or project state outside their temporary directory.
 
 ## Installation
 
-```bash
-# Runtime addition (one new dep)
-npm install chokidar@^5
+No new package is required.
 
-# Everything else is already declared in package.json — no other install needed.
+```bash
+npm ci
 ```
 
-Resulting `package.json` `dependencies` delta:
+Do not add Jest, Vitest, Sinon, c8, nyc, or a filesystem emulator. Each would
+duplicate a capability that the current stack already provides.
+
+## Compiler Configuration
+
+Keep these existing choices:
+
+- `strict: true`
+- `module: "NodeNext"`
+- `moduleResolution: "NodeNext"`
+- `noEmit: true`
+- `allowImportingTsExtensions: true`
+- `exactOptionalPropertyTypes: true`
+- `noUncheckedIndexedAccess: true`
+
+Add these checks during v1.19:
 
 ```json
 {
-  "dependencies": {
-    "chokidar": "^5.0.0",
-    "isomorphic-git": "^1.38.1",
-    "proper-lockfile": "^4.1.2",
-    "write-file-atomic": "^8.0.0"
+  "erasableSyntaxOnly": true,
+  "verbatimModuleSyntax": true
+}
+```
+
+Node's TypeScript runtime removes erasable types and ignores `tsconfig.json`.
+These options make `tsc` reject syntax and import forms that native execution
+cannot handle safely. A validation run with both flags already passes at HEAD.
+
+Do not add `rewriteRelativeImportExtensions`. This project uses `noEmit`, and
+both source and test files already use explicit `.ts` extensions.
+
+## Direct Pair Mechanics
+
+The existing scripts are useful retained foundations. They are not v1.19
+completion proof until the milestone revalidates their rules and negative
+controls.
+
+### Correspondence and Direct Import
+
+`scripts/check-corresponding-tests.mjs` derives this mapping:
+
+```text
+extensions/pi-claude-marketplace/<path>/<name>.ts
+                       ↓
+tests/<path>/<name>.test.ts
+```
+
+It uses the TypeScript compiler API to read static imports and exports. It then
+requires the mirrored test to import its production source directly.
+
+Keep the source-to-test rule. Refine the reverse rule before using the script
+as a closure gate. The current rule labels every unmatched unit-test file as
+unexpected. This conflicts with valid concern-local fake and contract modules.
+Support tests may exist, but they must not replace the mirrored test or own its
+direct coverage proof.
+
+Static import validation proves module ownership. It does not prove that the
+test calls every public export. The direct coverage gate and pair review must
+provide that evidence. Type-only modules and intentional barrels need explicit,
+small rules instead of a general exemption register.
+
+### Direct Coverage
+
+`scripts/test-coverage-direct.mjs` runs only the mirrored test in a child Node
+process. It reads LCOV for exactly the paired source record and requires:
+
+```text
+BRH = BRF
+FNH = FNF
+LH  = LF
+```
+
+The gate fails when the pair, source record, or full branch, function, or line
+coverage is missing. A type-only source may omit an LCOV record only when its
+transpiled runtime output is the empty `export {}` module.
+
+During migration, always pass the production source explicitly. The no-argument
+mode selects all changed files from the merge base. That scope crosses pair
+boundaries and is not valid proof for a one-pair plan.
+
+```bash
+npm run test:coverage:direct -- \
+  extensions/pi-claude-marketplace/<path>/<name>.ts
+```
+
+Node also offers native line, branch, and function thresholds. Keep the LCOV
+record check because a pair test can import dependencies. The milestone must
+prove exactly one paired source record, including missing-record failures.
+
+### Negative Controls
+
+The retained negative scripts currently pass, but their coverage is incomplete.
+Keep planted failures for correspondence and direct coverage. Add a focused
+negative control for each fail-closed class:
+
+- missing mirrored test
+- wrong direct import
+- invalid or outside-root path
+- missing non-type source record
+- duplicate paired-source record
+- incomplete line, function, and branch coverage
+- valid type-only source without runtime statements
+
+Do not use baseline counts. A newly introduced violation must fail even when
+the total count does not change.
+
+## Fallow Configuration
+
+The current `.fallowrc.json` sets `production` to `false`. Replace that setting
+during v1.19 with:
+
+```json
+{
+  "production": {
+    "deadCode": true,
+    "health": false,
+    "dupes": false
   }
 }
 ```
 
-`devDependencies` and `peerDependencies` unchanged.
+This catches exports that exist only for tests without treating every test call
+as production reachability. Do not add a broad `ignoreExports` list. Use a
+narrow documented suppression only for a real runtime API that static analysis
+cannot discover.
+
+## Command Contract
+
+### Every Pair Plan
+
+Use the mirrored test path and source path explicitly:
+
+```bash
+node --test tests/<path>/<name>.test.ts
+npm run test:coverage:direct -- \
+  extensions/pi-claude-marketplace/<path>/<name>.ts
+npm run check
+```
+
+The executable plan and commit contain one production source and its mirrored
+test. A necessary configuration or gate correction may travel with that pair.
+Do not batch several pairs into one plan or commit.
+
+### Milestone Closure
+
+After every pair passes, run the global gates on Node 24:
+
+```bash
+npm run test:corresponding
+npm run test:coverage:direct:all
+npm run check
+```
+
+The current `npm run check` does not call the correspondence or direct-coverage
+gates. Add both global gates to `check` only when all pairs pass, so the required
+quality command stays green throughout the migration. Make this change with the
+final pair, not in a separate tooling-only executable plan.
+
+Direct-all starts one coverage process per source pair. Measure its Node 24 CI
+duration before closure. If it exceeds the 15-minute CI timeout, use bounded
+child-process concurrency. Keep one isolated LCOV directory per pair and one
+in-memory result list. Do not restore coverage shards or reconciliation files.
+
+## Test Implementation Guidance
+
+For each pair:
+
+1. Trace production callers and public effects before changing code.
+2. Import the production source directly from the mirrored test.
+3. Create the subject and mutable collaborators inside each test case.
+4. Use Arrange, Act, Assert sections in that order.
+5. Cover meaningful success, failure, and boundary behavior.
+6. Verify exact port calls when interaction is part of the contract.
+7. Use a fresh temporary directory for every filesystem case.
+8. Assert public behavior, not private constants, regular expressions, or file layout.
+9. Run the focused test, explicit direct coverage, and normal quality gate.
+10. Record new v1.19 evidence before marking the pair complete.
+
+Do not use process-wide `mock` state from `node:test`. Do not use global
+`verifyAll`, `resetAll`, or shared mutable mock instances. Do not add a
+test-only production export. If code is hard to test, improve its real runtime
+seam through the pair plan.
 
 ## Alternatives Considered
 
-### Focus area 1 — File-system watcher for bucket-B `FileChanged`
+| Category             | Recommended                                    | Alternative                     | Why Not                                                                                                                                     |
+| -------------------- | ---------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test runner          | `node:test`                                    | Jest or Vitest                  | The built-in runner already executes this native ESM TypeScript repository. Another runner adds configuration and competing mock semantics. |
+| Coverage             | Node V8 coverage plus exact LCOV record checks | c8 or nyc                       | Node already produces the needed line, function, and branch data. Pair ownership still needs repository-specific record validation.         |
+| Simple doubles       | Literal fakes and `t.mock`                     | Sinon                           | Existing tools cover simple stubs, spies, and timers without a dependency.                                                                  |
+| Behavior-heavy ports | `strong-mock`                                  | Untyped hand-written mocks      | The installed library preserves interface types and provides explicit interaction verification.                                             |
+| Filesystem tests     | Real case-owned temporary directories          | memfs                           | Real paths, permissions, renames, and cleanup behavior are part of this product's contracts.                                                |
+| Direct import checks | TypeScript compiler API                        | Regex or runtime module loaders | The compiler API reads ESM syntax reliably. Runtime module replacement would weaken direct ownership.                                       |
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| **`chokidar@^5`** | **`node:fs.watch` (built-in)** | If the bridge only ever needs a single-directory non-recursive watch with no cross-platform abstraction. Rejected for v1.13: Claude `FileChanged` matchers support glob patterns over the plugin tree; the bridge would need to re-implement chokidar's debounce, atomic-write awareness (editor-save tmp+rename storms emit one logical change but ~3 `fs.watch` events), per-platform recursive-watch fallbacks (Linux pre-recursive-flag landed late; macOS FSEvents vs Linux inotify diverge on rename semantics), and ignore-list filtering. That's exactly chokidar's job. The `ENOENT-on-replace` and Linux-recursive footguns are real and chokidar is the canonical Node solution. |
-| **`chokidar@^5`** | **`@parcel/watcher@^2.5.6`** | If the bridge needed sub-millisecond change-detection latency on huge trees (Parcel's use case: re-bundling on every save during dev). Rejected for v1.13: (a) native bindings — every Node version bump + every platform combination (Linux x64/arm64, macOS x64/arm64, Windows x64) needs a prebuilt binary, raising the install-failure surface; (b) much heavier install footprint than chokidar; (c) chokidar v5 dropped its own native-bindings dep tree (no more `fsevents` optional dep on non-macOS) and is now a thin layer over `node:fs.watch` + `readdirp@^5`, so its complaint-of-record (heavy install) is gone. Pi's hook-bridge watches a handful of plugin trees with infrequent change rates — chokidar's latency is fine. |
-| **`chokidar@^5`** | **Pi host-provided watch channel** | If `@earendil-works/pi-coding-agent` exposed a consumer-side watch event. Verified absent at `dist/core/extensions/types.d.ts` (the cross-mapping table notes Pi's `session_start` return field `watchPaths` is **producer-only** — the host doesn't emit a `file_changed` event back). Bridge owns the watch lifecycle. |
+## Explicit Non-Choices
 
-### Focus area 2 — Debounce primitive
+Do not restore or create:
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| **Inline `setTimeout` + chokidar's `awaitWriteFinish`** | **`p-debounce@^4`** | If the bridge needed Promise-returning debounced functions with last-call resolution semantics. Rejected: chokidar already handles the only real debounce case (FS-event coalescing), and the `PostToolBatch` safety-net is a single-shot "fire-once-if-not-already-fired" timer, not a debounce. |
-| **Inline `setTimeout` + chokidar's `awaitWriteFinish`** | **`lodash.debounce`** | If the project already pulled in lodash. Rejected: pulling lodash for one debounce call would be 70 KB+ for a four-line primitive; pulling `lodash.debounce` alone is cleaner but still a new dep with no other use. |
+- historical coverage shards, matrices, reconciliation files, or baselines
+- mirrored-test exemption registers or ownership registries
+- adapter participation scanners or preservation checkers
+- generic helper directories that conceal the tested subject or expected values
+- module-mocking loaders or process-wide mock state
+- test-only production exports
+- migration-history comments or historical module partitions
+- the abandoned handoff patch or any patch-application mechanism
 
-### Focus area 3 — Matcher translation for tool-matcher syntax
+Aggregate test success and Sonar coverage remain useful repository signals.
+They cannot prove that one mirrored test directly owns one production source.
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| **Pure-JS string parser (literal + pipe-OR)** | **`new RegExp(pattern)` (built-in)** | Already adequate **if/when** full regex matchers are unblocked (deferred per the milestone scope — "Full regex matchers (literal + pipe-OR covers 100% of first-party plugins)"). Confirmed: NO new dep needed for full-regex support either. The matcher compiler is a tiny pure-JS function that returns `(input: string) => boolean` and switches on the syntax kind it parsed (literal / pipe-OR / regex). |
-| **Pure-JS string parser** | **`micromatch` / `minimatch`** | If/when the bridge needed glob-style matchers (e.g., for `security-guidance`'s `Bash(git commit:*)` prefix-glob `if` conditions, per the marketplace audit). Rejected for v1.13: the audit calls this out as a "literal-OR + prefix-glob" need that can be served by a hand-rolled `startsWith` check on the parsed `Bash(<prefix>)` form. If the audit ever upgrades the requirement to true glob, `micromatch@^4` is the right add then, not now. |
+## Risks and Mitigations
 
-### Focus area 4 — Hook payload discriminated union
+| Risk                                                        | Evidence at HEAD                                                                                                 | Mitigation                                                                                                          |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Coverage differs by Node and V8 version.                    | Local audit used Node 26.7.0, while CI uses Node 24.                                                             | Treat Node 24 output as the closure result.                                                                         |
+| The advertised Node floor conflicts with current tools.     | Fallow 3.17 requires Node 22 or newer. `write-file-atomic` 8 requires newer Node 22, Node 24, or Node 26 ranges. | Track runtime-floor alignment outside the pair migration. Do not silently expand v1.19 into a dependency migration. |
+| Coverage APIs remain experimental.                          | Node 24 documents test coverage as experimental.                                                                 | Pin CI to Node 24 for the milestone and retain planted negative controls.                                           |
+| The global correspondence gate rejects valid support tests. | The live run reports 43 unmatched test files in addition to pair defects.                                        | Make enforcement source-driven and define a narrow support-test rule.                                               |
+| Direct-all can exceed CI time.                              | It launches up to 204 isolated child processes.                                                                  | Measure first. Add bounded concurrency only when the Node 24 timing requires it.                                    |
+| Existing pair tests can pass in the suite but fail alone.   | The live audit reports two `TEST_FAIL` pairs.                                                                    | Require focused isolated execution for every pair.                                                                  |
+| Old structure can distort the refactor.                     | The handoff explicitly retires old partitions and patch mechanisms.                                              | Design each pair from current callers and behavior. Write comments only for current invariants.                     |
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| **typebox 1.x `Type.Union([...], { discriminator: "hook_event_name" })`** | **JSON-Schema-only validator (Ajv)** | If the bridge only needed to validate incoming payloads against a schema with no static-typing handshake. Rejected: NFR-7's discriminated-union discipline applies here too — the per-event payload translators *must* be type-narrowed to a specific arm by the time they run; Ajv would force a manual `as PreToolUsePayload` cast at every translator boundary, regressing the v1.0 "no `pluginRoot` read from non-installable plugin" type-safety pattern. |
-| **typebox 1.x** | **Zod 4.x** | If the project's contract surface had been Zod-based. Rejected on the v1.12 STACK's same reasoning (peer dep contract is `typebox`; perf and JIT-compile parity). |
+## Roadmap Implications
 
-### Focus area 5 — Synthetic user message for `Stop` synthesis
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| **`pi.sendUserMessage(content, { deliverAs: "followUp" })`** | **`pi.events.emit(...)` of a custom synthetic event** | If the host did NOT expose a user-message injection primitive. Confirmed present (verified at `dist/core/extensions/types.d.ts:292` and `:865`); no synthesis required. **Use `deliverAs: "followUp"`** — this is the documented in-band "treat this as if the user typed it next" semantic that bucket-D's `Stop` block-to-continue contract maps to. `"steer"` is for mid-turn corrections and would race the agent-loop teardown that `agent_end` represents. |
-
-### Focus area 6 — Hook stdout JSON contract parsing
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| **`node:child_process.spawn` + manual stdout buffering + `JSON.parse` in a try/catch** | **`execa@^9`** | If the bridge needed `execa`'s cross-platform shell quoting, kill-tree-on-timeout, or its piped-streams DSL. Rejected: hook commands are invoked by absolute path with explicit `args` arrays (not shell strings), so quoting is moot; `spawn` accepts `timeout` and signal-on-timeout options natively since Node 16; and the bridge needs to keep stdin under direct control to push the hook's input JSON, which is one line of `child.stdin.write(JSON.stringify(input)); child.stdin.end();`. **The CLAUDE.md heuristic ("don't add `execa` unless built-ins can't cover") applies cleanly here.** |
-| **`node:child_process.spawn`** | **`secure-json-parse`** for the stdout `JSON.parse` step | If the bridge wanted hardening against prototype-pollution payloads in hook stdout. Probably not needed for v1.13: hook commands are author-written plugin code, not user-input — the threat model is "buggy hook" not "adversarial hook". A `try { JSON.parse(stdout) } catch { warn + drop }` is sufficient. Reconsider only if a future plugin's hook stdout is sourced from network input. |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| **`node:fs.watchFile` (poll-based)** | Polling-based, not event-driven; CPU cost scales with the number of watched files; latency is bounded by the poll interval (1s default). The bridge's `FileChanged` synthesis fires on every editor save in the entire watched tree — polling would either be slow (5s+ latency) or expensive (100ms poll × dozens of files × the bridge's whole process lifetime). chokidar uses `fs.watch` internally for exactly this reason; do not regress. | `chokidar@^5` (which wraps `fs.watch` with the cross-platform glue). |
-| **`@parcel/watcher`** | Native bindings raise the install-failure surface; pre-built binaries needed for every (Node major × platform × arch) combination; doesn't materially improve latency for the bridge's use case (handful of plugin trees, infrequent changes); chokidar v5 already shed its own native-bindings dep. | `chokidar@^5`. |
-| **`fsevents` (macOS-only)** | Only works on macOS; would force the bridge to ship `fsevents`-or-`inotify` branches in code. chokidar v5 no longer ships `fsevents` as an optional dep — it's pure-JS now and uses the platform's `fs.watch` recursive flag where supported. | `chokidar@^5`. |
-| **`execa`** | The bridge's needs (stdin push, stdout capture, timeout, exit-code read) are all in `node:child_process.spawn` directly; `execa`'s value-adds (shell-string quoting, kill-tree, signal mapping) are either irrelevant or unnecessary. Adding it would be a new dep with no bridge-specific justification — fails the CLAUDE.md heuristic. | `node:child_process.spawn`. |
-| **`p-debounce` / `lodash.debounce`** | chokidar already debounces FS events via `awaitWriteFinish`. The only other debounce-shaped need (`PostToolBatch` safety-net timer) is a single-shot `setTimeout` + flag, not a debounce. | Inline `setTimeout` + chokidar's built-in option. |
-| **Any new lockfile lib** (e.g., `lockfile`, `lock-file`) | `proper-lockfile@^4.1.2` is already in the stack and is the cross-process exclusivity primitive for `state.json` mutation. The v1.13 hook-component install path picks it up via the existing v1.12 reconcile orchestrator. | `proper-lockfile@^4.1.2` (no change). |
-| **Any non-ESM dep** | The project is `"type": "module"`; TypeBox 1.x is ESM-only; the existing v1.12 stack note "Commit fully to ESM-only" still binds. | Verify ESM compatibility before adding any new dep. |
-| **Any telemetry/analytics dep** (Sentry, OpenTelemetry, posthog, etc.) | IL-4 forbids telemetry. The hook-bridge surface area is exactly the kind of subsystem where someone might want "how often does PostToolBatch fire?" instrumentation — the answer is "use debug-level logging via `console.warn`-with-tag, never a telemetry dep". | None. |
-| **Any i18n dep** (i18next, formatjs, etc.) | IL-1 forbids i18n. New hook-bridge user-visible strings stay English-only and route through `ctx.ui.notify` per IL-2. | None. |
-
-## Stack Patterns by Decision Point
-
-### Pattern: chokidar lifecycle bound to bridge load/unload
-
-`pi.on(...)` returns void (no unsubscribe — confirmed at the authority doc's "Constraint: `pi.on()` is non-removable" section). The chokidar watcher's lifetime should mirror this — one instance created at bridge load-time, never torn down within a single Pi process. On `/reload`, the bridge re-runs the v1.12 reconcile path, which produces a fresh enabled-plugin set; the watcher's `watched` paths get reconciled to match (chokidar exposes `watcher.add(paths)` / `watcher.unwatch(paths)` for this — both are idempotent).
-
-The bridge does **not** call `watcher.close()` inside the Pi process. The watcher tears down when the Pi process exits. This matches the "no unsubscribe" constraint and avoids the failure mode where a botched `/reload` leaves the watcher half-disposed.
-
-### Pattern: Discriminated `HookEventPayload` union via TypeBox
-
-Mirror v1.10's `MarketplaceNotificationMessage` shape — one `Type.Object({ ... })` per hook event, then `Type.Union([...], { discriminator: 'hook_event_name' })`. The dispatch table's per-event handler type-narrows by switching on the discriminator and then routes to a translator that returns a Pi return shape. The `assertNever(p)` exhaustiveness check at the default arm is the same pattern v1.10 already uses for the four `MpStatus` arms; one shared `assertNever` lives in `shared/notify.ts` already (D-21-01).
-
-### Pattern: `spawn` with explicit `args`, never via shell
-
-```ts
-const child = spawn(absoluteHookScriptPath, [], {
-  cwd: pluginRoot,
-  env: { ...process.env, /* hook-event-specific env vars per Claude contract */ },
-  stdio: ['pipe', 'pipe', 'pipe'],
-  timeout: HOOK_TIMEOUT_MS, // per-event budget; SIGKILL on overrun
-});
-child.stdin.write(JSON.stringify(input));
-child.stdin.end();
-```
-
-Never invoke via `spawn('sh', ['-c', ...])` or `exec(...)`. The plugin author can put a `#!/usr/bin/env bash` shebang in their hook script if they need shell features; the bridge stays out of the quoting story entirely.
-
-### Pattern: Bucket-D `Stop` round-trip via `sendUserMessage`
-
-```ts
-pi.on('agent_end', async (event, ctx) => {
-  const hookResults = await dispatchStopHooks(/* per-plugin */);
-  const blockingResult = hookResults.find(r => r.decision === 'block');
-  if (blockingResult) {
-    await ctx.sendUserMessage(blockingResult.reason, { deliverAs: 'followUp' });
-  }
-});
-```
-
-The `deliverAs: 'followUp'` semantic is the in-band "treat as if the user typed this next" path. This is the canary contract for `ralph-wiggum`.
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| `chokidar@^5.0.0` | Node `>=20.19.0` (NFR-4 floor exactly) | Engines align with the project's existing floor — no new floor pressure. Pure-JS implementation as of v5; no platform-specific native bindings. Dep `readdirp@^5` is pure-JS. |
-| `chokidar@^5.0.0` | ESM-only consumers | Ships ESM build; works under the project's `"type": "module"`. |
-| `chokidar@^5.0.0` | `node:test` (built-in) | Compatible; reserve real-tempdir tests for `tests/integration/` per the memfs-doesn't-work-with-fs.watch note above. Unit tests should drive a `WatchHost` mock seam, not chokidar directly. |
-| `@earendil-works/pi-coding-agent` `>=0.74.0` (peer floor) | `pi.sendUserMessage(content, opts)` API | Verified present at the existing dev pin `^0.79.0` and confirmed at the floor `>=0.74.0` via the shipped `dist/core/extensions/types.d.ts`. No peer-floor bump required for v1.13. |
-
-## Roadmap Implications (mapping each delta to a v1.13 phase)
-
-The downstream consumer (roadmapper) will use this table to slot each new
-dependency into the right phase. "Cross-cutting" means the item is used by
-more than one phase.
-
-| Stack item | Bridge phase(s) | Cross-cutting? |
-|------------|----------------|----------------|
-| `chokidar@^5` | bucket-B `FileChanged` synthesis | No — single-bucket; the dispatch core wires the watcher's events into the synthetic `FileChanged` translator. |
-| Discriminated `HookEventPayload` TypeBox union | resolver/state phase (parses `hooks/hooks.json`) + dispatch core (registers handlers) + per-bucket synthesis (each translator narrows to its arm) | **Cross-cutting.** Land the union in the resolver/state phase so subsequent phases can import the per-event types. |
-| `pi.sendUserMessage` (no new dep) | bucket-D `Stop` synthesis | No — single-event use. |
-| `node:child_process.spawn` for hook exec (no new dep) | dispatch core (every fired hook spawns) | **Cross-cutting at runtime, single-implementation-site.** Land a `runHookCommand(absolutePath, input): Promise<HookResult>` helper in the dispatch-core phase and reuse it everywhere. |
-| Matcher compiler (pure-JS; literal + pipe-OR; no new dep) | dispatch core (entry-time compilation) + per-bucket synthesis (matcher-evaluation at fire time) | **Cross-cutting.** One compiler function returning `(input: string) => boolean`; called once per registered hook entry at bridge load. |
-| Inline `setTimeout` for `PostToolBatch` safety-net (no new dep) | bucket-D `PostToolBatch` synthesis | No — single-bucket. |
-| Hook-payload-extension tolerance (no new dep — uses the existing typebox parser's `additionalProperties: true` mode on `HookEntry` schema + a known-extensions allow-list constant) | resolver/state phase (parse-time warning) + dispatch core (debug-log at fire time) | **Cross-cutting.** Land the known-extensions constant in resolver/state phase. |
+- Start future work at Phase 108.
+- Use Phase 108 to revalidate the small gates and complete its first source-test pair.
+- Use one source-test pair per later executable plan and commit.
+- Order pairs by present dependencies and risk, not by retired phase boundaries.
+- Enable the two global gates in `npm run check` with the final pair.
+- End with Node 24 correspondence, direct-all, and normal quality-gate evidence.
 
 ## Sources
 
-### Authoritative (HIGH confidence)
+### Repository Evidence
 
-- **`@earendil-works/pi-coding-agent`** `dist/core/extensions/types.d.ts` shipped with peer-dep at the v0.79.0 dev pin, read 2026-06-13:
-  - `:292` and `:865` — `ReplacedSessionContext.sendUserMessage(content: string | (TextContent | ImageContent)[], options?: { deliverAs?: "steer" | "followUp" }): Promise<void>` — confirms bucket-D `Stop` synthesis primitive exists; no synthesis required.
-  - Grep for `watchPaths|fs.watch|FileChanged|chokidar` in the same file returned zero matches — confirms the host does NOT provide a consumer-side watch event; the bridge owns the watcher (independent confirmation of the authority doc's claim).
-- **npm registry, queried 2026-06-13:**
-  - `npm view chokidar version engines` → `5.0.0`, `engines.node: >=20.19.0` (aligns with project floor exactly; no floor pressure).
-  - `npm view chokidar dependencies` → `{ readdirp: '^5.0.0' }` (pure-JS, no native bindings).
-  - `npm view @parcel/watcher version engines` → `2.5.6`, `engines.node: >= 10.0.0` (would not raise floor — rejected on other grounds: native bindings + install-failure surface).
-- **Authority doc** `/home/acolomba/pi-claude-marketplace/docs/research/claude-hooks-vs-pi-events.md` (Phase 6 input, 2026-06-12):
-  - "Constraint: `pi.on()` is non-removable" — informs the chokidar-lifecycle pattern (no teardown within the Pi process).
-  - "Bridge implications" — confirms matcher translation is "trivial" string-check work (no regex engine dep required).
-  - "Operational gotchas" #1 — hook scripts need `chmod +x` on install; uses `node:fs/promises` built-in (already in stack).
-  - "Operational gotchas" #3 — atomic `state.json` writes via `write-file-atomic` (already in stack).
-  - Bucket-D synthesis table — `Stop` uses `pi.sendUserMessage()` (verified above), `PostToolBatch` uses `tool_execution_end` counting + `turn_end` safety-net (uses `setTimeout`, no new dep).
-- **v1.12 STACK research** at `/home/acolomba/pi-claude-marketplace/.planning/milestones/v1.12-research/STACK.md`:
-  - "What V1 Already Got Right" — confirms TypeBox 1.x + write-file-atomic + proper-lockfile + node:test are the locked baseline; no change requested for v1.13.
-  - "What NOT to Use" — confirms ESM-only commitment, no telemetry, no i18n; constraints carried into v1.13.
-- **`pi-claude-marketplace/package.json`** as of `features/v1.13-hook-bridge` HEAD — confirms current dep set; `chokidar` not declared (NEW), no other dep is missing from the hook-bridge dep ledger.
+- `package.json`, `package-lock.json`, `tsconfig.json`, and `.fallowrc.json` at HEAD
+- `.github/workflows/ci.yml` and `.github/workflows/sonarqube.yml` at HEAD
+- `scripts/check-corresponding-tests.mjs` and its negative control at HEAD
+- `scripts/test-coverage-direct.mjs` and its negative control at HEAD
+- `docs/guidelines/typescript-unit-testing-guidelines.md`
+- `.claude/rules/typescript-unit-testing.md`
+- `.planning/inputs/unit-test-refactor-handoff/START-HERE.md` and linked handoff decisions
+- `/tmp/pi-cm-pair-audit.CJWiph/results.tsv`
 
-### Cross-referencing (MEDIUM confidence — ecosystem signal, not load-bearing)
+### Official Documentation
 
-- chokidar v4→v5 migration notes (paulmillr/chokidar README, 2026): v4 dropped globs and v5 dropped the optional `fsevents` native dep, completing the "pure-JS Node FS watcher" pivot. Confirms the v5-over-v4 recommendation.
-- Schema-validation perf landscape (TypeBox JIT competitive with ArkType, both ~3-4× faster than Zod 4) carries over from v1.12 STACK; no v1.13 re-benchmarking needed because the hook-payload union sits on the same hot path (per-tool-call) as the manifest validation that v1.12 already sized.
+- [Node.js test runner](https://nodejs.org/docs/latest-v24.x/api/test.html)
+- [Node.js TypeScript support](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
+- [Node.js command-line coverage options](https://nodejs.org/docs/latest-v24.x/api/cli.html)
+- [TypeScript `allowImportingTsExtensions`](https://www.typescriptlang.org/tsconfig/allowImportingTsExtensions.html)
+- [TypeScript module resolution](https://www.typescriptlang.org/tsconfig/moduleResolution.html)
+- [Fallow configuration](https://fallow.tools/docs/configuration/overview/)
+- [`strong-mock` documentation](https://github.com/NiGhTTraX/strong-mock)
 
----
-*Stack research for: v1.13 Claude Hook Bridge (subsequent-milestone delta over the locked v1.12 stack)*
-*Researched: 2026-06-13*
+Repository findings have HIGH confidence because they come from HEAD and live
+commands. External behavior has MEDIUM confidence under the research provider
+classification, even though the cited pages are primary documentation.

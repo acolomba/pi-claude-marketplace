@@ -45,8 +45,7 @@ import type { GitCredentials } from "./git.ts";
  *   - reject: evict a credential from the OS keychain
  *
  * The default implementation spawns `git credential fill/approve/reject`.
- * Tests inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
- * so the developer's OS keychain is never touched by the test suite.
+ * `createCredentialOps` accepts a process launcher for alternate adapters.
  *
  * buildAuthCallbacks consumes this seam.
  *
@@ -66,9 +65,41 @@ export interface CredentialOps {
   reject(host: string, cred: GitCredentials): Promise<void>;
 }
 
+export interface CredentialProcess {
+  readonly stdin: {
+    on(event: "error", listener: (error: Error) => void): void;
+    write(input: string): void;
+    end(): void;
+  };
+  readonly stdout: {
+    on(event: "data", listener: (chunk: Buffer) => void): void;
+  };
+  kill(signal: "SIGTERM"): boolean;
+  on(
+    event: "error" | "close",
+    listener: ((error: Error) => void) | ((code: number | null) => void),
+  ): void;
+}
+
+export interface CredentialSpawnOptions {
+  readonly env: NodeJS.ProcessEnv;
+  readonly stdio: readonly ["pipe", "pipe", "pipe"];
+}
+
+export type CredentialSpawn = (
+  command: string,
+  args: readonly string[],
+  options: CredentialSpawnOptions,
+) => CredentialProcess;
+
+export interface CreateCredentialOpsOptions {
+  readonly spawn?: CredentialSpawn;
+  readonly timeoutMs?: number;
+}
+
 /**
  * Spawn `git credential <subcommand>` and feed `input` over stdin. Returns
- * { stdout, stderr, code } on close. Rejects on subprocess "error" (ENOENT
+ * { stdout, code } on close. Rejects on subprocess "error" (ENOENT
  * et al.) or on timeout (default 5_000ms).
  *
  * Timeout discipline (CP-4): the setTimeout handle calls .unref() so a
@@ -77,10 +108,11 @@ export interface CredentialOps {
 function gitCredentialIO(
   subcommand: "fill" | "approve" | "reject",
   input: string,
-  timeoutMs = 5_000,
-): Promise<{ stdout: string; stderr: string; code: number }> {
+  spawnProcess: CredentialSpawn,
+  timeoutMs: number,
+): Promise<{ stdout: string; code: number }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["credential", subcommand], {
+    const child = spawnProcess("git", ["credential", subcommand], {
       env: {
         ...process.env,
         GIT_TERMINAL_PROMPT: "0",
@@ -90,12 +122,8 @@ function gitCredentialIO(
     });
 
     let stdout = "";
-    let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
     });
 
     const timer = setTimeout(() => {
@@ -104,13 +132,13 @@ function gitCredentialIO(
     }, timeoutMs);
     timer.unref();
 
-    child.on("error", (err) => {
+    child.on("error", (err: Error) => {
       clearTimeout(timer);
       reject(err);
     });
-    child.on("close", (code) => {
+    child.on("close", (code: number | null) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr, code: code ?? -1 });
+      resolve({ stdout, code: code ?? -1 });
     });
 
     // Swallow EPIPE: the credential helper may exit before reading all
@@ -193,11 +221,19 @@ function parseCredentialOutput(stdout: string): Record<string, string> {
  * The `null` return is the affirmative no-result; callers
  * (buildAuthCallbacks) fall through to Device Flow on null.
  */
-async function credentialFill(host: string): Promise<GitCredentials | null> {
+type RunGitCredential = (
+  subcommand: "fill" | "approve" | "reject",
+  input: string,
+) => Promise<{ stdout: string; code: number }>;
+
+async function credentialFill(
+  host: string,
+  runGitCredential: RunGitCredential,
+): Promise<GitCredentials | null> {
   const input = buildAttributeBlock(host);
   let result;
   try {
-    result = await gitCredentialIO("fill", input);
+    result = await runGitCredential("fill", input);
   } catch {
     return null;
   }
@@ -224,10 +260,14 @@ async function credentialFill(host: string): Promise<GitCredentials | null> {
  * operation; the user simply does not get keychain reuse on subsequent
  * runs (they will re-run Device Flow next time).
  */
-async function credentialApprove(host: string, cred: GitCredentials): Promise<void> {
+async function credentialApprove(
+  host: string,
+  cred: GitCredentials,
+  runGitCredential: RunGitCredential,
+): Promise<void> {
   const input = buildAttributeBlock(host, cred);
   try {
-    await gitCredentialIO("approve", input);
+    await runGitCredential("approve", input);
   } catch {
     return;
   }
@@ -241,17 +281,30 @@ async function credentialApprove(host: string, cred: GitCredentials): Promise<vo
  * credential helper matches on the full attribute set to identify the
  * entry to remove.
  */
-async function credentialReject(host: string, cred: GitCredentials): Promise<void> {
+async function credentialReject(
+  host: string,
+  cred: GitCredentials,
+  runGitCredential: RunGitCredential,
+): Promise<void> {
   const input = buildAttributeBlock(host, cred);
   try {
-    await gitCredentialIO("reject", input);
+    await runGitCredential("reject", input);
   } catch {
     return;
   }
 }
 
-export const DEFAULT_CREDENTIAL_OPS: CredentialOps = {
-  fill: credentialFill,
-  approve: credentialApprove,
-  reject: credentialReject,
-};
+export function createCredentialOps(options: CreateCredentialOpsOptions = {}): CredentialOps {
+  const spawnProcess = options.spawn ?? (spawn as CredentialSpawn);
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const runGitCredential: RunGitCredential = (subcommand, input) =>
+    gitCredentialIO(subcommand, input, spawnProcess, timeoutMs);
+
+  return {
+    fill: (host) => credentialFill(host, runGitCredential),
+    approve: (host, cred) => credentialApprove(host, cred, runGitCredential),
+    reject: (host, cred) => credentialReject(host, cred, runGitCredential),
+  };
+}
+
+export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps();

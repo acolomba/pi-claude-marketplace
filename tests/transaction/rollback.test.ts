@@ -8,196 +8,167 @@ import {
 import { formatRollbackError } from "../../extensions/pi-claude-marketplace/transaction/rollback.ts";
 
 import type { RunPhasesResult } from "../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
+import type { RollbackErrorResult } from "../../extensions/pi-claude-marketplace/transaction/rollback.ts";
 
-/**
- * D-03 / AS-4 / ES-4 / D-14-04 -- formatRollbackError structured result.
- *
- * Orchestrator-owns-rendering: formatRollbackError does not compose the
- * user-visible body. It returns a structured `RollbackErrorResult` -- the
- * original (or cause-wrapped) Error PLUS the raw `RollbackPartial[]` data so
- * the orchestrator can render via the `notify` path.
- *
- * Tests verify (a) zero-partial fast path returns the original Error
- * instance unwrapped with an empty partials array, (b) the cause-wrapped
- * Error preserves the original .message and sets .cause, (c) the raw
- * `rollbackPartials` array is forwarded verbatim, (d) PathContainmentError
- * / SymlinkRefusedError bypass returns the original instance verbatim
- * with an empty partials array.
- *
- * The byte-equivalent rendering of the children block is enforced by
- * `tests/architecture/catalog-uat.test.ts` against the renderer in
- * `shared/notify.ts`.
- */
-
-test("D-03 formatRollbackError: empty partials returns original error unchanged + empty partials array", () => {
-  const original = new Error("staging failed");
-  const result: RunPhasesResult = {
+test("returns an ordinary error unchanged when rollback has no partials", () => {
+  // arrange
+  const originalError = new Error("plugin staging failed");
+  const phaseRun = {
     ok: false,
-    error: original,
+    error: originalError,
     rollbackPartials: [],
     leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  assert.strictEqual(got.error, original, "no partials -> same Error instance");
-  assert.deepEqual(got.rollbackPartials, [], "no partials -> empty array");
+  } satisfies RunPhasesResult;
+  const expectedRollback = {
+    error: originalError,
+    rollbackPartials: [],
+  } satisfies RollbackErrorResult;
+
+  // act
+  const rollback = formatRollbackError(phaseRun, originalError);
+
+  // assert
+  assert.deepStrictEqual(rollback, expectedRollback);
+  assert.strictEqual(rollback.error, originalError);
 });
 
-test("D-03 / AS-4 formatRollbackError: 2 partials return cause-wrapped Error + raw RollbackPartial[] data", () => {
-  const original = new Error("staging failed");
-  const partials = [
-    { phase: "skills/prompts", msg: "rm failed" },
-    { phase: "agents", msg: "index unreadable" },
+test("returns a path-containment error unchanged and suppresses partials", () => {
+  // arrange
+  const originalError = new PathContainmentError(
+    "/scope-root",
+    "/escaped/plugin",
+    "plugin directory",
+  );
+  const partialCause = new Error("staging cleanup denied");
+  const phaseRun = {
+    ok: false,
+    error: originalError,
+    rollbackPartials: [{ phase: "skills", msg: "staging cleanup denied", cause: partialCause }],
+    leaks: ["/scope-root/staging/plugin"],
+  } satisfies RunPhasesResult;
+  const expectedRollback = {
+    error: originalError,
+    rollbackPartials: [],
+  } satisfies RollbackErrorResult;
+
+  // act
+  const rollback = formatRollbackError(phaseRun, originalError);
+
+  // assert
+  assert.deepStrictEqual(rollback, expectedRollback);
+  assert.strictEqual(rollback.error, originalError);
+});
+
+test("returns a symlink-refusal error unchanged and suppresses partials", () => {
+  // arrange
+  const originalError = new SymlinkRefusedError(
+    "/project/plugins",
+    "/external/plugin",
+    "plugin directory",
+    "/project/plugins/linked",
+    "/external",
+  );
+  const partialCause = new Error("agent rollback failed");
+  const phaseRun = {
+    ok: false,
+    error: originalError,
+    rollbackPartials: [{ phase: "agents", msg: "agent rollback failed", cause: partialCause }],
+    leaks: ["/project/plugins/linked"],
+  } satisfies RunPhasesResult;
+  const expectedRollback = {
+    error: originalError,
+    rollbackPartials: [],
+  } satisfies RollbackErrorResult;
+
+  // act
+  const rollback = formatRollbackError(phaseRun, originalError);
+
+  // assert
+  assert.deepStrictEqual(rollback, expectedRollback);
+  assert.strictEqual(rollback.error, originalError);
+  assert.ok(rollback.error instanceof PathContainmentError);
+});
+
+test("wraps one partial failure with its original cause and raw row", () => {
+  // arrange
+  const originalError = new Error("plugin installation failed");
+  const partialCause = new Error("hook cleanup denied");
+  const rollbackPartials = [
+    { phase: "hooks", msg: "hook cleanup denied", cause: partialCause },
   ] as const;
-  const result: RunPhasesResult = {
+  const rollbackLeaks = ["/project/hooks/stale-hook.json"] as const;
+  const phaseRun = {
     ok: false,
-    error: original,
-    rollbackPartials: partials,
-    leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  // Original message preserved on the wrapper Error (D-14-04: rendering
-  // moves to orchestrator; transaction layer just preserves the message).
-  assert.equal(
-    got.error.message,
-    "staging failed",
-    `expected original message preserved on wrapper Error; got: "${got.error.message}"`,
-  );
-  // ES-4 cause chain set so notifyError can traverse to the original.
-  assert.strictEqual(
-    got.error.cause,
-    original,
-    "expected cause-wrapped Error to retain reference to originalError",
-  );
-  // Raw partials forwarded verbatim -- the V2 notify renderer consumes
-  // this array to render the children block via composeRollbackPartialLines
-  // in shared/notify.ts.
-  assert.equal(got.rollbackPartials.length, 2);
-  assert.equal(got.rollbackPartials[0]?.phase, "skills/prompts");
-  assert.equal(got.rollbackPartials[1]?.phase, "agents");
+    error: originalError,
+    rollbackPartials,
+    leaks: rollbackLeaks,
+  } satisfies RunPhasesResult;
+  const expectedRollback = {
+    error: new Error("plugin installation failed", { cause: originalError }),
+    rollbackPartials: [{ phase: "hooks", msg: "hook cleanup denied", cause: partialCause }],
+  } satisfies RollbackErrorResult;
+
+  // act
+  const rollback = formatRollbackError(phaseRun, originalError);
+
+  // assert
+  assert.deepStrictEqual(rollback, expectedRollback);
+  assert.notStrictEqual(rollback.error, originalError);
+  assert.strictEqual(rollback.error.cause, originalError);
+  assert.strictEqual(rollback.rollbackPartials, rollbackPartials);
+  assert.deepStrictEqual(phaseRun.leaks, ["/project/hooks/stale-hook.json"]);
 });
 
-test("D-03 formatRollbackError: 1 partial returns cause-wrapped Error + single-element array", () => {
-  const original = new Error("base");
-  const result: RunPhasesResult = {
+test("preserves several partial failures and repeated rows in caller order", () => {
+  // arrange
+  const originalError = new Error("marketplace update failed");
+  const stateCause = new Error("state restore denied");
+  const cloneCause = new Error("clone removal denied");
+  const repeatedPartial = {
+    phase: "mcp",
+    msg: "clone removal denied",
+    cause: cloneCause,
+  } as const;
+  const rollbackPartials = [
+    { phase: "state", msg: "state restore denied", cause: stateCause },
+    repeatedPartial,
+    repeatedPartial,
+    { phase: "skills", msg: "generated skill remained" },
+  ] as const;
+  const rollbackLeaks = [
+    "/project/state.json.recovery",
+    "/project/plugins/example-clone",
+    "/project/plugins/example-clone",
+  ] as const;
+  const phaseRun = {
     ok: false,
-    error: original,
-    rollbackPartials: [{ phase: "p1", msg: "reason" }],
-    leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  assert.equal(got.error.message, "base");
-  assert.strictEqual(got.error.cause, original);
-  assert.equal(got.rollbackPartials.length, 1);
-  assert.equal(got.rollbackPartials[0]?.phase, "p1");
-  // F-4 (case-insensitive guard): no free-text prose with a
-  // colon-prefixed marker form (the ES-5 shape) seeps back into the
-  // wrapper Error's message. The token vocabulary is the closed CMC-11
-  // set composed on the orchestrator side, not in the wrapper.
-  assert.ok(
-    !got.error.message.toLowerCase().includes("reason"),
-    `legacy "reason:" prose detected on wrapper Error; got: "${got.error.message}"`,
-  );
-});
+    error: originalError,
+    rollbackPartials,
+    leaks: rollbackLeaks,
+  } satisfies RunPhasesResult;
+  const expectedRollback = {
+    error: new Error("marketplace update failed", { cause: originalError }),
+    rollbackPartials: [
+      { phase: "state", msg: "state restore denied", cause: stateCause },
+      { phase: "mcp", msg: "clone removal denied", cause: cloneCause },
+      { phase: "mcp", msg: "clone removal denied", cause: cloneCause },
+      { phase: "skills", msg: "generated skill remained" },
+    ],
+  } satisfies RollbackErrorResult;
 
-test("ES-4 formatRollbackError: cause-wrapped Error retains originalError reference", () => {
-  const original = new Error("base");
-  const result: RunPhasesResult = {
-    ok: false,
-    error: original,
-    rollbackPartials: [{ phase: "p1", msg: "x" }],
-    leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  assert.strictEqual(got.error.cause, original);
-  // Identity check: the returned Error is a fresh wrapper (NOT the
-  // originalError reference) because a partial occurred.
-  assert.notStrictEqual(got.error, original);
-});
+  // act
+  const rollback = formatRollbackError(phaseRun, originalError);
 
-test("D-14-04 orchestrator-owns-rendering: transaction layer no longer composes the user-visible body", () => {
-  const original = new Error("x");
-  const result: RunPhasesResult = {
-    ok: false,
-    error: original,
-    rollbackPartials: [{ phase: "p1", msg: "x" }],
-    leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  // The transaction-layer chokepoint MUST NOT include the parent token
-  // or child rendering -- those are the orchestrator's responsibility.
-  assert.ok(
-    !got.error.message.includes("(failed) {rollback partial}"),
-    `parent token leaked into transaction-layer wrapper Error: "${got.error.message}"`,
-  );
-  assert.ok(
-    !got.error.message.includes("(rollback failed)"),
-    `child token leaked into transaction-layer wrapper Error: "${got.error.message}"`,
-  );
+  // assert
+  assert.deepStrictEqual(rollback, expectedRollback);
+  assert.notStrictEqual(rollback.error, originalError);
+  assert.strictEqual(rollback.error.cause, originalError);
+  assert.strictEqual(rollback.rollbackPartials, rollbackPartials);
+  assert.strictEqual(rollback.rollbackPartials[1], repeatedPartial);
+  assert.strictEqual(rollback.rollbackPartials[2], repeatedPartial);
+  assert.deepStrictEqual(phaseRun.leaks, [
+    "/project/state.json.recovery",
+    "/project/plugins/example-clone",
+    "/project/plugins/example-clone",
+  ]);
 });
-
-/**
- * D-02 / PI-14 -- formatRollbackError MUST short-circuit when the
- * originalError is a PathContainmentError (or its SymlinkRefusedError
- * subclass per D-17). The violation surfaces verbatim instead
- * of being folded into the rollback-partial body, so every mutating
- * orchestrator (install / update / uninstall) inherits PI-14 compliance
- * from this single chokepoint.
- *
- * These tests deliberately pass a non-empty `rollbackPartials` array;
- * the bypass MUST suppress it (D-14-04) -- suppression means returning
- * the originalError reference + an EMPTY partials array so the
- * orchestrator skips rendering entirely.
- */
-test("PI-14 / D-02: PathContainmentError originalError bypasses rollback-partial wrapping", () => {
-  const original = new PathContainmentError("/scope-root", "/escaped/path", "test");
-  const result: RunPhasesResult = {
-    ok: false,
-    error: original,
-    rollbackPartials: [{ phase: "skills", msg: "leak" }],
-    leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  // Verbatim return -- NOT cause-wrapped.
-  assert.strictEqual(got.error, original, "expected the original PathContainmentError reference");
-  // Empty partials array -- orchestrator MUST skip the children block.
-  assert.deepEqual(
-    got.rollbackPartials,
-    [],
-    "expected empty partials array under PathContainmentError bypass",
-  );
-  // Type discrimination preserved (name + instanceof) so downstream
-  // notifyError can still identify a containment violation.
-  assert.equal(got.error.name, "PathContainmentError");
-  assert.ok(got.error instanceof PathContainmentError);
-});
-
-test("PI-14 / D-02: SymlinkRefusedError (subclass) bypasses rollback-partial wrapping", () => {
-  const original = new SymlinkRefusedError(
-    "/scope",
-    "/scope/link/escaped",
-    "test",
-    "/scope/link",
-    "/escaped",
-  );
-  const result: RunPhasesResult = {
-    ok: false,
-    error: original,
-    rollbackPartials: [{ phase: "agents", msg: "leak" }],
-    leaks: [],
-  };
-  const got = formatRollbackError(result, original);
-  assert.strictEqual(got.error, original, "expected the original SymlinkRefusedError reference");
-  assert.deepEqual(got.rollbackPartials, [], "expected empty partials array under bypass");
-  assert.equal(got.error.name, "SymlinkRefusedError");
-  // Subclass relationship intact -- one instanceof at the chokepoint
-  // catches both (D-17 contract).
-  assert.ok(
-    got.error instanceof PathContainmentError,
-    "SymlinkRefusedError must remain an instance of PathContainmentError",
-  );
-  assert.ok(got.error instanceof SymlinkRefusedError);
-});
-
-// D-21-02: `composeRollbackPartialLines` in `shared/notify.ts` owns the
-// rollback children-block grammar, and `tests/architecture/catalog-uat.test.ts`
-// asserts byte-equality against the catalog fixtures.

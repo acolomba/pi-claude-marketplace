@@ -29,7 +29,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { REPO_ROOT, stripComments } from "../helpers/source-scan.ts";
+import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 const EXTENSION_SOURCE_ROOT = "extensions/pi-claude-marketplace";
 
