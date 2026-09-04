@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-22",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-029"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-001", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-001", "findingId": "OMAUB-F01" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-002", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-002", "findingId": "OMAUB-F02" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-003", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-003", "findingId": "OMAUB-F03" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-004", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-004", "findingId": "OMAUB-F04" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-005", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-005", "findingId": "OMAUB-F05" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-006", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-006", "findingId": "OMAUB-F06" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-007", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-007", "findingId": "OMAUB-F07" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-008", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-008", "findingId": "OMAUB-F08" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-009", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-009", "findingId": "OMAUB-F09" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-010", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-010", "findingId": "OMAUB-F10" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-011", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-011", "findingId": "OMAUB-F11" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-012", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-012", "findingId": "OMAUB-F12" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-013", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-013", "findingId": "OMAUB-F13" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-014", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-014", "findingId": "OMAUB-F14" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-015", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-015", "findingId": "OMAUB-F15" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-016", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-016", "findingId": "OMAUB-F16" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-017", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-017", "findingId": "OMAUB-F17" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-018", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-018", "findingId": "OMAUB-F18" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-019", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-019", "findingId": "OMAUB-F19" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-020", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-020", "findingId": "OMAUB-F20" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-021", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-021", "findingId": "OMAUB-F21" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-022", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-022", "findingId": "OMAUB-F22" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-023", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-023", "findingId": "OMAUB-F23" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-024", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-024", "findingId": "OMAUB-F24" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-025", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-025", "findingId": "OMAUB-F25" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-026", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-026", "findingId": "OMAUB-F26" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-027", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-027", "findingId": "OMAUB-F27" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-028", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-028", "findingId": "OMAUB-F28" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-029", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md", "label": "OMAUB-029", "findingId": "OMAUB-F29" }
+  ],
+  "findings": [
+    {
+      "id": "OMAUB-F01", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-001"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.messaging.test.ts (repository-local isolated copy; swap agents/mcp flags and hardcode skipped/failed marketplace scope)", "exitCode": 0, "observed": "The complete focused suite passed after all three UPDATE_CONTEXT wiring mutations, confirming the one-sided argument matrix." },
+      "rationale": "Updated-row dependency and fold combinations and skipped/failed fold direction remain undiscriminated.", "destination": "Add asymmetric dependency and scope-fold cases in Phase 2."
+    },
+    {
+      "id": "OMAUB-F02", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-002"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.messaging.test.ts (repository-local isolated copy; replace cause with same-message Error)", "exitCode": 0, "observed": "The focused suite passed when the mapper cloned the cause, so deepStrictEqual does not pin reference identity." },
+      "rationale": "The promised original Error identity remains unasserted.", "destination": "Add strictEqual cause identity coverage in Phase 2."
+    },
+    {
+      "id": "OMAUB-F03", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-003"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.test.ts (repository-local isolated copy; reverse project/user scope array)", "exitCode": 0, "observed": "The full focused suite passed with user-before-project enumeration." },
+      "rationale": "No current case populates both scopes and observes the documented tie order.", "destination": "Add a two-scope whole-notification order case in Phase 2."
+    },
+    {
+      "id": "OMAUB-F04", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-004"], "evidenceStatus": "confirmed", "route": "operator decision", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }, { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.test.ts (repository-local isolated copy; hardcode retryHint to empty)", "exitCode": 0, "observed": "The focused suite passed; current searches also find no consumer beyond construction/storage." },
+      "rationale": "The field is write-only and its producer ternary is not observable through the public update surface.", "destination": "Decide whether to delete or surface retryHint before adding a discriminating test."
+    },
+    {
+      "id": "OMAUB-F05", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-005"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.test.ts (repository-local isolated copy; treat undefined pre-key as unchanged)", "exitCode": 0, "observed": "The focused suite passed while the stale-path case would falsely render up-to-date." },
+      "rationale": "The ENOENT changed-safe default still lacks a whole notification assertion.", "destination": "Pin the updated notification in the stale-path case."
+    },
+    {
+      "id": "OMAUB-F06", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-006"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.test.ts (repository-local isolated copy; remove direct InvalidMarketplaceManifestError disjunct)", "exitCode": 0, "observed": "The full focused suite passed after deleting the direct-error arm." },
+      "rationale": "Only wrapped invalid-manifest errors are currently discriminated.", "destination": "Add the raw cascade rejection case in Phase 2."
+    },
+    {
+      "id": "OMAUB-F07", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-007"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test tests/orchestrators/marketplace/update.test.ts (repository-local isolated copy; remove cause-undefined overwrite guard)", "exitCode": 0, "observed": "The full focused suite passed when auth fallback overwrote any pre-existing cause." },
+      "rationale": "All current authentication errors lack an existing cause.", "destination": "Add a caused HttpError case in Phase 2."
+    },
+    {
+      "id": "OMAUB-F08", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-008"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/platform/git-ops-fake.ts", "reason": "The shared fake is test support rather than production source." }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "makeMockGitOps still strips and reattaches function-bearing auth around the shared fake and deletes localRefs through git.state." },
+      "rationale": "The duplicated workaround and fake-internals poke remain in the live test.", "destination": "Improve the shared fake contract, then simplify consumers in Phase 2."
+    },
+    {
+      "id": "OMAUB-F09", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-009"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "The live TOCTOU case still coordinates a rename through fs.watch because no state-guard injection seam exists." },
+      "rationale": "The race remains a flake risk but does not create false passes.", "destination": "Track the determinism/design tension without patching this evidence phase."
+    },
+    {
+      "id": "OMAUB-F10", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-010"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "update.test.ts still imports and calls resetCompletionCache, preserving the cross-area test-only production hook dependency." },
+      "rationale": "This consumer must move when the completion-cache owner removes the reset hook.", "destination": "Coordinate with the completion-cache Phase 2 fix."
+    },
+    {
+      "id": "OMAUB-F11", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-011"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "N/A", "reason": "Production type-safety finding; no test can make an unchecked catch cast type-safe." }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "refreshOneMarketplace still assigns catch unknown to PluginFailedMessage.cause with `err as Error` and no narrowing." },
+      "rationale": "A non-Error rejection can still violate the declared message shape.", "destination": "Narrow or normalize the caught value in Phase 2."
+    },
+    {
+      "id": "OMAUB-F12", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-012"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "narrowFailReason still has an unreadable substring conditional whose branch and fallthrough both return unreadable manifest." },
+      "rationale": "The branch is observationally dead and cannot be meaningfully tested.", "destination": "Delete the redundant conditional in Phase 2."
+    },
+    {
+      "id": "OMAUB-F13", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-013"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }, { "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus successful focused test reruns", "observed": "Both runtime exports and their type contracts remain owned by the paired tests; both focused files pass." },
+      "rationale": "The historical export census remains true and requires no remediation.", "destination": "Preserve as positive evidence."
+    },
+    {
+      "id": "OMAUB-F14", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-014"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }, { "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus successful focused test reruns", "observed": "Current branch inspection agrees with the census except for the separately enumerated live gaps F01, F03-F07, and F12." },
+      "rationale": "The remaining branch-coverage inventory is useful positive evidence rather than a new remediation item.", "destination": "Preserve as evidence-only context."
+    },
+    {
+      "id": "OMAUB-F15", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-015"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "The test still creates ctx and pi object literals behind ExtensionContext/ExtensionAPI casts rather than strict interaction mocks." },
+      "rationale": "The first-pass test-double finding remains current.", "destination": "Replace hand-cast interaction doubles in Phase 2."
+    },
+    {
+      "id": "OMAUB-F16", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-016"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test --test-name-pattern='CMC-26|newly-degraded|WR-12' tests/orchestrators/marketplace/update.test.ts (equivalent current assertion inspection)", "exitCode": 0, "observed": "The cited cases still assert fragments/index order and omit complete marketplace-header bytes, so header/status mutations remain outside their assertions." },
+      "rationale": "The live cluster remains larger than the first-pass count and violates whole-result assertion rules.", "destination": "Replace fragment checks with independent full notifications in Phase 2."
+    },
+    {
+      "id": "OMAUB-F17", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-017"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "The MU-5 clone-advanced failure case still checks notification bytes but does not reload state to prove lastUpdatedAt stayed unchanged." },
+      "rationale": "The failure-path state promise remains unpinned.", "destination": "Add the missing whole-state assertion in Phase 2."
+    },
+    {
+      "id": "OMAUB-F18", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-018"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "Three cited cases still omit gitOps and therefore retain a live DEFAULT_GIT_OPS fallback even though their current paths make no git call." },
+      "rationale": "A future path change could touch a live boundary instead of failing loudly.", "destination": "Inject makeForbiddenGitOps in Phase 2."
+    },
+    {
+      "id": "OMAUB-F19", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-019"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Test-title style finding has no production source target." }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current source inspection", "observed": "Three current titles still begin with the date/initials prefix `260525-cjr B2:`." },
+      "rationale": "The prefix is not a durable requirement identifier.", "destination": "Rename the cases in Phase 2."
+    },
+    {
+      "id": "OMAUB-F20", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-020"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "The test still imports ExtensionAPI and ExtensionContext directly from the peer package rather than the project wrapper." },
+      "rationale": "The project-local Pi API boundary is still bypassed.", "destination": "Route the type imports through platform/pi-api.ts in Phase 2."
+    },
+    {
+      "id": "OMAUB-F21", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-021"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "refreshRecord still calls new Date directly and two tests still fake Date to pin persistence." },
+      "rationale": "The clock remains a hidden dependency.", "destination": "Inject a clock through the orchestrator contract in Phase 2."
+    },
+    {
+      "id": "OMAUB-F22", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-022"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "N/A", "reason": "Production cast/documentation finding is established statically." }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "refreshRecord still casts persisted record.source to ParsedSource without an adjacent justification or runtime validation." },
+      "rationale": "The first-pass unchecked-cast finding remains current.", "destination": "Validate/narrow the source or document the proven invariant in Phase 2."
+    },
+    {
+      "id": "OMAUB-F23", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-023"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "N/A", "reason": "Comment/code disagreement is a static production finding." }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "The switch comment still says it ends with assertNever, while the function ends after the switch with no default or assertion." },
+      "rationale": "The exhaustiveness comment remains factually wrong.", "destination": "Correct the comment or add the asserted exhaustiveness construct in Phase 2."
+    },
+    {
+      "id": "OMAUB-F24", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-024"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Cross-test support duplication has no production source owner." }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current repository search", "observed": "withHermeticHome remains locally implemented across the named orchestrator tests with observable comment/behavior drift." },
+      "rationale": "The duplicated hermetic-home setup remains a cross-cutting maintenance issue.", "destination": "Consolidate beside the orchestrator test concern after owner-by-owner review."
+    },
+    {
+      "id": "OMAUB-F25", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-025"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/platform/git-ops-fake.ts", "reason": "Shared test fake is the correction target." }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }, { "path": "tests/orchestrators/marketplace/add.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "Both add and update wrappers still strip and reattach function-bearing auth before calling createGitOpsFake." },
+      "rationale": "The meta-finding correction from singular to duplicated workaround remains current.", "destination": "Audit the remaining wrapper consumers and fix the fake once."
+    },
+    {
+      "id": "OMAUB-F26", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-026"], "evidenceStatus": "confirmed", "route": "operator decision", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }, { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current repository search", "observed": "retryHint is still produced and stored but has no reader; F04 independently proves its ternary can be removed without a test failure." },
+      "rationale": "The cross-cutting structured-error-field audit premise remains live.", "destination": "Use the retryHint decision to seed a broader zero-consumer field audit."
+    },
+    {
+      "id": "OMAUB-F27", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-027"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source inspection", "observed": "The marketplace test still documents user-scope setup used to avoid updateSinglePlugin's hidden process.cwd read." },
+      "rationale": "The hidden cwd dependency belongs to the plugin-update owner but still distorts these cases.", "destination": "Reconcile in the plugin-update area and then simplify marketplace cases."
+    },
+    {
+      "id": "OMAUB-F28", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-028"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current source inspection", "observed": "The cited indexOf and partial-message assertions remain, supporting the correction from approximately 20 to approximately 23 weak-message cases." },
+      "rationale": "This refines the meta-finding count without changing its remedy.", "destination": "Preserve the corrected scope for downstream planning."
+    },
+    {
+      "id": "OMAUB-F29", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md#OMAUB-029"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }, { "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "codegraph explore plus successful focused test reruns", "observed": "Whole-message, exact git-operation, full-state, and forbidden-boundary patterns remain present and both focused suites pass; only the separately recorded gaps survived mutation." },
+      "rationale": "The report's strengths and propagation recommendations remain valid constraints for later fixes.", "destination": "Preserve these patterns during Phase 2 remediation."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
