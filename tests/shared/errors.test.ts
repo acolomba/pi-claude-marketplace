@@ -1,463 +1,1523 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
+  AggregateResourcesDiscoverError,
   appendLeakToError,
   appendLeaks,
+  assertNever,
   causeChainTrailer,
+  composeErrorWithCauseChain,
   ConcurrentInstallError,
   ConcurrentUninstallError,
   CrossPluginConflictError,
   errorMessage,
   errorWithManualRecovery,
   findManualRecoveryError,
+  InvalidMarketplaceManifestError,
+  isErrnoException,
   ManualRecoveryError,
+  manualRecoveryLeaks,
+  MarketplaceDuplicateNameError,
+  MarketplaceNotFoundError,
+  MarketplaceUpdateError,
   PluginShapeError,
   PluginUpdatePhase3Error,
+  StaleSourceCloneError,
+  StateLockHeldError,
+  UnsupportedSourceError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-/**
- * AS-5 -- error helpers. Tests verify the
- * Error.cause chain semantics and the user-visible message format.
- */
+import type {
+  Phase3Failure,
+  PluginShapeErrorKind,
+  PluginShapeErrorShape,
+  ResourcesDiscoverFailure,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-test("errorMessage returns Error.message for Error and String(other) for non-Error", () => {
-  assert.equal(errorMessage(new Error("boom")), "boom");
-  assert.equal(errorMessage("plain string"), "plain string");
-  assert.equal(errorMessage(42), "42");
-  assert.equal(errorMessage(null), "null");
-  assert.equal(errorMessage(undefined), "undefined");
-});
+void ({
+  phase: "skills",
+  msg: "skills failed",
+  cause: new Error("skills"),
+} satisfies Phase3Failure);
+void ({
+  phase: "commands",
+  msg: "commands failed",
+  cause: new Error("commands"),
+} satisfies Phase3Failure);
+void ({
+  phase: "agents",
+  msg: "agents failed",
+  cause: new Error("agents"),
+} satisfies Phase3Failure);
+void ({ phase: "hooks", msg: "hooks failed", cause: new Error("hooks") } satisfies Phase3Failure);
+void ({ phase: "mcp", msg: "mcp failed", cause: new Error("mcp") } satisfies Phase3Failure);
+// @ts-expect-error phase 3 failures use the closed bridge phase union
+void ({ phase: "files", msg: "files failed", cause: new Error("files") } satisfies Phase3Failure);
 
-test("appendLeakToError chains via Error.cause when leak is non-undefined", () => {
-  const base = new Error("base failure");
-  const wrapped = appendLeakToError(base, "tmp dir leaked");
-  assert.equal(wrapped.message, "base failure (additionally: tmp dir leaked)");
-  assert.equal(
-    (wrapped as Error & { cause: unknown }).cause,
-    base,
-    "Error.cause must point at the original",
-  );
-});
+void ({
+  kind: "not-in-manifest",
+  plugin: "acme",
+  marketplace: "official",
+} satisfies PluginShapeErrorShape);
+void ({
+  kind: "already-installed",
+  plugin: "acme",
+  marketplace: "official",
+} satisfies PluginShapeErrorShape);
+void ({
+  kind: "not-installable",
+  plugin: "acme",
+  reasons: ["unsupported hooks"],
+  partialable: true,
+  unsupportedKinds: ["hooks"],
+} satisfies PluginShapeErrorShape);
+void ({
+  kind: "no-longer-installable",
+  plugin: "acme",
+  reasons: ["unsupported source"],
+  partialable: false,
+} satisfies PluginShapeErrorShape);
+// @ts-expect-error installability shapes require the partialable discriminator
+void ({ kind: "not-installable", plugin: "acme", reasons: [] } satisfies PluginShapeErrorShape);
 
-test("appendLeakToError returns the unchanged base when leak is undefined", () => {
-  const base = new Error("base only");
-  const result = appendLeakToError(base, undefined);
-  assert.equal(result, base);
-});
+void ("not-in-manifest" satisfies PluginShapeErrorKind);
+void ("already-installed" satisfies PluginShapeErrorKind);
+void ("not-installable" satisfies PluginShapeErrorKind);
+void ("no-longer-installable" satisfies PluginShapeErrorKind);
+// @ts-expect-error plugin shape kinds are a closed union
+void ("invalid-manifest" satisfies PluginShapeErrorKind);
 
-test("appendLeaks accumulates multiple leaks via repeated cause-chaining", () => {
-  const base = new Error("root");
-  const result = appendLeaks(base, ["leak1", undefined, "leak3"]);
-  // Only the non-undefined leaks attach. Order: root <- leak1 <- leak3.
-  assert.equal(result.message, "root (additionally: leak1) (additionally: leak3)");
-  // Walk the cause chain: result.cause should be intermediate (root + leak1),
-  // and intermediate.cause should be the original.
-  const intermediate = (result as Error & { cause: Error }).cause;
-  assert.equal(intermediate.message, "root (additionally: leak1)");
-  assert.equal((intermediate as Error & { cause: Error }).cause, base);
-});
+void ({
+  scope: "user",
+  kind: "skills",
+  path: "/scope/skills",
+  cause: new Error("skills"),
+} satisfies ResourcesDiscoverFailure);
+void ({
+  scope: "project",
+  kind: "prompts",
+  path: "/scope/prompts",
+  cause: new Error("prompts"),
+} satisfies ResourcesDiscoverFailure);
+void ({
+  scope: "user",
+  // @ts-expect-error resource discovery failures use the closed resource-kind union
+  kind: "agents",
+  path: "/scope/agents",
+  cause: null,
+} satisfies ResourcesDiscoverFailure);
 
-/**
- * Four error classes consumed by the plugin
- * orchestrators (install/uninstall/update). Each smoke test covers:
- *   - `extends Error` instanceof contract
- *   - `name` property set verbatim (matters for `err.name === "..."` callsites)
- *   - readonly payload fields preserved verbatim from constructor args
- *   - message format (where the caller doesn't compose it themselves)
- */
+describe("errorMessage", () => {
+  test("returns an Error message", () => {
+    // arrange
+    const error = new Error("boom");
 
-test("CrossPluginConflictError: PI-6 / RN-3 multi-conflict construction", () => {
-  const conflicts = [
-    'skill "foo" already owned by plugin "a"',
-    'agent "bar" already owned by plugin "b"',
-  ] as const;
-  const err = new CrossPluginConflictError(conflicts);
-  assert.ok(err instanceof Error);
-  assert.equal(err.name, "CrossPluginConflictError");
-  assert.deepEqual(err.conflicts, conflicts);
-  // Message must contain both conflict rows verbatim so the user sees every offender.
-  assert.match(err.message, /skill "foo" already owned by plugin "a"/);
-  assert.match(err.message, /agent "bar" already owned by plugin "b"/);
-  assert.match(err.message, /^Cross-plugin name conflict:/);
-});
+    // act
+    const message = errorMessage(error);
 
-test("ConcurrentInstallError: PI-15 verbatim message and payload fields", () => {
-  const err = new ConcurrentInstallError("foo", "official");
-  assert.ok(err instanceof Error);
-  assert.equal(err.name, "ConcurrentInstallError");
-  assert.equal(err.plugin, "foo");
-  assert.equal(err.marketplace, "official");
-  assert.equal(err.message, 'Plugin "foo" was installed concurrently in marketplace "official".');
-});
-
-test("ConcurrentUninstallError: PU-5 silent-converge sentinel", () => {
-  const err = new ConcurrentUninstallError("foo");
-  assert.ok(err instanceof Error);
-  assert.equal(err.name, "ConcurrentUninstallError");
-  assert.equal(err.plugin, "foo");
-  assert.equal(err.message, 'Plugin "foo" already uninstalled.');
-});
-
-test("PluginUpdatePhase3Error: PUP-6 aggregate with cause + failures payload", () => {
-  const outer = new Error("outer");
-  const inner = new Error("inner");
-  const err = new PluginUpdatePhase3Error(
-    "plugin update phase 3 failed",
-    [{ phase: "skills", msg: "oops", cause: inner }],
-    { cause: outer },
-  );
-  assert.ok(err instanceof Error);
-  assert.equal(err.name, "PluginUpdatePhase3Error");
-  // Error.cause must be the outer-passed cause (NOT swallowed by the constructor).
-  assert.equal((err as Error & { cause: unknown }).cause, outer);
-  assert.equal(err.failures.length, 1);
-  const first = err.failures[0];
-  assert.ok(first, "failures[0] must be present");
-  assert.equal(first.phase, "skills");
-  assert.equal(first.msg, "oops");
-  assert.equal(first.cause, inner);
-  assert.equal(err.message, "plugin update phase 3 failed");
-});
-
-/**
- * CMC-16 -- ManualRecoveryError shape contract.
- *
- * The bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this when
- * a rollback of a partially-completed replacement swap leaks files. The
- * MSG-MR-1 / ES-5 marker-prefixed message form is NOT embedded in `.message`;
- * the leak payload lives structurally on `.leaks` so the orchestrator can
- * type-check the Error instead of substring-matching the message.
- */
-
-test("ManualRecoveryError: message is the bare original text (no legacy ES-5 marker prefix)", () => {
-  const err = new ManualRecoveryError("staging failed", ["agents: leak A", "skills: leak B"]);
-  assert.equal(err.message, "staging failed");
-});
-
-test("ManualRecoveryError: ErrorOptions cause-chain wires through super()", () => {
-  const rootErr = new Error("root");
-  const err = new ManualRecoveryError("base", ["x"], { cause: rootErr });
-  assert.equal((err as Error & { cause: unknown }).cause, rootErr);
-});
-
-test("ManualRecoveryError: name is set so instanceof + structural type-tag checks work", () => {
-  const err = new ManualRecoveryError("m", ["x"]);
-  assert.equal(err.name, "ManualRecoveryError");
-});
-
-test("ManualRecoveryError: leaks payload is exposed verbatim on the readonly field", () => {
-  const err = new ManualRecoveryError("m", ["a", "b"]);
-  assert.deepEqual(err.leaks, ["a", "b"]);
-});
-
-test("ManualRecoveryError: instanceof both ManualRecoveryError and Error", () => {
-  const err = new ManualRecoveryError("m", ["x"]);
-  assert.ok(err instanceof ManualRecoveryError);
-  assert.ok(err instanceof Error);
-});
-
-/**
- * PluginShapeError discriminated typed error class, consumed in
- * install/update/remove orchestrators. Byte-equal `.message` text is the
- * contract that keeps the `.message.includes(...)` assertions in
- * `tests/orchestrators/plugin/install.test.ts` and
- * `tests/domain/resolver-strict.test.ts` green.
- */
-
-test("PluginShapeError: kind=not-in-manifest -> byte-equal install.ts:263/294 message", () => {
-  const err = new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "mp" });
-  assert.equal(err.message, 'Plugin "p" not found in marketplace "mp".');
-  assert.equal(err.kind, "not-in-manifest");
-  assert.equal(err.plugin, "p");
-  // Shape-specific data is read via `err.shape`,
-  // not via top-level mirror fields. Narrow on `shape.kind` first.
-  if (err.shape.kind === "not-in-manifest") {
-    assert.equal(err.shape.marketplace, "mp");
-  } else {
-    assert.fail("expected shape.kind=not-in-manifest");
-  }
-
-  assert.equal(err.name, "PluginShapeError");
-  assert.ok(err instanceof PluginShapeError);
-  assert.ok(err instanceof Error);
-});
-
-test("PluginShapeError: kind=already-installed -> byte-equal install.ts:285 message", () => {
-  const err = new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "mp" });
-  assert.equal(err.message, 'Plugin "p" is already installed in marketplace "mp".');
-  assert.equal(err.kind, "already-installed");
-  assert.equal(err.plugin, "p");
-  if (err.shape.kind === "already-installed") {
-    assert.equal(err.shape.marketplace, "mp");
-  } else {
-    assert.fail("expected shape.kind=already-installed");
-  }
-});
-
-test("PluginShapeError: kind=not-installable -> byte-equal resolver.ts:786 install-verb message", () => {
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p1",
-    reasons: ["hooks", "lspServers"],
-    partialable: false,
+    // assert
+    assert.strictEqual(message, "boom");
   });
-  assert.equal(err.message, 'Plugin "p1" is not installable: hooks; lspServers');
-  assert.equal(err.kind, "not-installable");
-  assert.equal(err.plugin, "p1");
-  if (err.shape.kind === "not-installable") {
-    assert.deepEqual(err.shape.reasons, ["hooks", "lspServers"]);
-  } else {
-    assert.fail("expected shape.kind=not-installable");
-  }
-});
 
-test("PluginShapeError: kind=no-longer-installable -> byte-equal resolver.ts:786 update-verb message", () => {
-  const err = new PluginShapeError({
-    kind: "no-longer-installable",
-    plugin: "p1",
-    reasons: ["unsupported source"],
-    partialable: false,
+  test("stringifies a non-Error value", () => {
+    // arrange
+    const thrownValue = 42;
+
+    // act
+    const message = errorMessage(thrownValue);
+
+    // assert
+    assert.strictEqual(message, "42");
   });
-  assert.equal(err.message, 'Plugin "p1" is no longer installable: unsupported source');
-  assert.equal(err.kind, "no-longer-installable");
-  assert.equal(err.plugin, "p1");
-  if (err.shape.kind === "no-longer-installable") {
-    assert.deepEqual(err.shape.reasons, ["unsupported source"]);
-  } else {
-    assert.fail("expected shape.kind=no-longer-installable");
-  }
 });
 
-test("PluginShapeError: reasons preserve arbitrary resolver.ts notes verbatim (byte-equal join)", () => {
-  // Resolver `r.notes` are NOT pre-narrowed to the closed Reason set --
-  // they are free-form strings like "source dir does not exist",
-  // "contains hooks", "malformed mcpServers: ...", "declares dependencies
-  // that must be installed manually". The byte-equal contract requires
-  // PluginShapeError to pass them through verbatim into the `.message`
-  // text. The `classifyEntityShapeError` consumer narrows them to closed
-  // `Reason` members at the catch site.
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p1",
-    reasons: ["source dir does not exist", "contains hooks"],
-    partialable: false,
+describe("isErrnoException", () => {
+  test("accepts an Error with a string code", () => {
+    // arrange
+    const error = Object.assign(new Error("missing"), { code: "ENOENT" });
+
+    // act
+    const isErrno = isErrnoException(error);
+
+    // assert
+    assert.strictEqual(isErrno, true);
   });
-  assert.equal(
-    err.message,
-    'Plugin "p1" is not installable: source dir does not exist; contains hooks',
-  );
-});
 
-test("PluginShapeError: ErrorOptions cause-chain wires through super()", () => {
-  const rootErr = new Error("root");
-  const err = new PluginShapeError(
-    { kind: "not-in-manifest", plugin: "p", marketplace: "mp" },
-    { cause: rootErr },
-  );
-  assert.equal((err as Error & { cause: unknown }).cause, rootErr);
-});
+  test("rejects a non-Error with a string code", () => {
+    // arrange
+    const thrownValue = { code: "ENOENT" };
 
-test("PluginShapeError: readonly fields survive cast to base Error", () => {
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p1",
-    reasons: ["hooks"],
-    partialable: false,
+    // act
+    const isErrno = isErrnoException(thrownValue);
+
+    // assert
+    assert.strictEqual(isErrno, false);
   });
-  // The discriminated payload survives narrowing through the base Error
-  // ref because the fields are own enumerable properties on the instance.
-  const baseRef: Error = err;
-  assert.ok(baseRef instanceof PluginShapeError);
-  if (baseRef instanceof PluginShapeError) {
-    assert.equal(baseRef.kind, "not-installable");
-    assert.equal(baseRef.plugin, "p1");
-  }
-});
 
-// ---------------------------------------------------------------------------
-// causeChainTrailer MAX_DEPTH=5 bound. The walker renders at most 5 links
-// joined by " -> ", appends " (truncated)" when the chain is deeper, and is
-// cycle-safe so a self-referential .cause cannot loop forever.
-// ---------------------------------------------------------------------------
+  test("rejects an Error without a code", () => {
+    // arrange
+    const error = new Error("opaque");
 
-/** Builds a chain of `depth` Errors linked via Error.cause; returns the head. */
-function buildChain(depth: number): Error {
-  let current = new Error("link0");
-  for (let i = 1; i < depth; i++) {
-    current = new Error(`link${i}`, { cause: current });
-  }
+    // act
+    const isErrno = isErrnoException(error);
 
-  return current;
-}
-
-test("causeChainTrailer: a 6-deep chain renders 5 links then ' (truncated)'", () => {
-  const trailer = causeChainTrailer(buildChain(6));
-  const body = trailer.replace(/^cause: /, "");
-  const links = body.split(" -> ");
-  assert.equal(links.length, 5);
-  assert.match(trailer, / \(truncated\)$/);
-  // Only the 5th rendered link carries the marker, not the earlier ones.
-  assert.equal(
-    links.slice(0, 4).some((l) => l.includes("(truncated)")),
-    false,
-  );
-});
-
-test("causeChainTrailer: an exactly-5-deep chain renders 5 links with NO truncation marker", () => {
-  const trailer = causeChainTrailer(buildChain(5));
-  const links = trailer.replace(/^cause: /, "").split(" -> ");
-  assert.equal(links.length, 5);
-  assert.doesNotMatch(trailer, /\(truncated\)/);
-});
-
-test("causeChainTrailer: a self-referential cycle terminates at the bound", () => {
-  const cyclic = new Error("loop");
-  (cyclic as { cause?: unknown }).cause = cyclic;
-  const trailer = causeChainTrailer(cyclic);
-  // The walker stops when current.cause === current (no truncation marker,
-  // single rendered link) -- proving it cannot loop forever.
-  assert.equal(trailer, "cause: loop");
-
-  // A 2-node cycle (a -> b -> a -> ...) is bounded by MAX_DEPTH=5.
-  const a = new Error("a");
-  const b = new Error("b", { cause: a });
-  (a as { cause?: unknown }).cause = b;
-  const twoNode = causeChainTrailer(a);
-  const links = twoNode.replace(/^cause: /, "").split(" -> ");
-  assert.equal(links.length, 5);
-  assert.match(twoNode, / \(truncated\)$/);
-});
-
-test("causeChainTrailer: non-Error input returns ''", () => {
-  assert.equal(causeChainTrailer(undefined), "");
-  assert.equal(causeChainTrailer(null), "");
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// The ManualRecoveryError cause-chain protocol (CMC-16 / F-5 / WR-01 / AS-7).
-//
-// These tests used to live in tests/orchestrators/plugin/reinstall.test.ts and
-// reach the two functions through `__test_*` re-exports, because both were
-// declared inside reinstall.ts. They are the error class's own protocol rather
-// than anything reinstall-specific -- three bridges throw the class and the
-// notify renderer reads it -- so the functions moved beside the class and the
-// tests followed them here, against the public interface (FLOW-09).
-// ───────────────────────────────────────────────────────────────────────────
-
-/**
- * CMC-16 / F-5 dedup regression guard.
- *
- * `errorWithManualRecovery` MAY be called twice in the bridge cascade: once
- * when a bridge throws ManualRecoveryError with its own `.leaks`, and again
- * at the orchestrator-source rollback site with the merged leak set. The
- * F-5 invariant: even if the same leak string appears in both sources, the
- * final `.leaks` payload counts it ONCE. The implementation uses a
- * `Set`-dedup on the merged array.
- */
-test("CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
-  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
-  const wrapped = errorWithManualRecovery(inner, ["agents: foo"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.equal(
-    wrapped.leaks.length,
-    1,
-    `expected dedup; got: ${JSON.stringify([...wrapped.leaks])}`,
-  );
-  assert.equal(wrapped.leaks[0], "agents: foo");
-  // Cause-chain preserved so the depth-5 walker still surfaces the inner.
-  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
-});
-
-test("CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
-  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
-  const wrapped = errorWithManualRecovery(inner, ["skills: bar"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.deepEqual([...wrapped.leaks], ["agents: foo", "skills: bar"]);
-});
-
-test("CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
-  const inner = new Error("raw error");
-  const wrapped = errorWithManualRecovery(inner, ["x: leak"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  assert.equal(wrapped.message, "raw error");
-  assert.deepEqual([...wrapped.leaks], ["x: leak"]);
-  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
-});
-
-test("CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
-  const inner = new Error("raw error");
-  const wrapped = errorWithManualRecovery(inner, []);
-  // Zero-leak fast path preserves the original Error reference verbatim.
-  assert.equal(wrapped, inner);
-});
-
-/**
- * CMC-16 / WR-01 regression guard.
- *
- * When `withScopeLock`'s body throw is a `ManualRecoveryError` AND
- * `release()` also throws, the lock helper wraps the original in a plain
- * `new Error(combinedMsg, { cause: base })`. A direct
- * `err instanceof ManualRecoveryError` check would see a plain Error and
- * silently downgrade the cascade row's Reason from `{rollback partial}`
- * to the `narrowReason` last-resort fallback. WR-01 uses a cause-chain walk
- * instead of the direct `instanceof` check so the class identity survives the
- * wrapping.
- *
- * These tests pin both directions: positive (the walker finds the wrapped
- * MRE) and negative (no MRE in the chain returns undefined; cycles and
- * the depth bound terminate cleanly).
- */
-test("WR-01: findManualRecoveryError returns the wrapped MRE when release-also-failed wrapper sits on top", () => {
-  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
-  const wrapped = new Error("staging failed (lock release also failed: chmod denied)", {
-    cause: inner,
+    // assert
+    assert.strictEqual(isErrno, false);
   });
-  const found = findManualRecoveryError(wrapped);
-  assert.equal(found, inner);
+
+  test("rejects an Error with a non-string code", () => {
+    // arrange
+    const error = Object.assign(new Error("numeric"), { code: 2 });
+
+    // act
+    const isErrno = isErrnoException(error);
+
+    // assert
+    assert.strictEqual(isErrno, false);
+  });
 });
 
-test("WR-01: findManualRecoveryError returns the MRE directly when it is the top-level error", () => {
-  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
-  assert.equal(findManualRecoveryError(inner), inner);
+describe("assertNever", () => {
+  test("throws the complete unexpected-value error", () => {
+    // arrange
+    const unexpected = "future-arm" as never;
+
+    // act & assert
+    assert.throws(() => assertNever(unexpected), {
+      name: "Error",
+      message: "Unexpected value: future-arm",
+    });
+  });
 });
 
-test("WR-01: findManualRecoveryError returns undefined when no MRE is in the chain", () => {
-  const inner = new Error("opaque inner");
-  const wrapped = new Error("opaque outer", { cause: inner });
-  assert.equal(findManualRecoveryError(wrapped), undefined);
+describe("causeChainTrailer", () => {
+  test("returns no trailer for an absent error", () => {
+    // arrange
+    const thrownValue = undefined;
+
+    // act
+    const trailer = causeChainTrailer(thrownValue);
+
+    // assert
+    assert.strictEqual(trailer, "");
+  });
+
+  test("renders one Error link exactly", () => {
+    // arrange
+    const error = new Error("outer");
+
+    // act
+    const trailer = causeChainTrailer(error);
+
+    // assert
+    assert.strictEqual(trailer, "cause: outer");
+  });
+
+  test("renders string and object links with their promised coercions", () => {
+    // arrange
+    const stringCause = new Error("outer", { cause: "inner" });
+    const objectCause = new Error("outer", { cause: { detail: "inner" } });
+
+    // act
+    const trailers = [causeChainTrailer(stringCause), causeChainTrailer(objectCause)];
+
+    // assert
+    assert.deepStrictEqual(trailers, ["cause: outer -> inner", "cause: outer -> [object Object]"]);
+  });
+
+  test("renders exactly five links without a truncation marker", () => {
+    // arrange
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", { cause: new Error("link-5") }),
+        }),
+      }),
+    });
+
+    // act
+    const trailer = causeChainTrailer(error);
+
+    // assert
+    assert.strictEqual(trailer, "cause: link-1 -> link-2 -> link-3 -> link-4 -> link-5");
+  });
+
+  test("marks the fifth link when a sixth link remains", () => {
+    // arrange
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", {
+            cause: new Error("link-5", { cause: new Error("link-6") }),
+          }),
+        }),
+      }),
+    });
+
+    // act
+    const trailer = causeChainTrailer(error);
+
+    // assert
+    assert.strictEqual(
+      trailer,
+      "cause: link-1 -> link-2 -> link-3 -> link-4 -> link-5 (truncated)",
+    );
+  });
+
+  test("stops at one link for a self-referencing cause", () => {
+    // arrange
+    const error = new Error("loop");
+    error.cause = error;
+
+    // act
+    const trailer = causeChainTrailer(error);
+
+    // assert
+    assert.strictEqual(trailer, "cause: loop");
+  });
+
+  test("bounds a two-link cycle and marks the continuing chain", () => {
+    // arrange
+    const first = new Error("first");
+    const second = new Error("second", { cause: first });
+    first.cause = second;
+
+    // act
+    const trailer = causeChainTrailer(first);
+
+    // assert
+    assert.strictEqual(trailer, "cause: first -> second -> first -> second -> first (truncated)");
+  });
 });
 
-test("WR-01: findManualRecoveryError terminates cleanly on self-referencing cause cycles", () => {
-  const cyclic = new Error("cyclic") as Error & { cause: unknown };
-  cyclic.cause = cyclic;
-  assert.equal(findManualRecoveryError(cyclic), undefined);
+describe("composeErrorWithCauseChain", () => {
+  test("returns only the normalized message when no trailer exists", () => {
+    // arrange
+    const thrownValue = null;
+
+    // act
+    const composed = composeErrorWithCauseChain(thrownValue);
+
+    // assert
+    assert.strictEqual(composed, "null");
+  });
+
+  test("separates the message and complete cause trailer with one blank line", () => {
+    // arrange
+    const error = new Error("outer", { cause: new Error("inner") });
+
+    // act
+    const composed = composeErrorWithCauseChain(error);
+
+    // assert
+    assert.strictEqual(composed, "outer\n\ncause: outer -> inner");
+  });
 });
 
-test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
-  // Build a 6-link chain with the MRE at the deepest position; the walker
-  // visits depth 0..4 inclusive, so a MRE at depth 5 is unreachable.
-  const mre = new ManualRecoveryError("deep", ["x"]);
-  const l5 = new Error("l5", { cause: mre });
-  const l4 = new Error("l4", { cause: l5 });
-  const l3 = new Error("l3", { cause: l4 });
-  const l2 = new Error("l2", { cause: l3 });
-  const l1 = new Error("l1", { cause: l2 });
-  const l0 = new Error("l0", { cause: l1 });
-  // l0 -> l1 -> l2 -> l3 -> l4 -> l5 -> mre (mre is at depth 6 from l0;
-  // 5 hops via .cause). The walker visits l0, l1, l2, l3, l4 (5 slots);
-  // mre is unreachable.
-  assert.equal(findManualRecoveryError(l0), undefined);
+describe("appendLeakToError", () => {
+  test("returns the same Error when no leak exists", () => {
+    // arrange
+    const error = new Error("base");
+
+    // act
+    const appended = appendLeakToError(error, undefined);
+
+    // assert
+    assert.strictEqual(appended, error);
+  });
+
+  test("wraps an Error with the exact leak text and original cause", () => {
+    // arrange
+    const error = new Error("base");
+
+    // act
+    const appended = appendLeakToError(error, "tmp leaked");
+
+    // assert
+    assert.deepStrictEqual(
+      { name: appended.name, message: appended.message, cause: appended.cause },
+      { name: "Error", message: "base (additionally: tmp leaked)", cause: error },
+    );
+  });
+
+  test("wraps a non-Error and appends the exact leak text", () => {
+    // arrange
+    const thrownValue = "base";
+
+    // act
+    const appended = appendLeakToError(thrownValue, "tmp leaked");
+
+    // assert
+    assert.strictEqual(appended.name, "Error");
+    assert.strictEqual(appended.message, "base (additionally: tmp leaked)");
+    assert.deepStrictEqual(appended.cause, new Error("base"));
+  });
 });
 
-test("GAP-05: errorWithManualRecovery instanceof-ManualRecoveryError branch merges leaks deduped", () => {
-  // When the input error is already a ManualRecoveryError, errorWithManualRecovery
-  // merges the new leaks into the existing leaks (deduped) and wraps with cause.
-  const inner = new ManualRecoveryError("stage failed", ["agents: old"]);
-  const wrapped = errorWithManualRecovery(inner, ["agents: old", "skills: new"]);
-  assert.ok(wrapped instanceof ManualRecoveryError);
-  const mre = wrapped;
-  assert.deepEqual([...mre.leaks].sort(), ["agents: old", "skills: new"]);
-  assert.equal(mre.message, "stage failed");
-  assert.equal(mre.cause, inner);
+describe("appendLeaks", () => {
+  test("returns the same Error for an empty leak collection", () => {
+    // arrange
+    const error = new Error("base");
+
+    // act
+    const appended = appendLeaks(error, []);
+
+    // assert
+    assert.strictEqual(appended, error);
+  });
+
+  test("normalizes a non-Error for an empty leak collection", () => {
+    // arrange
+    const thrownValue = "base";
+
+    // act
+    const appended = appendLeaks(thrownValue, []);
+
+    // assert
+    assert.deepStrictEqual(
+      { name: appended.name, message: appended.message, cause: appended.cause },
+      { name: "Error", message: "base", cause: undefined },
+    );
+  });
+
+  test("chains defined leaks in caller order and ignores undefined entries", () => {
+    // arrange
+    const error = new Error("base");
+
+    // act
+    const appended = appendLeaks(error, ["first", undefined, "second"]);
+    const intermediate = appended.cause as Error;
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        message: appended.message,
+        intermediateMessage: intermediate.message,
+        original: intermediate.cause,
+      },
+      {
+        message: "base (additionally: first) (additionally: second)",
+        intermediateMessage: "base (additionally: first)",
+        original: error,
+      },
+    );
+  });
+});
+
+describe("StaleSourceCloneError", () => {
+  test("exposes the complete stale-clone value with a marketplace", () => {
+    // arrange
+    const absPath = "/scope/sources/official";
+
+    // act
+    const error = new StaleSourceCloneError(absPath, "official");
+
+    // assert
+    assert.ok(error instanceof StaleSourceCloneError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        absPath: error.absPath,
+        mpName: error.mpName,
+        cause: error.cause,
+      },
+      {
+        name: "StaleSourceCloneError",
+        message: "stale source clone at /scope/sources/official",
+        absPath: "/scope/sources/official",
+        mpName: "official",
+        cause: undefined,
+      },
+    );
+  });
+
+  test("keeps the marketplace property undefined when no name is supplied", () => {
+    // arrange
+    const absPath = "/scope/sources/pending";
+
+    // act
+    const error = new StaleSourceCloneError(absPath);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        absPath: error.absPath,
+        mpName: error.mpName,
+        hasMarketplaceProperty: Object.hasOwn(error, "mpName"),
+      },
+      {
+        name: "StaleSourceCloneError",
+        message: "stale source clone at /scope/sources/pending",
+        absPath: "/scope/sources/pending",
+        mpName: undefined,
+        hasMarketplaceProperty: true,
+      },
+    );
+  });
+});
+
+describe("MarketplaceDuplicateNameError", () => {
+  test("exposes the complete duplicate-name value", () => {
+    // arrange
+    const marketplaceName = "official";
+
+    // act
+    const error = new MarketplaceDuplicateNameError(marketplaceName, "user");
+
+    // assert
+    assert.ok(error instanceof MarketplaceDuplicateNameError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        mpName: error.mpName,
+        scope: error.scope,
+        cause: error.cause,
+      },
+      {
+        name: "MarketplaceDuplicateNameError",
+        message: 'Marketplace "official" already exists in user scope.',
+        mpName: "official",
+        scope: "user",
+        cause: undefined,
+      },
+    );
+  });
+
+  test("keeps the adjacent project scope distinct", () => {
+    // arrange
+    const marketplaceName = "official";
+
+    // act
+    const error = new MarketplaceDuplicateNameError(marketplaceName, "project");
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, mpName: error.mpName, scope: error.scope },
+      {
+        message: 'Marketplace "official" already exists in project scope.',
+        mpName: "official",
+        scope: "project",
+      },
+    );
+  });
+});
+
+describe("MarketplaceNotFoundError", () => {
+  test("exposes the complete one-scope missing-marketplace value", () => {
+    // arrange
+    const scopes = ["project"] as const;
+
+    // act
+    const error = new MarketplaceNotFoundError("official", scopes);
+
+    // assert
+    assert.ok(error instanceof MarketplaceNotFoundError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        mpName: error.mpName,
+        scopes: error.scopes,
+        cause: error.cause,
+      },
+      {
+        name: "MarketplaceNotFoundError",
+        message: 'Marketplace "official" not found in project scope.',
+        mpName: "official",
+        scopes: ["project"],
+        cause: undefined,
+      },
+    );
+  });
+
+  test("renders an empty scope collection as any scopes", () => {
+    // arrange
+    const scopes = [] as const;
+
+    // act
+    const error = new MarketplaceNotFoundError("official", scopes);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, scopes: error.scopes },
+      { message: 'Marketplace "official" not found in any scopes.', scopes: [] },
+    );
+  });
+
+  test("renders both scopes in caller order with the plural suffix", () => {
+    // arrange
+    const scopes = ["user", "project"] as const;
+
+    // act
+    const error = new MarketplaceNotFoundError("official", scopes);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, scopes: error.scopes },
+      {
+        message: 'Marketplace "official" not found in user, project scopes.',
+        scopes: ["user", "project"],
+      },
+    );
+  });
+});
+
+describe("MarketplaceUpdateError", () => {
+  test("exposes the complete update failure with its cause and retry hint", () => {
+    // arrange
+    const cause = new Error("network");
+
+    // act
+    const error = new MarketplaceUpdateError("update failed", {
+      cause,
+      retryHint: "retry later",
+    });
+
+    // assert
+    assert.ok(error instanceof MarketplaceUpdateError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        retryHint: error.retryHint,
+        cause: error.cause,
+      },
+      {
+        name: "MarketplaceUpdateError",
+        message: "update failed",
+        retryHint: "retry later",
+        cause,
+      },
+    );
+  });
+
+  test("defaults to no retry hint and no cause", () => {
+    // arrange
+    const message = "update failed";
+
+    // act
+    const error = new MarketplaceUpdateError(message);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        retryHint: error.retryHint,
+        cause: error.cause,
+      },
+      {
+        name: "MarketplaceUpdateError",
+        message: "update failed",
+        retryHint: "",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("InvalidMarketplaceManifestError", () => {
+  test("exposes the complete typed manifest failure", () => {
+    // arrange
+    const cause = new SyntaxError("bad json");
+
+    // act
+    const error = new InvalidMarketplaceManifestError("invalid manifest", { cause });
+
+    // assert
+    assert.ok(error instanceof InvalidMarketplaceManifestError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      { name: "InvalidMarketplaceManifestError", message: "invalid manifest", cause },
+    );
+  });
+});
+
+describe("UnsupportedSourceError", () => {
+  test("exposes the complete unsupported-source failure", () => {
+    // arrange
+    const message = "Unsupported marketplace source kind: npm";
+
+    // act
+    const error = new UnsupportedSourceError(message);
+
+    // assert
+    assert.ok(error instanceof UnsupportedSourceError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "UnsupportedSourceError",
+        message: "Unsupported marketplace source kind: npm",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("CrossPluginConflictError", () => {
+  test("exposes every conflict in caller order", () => {
+    // arrange
+    const conflicts = [
+      'skill "alpha" already owned by plugin "first"',
+      'agent "beta" already owned by plugin "second"',
+    ];
+
+    // act
+    const error = new CrossPluginConflictError(conflicts);
+
+    // assert
+    assert.ok(error instanceof CrossPluginConflictError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        conflicts: error.conflicts,
+        cause: error.cause,
+      },
+      {
+        name: "CrossPluginConflictError",
+        message:
+          'Cross-plugin name conflict:\n  - skill "alpha" already owned by plugin "first"\n  - agent "beta" already owned by plugin "second"',
+        conflicts: [
+          'skill "alpha" already owned by plugin "first"',
+          'agent "beta" already owned by plugin "second"',
+        ],
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(error.conflicts, conflicts);
+  });
+
+  test("preserves an empty conflict collection exactly", () => {
+    // arrange
+    const conflicts: string[] = [];
+
+    // act
+    const error = new CrossPluginConflictError(conflicts);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, conflicts: error.conflicts },
+      { message: "Cross-plugin name conflict:\n", conflicts: [] },
+    );
+    assert.strictEqual(error.conflicts, conflicts);
+  });
+
+  test("preserves repeated conflict text and first-seen order", () => {
+    // arrange
+    const conflicts = ["same conflict", "same conflict", "later conflict"];
+
+    // act
+    const error = new CrossPluginConflictError(conflicts);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, conflicts: error.conflicts },
+      {
+        message:
+          "Cross-plugin name conflict:\n  - same conflict\n  - same conflict\n  - later conflict",
+        conflicts: ["same conflict", "same conflict", "later conflict"],
+      },
+    );
+  });
+});
+
+describe("ConcurrentInstallError", () => {
+  test("exposes the complete concurrent-install failure", () => {
+    // arrange
+    const plugin = "acme";
+
+    // act
+    const error = new ConcurrentInstallError(plugin, "official");
+
+    // assert
+    assert.ok(error instanceof ConcurrentInstallError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        cause: error.cause,
+      },
+      {
+        name: "ConcurrentInstallError",
+        message: 'Plugin "acme" was installed concurrently in marketplace "official".',
+        plugin: "acme",
+        marketplace: "official",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("ConcurrentUninstallError", () => {
+  test("exposes the complete concurrent-uninstall sentinel", () => {
+    // arrange
+    const plugin = "acme";
+
+    // act
+    const error = new ConcurrentUninstallError(plugin);
+
+    // assert
+    assert.ok(error instanceof ConcurrentUninstallError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        plugin: error.plugin,
+        cause: error.cause,
+      },
+      {
+        name: "ConcurrentUninstallError",
+        message: 'Plugin "acme" already uninstalled.',
+        plugin: "acme",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("StateLockHeldError", () => {
+  test("exposes the complete state-lock failure and cause", () => {
+    // arrange
+    const cause = new Error("open failed");
+
+    // act
+    const error = new StateLockHeldError("project", "/scope/.state-lock", { cause });
+
+    // assert
+    assert.ok(error instanceof StateLockHeldError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        scope: error.scope,
+        lockPath: error.lockPath,
+        cause: error.cause,
+      },
+      {
+        name: "StateLockHeldError",
+        message:
+          "Another pi-claude-marketplace operation is in progress for project scope (/scope/.state-lock). Retry after it completes.",
+        scope: "project",
+        lockPath: "/scope/.state-lock",
+        cause,
+      },
+    );
+  });
+});
+
+describe("PluginUpdatePhase3Error", () => {
+  test("exposes the complete aggregate failure and cause", () => {
+    // arrange
+    const bridgeCause = new Error("skills failed");
+    const outerCause = new Error("commit failed");
+    const failures = [
+      { phase: "skills", msg: "skills rollback failed", cause: bridgeCause },
+    ] satisfies Phase3Failure[];
+
+    // act
+    const error = new PluginUpdatePhase3Error("phase 3 failed", failures, {
+      cause: outerCause,
+    });
+
+    // assert
+    assert.ok(error instanceof PluginUpdatePhase3Error);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        failures: error.failures,
+        cause: error.cause,
+      },
+      {
+        name: "PluginUpdatePhase3Error",
+        message: "phase 3 failed",
+        failures: [{ phase: "skills", msg: "skills rollback failed", cause: bridgeCause }],
+        cause: outerCause,
+      },
+    );
+    assert.strictEqual(error.failures, failures);
+  });
+
+  test("preserves an empty failure collection exactly", () => {
+    // arrange
+    const failures: Phase3Failure[] = [];
+
+    // act
+    const error = new PluginUpdatePhase3Error("phase 3 failed", failures);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        failures: error.failures,
+        cause: error.cause,
+      },
+      {
+        name: "PluginUpdatePhase3Error",
+        message: "phase 3 failed",
+        failures: [],
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(error.failures, failures);
+  });
+
+  test("preserves every bridge phase and repeated failure text in caller order", () => {
+    // arrange
+    const repeatedCause = new Error("repeated");
+    const failures = [
+      { phase: "skills", msg: "same", cause: repeatedCause },
+      { phase: "commands", msg: "same", cause: repeatedCause },
+      { phase: "agents", msg: "agents", cause: new Error("agents") },
+      { phase: "hooks", msg: "hooks", cause: new Error("hooks") },
+      { phase: "mcp", msg: "mcp", cause: new Error("mcp") },
+    ] satisfies Phase3Failure[];
+
+    // act
+    const error = new PluginUpdatePhase3Error("all bridges failed", failures);
+
+    // assert
+    assert.deepStrictEqual(error.failures, [
+      { phase: "skills", msg: "same", cause: repeatedCause },
+      { phase: "commands", msg: "same", cause: repeatedCause },
+      { phase: "agents", msg: "agents", cause: failures[2]?.cause },
+      { phase: "hooks", msg: "hooks", cause: failures[3]?.cause },
+      { phase: "mcp", msg: "mcp", cause: failures[4]?.cause },
+    ]);
+    assert.strictEqual(error.failures, failures);
+  });
+});
+
+describe("ManualRecoveryError", () => {
+  test("exposes the complete manual-recovery value and cause", () => {
+    // arrange
+    const cause = new Error("replace failed");
+    const leaks = ["agents: /scope/agent.md", "skills: /scope/skill"];
+
+    // act
+    const error = new ManualRecoveryError("staging failed", leaks, { cause });
+
+    // assert
+    assert.ok(error instanceof ManualRecoveryError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        leaks: error.leaks,
+        cause: error.cause,
+      },
+      {
+        name: "ManualRecoveryError",
+        message: "staging failed",
+        leaks: ["agents: /scope/agent.md", "skills: /scope/skill"],
+        cause,
+      },
+    );
+    assert.strictEqual(error.leaks, leaks);
+  });
+
+  test("preserves an empty leak collection exactly", () => {
+    // arrange
+    const leaks: string[] = [];
+
+    // act
+    const error = new ManualRecoveryError("recover", leaks);
+
+    // assert
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, leaks: error.leaks, cause: error.cause },
+      { name: "ManualRecoveryError", message: "recover", leaks: [], cause: undefined },
+    );
+    assert.strictEqual(error.leaks, leaks);
+  });
+});
+
+describe("errorWithManualRecovery", () => {
+  test("returns the same Error when no leaks exist", () => {
+    // arrange
+    const error = new Error("base");
+
+    // act
+    const wrapped = errorWithManualRecovery(error, []);
+
+    // assert
+    assert.strictEqual(wrapped, error);
+  });
+
+  test("normalizes a non-Error when no leaks exist", () => {
+    // arrange
+    const thrownValue = "base";
+
+    // act
+    const wrapped = errorWithManualRecovery(thrownValue, []);
+
+    // assert
+    assert.deepStrictEqual(
+      { name: wrapped.name, message: wrapped.message, cause: wrapped.cause },
+      { name: "Error", message: "base", cause: undefined },
+    );
+  });
+
+  test("wraps a plain Error with the complete manual-recovery value", () => {
+    // arrange
+    const error = new Error("base");
+    const leaks = ["agents: leaked"];
+
+    // act
+    const wrapped = errorWithManualRecovery(error, leaks);
+
+    // assert
+    assert.ok(wrapped instanceof ManualRecoveryError);
+    assert.deepStrictEqual(
+      {
+        name: wrapped.name,
+        message: wrapped.message,
+        leaks: wrapped.leaks,
+        cause: wrapped.cause,
+      },
+      {
+        name: "ManualRecoveryError",
+        message: "base",
+        leaks: ["agents: leaked"],
+        cause: error,
+      },
+    );
+  });
+
+  test("normalizes a non-Error before attaching leaks", () => {
+    // arrange
+    const thrownValue = 42;
+
+    // act
+    const wrapped = errorWithManualRecovery(thrownValue, ["agents: leaked"]);
+
+    // assert
+    assert.ok(wrapped instanceof ManualRecoveryError);
+    assert.deepStrictEqual(
+      {
+        name: wrapped.name,
+        message: wrapped.message,
+        leaks: wrapped.leaks,
+        causeName: (wrapped.cause as Error).name,
+        causeMessage: (wrapped.cause as Error).message,
+      },
+      {
+        name: "ManualRecoveryError",
+        message: "42",
+        leaks: ["agents: leaked"],
+        causeName: "Error",
+        causeMessage: "42",
+      },
+    );
+  });
+
+  test("merges a manual-recovery error with first-seen de-duplication", () => {
+    // arrange
+    const inner = new ManualRecoveryError("base", ["agents: old", "skills: shared"]);
+
+    // act
+    const wrapped = errorWithManualRecovery(inner, ["skills: shared", "mcp: new"]);
+
+    // assert
+    assert.ok(wrapped instanceof ManualRecoveryError);
+    assert.deepStrictEqual(
+      {
+        name: wrapped.name,
+        message: wrapped.message,
+        leaks: wrapped.leaks,
+        cause: wrapped.cause,
+      },
+      {
+        name: "ManualRecoveryError",
+        message: "base",
+        leaks: ["agents: old", "skills: shared", "mcp: new"],
+        cause: inner,
+      },
+    );
+    assert.strictEqual(Object.isFrozen(wrapped.leaks), true);
+  });
+
+  test("freezes a defensive merged copy before caller arrays change", () => {
+    // arrange
+    const existingLeaks = ["agents: first", "skills: shared", "agents: first"];
+    const addedLeaks = ["skills: shared", "mcp: last", "mcp: last"];
+    const inner = new ManualRecoveryError("base", existingLeaks);
+
+    // act
+    const wrapped = errorWithManualRecovery(inner, addedLeaks);
+    existingLeaks.push("hooks: late-existing");
+    addedLeaks.push("hooks: late-added");
+
+    // assert
+    assert.ok(wrapped instanceof ManualRecoveryError);
+    assert.deepStrictEqual(wrapped.leaks, ["agents: first", "skills: shared", "mcp: last"]);
+    assert.strictEqual(Object.isFrozen(wrapped.leaks), true);
+    assert.notStrictEqual(wrapped.leaks, existingLeaks);
+    assert.notStrictEqual(wrapped.leaks, addedLeaks);
+  });
+});
+
+describe("findManualRecoveryError", () => {
+  test("returns the first manual-recovery error in a cause chain", () => {
+    // arrange
+    const manualRecovery = new ManualRecoveryError("recover", ["agents: leaked"]);
+    const error = new Error("outer", { cause: manualRecovery });
+
+    // act
+    const found = findManualRecoveryError(error);
+
+    // assert
+    assert.strictEqual(found, manualRecovery);
+  });
+
+  test("returns undefined when the chain has no manual-recovery error", () => {
+    // arrange
+    const error = new Error("outer", { cause: new Error("inner") });
+
+    // act
+    const found = findManualRecoveryError(error);
+
+    // assert
+    assert.strictEqual(found, undefined);
+  });
+
+  test("finds a manual-recovery error at the exact fifth link", () => {
+    // arrange
+    const manualRecovery = new ManualRecoveryError("recover", ["agents: leaked"]);
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", { cause: new Error("link-4", { cause: manualRecovery }) }),
+      }),
+    });
+
+    // act
+    const found = findManualRecoveryError(error);
+
+    // assert
+    assert.strictEqual(found, manualRecovery);
+  });
+
+  test("does not inspect a manual-recovery error beyond the fifth link", () => {
+    // arrange
+    const manualRecovery = new ManualRecoveryError("recover", ["agents: leaked"]);
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", { cause: new Error("link-5", { cause: manualRecovery }) }),
+        }),
+      }),
+    });
+
+    // act
+    const found = findManualRecoveryError(error);
+
+    // assert
+    assert.strictEqual(found, undefined);
+  });
+
+  test("terminates a self-referencing chain without a match", () => {
+    // arrange
+    const error = new Error("loop");
+    error.cause = error;
+
+    // act
+    const found = findManualRecoveryError(error);
+
+    // assert
+    assert.strictEqual(found, undefined);
+  });
+});
+
+describe("manualRecoveryLeaks", () => {
+  test("returns the first non-empty manual-recovery payload", () => {
+    // arrange
+    const innerLeaks = ["agents: leaked"];
+    const inner = new ManualRecoveryError("inner", innerLeaks);
+    const outer = new ManualRecoveryError("outer", [], { cause: inner });
+
+    // act
+    const leaks = manualRecoveryLeaks(outer);
+
+    // assert
+    assert.strictEqual(leaks, innerLeaks);
+    assert.deepStrictEqual(leaks, ["agents: leaked"]);
+  });
+
+  test("returns an empty collection when no payload exists", () => {
+    // arrange
+    const error = new Error("opaque");
+
+    // act
+    const leaks = manualRecoveryLeaks(error);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+  });
+
+  test("returns a payload at the exact fifth link", () => {
+    // arrange
+    const expectedLeaks = ["agents: leaked"];
+    const manualRecovery = new ManualRecoveryError("recover", expectedLeaks);
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", { cause: new Error("link-4", { cause: manualRecovery }) }),
+      }),
+    });
+
+    // act
+    const leaks = manualRecoveryLeaks(error);
+
+    // assert
+    assert.strictEqual(leaks, expectedLeaks);
+    assert.deepStrictEqual(leaks, ["agents: leaked"]);
+  });
+
+  test("does not inspect a payload beyond the fifth link", () => {
+    // arrange
+    const manualRecovery = new ManualRecoveryError("recover", ["agents: leaked"]);
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", { cause: new Error("link-5", { cause: manualRecovery }) }),
+        }),
+      }),
+    });
+
+    // act
+    const leaks = manualRecoveryLeaks(error);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+  });
+});
+
+describe("PluginShapeError", () => {
+  test("exposes the complete not-in-manifest arm", () => {
+    // arrange
+    const shape = {
+      kind: "not-in-manifest",
+      plugin: "acme",
+      marketplace: "official",
+    } satisfies PluginShapeErrorShape;
+
+    // act
+    const error = new PluginShapeError(shape);
+
+    // assert
+    assert.ok(error instanceof PluginShapeError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        shape: error.shape,
+        kind: error.kind,
+        plugin: error.plugin,
+        cause: error.cause,
+      },
+      {
+        name: "PluginShapeError",
+        message: 'Plugin "acme" not found in marketplace "official".',
+        shape: { kind: "not-in-manifest", plugin: "acme", marketplace: "official" },
+        kind: "not-in-manifest",
+        plugin: "acme",
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(error.shape, shape);
+  });
+
+  test("exposes the complete already-installed arm", () => {
+    // arrange
+    const shape = {
+      kind: "already-installed",
+      plugin: "acme",
+      marketplace: "official",
+    } satisfies PluginShapeErrorShape;
+    const cause = new Error("state changed");
+
+    // act
+    const error = new PluginShapeError(shape, { cause });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        shape: error.shape,
+        kind: error.kind,
+        plugin: error.plugin,
+        cause: error.cause,
+      },
+      {
+        name: "PluginShapeError",
+        message: 'Plugin "acme" is already installed in marketplace "official".',
+        shape: { kind: "already-installed", plugin: "acme", marketplace: "official" },
+        kind: "already-installed",
+        plugin: "acme",
+        cause,
+      },
+    );
+  });
+
+  test("exposes the complete not-installable arm", () => {
+    // arrange
+    const shape = {
+      kind: "not-installable",
+      plugin: "acme",
+      reasons: ["contains hooks", "unsupported source"],
+      partialable: true,
+      unsupportedKinds: ["hooks"],
+    } satisfies PluginShapeErrorShape;
+
+    // act
+    const error = new PluginShapeError(shape);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        shape: error.shape,
+        kind: error.kind,
+        plugin: error.plugin,
+        cause: error.cause,
+      },
+      {
+        name: "PluginShapeError",
+        message: 'Plugin "acme" is not installable: contains hooks; unsupported source',
+        shape: {
+          kind: "not-installable",
+          plugin: "acme",
+          reasons: ["contains hooks", "unsupported source"],
+          partialable: true,
+          unsupportedKinds: ["hooks"],
+        },
+        kind: "not-installable",
+        plugin: "acme",
+        cause: undefined,
+      },
+    );
+  });
+
+  test("exposes the complete no-longer-installable arm", () => {
+    // arrange
+    const shape = {
+      kind: "no-longer-installable",
+      plugin: "acme",
+      reasons: ["unsupported source"],
+      partialable: false,
+    } satisfies PluginShapeErrorShape;
+
+    // act
+    const error = new PluginShapeError(shape);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        shape: error.shape,
+        kind: error.kind,
+        plugin: error.plugin,
+        cause: error.cause,
+      },
+      {
+        name: "PluginShapeError",
+        message: 'Plugin "acme" is no longer installable: unsupported source',
+        shape: {
+          kind: "no-longer-installable",
+          plugin: "acme",
+          reasons: ["unsupported source"],
+          partialable: false,
+        },
+        kind: "no-longer-installable",
+        plugin: "acme",
+        cause: undefined,
+      },
+    );
+  });
+
+  test("preserves an empty reason collection in the exact install message", () => {
+    // arrange
+    const shape = {
+      kind: "not-installable",
+      plugin: "acme",
+      reasons: [],
+      partialable: false,
+    } satisfies PluginShapeErrorShape;
+
+    // act
+    const error = new PluginShapeError(shape);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, shape: error.shape, kind: error.kind, plugin: error.plugin },
+      {
+        message: 'Plugin "acme" is not installable: ',
+        shape: {
+          kind: "not-installable",
+          plugin: "acme",
+          reasons: [],
+          partialable: false,
+        },
+        kind: "not-installable",
+        plugin: "acme",
+      },
+    );
+  });
+
+  test("preserves repeated reasons and first-seen order in the update message", () => {
+    // arrange
+    const shape = {
+      kind: "no-longer-installable",
+      plugin: "acme",
+      reasons: ["same", "same", "later"],
+      partialable: true,
+      unsupportedKinds: [],
+    } satisfies PluginShapeErrorShape;
+
+    // act
+    const error = new PluginShapeError(shape);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, shape: error.shape },
+      {
+        message: 'Plugin "acme" is no longer installable: same; same; later',
+        shape: {
+          kind: "no-longer-installable",
+          plugin: "acme",
+          reasons: ["same", "same", "later"],
+          partialable: true,
+          unsupportedKinds: [],
+        },
+      },
+    );
+  });
+
+  test("rejects an unknown runtime discriminator through the public constructor", () => {
+    // arrange
+    const shape = { kind: "future", plugin: "acme" } as never;
+
+    // act & assert
+    assert.throws(() => new PluginShapeError(shape), {
+      name: "Error",
+      message: "Unexpected value: [object Object]",
+    });
+  });
+});
+
+describe("AggregateResourcesDiscoverError", () => {
+  test("exposes the complete ordered failure set with the first cause", () => {
+    // arrange
+    const firstCause = new Error("skills denied");
+    const failures = [
+      { scope: "user", kind: "skills", path: "/user/skills", cause: firstCause },
+      { scope: "project", kind: "prompts", path: "/project/prompts", cause: "missing" },
+    ] satisfies ResourcesDiscoverFailure[];
+
+    // act
+    const error = new AggregateResourcesDiscoverError(failures);
+
+    // assert
+    assert.ok(error instanceof AggregateResourcesDiscoverError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        failures: error.failures,
+        cause: error.cause,
+      },
+      {
+        name: "AggregateResourcesDiscoverError",
+        message:
+          "Failed to discover Pi resources: user/skills at /user/skills: skills denied; project/prompts at /project/prompts: missing",
+        failures: [
+          { scope: "user", kind: "skills", path: "/user/skills", cause: firstCause },
+          { scope: "project", kind: "prompts", path: "/project/prompts", cause: "missing" },
+        ],
+        cause: firstCause,
+      },
+    );
+    assert.strictEqual(Object.isFrozen(error.failures), true);
+    assert.notStrictEqual(error.failures, failures);
+  });
+
+  test("exposes an empty frozen failure collection exactly", () => {
+    // arrange
+    const failures: ResourcesDiscoverFailure[] = [];
+
+    // act
+    const error = new AggregateResourcesDiscoverError(failures);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        failures: error.failures,
+        cause: error.cause,
+      },
+      {
+        name: "AggregateResourcesDiscoverError",
+        message: "Failed to discover Pi resources: ",
+        failures: [],
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(Object.isFrozen(error.failures), true);
+    assert.notStrictEqual(error.failures, failures);
+  });
+
+  test("freezes a defensive copy while preserving all discriminator arms and duplicates", () => {
+    // arrange
+    const repeatedCause = new Error("same");
+    const failures: ResourcesDiscoverFailure[] = [
+      { scope: "user", kind: "skills", path: "/user/skills", cause: repeatedCause },
+      { scope: "user", kind: "prompts", path: "/user/prompts", cause: repeatedCause },
+      { scope: "project", kind: "skills", path: "/project/skills", cause: "later" },
+      { scope: "project", kind: "prompts", path: "/project/prompts", cause: "later" },
+    ];
+
+    // act
+    const error = new AggregateResourcesDiscoverError(failures);
+    failures.push({ scope: "user", kind: "skills", path: "/late", cause: "late" });
+
+    // assert
+    assert.strictEqual(
+      error.message,
+      "Failed to discover Pi resources: user/skills at /user/skills: same; user/prompts at /user/prompts: same; project/skills at /project/skills: later; project/prompts at /project/prompts: later",
+    );
+    assert.deepStrictEqual(error.failures, [
+      { scope: "user", kind: "skills", path: "/user/skills", cause: repeatedCause },
+      { scope: "user", kind: "prompts", path: "/user/prompts", cause: repeatedCause },
+      { scope: "project", kind: "skills", path: "/project/skills", cause: "later" },
+      { scope: "project", kind: "prompts", path: "/project/prompts", cause: "later" },
+    ]);
+    assert.strictEqual(Object.isFrozen(error.failures), true);
+    assert.notStrictEqual(error.failures, failures);
+  });
 });

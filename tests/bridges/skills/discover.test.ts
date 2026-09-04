@@ -1,428 +1,406 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import test, { type TestContext } from "node:test";
 
 import { discoverPluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/discover.ts";
-import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
-// Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.resolve(__dirname, "..", "_fixtures");
+async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
+  const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(pluginRoot, { recursive: true, force: true }));
+  return pluginRoot;
+}
 
-function makeResolved(
-  pluginRoot: string,
-  skillsDirAbs: string | undefined,
-): ResolvedPluginInstallable {
-  // D-07: componentPaths.skills is `readonly string[]`. Tests pass the
-  // absolute fixture dir directly (verbatim element); the bridge accepts
-  // both absolute and relative-to-pluginRoot elements.
+function resolvedPlugin(pluginRoot: string, skills: readonly string[]): ResolvedPluginInstallable {
   return {
+    installable: true,
     state: "installable",
     name: "acme",
     pluginRoot,
-    supported: [],
+    supported: ["skills"],
     unsupported: [],
     notes: [],
-    componentPaths: {
-      skills: skillsDirAbs === undefined ? [] : [skillsDirAbs],
-      commands: [],
-      agents: [],
-    },
+    componentPaths: { skills: [...skills], commands: [], agents: [] },
     mcpServers: {},
     defaultEnabled: true,
   };
 }
 
-test("SK-5 discoverPluginSkills returns sorted DiscoveredSkill[] for fixture plugin", async () => {
-  const pluginRoot = path.join(FIXTURES, "test-plugin");
-  const skillsDir = path.join(pluginRoot, "skills");
-  const resolved = makeResolved(pluginRoot, skillsDir);
+test("returns no skills when the plugin declares no skill paths", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-empty-");
+  const resolved = resolvedPlugin(pluginRoot, []);
 
-  const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
-  assert.equal(discovered.length, 2, "expected 2 discovered skills");
-  assert.deepEqual([...warnings], [], "no warnings expected on happy path");
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
 
-  // Alphabetic sort: "acme-knowledge" < "helper".
-  assert.equal(discovered[0]!.sourceName, "acme-knowledge");
-  assert.equal(discovered[1]!.sourceName, "helper");
+  // assert
+  assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
 });
 
-test("SK-2 discoverPluginSkills generates name 'acme-knowledge' (elided) for source already prefixed", async () => {
-  const pluginRoot = path.join(FIXTURES, "test-plugin");
-  const skillsDir = path.join(pluginRoot, "skills");
-  const resolved = makeResolved(pluginRoot, skillsDir);
+test("returns no skills when a relative skill parent is absent", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-missing-");
+  const resolved = resolvedPlugin(pluginRoot, [path.join("catalog", "skills")]);
 
-  const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
-  const acmeKnowledge = discovered.find((s) => s.sourceName === "acme-knowledge");
-  assert.ok(acmeKnowledge, "acme-knowledge entry missing");
-  assert.equal(acmeKnowledge.generatedName, "acme-knowledge");
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
 });
 
-test("SK-2 discoverPluginSkills generates name 'acme-helper' for unprefixed source", async () => {
-  const pluginRoot = path.join(FIXTURES, "test-plugin");
-  const skillsDir = path.join(pluginRoot, "skills");
-  const resolved = makeResolved(pluginRoot, skillsDir);
+test("discovers a relative skill parent in stable source-name order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-relative-");
+  const skillsRelative = path.join("catalog", "skills");
+  const skillsDirectory = path.join(pluginRoot, skillsRelative);
+  const knowledgeDirectory = path.join(skillsDirectory, "acme-knowledge");
+  const helperDirectory = path.join(skillsDirectory, "helper");
+  await mkdir(path.join(knowledgeDirectory, "resources"), { recursive: true });
+  await writeFile(
+    path.join(knowledgeDirectory, "SKILL.md"),
+    "---\nname: acme-knowledge\ndescription: Consult the knowledge base.\n---\n\nUse the bundled lookup.\n",
+  );
+  await writeFile(
+    path.join(knowledgeDirectory, "resources", "lookup.json"),
+    '{"answer":"local"}\n',
+  );
+  await mkdir(helperDirectory, { recursive: true });
+  await writeFile(
+    path.join(helperDirectory, "SKILL.md"),
+    "---\nname: helper\ndescription: Run the helper.\n---\n\nUse the helper procedure.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [skillsRelative]);
 
-  const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
-  const helper = discovered.find((s) => s.sourceName === "helper");
-  assert.ok(helper, "helper entry missing");
-  assert.equal(helper.generatedName, "acme-helper");
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "acme-knowledge",
+        generatedName: "acme-knowledge",
+        skillDir: knowledgeDirectory,
+      },
+      {
+        sourceName: "helper",
+        generatedName: "acme-helper",
+        skillDir: helperDirectory,
+      },
+    ],
+    warnings: [],
+  });
 });
 
-test("SK-5 discoverPluginSkills returns [] when skills dir missing (ENOENT graceful)", async () => {
-  // empty-mcp fixture has no `skills/` dir.
-  const pluginRoot = path.join(FIXTURES, "empty-mcp");
-  const skillsDir = path.join(pluginRoot, "skills");
-  const resolved = makeResolved(pluginRoot, skillsDir);
+test("preserves declared parent order while sorting each absolute parent", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-absolute-");
+  const firstParent = path.join(pluginRoot, "first-declared");
+  const secondParent = path.join(pluginRoot, "second-declared");
+  const betaDirectory = path.join(firstParent, "beta");
+  const zetaDirectory = path.join(firstParent, "zeta");
+  const alphaDirectory = path.join(secondParent, "alpha");
+  await mkdir(betaDirectory, { recursive: true });
+  await writeFile(
+    path.join(betaDirectory, "SKILL.md"),
+    "---\nname: beta\ndescription: Beta skill.\n---\n\nBeta body.\n",
+  );
+  await mkdir(zetaDirectory, { recursive: true });
+  await writeFile(
+    path.join(zetaDirectory, "SKILL.md"),
+    "---\nname: zeta\ndescription: Zeta skill.\n---\n\nZeta body.\n",
+  );
+  await mkdir(alphaDirectory, { recursive: true });
+  await writeFile(
+    path.join(alphaDirectory, "SKILL.md"),
+    "---\nname: alpha\ndescription: Alpha skill.\n---\n\nAlpha body.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [firstParent, secondParent]);
 
-  const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
-  assert.deepEqual([...discovered], []);
-  assert.deepEqual([...warnings], []);
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "beta", generatedName: "acme-beta", skillDir: betaDirectory },
+      { sourceName: "zeta", generatedName: "acme-zeta", skillDir: zetaDirectory },
+      { sourceName: "alpha", generatedName: "acme-alpha", skillDir: alphaDirectory },
+    ],
+    warnings: [],
+  });
 });
 
-test("SK-5 discoverPluginSkills returns [] when componentPaths.skills is empty", async () => {
-  const resolved = makeResolved("/anywhere", undefined);
-  const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
-  assert.deepEqual([...discovered], []);
-  assert.deepEqual([...warnings], []);
+test("discovers a declared relative path that is itself a skill directory", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-self-");
+  const skillRelative = path.join("catalog", "implement");
+  const skillDirectory = path.join(pluginRoot, skillRelative);
+  const nestedDirectory = path.join(skillDirectory, "nested");
+  await mkdir(nestedDirectory, { recursive: true });
+  await writeFile(
+    path.join(skillDirectory, "SKILL.md"),
+    "---\nname: implement\ndescription: Implement a task.\n---\n\nFollow the task contract.\n",
+  );
+  await writeFile(
+    path.join(nestedDirectory, "SKILL.md"),
+    "---\nname: nested\ndescription: Nested skill.\n---\n\nThis directory is not a second root.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [skillRelative]);
+
+  // act
+  const discovery = await discoverPluginSkills({
+    pluginName: "mattpocock-skills",
+    resolved,
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "implement",
+        generatedName: "mattpocock-skills-implement",
+        skillDir: skillDirectory,
+      },
+    ],
+    warnings: [],
+  });
 });
 
-test("discoverPluginSkills skips dotfile-prefixed directories", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-dotfiles-"));
-  try {
-    const skillsDir = path.join(tmp, "skills");
-    await mkdir(skillsDir, { recursive: true });
-    // Hidden dir with SKILL.md should be skipped.
-    await mkdir(path.join(skillsDir, ".hidden"));
-    await writeFile(path.join(skillsDir, ".hidden", "SKILL.md"), "---\nname: x\n---\nbody");
-    // Visible dir should be included.
-    await mkdir(path.join(skillsDir, "visible"));
-    await writeFile(path.join(skillsDir, "visible", "SKILL.md"), "---\nname: visible\n---\nbody");
-
-    const resolved = makeResolved(tmp, skillsDir);
-    const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
-    assert.equal(discovered.length, 1);
-    assert.equal(discovered[0]!.sourceName, "visible");
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
+test("filters hidden, non-regular, nested-only, linked, and undeclared entries", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-filter-");
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  const hiddenDirectory = path.join(skillsDirectory, ".hidden");
+  const missingDocumentDirectory = path.join(skillsDirectory, "missing-document");
+  const directoryDocumentDirectory = path.join(skillsDirectory, "directory-document");
+  const nestedOnlyDirectory = path.join(skillsDirectory, "nested-only");
+  const opaqueDirectory = path.join(skillsDirectory, "opaque");
+  const visibleDirectory = path.join(skillsDirectory, "visible");
+  const externalDirectory = path.join(pluginRoot, "external-skill");
+  const undeclaredDirectory = path.join(pluginRoot, "undeclared", "outside");
+  await mkdir(hiddenDirectory, { recursive: true });
+  await writeFile(
+    path.join(hiddenDirectory, "SKILL.md"),
+    "---\nname: hidden\ndescription: Hidden skill.\n---\n\nHidden body.\n",
+  );
+  await mkdir(missingDocumentDirectory, { recursive: true });
+  await writeFile(path.join(missingDocumentDirectory, "README.md"), "No skill document.\n");
+  await mkdir(path.join(directoryDocumentDirectory, "SKILL.md"), { recursive: true });
+  await mkdir(path.join(nestedOnlyDirectory, "deep"), { recursive: true });
+  await writeFile(
+    path.join(nestedOnlyDirectory, "deep", "SKILL.md"),
+    "---\nname: deep\ndescription: Nested-only skill.\n---\n\nNested body.\n",
+  );
+  await mkdir(opaqueDirectory, { recursive: true });
+  const opaqueDocument = path.join(opaqueDirectory, "SKILL.md");
+  await writeFile(
+    opaqueDocument,
+    "---\nname: opaque\ndescription: Metadata-only discovery.\n---\n\nOpaque body.\n",
+  );
+  if (process.platform !== "win32") {
+    await chmod(opaqueDocument, 0o000);
   }
+
+  await mkdir(visibleDirectory, { recursive: true });
+  await writeFile(
+    path.join(visibleDirectory, "SKILL.md"),
+    "---\nname: visible\ndescription: Visible skill.\n---\n\nVisible body.\n",
+  );
+  await writeFile(path.join(skillsDirectory, "loose.md"), "Not a skill directory.\n");
+  await mkdir(externalDirectory, { recursive: true });
+  await writeFile(
+    path.join(externalDirectory, "SKILL.md"),
+    "---\nname: linked\ndescription: Linked skill.\n---\n\nLinked body.\n",
+  );
+  await symlink(
+    externalDirectory,
+    path.join(skillsDirectory, "linked-directory"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  await mkdir(undeclaredDirectory, { recursive: true });
+  await writeFile(
+    path.join(undeclaredDirectory, "SKILL.md"),
+    "---\nname: outside\ndescription: Undeclared skill.\n---\n\nOutside body.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [skillsDirectory]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "opaque", generatedName: "acme-opaque", skillDir: opaqueDirectory },
+      { sourceName: "visible", generatedName: "acme-visible", skillDir: visibleDirectory },
+    ],
+    warnings: [],
+  });
 });
 
-test("discoverPluginSkills skips entries without SKILL.md", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-no-skillmd-"));
-  try {
-    const skillsDir = path.join(tmp, "skills");
-    await mkdir(skillsDir, { recursive: true });
-    // Dir without SKILL.md should be skipped.
-    await mkdir(path.join(skillsDir, "no-skill-md"));
-    await writeFile(path.join(skillsDir, "no-skill-md", "README.md"), "no skill here");
-    // Dir with SKILL.md present.
-    await mkdir(path.join(skillsDir, "with-skill"));
-    await writeFile(path.join(skillsDir, "with-skill", "SKILL.md"), "---\nname: with-skill\n---");
+test("keeps the first generated name when sources collide within one parent", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-local-collision-");
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  const prefixedDirectory = path.join(skillsDirectory, "acme-foo");
+  const bareDirectory = path.join(skillsDirectory, "foo");
+  await mkdir(prefixedDirectory, { recursive: true });
+  await writeFile(
+    path.join(prefixedDirectory, "SKILL.md"),
+    "---\nname: acme-foo\ndescription: Prefixed skill.\n---\n\nPrefixed body.\n",
+  );
+  await mkdir(bareDirectory, { recursive: true });
+  await writeFile(
+    path.join(bareDirectory, "SKILL.md"),
+    "---\nname: foo\ndescription: Bare skill.\n---\n\nBare body.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [skillsDirectory]);
 
-    const resolved = makeResolved(tmp, skillsDir);
-    const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
-    assert.equal(discovered.length, 1);
-    assert.equal(discovered[0]!.sourceName, "with-skill");
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "acme-foo",
+        generatedName: "acme-foo",
+        skillDir: prefixedDirectory,
+      },
+    ],
+    warnings: [
+      `skill source "foo" in "${skillsDirectory}" elides to generated name ` +
+        `"acme-foo", already produced by skill source "acme-foo"; ignoring duplicate.`,
+    ],
+  });
 });
 
-test("discoverPluginSkills skips symlinked skill dirs (T-03-15 hardening)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("symlink semantics differ on Windows");
-    return;
-  }
+test("keeps the first generated name when sources collide across parents", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-parent-collision-");
+  const winningParent = path.join(pluginRoot, "winning-parent");
+  const losingParent = path.join(pluginRoot, "losing-parent");
+  const winningDirectory = path.join(winningParent, "acme-shared");
+  const losingDirectory = path.join(losingParent, "shared");
+  await mkdir(winningDirectory, { recursive: true });
+  await writeFile(
+    path.join(winningDirectory, "SKILL.md"),
+    "---\nname: acme-shared\ndescription: Winning skill.\n---\n\nWinning body.\n",
+  );
+  await mkdir(losingDirectory, { recursive: true });
+  await writeFile(
+    path.join(losingDirectory, "SKILL.md"),
+    "---\nname: shared\ndescription: Losing skill.\n---\n\nLosing body.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [winningParent, losingParent]);
 
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-symlink-"));
-  try {
-    const skillsDir = path.join(tmp, "skills");
-    await mkdir(skillsDir, { recursive: true });
-    // Real directory outside skillsDir.
-    const elsewhere = path.join(tmp, "elsewhere");
-    await mkdir(elsewhere);
-    await writeFile(path.join(elsewhere, "SKILL.md"), "---\nname: evil\n---");
-    // Symlink inside skillsDir pointing to elsewhere.
-    await symlink(elsewhere, path.join(skillsDir, "evil-link"));
-    // Plus a regular skill so we know discovery itself ran.
-    await mkdir(path.join(skillsDir, "real-skill"));
-    await writeFile(path.join(skillsDir, "real-skill", "SKILL.md"), "---\nname: real\n---");
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
 
-    const resolved = makeResolved(tmp, skillsDir);
-    const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
-    assert.equal(discovered.length, 1);
-    assert.equal(discovered[0]!.sourceName, "real-skill");
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "acme-shared",
+        generatedName: "acme-shared",
+        skillDir: winningDirectory,
+      },
+    ],
+    warnings: [
+      `skill source "shared" in "${losingParent}" elides to generated name ` +
+        `"acme-shared", already produced by skill source "acme-shared"; ignoring duplicate.`,
+    ],
+  });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// D-07 (COMP-01): multi-element componentPaths.skills with first-wins dedup.
-// ──────────────────────────────────────────────────────────────────────────
+test("keeps a self skill when a later parent produces the same generated name", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-self-wins-");
+  const selfDirectory = path.join(pluginRoot, "implement");
+  const parentDirectory = path.join(pluginRoot, "skills");
+  const duplicateDirectory = path.join(parentDirectory, "implement");
+  await mkdir(selfDirectory, { recursive: true });
+  await writeFile(
+    path.join(selfDirectory, "SKILL.md"),
+    "---\nname: implement\ndescription: Direct skill.\n---\n\nDirect body.\n",
+  );
+  await mkdir(duplicateDirectory, { recursive: true });
+  await writeFile(
+    path.join(duplicateDirectory, "SKILL.md"),
+    "---\nname: implement\ndescription: Duplicate skill.\n---\n\nDuplicate body.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [selfDirectory, parentDirectory]);
 
-test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no collision)", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-multi-"));
-  try {
-    // Two independent skills dirs, no overlap.
-    const a = path.join(tmp, "a");
-    const b = path.join(tmp, "b");
-    await mkdir(path.join(a, "one"), { recursive: true });
-    await writeFile(path.join(a, "one", "SKILL.md"), "---\nname: one\n---\nbody");
-    await mkdir(path.join(b, "two"), { recursive: true });
-    await writeFile(path.join(b, "two", "SKILL.md"), "---\nname: two\n---\nbody");
+  // act
+  const discovery = await discoverPluginSkills({
+    pluginName: "mattpocock-skills",
+    resolved,
+  });
 
-    const resolved: ResolvedPluginInstallable = {
-      state: "installable",
-      name: "acme",
-      pluginRoot: tmp,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [a, b], commands: [], agents: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    };
-
-    const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
-    assert.equal(discovered.length, 2, "both dirs' sources discovered");
-    const names = discovered.map((d) => d.sourceName).sort();
-    assert.deepEqual(names, ["one", "two"]);
-    assert.deepEqual([...warnings], [], "no warnings when generated names disjoint");
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "implement",
+        generatedName: "mattpocock-skills-implement",
+        skillDir: selfDirectory,
+      },
+    ],
+    warnings: [
+      `skill source "implement" in "${parentDirectory}" elides to generated name ` +
+        `"mattpocock-skills-implement", already produced by skill source "implement"; ` +
+        `ignoring duplicate.`,
+    ],
+  });
 });
 
-test("D-07 discoverPluginSkills first-wins dedup across array elements (collision -> warning)", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-dedup-"));
-  try {
-    // Dir `a` holds `acme-shared/`, dir `b` holds `shared/`. Both elide to
-    // the generated name "acme-shared" (SK-2 drops the `acme-` head and
-    // re-prefixes). First-wins: dir `a` is kept; dir `b` surfaces a soft-fail
-    // warning. The two source names are deliberately DIFFERENT so the exact
-    // string below discriminates the winner from the loser -- with both named
-    // "shared" it read the same whichever the code passed. The within-entry
-    // case takes the same branch and is covered by the D-141-04 test below.
-    const a = path.join(tmp, "a");
-    const b = path.join(tmp, "b");
-    await mkdir(path.join(a, "acme-shared"), { recursive: true });
-    await writeFile(path.join(a, "acme-shared", "SKILL.md"), "---\nname: shared\n---\nfrom-a");
-    await mkdir(path.join(b, "shared"), { recursive: true });
-    await writeFile(path.join(b, "shared", "SKILL.md"), "---\nname: shared\n---\nfrom-b");
+test("reports a self skill loss without traversing its nested directories", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-self-loses-");
+  const parentDirectory = path.join(pluginRoot, "skills");
+  const winningDirectory = path.join(parentDirectory, "mattpocock-skills-implement");
+  const selfDirectory = path.join(pluginRoot, "implement");
+  const nestedDirectory = path.join(selfDirectory, "nested");
+  await mkdir(winningDirectory, { recursive: true });
+  await writeFile(
+    path.join(winningDirectory, "SKILL.md"),
+    "---\nname: implement\ndescription: Winning skill.\n---\n\nWinning body.\n",
+  );
+  await mkdir(nestedDirectory, { recursive: true });
+  await writeFile(
+    path.join(selfDirectory, "SKILL.md"),
+    "---\nname: implement\ndescription: Losing direct skill.\n---\n\nLosing body.\n",
+  );
+  await writeFile(
+    path.join(nestedDirectory, "SKILL.md"),
+    "---\nname: nested\ndescription: Nested skill.\n---\n\nNested body.\n",
+  );
+  const resolved = resolvedPlugin(pluginRoot, [parentDirectory, selfDirectory]);
 
-    const resolved: ResolvedPluginInstallable = {
-      state: "installable",
-      name: "acme",
-      pluginRoot: tmp,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [a, b], commands: [], agents: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    };
+  // act
+  const discovery = await discoverPluginSkills({
+    pluginName: "mattpocock-skills",
+    resolved,
+  });
 
-    const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
-    assert.equal(discovered.length, 1, "first-wins keeps only one");
-    assert.equal(discovered[0]!.skillDir, path.join(a, "acme-shared"), "dir 'a' wins");
-    assert.equal(discovered[0]!.sourceName, "acme-shared");
-    assert.equal(warnings.length, 1);
-    // The warning names the WINNING source, not an "earlier entry".
-    assert.equal(
-      warnings[0],
-      `skill source "shared" in "${b}" elides to generated name "acme-shared", ` +
-        `already produced by skill source "acme-shared"; ignoring duplicate.`,
-    );
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
-});
-
-test("D-141-04 two skill dirs under ONE componentPaths.skills entry take the first-wins skip", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-within-entry-"));
-  try {
-    // One declared entry holding two skill dirs that elide to the same
-    // generated name: `generatedSkillName` drops the `acme-` head and
-    // re-prefixes, so `acme-foo/` and `foo/` both name `acme-foo`.
-    // Discovery sorts by `name.localeCompare`, so `acme-foo` wins.
-    const skillsDir = path.join(tmp, "skills");
-    await mkdir(path.join(skillsDir, "acme-foo"), { recursive: true });
-    await writeFile(path.join(skillsDir, "acme-foo", "SKILL.md"), "---\nname: foo\n---\nfrom-acme");
-    await mkdir(path.join(skillsDir, "foo"), { recursive: true });
-    await writeFile(path.join(skillsDir, "foo", "SKILL.md"), "---\nname: foo\n---\nfrom-bare");
-
-    const resolved: ResolvedPluginInstallable = {
-      state: "installable",
-      name: "acme",
-      pluginRoot: tmp,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDir], commands: [], agents: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    };
-
-    const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
-
-    assert.equal(discovered.length, 1, "first-wins keeps only one");
-    assert.equal(discovered[0]!.sourceName, "acme-foo", "the localeCompare-first source wins");
-    assert.equal(discovered[0]!.generatedName, "acme-foo");
-    assert.equal(warnings.length, 1);
-    // There IS no earlier `componentPaths.skills` entry here -- one entry
-    // holds both sides -- so the warning names the winner instead.
-    assert.equal(
-      warnings[0],
-      `skill source "foo" in "${skillsDir}" elides to generated name "acme-foo", ` +
-        `already produced by skill source "acme-foo"; ignoring duplicate.`,
-    );
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
-});
-
-test("discoverPluginSkills treats a declared path that is itself a skill dir as one discovered skill", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-"));
-  try {
-    const skillDir = path.join(tmp, "implement");
-    await mkdir(skillDir, { recursive: true });
-    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: implement\n---\nbody");
-
-    const resolved: ResolvedPluginInstallable = {
-      state: "installable",
-      name: "mattpocock-skills",
-      pluginRoot: tmp,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillDir], commands: [], agents: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    };
-
-    const { discovered, warnings } = await discoverPluginSkills({
-      pluginName: "mattpocock-skills",
-      resolved,
-    });
-
-    assert.deepEqual([...warnings], []);
-    assert.equal(discovered.length, 1);
-    assert.equal(discovered[0]!.sourceName, "implement");
-    assert.equal(discovered[0]!.skillDir, skillDir);
-    assert.equal(discovered[0]!.generatedName, "mattpocock-skills-implement");
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
-});
-
-test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill dir", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-dedup-"));
-  try {
-    const direct = path.join(tmp, "implement");
-    await mkdir(direct, { recursive: true });
-    await writeFile(path.join(direct, "SKILL.md"), "---\nname: implement\n---\nbody");
-
-    const container = path.join(tmp, "skills");
-    await mkdir(path.join(container, "implement"), { recursive: true });
-    await writeFile(
-      path.join(container, "implement", "SKILL.md"),
-      "---\nname: implement\n---\nbody",
-    );
-
-    const resolved: ResolvedPluginInstallable = {
-      state: "installable",
-      name: "mattpocock-skills",
-      pluginRoot: tmp,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [direct, container], commands: [], agents: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    };
-
-    const { discovered, warnings } = await discoverPluginSkills({
-      pluginName: "mattpocock-skills",
-      resolved,
-    });
-
-    assert.equal(discovered.length, 1);
-    assert.equal(discovered[0]!.skillDir, direct);
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /mattpocock-skills-implement/);
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
-});
-
-test("discoverPluginSkills reports the loss on the self skill dir when it arrives second", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-loses-"));
-  try {
-    // The sibling test above orders the array [direct, container], so the self
-    // skill dir always WINS and the loss is reported by the subdir-enumeration
-    // loop. That leaves `collectSelfSkillDir`'s own duplicate branch
-    // unexecuted. Reversing the order routes the loss through it instead.
-    //
-    // The two source names differ (`mattpocock-skills-implement` in the
-    // container, `implement` as the self skill dir) so the exact string below
-    // discriminates winner from loser; both elide to the same generated name.
-    const container = path.join(tmp, "skills");
-    await mkdir(path.join(container, "mattpocock-skills-implement"), { recursive: true });
-    await writeFile(
-      path.join(container, "mattpocock-skills-implement", "SKILL.md"),
-      "---\nname: implement\n---\nfrom-container",
-    );
-
-    const direct = path.join(tmp, "implement");
-    await mkdir(direct, { recursive: true });
-    await writeFile(path.join(direct, "SKILL.md"), "---\nname: implement\n---\nfrom-direct");
-
-    // A skill subdir UNDER the self skill dir, generating a name that collides
-    // with nothing. It is discovered only if the branch falls through to
-    // subdir enumeration, so `discovered.length` below also guards the
-    // branch's `return true`.
-    await mkdir(path.join(direct, "nested"), { recursive: true });
-    await writeFile(path.join(direct, "nested", "SKILL.md"), "---\nname: nested\n---\nbody");
-
-    const resolved: ResolvedPluginInstallable = {
-      state: "installable",
-      name: "mattpocock-skills",
-      pluginRoot: tmp,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [container, direct], commands: [], agents: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    };
-
-    const { discovered, warnings } = await discoverPluginSkills({
-      pluginName: "mattpocock-skills",
-      resolved,
-    });
-
-    assert.equal(discovered.length, 1, "the self skill dir loses and its subdirs stay unwalked");
-    assert.equal(discovered[0]!.sourceName, "mattpocock-skills-implement");
-    assert.equal(
-      discovered[0]!.skillDir,
-      path.join(container, "mattpocock-skills-implement"),
-      "the container entry wins",
-    );
-    assert.equal(warnings.length, 1);
-    assert.equal(
-      warnings[0],
-      `skill source "implement" in "${direct}" elides to generated name ` +
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills-implement",
+        skillDir: winningDirectory,
+      },
+    ],
+    warnings: [
+      `skill source "implement" in "${selfDirectory}" elides to generated name ` +
         `"mattpocock-skills-implement", already produced by skill source ` +
         `"mattpocock-skills-implement"; ignoring duplicate.`,
-    );
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
+    ],
+  });
 });

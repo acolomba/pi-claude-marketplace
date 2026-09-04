@@ -35,9 +35,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  */
 
 const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
-// The MANIFEST_FIELD_REASONS declaration moved to install.messaging.ts with
-// the rest of install's error-classification family; the gate follows the
-// constant rather than the folder it used to sit in.
+// The gate follows the MANIFEST_FIELD_REASONS declaration itself -- currently
+// in install.messaging.ts, alongside the rest of install's
+// error-classification family -- rather than pinning a fixed folder.
 const INSTALL_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 const LIST_ORCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 const LIST_EDGE_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";

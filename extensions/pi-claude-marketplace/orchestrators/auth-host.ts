@@ -124,8 +124,8 @@ export function buildAuthForHost(args: {
  * once per host.
  *
  * Shared by the install, reinstall, fetch, and `info --fetch` probes, and by
- * the pinned and unpinned arms within each. Those four previously carried
- * copies of this that their own comments described as mirrors of one another.
+ * the pinned and unpinned arms within each, so none of those call sites needs
+ * its own copy of this logic.
  * `update.ts` is the one git-plugin probe still outside it: it keeps a local
  * `buildBundle` because its cascade path may run with no `ctx` at all and
  * returns undefined rather than a bundle in that case.

@@ -1,0 +1,347 @@
+diff --git a/extensions/pi-claude-marketplace/domain/version.ts b/extensions/pi-claude-marketplace/domain/version.ts
+index 6a39fcb3..a7feb728 100644
+--- a/extensions/pi-claude-marketplace/domain/version.ts
++++ b/extensions/pi-claude-marketplace/domain/version.ts
+@@ -22,7 +22,7 @@ import { readdir, readFile } from "node:fs/promises";
+ import path from "node:path";
+
+ /** D-12: walk filter -- entries by name that are skipped at every level. */
+-export const HASH_WALK_SKIP = Object.freeze([".git", "node_modules", ".DS_Store"] as const);
++const HASH_WALK_SKIP = Object.freeze([".git", "node_modules", ".DS_Store"] as const);
+
+ const HASH_TRUNC = 12;
+
+@@ -33,16 +33,6 @@ export async function computeHashVersion(pluginRoot: string): Promise<string> {
+   return "hash-" + hash.digest("hex").slice(0, HASH_TRUNC);
+ }
+
+-/**
+- * D-77-01 / PURL-09: anchored-exact predicate for a git-source sha-version
+- * string. Matches EXACTLY `sha-` + 12 lowercase-hex chars -- the shape produced
+- * by `shaVersion` (`"sha-" + fullSha.slice(0, 12)`). Uppercase hex, wrong
+- * length, a `hash-` prefix, or an affixed character are all rejected so a
+- * malformed pseudo-sha is never silently rewritten into a misleading short SHA
+- * (mirrors the HASH_VERSION_RE hardening in shared/notify.ts).
+- */
+-export const SHA_VERSION_RE = /^sha-[0-9a-f]{12}$/;
+-
+ /**
+  * D-77-01 / PURL-09: build the git-source version string from a resolved commit
+  * sha -- `sha-` + the first 12 hex chars. Parallels the PI-7 `hash-<12hex>`
+@@ -53,11 +43,6 @@ export function shaVersion(fullSha: string): string {
+   return "sha-" + fullSha.slice(0, HASH_TRUNC);
+ }
+
+-/** D-77-01 / PURL-09: true iff `v` is exactly `sha-<12 lowercase hex>`. */
+-export function looksLikeShaVersion(v: string): boolean {
+-  return SHA_VERSION_RE.test(v);
+-}
+-
+ async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void> {
+   const dirAbs = rel === "" ? root : path.join(root, rel);
+   const entries = await readdir(dirAbs, { withFileTypes: true });
+diff --git a/extensions/pi-claude-marketplace/edge/completions/data.ts b/extensions/pi-claude-marketplace/edge/completions/data.ts
+index 7871ae33..23efb67a 100644
+--- a/extensions/pi-claude-marketplace/edge/completions/data.ts
++++ b/extensions/pi-claude-marketplace/edge/completions/data.ts
+@@ -430,7 +430,7 @@ async function getInfoPluginToMarketplacesMap(
+  * reinstall flows through the installed-only path; info is the union
+  * of every status across both scopes.
+  */
+-export async function getPluginToMarketplacesMap(
++async function getPluginToMarketplacesMap(
+   mode: PluginRefCompletionMode,
+   resolver: LocationsResolver,
+   options: PluginMapOptions = {},
+diff --git a/tests/domain/version.test.ts b/tests/domain/version.test.ts
+index 7d21e17a..14a9d11c 100644
+--- a/tests/domain/version.test.ts
++++ b/tests/domain/version.test.ts
+@@ -18,9 +18,6 @@ import { fileURLToPath } from "node:url";
+
+ import {
+   computeHashVersion,
+-  HASH_WALK_SKIP,
+-  looksLikeShaVersion,
+-  SHA_VERSION_RE,
+   shaVersion,
+ } from "../../extensions/pi-claude-marketplace/domain/version.ts";
+
+@@ -40,10 +37,14 @@ before(() => {
+   writeFileSync(SAMPLE_PLUGIN_DOT_GIT_HEAD, "ref: refs/heads/main\n");
+ });
+
+-test("PI-7 / D-12 HASH_WALK_SKIP is the locked walk-filter list", () => {
+-  // D-12 contract: exactly these three entries, in this order. Adding or
+-  // removing entries is a breaking change to the user-visible hash version.
+-  assert.deepEqual([...HASH_WALK_SKIP], [".git", "node_modules", ".DS_Store"]);
++test("PI-7 / D-12 computeHashVersion ignores .git metadata", async () => {
++  const before = await computeHashVersion(SAMPLE_PLUGIN);
++  writeFileSync(SAMPLE_PLUGIN_DOT_GIT_HEAD, "ref: refs/heads/changed\n");
++  try {
++    assert.equal(await computeHashVersion(SAMPLE_PLUGIN), before);
++  } finally {
++    writeFileSync(SAMPLE_PLUGIN_DOT_GIT_HEAD, "ref: refs/heads/main\n");
++  }
+ });
+
+ test("PI-7 computeHashVersion returns 12-hex prefix matching /^hash-[0-9a-f]{12}$/", async () => {
+@@ -89,18 +90,3 @@ const FULL_SHA = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+ test("PURL-09 / D-77-01 shaVersion returns sha- + first 12 hex of the full sha", () => {
+   assert.equal(shaVersion(FULL_SHA), "sha-a1b2c3d4e5f6");
+ });
+-
+-test("PURL-09 / D-77-01 SHA_VERSION_RE is the anchored-exact 12-lowercase-hex shape", () => {
+-  assert.deepEqual(SHA_VERSION_RE, /^sha-[0-9a-f]{12}$/);
+-});
+-
+-test("PURL-09 / D-77-01 looksLikeShaVersion accepts exactly sha-<12 lowercase hex>", () => {
+-  assert.equal(looksLikeShaVersion("sha-a1b2c3d4e5f6"), true);
+-});
+-
+-test("PURL-09 / D-77-01 looksLikeShaVersion rejects uppercase, wrong length, hash-, and semver", () => {
+-  assert.equal(looksLikeShaVersion("sha-A1B2C3D4E5F6"), false);
+-  assert.equal(looksLikeShaVersion("sha-a1b2"), false);
+-  assert.equal(looksLikeShaVersion("hash-a1b2c3d4e5f6"), false);
+-  assert.equal(looksLikeShaVersion("1.0.0"), false);
+-});
+diff --git a/tests/edge/completions/data.test.ts b/tests/edge/completions/data.test.ts
+index 68abd7bd..f270c72b 100644
+--- a/tests/edge/completions/data.test.ts
++++ b/tests/edge/completions/data.test.ts
+@@ -8,7 +8,6 @@ import {
+   getMarketplaceCompletions,
+   getMarketplaceNamesAcrossScopes,
+   getPluginRefCompletions,
+-  getPluginToMarketplacesMap,
+ } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+
+@@ -85,6 +84,18 @@ async function makeResolver(spec: {
+   };
+ }
+
++async function pluginLabels(
++  mode: Parameters<typeof getPluginRefCompletions>[0],
++  resolver: LocationsResolver,
++  options: { targetScope?: Scope; partial?: boolean } = {},
++): Promise<string[]> {
++  const items = await getPluginRefCompletions(mode, "", mode, resolver, {
++    allowMarketplaceOnly: false,
++    ...options,
++  });
++  return items.map((item) => item.label);
++}
++
+ // ---------------------------------------------------------------------------
+ // Cache-backed accessors.
+ // ---------------------------------------------------------------------------
+@@ -111,7 +122,7 @@ test("getMarketplaceNamesAcrossScopes :: dedupes overlapping names from user and
+   }
+ });
+
+-test("getPluginToMarketplacesMap :: install mode is available-only for target scope", async () => {
++test("getPluginRefCompletions :: install mode is available-only for target scope", async () => {
+   const fixture = await makeResolver({
+     state: { user: { mp: {} }, project: {} },
+     manifests: {
+@@ -126,16 +137,13 @@ test("getPluginToMarketplacesMap :: install mode is available-only for target sc
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("install", fixture.resolver);
+-    assert.equal(map.has("p-installed"), false);
+-    assert.deepEqual(map.get("p-avail"), ["mp"]);
+-    assert.equal(map.has("p-unavail"), false);
++    assert.deepEqual(await pluginLabels("install", fixture.resolver), ["p-avail@mp"]);
+   } finally {
+     await fixture.cleanup();
+   }
+ });
+
+-test("getPluginToMarketplacesMap :: uninstall mode keeps only installed", async () => {
++test("getPluginRefCompletions :: uninstall mode keeps only installed", async () => {
+   const fixture = await makeResolver({
+     state: { user: { mp: {} }, project: {} },
+     manifests: {
+@@ -150,16 +158,13 @@ test("getPluginToMarketplacesMap :: uninstall mode keeps only installed", async
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver);
+-    assert.deepEqual(map.get("p-installed"), ["mp"]);
+-    assert.equal(map.has("p-avail"), false);
+-    assert.equal(map.has("p-unavail"), false);
++    assert.deepEqual(await pluginLabels("uninstall", fixture.resolver), ["p-installed@mp"]);
+   } finally {
+     await fixture.cleanup();
+   }
+ });
+
+-test("getPluginToMarketplacesMap :: update mode keeps only installed", async () => {
++test("getPluginRefCompletions :: update mode keeps only installed", async () => {
+   const fixture = await makeResolver({
+     state: { user: { mp: {} }, project: {} },
+     manifests: {
+@@ -173,15 +178,13 @@ test("getPluginToMarketplacesMap :: update mode keeps only installed", async ()
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("update", fixture.resolver);
+-    assert.deepEqual(map.get("p-installed"), ["mp"]);
+-    assert.equal(map.has("p-avail"), false);
++    assert.deepEqual(await pluginLabels("update", fixture.resolver), ["p-installed@mp"]);
+   } finally {
+     await fixture.cleanup();
+   }
+ });
+
+-test("getPluginToMarketplacesMap :: cross-marketplace plugin appears with both marketplace names", async () => {
++test("getPluginRefCompletions :: cross-marketplace plugin offers both marketplace names", async () => {
+   const fixture = await makeResolver({
+     state: {
+       user: { "mp-a": {}, "mp-b": {} },
+@@ -196,12 +199,14 @@ test("getPluginToMarketplacesMap :: cross-marketplace plugin appears with both m
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver, {
+-      targetScope: "user",
+-    });
+-    const mps = map.get("shared");
+-    assert.ok(mps !== undefined);
+-    assert.deepEqual([...mps].sort(), ["mp-a", "mp-b"]);
++    const items = await getPluginRefCompletions(
++      "uninstall",
++      "shared@",
++      "uninstall",
++      fixture.resolver,
++      { allowMarketplaceOnly: false, targetScope: "user" },
++    );
++    assert.deepEqual(items.map((item) => item.label).sort(), ["shared@mp-a", "shared@mp-b"]);
+   } finally {
+     await fixture.cleanup();
+   }
+@@ -225,9 +230,7 @@ test("CMP-7 :: install completion excludes plugins already installed in the targ
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("install", fixture.resolver);
+-    assert.equal(map.has("already"), false);
+-    assert.deepEqual(map.get("fresh"), ["mp"]);
++    assert.deepEqual(await pluginLabels("install", fixture.resolver), ["fresh@mp"]);
+   } finally {
+     await fixture.cleanup();
+   }
+@@ -242,10 +245,9 @@ test("CMP-8 :: project install completion falls back to user marketplace when pr
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("install", fixture.resolver, {
+-      targetScope: "project",
+-    });
+-    assert.deepEqual(map.get("fallback"), ["mp"]);
++    assert.deepEqual(await pluginLabels("install", fixture.resolver, { targetScope: "project" }), [
++      "fallback@mp",
++    ]);
+   } finally {
+     await fixture.cleanup();
+   }
+@@ -260,11 +262,9 @@ test("CMP-8 :: project marketplace shadows same-named user marketplace for insta
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("install", fixture.resolver, {
+-      targetScope: "project",
+-    });
+-    assert.deepEqual(map.get("project-only"), ["mp"]);
+-    assert.equal(map.has("user-only"), false);
++    assert.deepEqual(await pluginLabels("install", fixture.resolver, { targetScope: "project" }), [
++      "project-only@mp",
++    ]);
+   } finally {
+     await fixture.cleanup();
+   }
+@@ -294,7 +294,7 @@ test("getPluginRefCompletions :: plugin@ prefix completes matching marketplace s
+   }
+ });
+
+-test("getPluginToMarketplacesMap :: fetch, info, and partial modes keep their status contracts", async () => {
++test("getPluginRefCompletions :: fetch, info, and partial modes keep their status contracts", async () => {
+   const fixture = await makeResolver({
+     state: {
+       user: { mp: {} },
+@@ -318,31 +318,31 @@ test("getPluginToMarketplacesMap :: fetch, info, and partial modes keep their st
+     },
+   });
+   try {
+-    const fetched = await getPluginToMarketplacesMap("fetch", fixture.resolver, {
+-      targetScope: "user",
+-    });
+-    assert.deepEqual([...fetched.keys()].sort(), [
+-      "available",
+-      "partialAvailable",
+-      "remote",
+-      "unavailable",
+-    ]);
+-    assert.equal(fetched.has("installed"), false);
+-    assert.equal(fetched.has("projectOnly"), false);
++    assert.deepEqual(
++      (await pluginLabels("fetch", fixture.resolver, { targetScope: "user" })).sort(),
++      ["available@mp", "partialAvailable@mp", "remote@mp", "unavailable@mp"],
++    );
+
+-    const info = await getPluginToMarketplacesMap("info", fixture.resolver);
+-    assert.equal(info.size, 8);
+-    assert.deepEqual(info.get("projectOnly"), ["projectMp"]);
++    assert.deepEqual((await pluginLabels("info", fixture.resolver)).sort(), [
++      "available@mp",
++      "installed@mp",
++      "partialAvailable@mp",
++      "partialUpgradable@mp",
++      "projectOnly@projectMp",
++      "remote@mp",
++      "unavailable@mp",
++      "upgradable@mp",
++    ]);
+
+-    const partialInstall = await getPluginToMarketplacesMap("install", fixture.resolver, {
+-      partial: true,
+-    });
+-    assert.deepEqual([...partialInstall.keys()].sort(), ["available", "partialAvailable"]);
++    assert.deepEqual((await pluginLabels("install", fixture.resolver, { partial: true })).sort(), [
++      "available@mp",
++      "partialAvailable@mp",
++    ]);
+
+-    const partialUpdate = await getPluginToMarketplacesMap("update", fixture.resolver, {
+-      partial: true,
+-    });
+-    assert.deepEqual([...partialUpdate.keys()].sort(), ["partialUpgradable", "upgradable"]);
++    assert.deepEqual((await pluginLabels("update", fixture.resolver, { partial: true })).sort(), [
++      "partialUpgradable@mp",
++      "upgradable@mp",
++    ]);
+   } finally {
+     await fixture.cleanup();
+   }
+@@ -413,7 +413,7 @@ test("getPluginRefCompletions :: marketplace-only completion obeys its gate and
+   }
+ });
+
+-test("getPluginToMarketplacesMap :: manifest failures soft-fail without hiding healthy rows", async () => {
++test("getPluginRefCompletions :: manifest failures soft-fail without hiding healthy rows", async () => {
+   const fixture = await makeResolver({
+     state: { user: { broken: {}, healthy: {} }, project: {} },
+     manifests: {
+@@ -422,9 +422,7 @@ test("getPluginToMarketplacesMap :: manifest failures soft-fail without hiding h
+     },
+   });
+   try {
+-    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver);
+-    assert.deepEqual(map.get("ok"), ["healthy"]);
+-    assert.equal(map.has("broken"), false);
++    assert.deepEqual(await pluginLabels("uninstall", fixture.resolver), ["ok@healthy"]);
+   } finally {
+     await fixture.cleanup();
+   }

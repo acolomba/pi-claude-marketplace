@@ -22,7 +22,7 @@ original deferral record is retained below for the audit trail.
 ## Pre-existing test failure: reinstall README documentation gap
 
 - **Test:** `tests/architecture/reinstall-docs.test.ts` -- "PRL-01/03/04/05/13/14/15/16: README documents reinstall command forms and semantics"
-- **Status:** PRE-EXISTING failure on the `features/v1.10-error-attribution` baseline (commit `f000843~1`).
+- **Status:** acknowledged
 - **Evidence:** `git show f000843~1:README.md | grep -c "reinstall pr-review-toolkit@claude-plugins-official"` returns `0`; the test file is byte-unchanged by this plan (`git diff f000843~1 HEAD -- tests/architecture/reinstall-docs.test.ts` is empty).
 - **Cause:** `README.md` lacks the v1.1 reinstall command documentation block the test asserts. README was last touched by an unrelated docs-refresh commit (`14736e0`), not by any v1.11 / Phase-50 work.
 - **Impact on this plan:** none -- this plan touches only `shared/notify.ts`, the notification catalog, and notification byte tests. The notification-grammar work is fully GREEN (catalog-uat, notify-v2, notify-grammar-invariant, cross-op-convergence, and all orchestrator/edge byte tests pass).

@@ -105,7 +105,6 @@ import {
   MarketplaceUpdateError,
   PluginShapeError,
   composeErrorWithCauseChain,
-  errorMessage,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
@@ -166,7 +165,7 @@ export interface UpdateMarketplaceOptions {
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
+   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -189,7 +188,7 @@ export interface UpdateAllMarketplacesOptions {
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
+   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -702,7 +701,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       status: "failed",
       name,
       reasons: typedReasons ?? (["network unreachable"] as const),
-      cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      cause: err as Error,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -723,8 +722,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
     // pre-guard already emitted the standalone `{marketplace not added}` notification, so
     // return silently -- NO second contradictory notification, and crucially NO
-    // lying `{network unreachable}` (the raw MarketplaceNotFoundError no longer
-    // escapes; mirrors remove.ts).
+    // lying `{network unreachable}` (the raw MarketplaceNotFoundError does not
+    // escape; mirrors remove.ts).
     return;
   }
 

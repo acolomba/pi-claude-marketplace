@@ -5,9 +5,9 @@
 // the degrade path and the name-rewrite path need the same two questions
 // answered about a block: where it ends, and how far one key's value spans.
 //
-// Both files previously carried byte-identical copies of these, which meant a
-// fix to the span rule had to be made twice or the two paths would disagree
-// about the same bytes.
+// This is the single shared module for both paths, so a fix to the span rule
+// lands once instead of risking the degrade path and the name-rewrite path
+// disagreeing about the same bytes.
 
 /** Index of the closing `---` fence (frontmatter block end), or `lines.length`. */
 export function frontmatterBlockEnd(lines: readonly string[]): number {

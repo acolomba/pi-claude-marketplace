@@ -15,3 +15,4 @@ scope boundary: only auto-fix issues directly caused by the current task).
   reason-classifier change (which touches only
   `orchestrators/plugin/install.ts::narrowResolverReasons`). The full unit suite
   (`npm test`) is green (3234 pass, 1 skip); typecheck + lint + format are green.
+  status: acknowledged

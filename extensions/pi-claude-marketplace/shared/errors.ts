@@ -9,8 +9,8 @@ export function errorMessage(err: unknown): string {
  * what every errno-dispatching narrower keys on, and `instanceof` cannot see
  * it because Node throws plain `Error` objects with the field attached.
  *
- * One definition: byte-identical copies previously sat in `uninstall.ts` and
- * `marketplace/remove.ts`, each private to its own narrower.
+ * One definition, shared by every errno-dispatching narrower in the codebase
+ * instead of each keeping a private copy.
  */
 export function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return (
@@ -29,9 +29,8 @@ export function assertNever(x: never): never {
 
 /**
  * Depth bound shared by every `Error.cause` walk in the codebase (T-13-04 DoS
- * mitigation). One constant rather than a literal per walker: three walkers
- * previously each declared their own `MAX_DEPTH = 5` and each documented
- * itself as "mirroring" the others, which is a contract maintained by comment.
+ * mitigation). One constant rather than a literal per walker, so a change to
+ * the bound cannot drift out of sync across walkers.
  */
 const CAUSE_CHAIN_MAX_DEPTH = 5;
 
@@ -229,11 +228,9 @@ export class MarketplaceUpdateError extends Error {
  * D-48-B: typed marketplace-manifest parse/validation failure.
  *
  * Thrown by `domain/manifest.ts::loadMarketplaceManifestUncached` for BOTH
- * malformed JSON (formerly a bare `SyntaxError` from `JSON.parse`) and a
- * schema-invalid manifest (formerly a bare `Error("marketplace.json schema
- * invalid: ...")`). Giving the failure a typed class lets consumers narrow on
- * `instanceof` instead of substring-matching the message text or sniffing for
- * `SyntaxError`:
+ * malformed JSON and a schema-invalid manifest. Giving the failure a typed
+ * class lets consumers narrow on `instanceof` instead of substring-matching
+ * the message text or sniffing for `SyntaxError`:
  *   - `orchestrators/marketplace/add.ts::classifyAddError` -> `invalid manifest`
  *     (ATTR-07).
  *   - `orchestrators/marketplace/update.ts::reasonsFromCascadeError` ->

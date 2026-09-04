@@ -12,7 +12,6 @@
 // `renderPluginRow` `updated` / `skipped` / `failed` arms, so dispatch is
 // byte-identical.
 
-import { assertNever } from "../../shared/errors.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import {
   ICON_INSTALLED,
@@ -212,11 +211,6 @@ export function outcomeToCascadePluginMessage(
         severity: "error",
         needsReload: false,
       };
-    default:
-      // Exhaustiveness guard. A new partition added to PluginUpdateOutcome
-      // without updating this switch fails at compile time on
-      // `assertNever(outcome)`.
-      return assertNever(outcome);
   }
 }
 

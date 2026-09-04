@@ -8,8 +8,8 @@
  *
  * Locked decisions:
  *   - D-32-01: file lives in domain/ (auth policy is domain-tier).
- *   - D-32-02: injectable DeviceFlowHttp seam (DEFAULT_DEVICE_FLOW_HTTP uses
- *     globalThis.fetch; tests inject makeMockDeviceFlowHttp).
+ *   - D-32-02: injectable DeviceFlowHttp seam. The default implementation
+ *     uses globalThis.fetch.
  *   - D-32-03: the OAuth App client_id is a PUBLIC compile-time constant
  *     (Device Flow has no client_secret; client_id is safe to commit per
  *     RFC 8628 §3.1 and GitHub OAuth Apps docs). It now lives on the
@@ -82,10 +82,8 @@ export type PollResult =
   | { kind: "unexpected"; error: string; description?: string };
 
 /**
- * Injectable HTTP seam. The default impl (DEFAULT_DEVICE_FLOW_HTTP) calls
- * `globalThis.fetch` against github.com; tests inject makeMockDeviceFlowHttp
- * from tests/helpers/device-flow-mock.ts so the unit suite never hits the
- * network.
+ * Injectable HTTP seam. The default implementation calls `globalThis.fetch`
+ * against the selected provider.
  */
 export interface DeviceFlowHttp {
   /**
@@ -123,7 +121,7 @@ export interface InitiateDeviceFlowOpts {
   credentialOps: CredentialOps;
   /** Pre-bound ctx.ui.notify callback per D-32-04. */
   notifyFn: NotifyFn;
-  /** Defaults to DEFAULT_DEVICE_FLOW_HTTP; tests inject a mock. */
+  /** Defaults to the fetch-backed adapter for the selected provider. */
   http?: DeviceFlowHttp;
   /**
    * Provider descriptor supplying endpoints/clientId/scope/credentialFrom
@@ -131,8 +129,10 @@ export interface InitiateDeviceFlowOpts {
    * compile and behave byte-identically.
    */
   provider?: GitAuthProvider;
-  /** Optional abort signal. Future-proofing; currently ignored. */
+  /** Optional abort signal for the polling wait. */
   signal?: AbortSignal;
+  /** Optional polling wait. Defaults to the Node timer implementation. */
+  waitForPoll?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }
 
 /**
@@ -297,7 +297,7 @@ async function pollTokenImpl(
  * Build the real fetch-backed DeviceFlowHttp for a provider. The URLs are
  * captured in closures so the PUBLIC requestCode/pollToken signatures stay
  * (clientId, scope) / (clientId, deviceCode, intervalSec) -- the mock seam in
- * tests/helpers/device-flow-mock.ts needs no change.
+ * tests/domain/device-flow-fake.ts needs no change.
  */
 function makeDeviceFlowHttp(deviceCodeUrl: string, tokenUrl: string): DeviceFlowHttp {
   return {
@@ -306,11 +306,6 @@ function makeDeviceFlowHttp(deviceCodeUrl: string, tokenUrl: string): DeviceFlow
       pollTokenImpl(tokenUrl, clientId, deviceCode, intervalSec),
   };
 }
-
-export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = makeDeviceFlowHttp(
-  GITHUB_PROVIDER.deviceCodeUrl,
-  GITHUB_PROVIDER.tokenUrl,
-);
 
 /**
  * Run the GitHub Device Flow against the injected DeviceFlowHttp and persist
@@ -345,6 +340,10 @@ async function safePollToken(
   }
 }
 
+async function waitForPoll(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  await sleepMs(milliseconds, undefined, signal === undefined ? undefined : { signal });
+}
+
 async function runPollLoop(
   http: DeviceFlowHttp,
   provider: GitAuthProvider,
@@ -356,11 +355,7 @@ async function runPollLoop(
 
   while (Date.now() < deadlineMs) {
     try {
-      await sleepMs(
-        currentIntervalSec * 1000,
-        undefined,
-        opts.signal === undefined ? undefined : { signal: opts.signal },
-      );
+      await (opts.waitForPoll ?? waitForPoll)(currentIntervalSec * 1000, opts.signal);
     } catch {
       return { ok: false, reason: "Device Flow cancelled.", authAttempted: true };
     }

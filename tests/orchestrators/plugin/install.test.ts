@@ -1,18 +1,11 @@
 import assert from "node:assert/strict";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+
+import { Type } from "typebox";
 
 import {
   GENERATED_AGENT_MARKER,
@@ -22,6 +15,8 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { PLUGIN_ENTRY_VALIDATOR } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -29,29 +24,214 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
-  classifyEntityShapeError,
-  classifyInstallFailure,
-  composeInstallFailureMessage,
-  narrowResolverReasons,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-import {
   installPlugin,
+  runInstallLedger,
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
+  STATE_VALIDATOR,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { retryTree } from "./scope-tree-inventory.ts";
+
+import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type { TestContext } from "node:test";
+
+const require = createRequire(import.meta.url);
+const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
+
+function observeRetryBridgeSchedule(
+  t: TestContext,
+  targets: {
+    readonly agentsStagingDir: string;
+    readonly agentTarget?: string;
+    readonly commandsStagingDir: string;
+    readonly commandTarget?: string;
+    readonly skillsStagingDir: string;
+    readonly skillTarget?: string;
+    readonly undoFault?: { enabled: boolean; readonly message: string; readonly target: string };
+  },
+  schedule: { current: string[] },
+): () => void {
+  const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+  const originalRename = filesystemPromises.rename.bind(filesystemPromises);
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+  const phaseForStagingPath = (target: string): "agents" | "commands" | "skills" | undefined => {
+    if (target.startsWith(`${targets.skillsStagingDir}${path.sep}`)) {
+      return "skills";
+    }
+
+    if (target.startsWith(`${targets.commandsStagingDir}${path.sep}`)) {
+      return "commands";
+    }
+
+    if (target.startsWith(`${targets.agentsStagingDir}${path.sep}`)) {
+      return "agents";
+    }
+
+    return undefined;
+  };
+
+  const recordOnce = (event: string): void => {
+    if (schedule.current.at(-1) !== event) {
+      schedule.current.push(event);
+    }
+  };
+
+  const mkdirMock = t.mock.method(
+    filesystemPromises,
+    "mkdir",
+    async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+      const phase = phaseForStagingPath(String(args[0]));
+      if (phase !== undefined) {
+        recordOnce(`prepare:${phase}`);
+      }
+
+      return originalMkdir(...args);
+    },
+  );
+  const renameMock = t.mock.method(
+    filesystemPromises,
+    "rename",
+    async (...args: Parameters<typeof filesystemPromises.rename>) => {
+      const destination = String(args[1]);
+      if (destination === targets.skillTarget) {
+        schedule.current.push("commit:skills");
+      }
+
+      if (destination === targets.commandTarget) {
+        schedule.current.push("commit:commands");
+      }
+
+      if (destination === targets.agentTarget) {
+        schedule.current.push("commit:agents");
+      }
+
+      return originalRename(...args);
+    },
+  );
+  const rmMock = t.mock.method(
+    filesystemPromises,
+    "rm",
+    async (...args: Parameters<typeof filesystemPromises.rm>) => {
+      const target = String(args[0]);
+      if (target === targets.skillTarget) {
+        schedule.current.push("undo:skills");
+      }
+
+      if (target === targets.commandTarget) {
+        schedule.current.push("undo:commands");
+      }
+
+      if (target === targets.agentTarget) {
+        schedule.current.push("undo:agents");
+      }
+
+      if (targets.undoFault?.enabled === true && target === targets.undoFault.target) {
+        throw new Error(targets.undoFault.message);
+      }
+
+      return originalRm(...args);
+    },
+  );
+  const unlinkMock = t.mock.method(
+    filesystemPromises,
+    "unlink",
+    async (...args: Parameters<typeof filesystemPromises.unlink>) => {
+      const target = String(args[0]);
+      if (target === targets.commandTarget) {
+        schedule.current.push("undo:commands");
+      }
+
+      if (target === targets.agentTarget) {
+        schedule.current.push("undo:agents");
+      }
+
+      if (targets.undoFault?.enabled === true && target === targets.undoFault.target) {
+        throw new Error(targets.undoFault.message);
+      }
+
+      return originalUnlink(...args);
+    },
+  );
+  syncBuiltinESMExports();
+
+  return () => {
+    unlinkMock.mock.restore();
+    rmMock.mock.restore();
+    renameMock.mock.restore();
+    mkdirMock.mock.restore();
+    syncBuiltinESMExports();
+  };
+}
+
+/** The doubled form `installPlugin` renders into a failed outcome's `cause`. */
+function retryCauseChain(message: string): string {
+  return `${message}\n\ncause: ${message}`;
+}
+
+function assertRetryFailure(
+  outcome: Awaited<ReturnType<typeof installPlugin>>,
+  expectedMessage: string,
+): void {
+  assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
+  assert.strictEqual(outcome.status, "failed");
+  assert.ok(outcome.error instanceof Error);
+  assert.strictEqual(outcome.error.message, expectedMessage);
+  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+}
+
+/**
+ * Variant for the two failure messages this suite cannot author end to end:
+ * the staging root UUID a bridge generates per call, and V8's JSON position
+ * text. `expectedPrefix` is a case-authored literal covering every byte the
+ * module under test is responsible for, and `expectedTail` pins the shape of
+ * the remainder. Returns the two halves rejoined so a case that renders the
+ * cause into a notification asserts against that rather than against the raw
+ * actual message.
+ */
+function assertRetryPartialFailure(
+  outcome: Awaited<ReturnType<typeof installPlugin>>,
+  expectedPrefix: string,
+  expectedTail: RegExp,
+): string {
+  assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
+  assert.strictEqual(outcome.status, "failed");
+  assert.ok(outcome.error instanceof Error);
+  assert.strictEqual(outcome.error.message.slice(0, expectedPrefix.length), expectedPrefix);
+  const tail = outcome.error.message.slice(expectedPrefix.length);
+  assert.match(tail, expectedTail);
+  const expectedMessage = `${expectedPrefix}${tail}`;
+  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+  return expectedMessage;
+}
+
+/** The `randomUUID()` staging-root suffix each bridge appends to its dir. */
+const RETRY_STAGING_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'$/;
+
+/** `ENOTDIR` prefix for a staging root whose parent was replaced by a file. */
+function retryStagingMkdirPrefix(stagingDir: string): string {
+  return `ENOTDIR: not a directory, mkdir '${stagingDir}${path.sep}`;
+}
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
 //
@@ -85,7 +265,21 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `test tool ${name}`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      origin: "top-level",
+      path: `/test/tools/${name}.ts`,
+      scope: "temporary",
+      source: "test",
+    },
+  } satisfies ToolInfo;
+}
+
+function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
@@ -93,14 +287,14 @@ function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
   const notifications: NotifyRecord[] = [];
   const ctx = {
     ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+      notify(message: string, severity?: string): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
-  } as unknown as ExtensionContext;
+  } as ExtensionContext;
   const pi = {
-    getAllTools: piOverrides?.getAllTools ?? ((): unknown[] => []),
-  } as unknown as ExtensionAPI;
+    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
+  } as ExtensionAPI;
   return { ctx, pi, notifications };
 }
 
@@ -126,46 +320,10 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function filesBelow(root: string): Promise<string[]> {
-  let entries;
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
-    }
-
-    throw err;
-  }
-
-  const files: string[] = [];
-  for (const entry of entries) {
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await filesBelow(entryPath)));
-    } else {
-      files.push(entryPath);
-    }
-  }
-
-  return files;
-}
-
 interface SeededPlugin {
   pluginRoot: string;
   marketplaceRoot: string;
   manifestPath: string;
-}
-
-async function writeWorkflowFixtures(
-  pluginRoot: string,
-  workflows: readonly { sourceName: string; body?: string }[],
-): Promise<void> {
-  for (const workflow of workflows) {
-    const workflowsDir = path.join(pluginRoot, "workflows");
-    await mkdir(workflowsDir, { recursive: true });
-    await writeFile(path.join(workflowsDir, workflow.sourceName), workflow.body ?? "steps: []\n");
-  }
 }
 
 /**
@@ -185,7 +343,6 @@ async function writePluginComponents(
     agents?: { sourceName: string; frontmatterName?: string; tools?: string; body?: string }[];
     mcpServers?: Record<string, unknown>;
     hooksJson?: object;
-    workflows?: { sourceName: string; body?: string }[];
   },
 ): Promise<void> {
   for (const skill of opts.skills ?? []) {
@@ -230,8 +387,6 @@ async function writePluginComponents(
     await mkdir(hooksDir, { recursive: true });
     await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
   }
-
-  await writeWorkflowFixtures(pluginRoot, opts.workflows ?? []);
 }
 
 /**
@@ -438,8 +593,6 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * orchestrators run their parsed-config-cache mutation path.
    */
   hooksJson?: object;
-  /** Workflow source fixtures. Production code must not read or materialize these files. */
-  workflows?: { sourceName: string; body?: string }[];
   /**
    * DFEN-08: additional entries seeded into the SAME marketplace manifest
    * beside `pluginName`, each with its own plugin tree carrying one skill.
@@ -1082,7 +1235,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       // `disabled` render arm ever threaded the real soft-dep flags instead of
       // hard-coding them false, this fixture is the one that would emit
       // `{requires pi-subagents, requires pi-mcp}` and fail below.
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -1237,7 +1390,7 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -2450,7 +2603,7 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
         agents: [{ sourceName: "bot" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -2495,7 +2648,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
         mcpServers: { server1: { command: "node" } },
       });
 
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [] });
+      const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
         pi,
@@ -2995,29 +3148,14 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       // project-only marketplace and the CMP-3 fallback is user->? only (it
       // does NOT fall back project, so the user-target miss is terminal).
       // The marketplace is "not added in user", surfaced via the standalone
-      // `marketplace-not-added` variant with the `[user]` bracket -- NOT
-      // `{not in manifest}` on a plugin row.
-      //
-      // CMP-4 / SCOPE-01: the container DOES exist at project scope, so the
-      // brace carries the cross-scope structural token INSTEAD of `marketplace not added`.
-      // Byte-exact, and still a two-block surface -- the token rides the row,
-      // so no third block and no prose trailer.
+      // `marketplace-not-added` variant with the `[user]` bracket and the
+      // scope-qualified reason naming where the container actually sits --
+      // NOT `{not in manifest}` on a plugin row.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n" +
-          "⊘ mp [user] (failed) {marketplace not added to user scope}",
-      );
-      // The two structural claims are mutually exclusive: the container either
-      // does not exist or exists elsewhere, never both.
-      assert.ok(
-        !(notifications[0]?.message ?? "").includes("{marketplace not added}"),
-        "the cross-scope token REPLACES `marketplace not added`; it must not join it",
-      );
-      assert.ok(
-        !(notifications[0]?.message ?? "").includes("--local"),
-        "the scope miss must not name --local (orthogonal axis)",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
       );
 
       const userAfter = await loadState(userLocations.extensionRoot);
@@ -3511,17 +3649,23 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
 // Orchestrated mode: post-commit warning collection
 // ───────────────────────────────────────────────────────────────────────────
 
-test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommitWarnings has deferred message", async () => {
-  // Gap: dropMarketplaceCache try/catch in orchestrated mode -- EISDIR from
-  // the unlink call is re-thrown by dropMarketplaceCache (not ENOENT), so the
-  // catch appends the 'completion cache refresh deferred' string to
-  // postCommitWarnings instead of firing notifyWarning.
+test("retry proof: install: completion-cache maintenance failure stays installed and retry is idempotent", async (t) => {
+  // The injected `unlink` refusal is not ENOENT, so dropMarketplaceCache
+  // re-throws and the orchestrator appends the deferral to postCommitWarnings
+  // instead of firing notifyWarning. Cache eviction is optimization-only, so
+  // the install stays committed and the retry is the already-installed arm.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-cache-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-cache-"));
+    const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
     try {
+      // arrange
       resetCompletionCache();
+      t.after(() => {
+        resetCompletionCache();
+      });
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
@@ -3529,16 +3673,46 @@ test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommit
         skills: [{ sourceName: "tool" }],
       });
 
-      // Pre-create a DIRECTORY at the pluginCacheFile path. When
-      // dropMarketplaceCache calls unlink() on it the OS returns EISDIR
-      // (not ENOENT), so dropMarketplaceCache re-throws. The orchestrator
-      // catches it and appends the deferred message to postCommitWarnings.
       const cacheFilePath = await locations.pluginCacheFile("mp");
-      await mkdir(path.dirname(cacheFilePath), { recursive: true });
-      await mkdir(cacheFilePath, { recursive: true });
+      const firstSchedule: string[] = [];
+      let cacheFault = true;
+      unlinkMock = t.mock.method(
+        filesystemPromises,
+        "unlink",
+        async (...args: Parameters<typeof filesystemPromises.unlink>) => {
+          if (String(args[0]) === cacheFilePath) {
+            firstSchedule.push(
+              cacheFault
+                ? "post-commit:completion-cache:failed"
+                : "post-commit:completion-cache:ok",
+            );
+            if (cacheFault) {
+              throw new Error("cache maintenance denied");
+            }
+          }
 
-      const { ctx, pi } = makeCtx();
-      const outcome = await installPlugin({
+          return originalUnlink(...args);
+        },
+      );
+      syncBuiltinESMExports();
+
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      cacheFault = false;
+      const second = await installPlugin({
         ctx,
         pi,
         scope: "project",
@@ -3548,28 +3722,59 @@ test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommit
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(outcome.status, "installed");
-      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
-      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
-      assert.ok(
-        warnings?.some((w) => w.includes("completion cache refresh deferred")),
-        `expected 'completion cache refresh deferred' in warnings; got: ${JSON.stringify(warnings)}`,
+      // assert
+      assert.deepStrictEqual(first, {
+        declaresAgents: false,
+        declaresMcp: false,
+        postCommitWarnings: [
+          'Plugin "hello" installed; completion cache refresh deferred: cache maintenance denied',
+        ],
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["post-commit:completion-cache:failed"]);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
       );
     } finally {
+      unlinkMock?.mock.restore();
+      syncBuiltinESMExports();
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("Orchestrated-pluginDataDir-failure: mkdir failure -> postCommitWarnings has deferred message", async () => {
+test("retry proof: install: plugin-data-dir maintenance failure stays installed and retry is idempotent", async (t) => {
   // Gap: orchestrated variant of AS-6 -- pluginDataDir mkdir failure appends
   // 'data dir creation deferred' to postCommitWarnings instead of calling
   // notifyWarning directly.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-data-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-data-"));
+    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
@@ -3577,37 +3782,82 @@ test("Orchestrated-pluginDataDir-failure: mkdir failure -> postCommitWarnings ha
         skills: [{ sourceName: "tool" }],
       });
 
-      // Make the parent of pluginDataDir read-only so mkdir(pluginDataDir)
-      // fails. The parent path is <dataRoot>/mp which we create and chmod.
-      await mkdir(path.join(locations.dataRoot, "mp"), { recursive: true });
-      await chmod(path.join(locations.dataRoot, "mp"), 0o555);
+      const pluginDataDir = await locations.pluginDataDir("mp", "hello");
+      const firstSchedule: string[] = [];
+      let dataDirFault = true;
+      mkdirMock = t.mock.method(
+        filesystemPromises,
+        "mkdir",
+        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+          if (String(args[0]) === pluginDataDir) {
+            firstSchedule.push(
+              dataDirFault ? "post-commit:data-dir:failed" : "post-commit:data-dir:ok",
+            );
+            if (dataDirFault) {
+              throw new Error("data directory maintenance denied");
+            }
+          }
 
-      const { ctx, pi } = makeCtx();
-      let outcome;
-      try {
-        outcome = await installPlugin({
-          ctx,
-          pi,
-          scope: "project",
-          cwd,
-          marketplace: "mp",
-          plugin: "hello",
-          notifications: { mode: "orchestrated" },
-        });
-      } finally {
-        // Restore permissions so cleanup can remove the temp dir.
-        await chmod(path.join(locations.dataRoot, "mp"), 0o755);
-      }
-
-      assert.ok(outcome !== undefined);
-      assert.equal(outcome.status, "installed");
-      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
-      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
-      assert.ok(
-        warnings?.some((w) => w.includes("data dir creation deferred")),
-        `expected 'data dir creation deferred' in warnings; got: ${JSON.stringify(warnings)}`,
+          return originalMkdir(...args);
+        },
       );
+      syncBuiltinESMExports();
+
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      dataDirFault = false;
+      const second = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(first, {
+        declaresAgents: false,
+        declaresMcp: false,
+        postCommitWarnings: [
+          `Plugin "hello" installed; data dir creation deferred at ${pluginDataDir}: data directory maintenance denied`,
+        ],
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["post-commit:data-dir:failed"]);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
     } finally {
+      mkdirMock?.mock.restore();
+      syncBuiltinESMExports();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -3738,371 +3988,6 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
       await rm(cwd, { recursive: true, force: true });
     }
   });
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// Discriminated-dispatch regression guards on the
-// catch-site classifiers. Locks in the `instanceof PluginShapeError` +
-// `.kind` dispatch so a future refactor cannot regress to message-text
-// substring matching. These tests guarantee the typed dispatch produces
-// the same closed-set `Reason[]` output without re-parsing `.message`.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("classifyEntityShapeError dispatches on kind=already-installed -> failed/{already installed}", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  const err = new PluginShapeError({
-    kind: "already-installed",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "failed");
-  assert.deepEqual(row.reasons, ["already installed"]);
-});
-
-test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not in manifest}", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  const err = new PluginShapeError({
-    kind: "not-in-manifest",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "failed");
-  assert.deepEqual(row.reasons, ["not in manifest"]);
-});
-
-test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable + manifest-field reasons preserved verbatim", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // The resolver's `r.notes` carry the
-  // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
-  // `lspServers` carve-out in `narrowResolverReasons` strips the prefix and
-  // routes the bare token through the shared `narrowUnsupportedKinds` helper
-  // -> `lsp` (SNM-36 / D-24-04). The carve-out is arm-independent.
-  //
-  // SURF-01 / WR-01 / D-64-07: a `not-installable` shape is the structural
-  // `unavailable` arm (`partialable: false`). A non-carve-out `contains <kind>`
-  // note on that arm stays on the SOURCE axis and renders `unsupported source`,
-  // mirroring `narrowResolverNotes` -- the component-axis `unsupported hooks` /
-  // `unsupported component` markers belong to the partially-available arm only.
-  // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver never
-  // emits a real `contains hooks` note; the force-degradable `hooks` marker
-  // travels on the typed `unsupported[]` list, covered by the IN-02 parity
-  // cases. This synthetic structural note therefore collapses to the source
-  // axis.)
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["contains hooks", "contains lspServers"],
-    partialable: false,
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source", "lsp"]);
-});
-
-test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // The resolver's `r.notes` carry free-form strings like
-  // "source dir does not exist"; the narrow at the catch site maps any
-  // "source" substring to the closed Reason "unsupported source".
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source"]);
-});
-
-test("classifyEntityShapeError returns undefined for non-PluginShapeError input (fallback to bare errorMessage)", () => {
-  const row = classifyEntityShapeError(new Error("random failure"), {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.equal(row, undefined);
-});
-
-test("IN-02 / RSTATE-05: hooks-only unsupported (typed kind, no notes) renders {unsupported hooks} on the failure row", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // A partial-hook `unsupported` plugin carries NO `contains hooks` note (hooks
-  // is not an UNSUPPORTED_COMPONENT_KINDS member), so `reasons` is empty; the
-  // typed `hooks` kind on `unsupportedKinds` is the SOLE reason source. The
-  // failure row must read `{unsupported hooks}`, byte-identical to list/info,
-  // NOT the generic `{unsupported source}` fallback.
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: [],
-    partialable: true,
-    unsupportedKinds: ["hooks"],
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported hooks"]);
-});
-
-test("IN-02 / RSTATE-05: lsp unsupported (typed kind) renders {lsp} on the failure row", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["contains lspServers"],
-    partialable: true,
-    unsupportedKinds: ["lspServers"],
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  // Deduped: the typed kind and the `contains lspServers` note both map to
-  // `lsp`, so the row renders a single marker.
-  assert.deepEqual(row.reasons, ["lsp"]);
-});
-
-test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their notes-derived reason, unchanged", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // The `unavailable` arm carries NO typed `unsupported[]` (empty list on the
-  // throw), so a structural defect keeps its `notes`-sourced reason. This pins
-  // that the IN-02 typed-kind path never perturbs a structural failure row.
-  const err = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-    unsupportedKinds: [],
-  });
-  const row = classifyEntityShapeError(err, {
-    plugin: "p",
-    marketplace: "mp",
-    scope: "project",
-  });
-  assert.ok(row);
-  assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source"]);
-});
-
-test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the thrown shape", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  const partialable = classifyEntityShapeError(
-    new PluginShapeError({
-      kind: "not-installable",
-      plugin: "p",
-      reasons: ["contains lspServers"],
-      partialable: true,
-    }),
-    { plugin: "p", marketplace: "mp", scope: "project" },
-  );
-  assert.ok(partialable);
-  assert.equal(partialable.status, "unavailable");
-  assert.equal(partialable.partialable, true);
-
-  const structural = classifyEntityShapeError(
-    new PluginShapeError({
-      kind: "not-installable",
-      plugin: "p",
-      reasons: ["source dir does not exist"],
-      partialable: false,
-    }),
-    { plugin: "p", marketplace: "mp", scope: "project" },
-  );
-  assert.ok(structural);
-  assert.equal(structural.status, "unavailable");
-  assert.equal(structural.partialable, false);
-});
-
-test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the verdict is force-degradable", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  // XSURF-01: force-degradable arm -> the resolver-state-driven `unsupported`
-  // row carries the `--force` hint and renders at error severity (consistent
-  // with how `list` / `info` describe the same plugin).
-  const partialableErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["contains lspServers"],
-    partialable: true,
-  });
-  const partialableMsg = composeInstallFailureMessage({
-    err: partialableErr,
-    plugin: "helper",
-    scope: "project",
-    version: undefined,
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: classifyEntityShapeError(partialableErr, {
-      plugin: "helper",
-      marketplace: "mp",
-      scope: "project",
-    }),
-  });
-  assert.equal(partialableMsg.status, "partially-available");
-  assert.ok(partialableMsg.status === "partially-available");
-  assert.equal(partialableMsg.partialHint, true);
-  assert.equal(partialableMsg.severity, "error");
-
-  // D-70-02: structural `unavailable` arm -> error severity, but NO `--force`
-  // hint (force cannot degrade-install a structural defect).
-  const structuralErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  const structuralMsg = composeInstallFailureMessage({
-    err: structuralErr,
-    plugin: "helper",
-    scope: "project",
-    version: undefined,
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: classifyEntityShapeError(structuralErr, {
-      plugin: "helper",
-      marketplace: "mp",
-      scope: "project",
-    }),
-  });
-  assert.equal(structuralMsg.status, "unavailable");
-  assert.ok(structuralMsg.status === "unavailable");
-  assert.equal(structuralMsg.partialHint, undefined);
-  assert.equal(structuralMsg.severity, "error");
-});
-
-test("composeInstallFailureMessage threads a resolved version onto both not-installable arms and omits an empty-string version", async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  const partialableErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["contains lspServers"],
-    partialable: true,
-  });
-  const partialableRow = classifyEntityShapeError(partialableErr, {
-    plugin: "helper",
-    marketplace: "mp",
-    scope: "project",
-  });
-  const withVersion = composeInstallFailureMessage({
-    err: partialableErr,
-    plugin: "helper",
-    scope: "project",
-    version: "1.2.3",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: partialableRow,
-  });
-  assert.equal(withVersion.status, "partially-available");
-  assert.ok(withVersion.status === "partially-available");
-  assert.equal(withVersion.version, "1.2.3", "the partially-available arm carries the version");
-
-  const structuralErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "helper",
-    reasons: ["source dir does not exist"],
-    partialable: false,
-  });
-  const structuralRow = classifyEntityShapeError(structuralErr, {
-    plugin: "helper",
-    marketplace: "mp",
-    scope: "project",
-  });
-  const unavailableWithVersion = composeInstallFailureMessage({
-    err: structuralErr,
-    plugin: "helper",
-    scope: "project",
-    version: "2.0.0",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: structuralRow,
-  });
-  assert.equal(unavailableWithVersion.status, "unavailable");
-  assert.ok(unavailableWithVersion.status === "unavailable");
-  assert.equal(unavailableWithVersion.version, "2.0.0", "the unavailable arm carries the version");
-
-  // An empty-string version (a placeholder resolve) is OMITTED from both arms.
-  const emptyPartial = composeInstallFailureMessage({
-    err: partialableErr,
-    plugin: "helper",
-    scope: "project",
-    version: "",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: partialableRow,
-  });
-  assert.ok(emptyPartial.status === "partially-available");
-  assert.equal(emptyPartial.version, undefined, "empty-string version is omitted");
-
-  const emptyStructural = composeInstallFailureMessage({
-    err: structuralErr,
-    plugin: "helper",
-    scope: "project",
-    version: "",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: structuralRow,
-  });
-  assert.ok(emptyStructural.status === "unavailable");
-  assert.equal(emptyStructural.version, undefined, "empty-string version is omitted");
-});
-
-test("composeInstallFailureMessage runtime arm: a non-Error throw yields the bare failed row (no cause) with the version threaded", () => {
-  const msg = composeInstallFailureMessage({
-    err: "disk exploded",
-    plugin: "helper",
-    scope: "project",
-    version: "2.0.0",
-    rolledBackPartial: false,
-    rollbackPartials: [],
-    entityErrorRow: undefined,
-  });
-  assert.equal(msg.status, "failed");
-  assert.ok(msg.status === "failed");
-  assert.deepEqual(msg.reasons, [], "no fabricated reason on a generic runtime throw");
-  assert.equal(msg.cause, undefined, "a non-Error throw carries no cause");
-  assert.equal(msg.version, "2.0.0", "the runtime arm threads the version");
-  assert.equal(msg.severity, "error");
 });
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -4323,165 +4208,6 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
   });
 });
 
-test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {
-  const { PluginShapeError } =
-    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-
-  // The four error variants
-  // (already-installed / unavailable / uninstallable /
-  // unexpected-failure) collapse into a single
-  // `{ status: "failed"; error; cause }` shape. The typed Error is
-  // the dispatch surface; consumers narrow on `instanceof
-  // PluginShapeError` and read `.kind` to recover the
-  // semantic class.
-  const notInManifestErr = new PluginShapeError({
-    kind: "not-in-manifest",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const notInManifest = classifyInstallFailure(notInManifestErr, "formatted");
-  assert.equal(notInManifest.status, "failed");
-  assert.ok(notInManifest.status === "failed");
-  assert.equal(notInManifest.error, notInManifestErr);
-  assert.equal(notInManifest.cause, "formatted");
-
-  const alreadyInstalledErr = new PluginShapeError({
-    kind: "already-installed",
-    plugin: "p",
-    marketplace: "mp",
-  });
-  const alreadyInstalled = classifyInstallFailure(alreadyInstalledErr, "formatted");
-  assert.equal(alreadyInstalled.status, "failed");
-  assert.ok(alreadyInstalled.status === "failed");
-  assert.equal(alreadyInstalled.error, alreadyInstalledErr);
-
-  const notInstallableErr = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "p",
-    reasons: ["hooks"],
-    partialable: false,
-  });
-  const notInstallable = classifyInstallFailure(notInstallableErr, "formatted");
-  assert.equal(notInstallable.status, "failed");
-  assert.ok(notInstallable.status === "failed");
-  assert.equal(notInstallable.error, notInstallableErr);
-
-  const noLongerInstallableErr = new PluginShapeError({
-    kind: "no-longer-installable",
-    plugin: "p",
-    reasons: ["unsupported source"],
-    partialable: false,
-  });
-  const noLongerInstallable = classifyInstallFailure(noLongerInstallableErr, "formatted");
-  assert.equal(noLongerInstallable.status, "failed");
-  assert.ok(noLongerInstallable.status === "failed");
-  assert.equal(noLongerInstallable.error, noLongerInstallableErr);
-
-  // Non-PluginShapeError input is preserved verbatim on `error`.
-  const opaque = new Error("random");
-  const unexpected = classifyInstallFailure(opaque, "formatted");
-  assert.equal(unexpected.status, "failed");
-  assert.ok(unexpected.status === "failed");
-  assert.equal(unexpected.error, opaque);
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// narrowResolverReasons does not silently degrade
-// non-resolver causes to `{unsupported source}`. EACCES / EPERM / ENOENT /
-// SyntaxError substrings map to their precise closed Reasons; the
-// `unsupported source` fallback runs only when no classifier matched.
-// ───────────────────────────────────────────────────────────────────────────
-
-test("PHOOK-05 / D-71-04: narrowResolverReasons routes the `contains hooks` token through the shared per-kind helper -> `unsupported hooks`", () => {
-  // `hooks` is a SUPPORTED component kind that, when a parseable hooks.json
-  // drops one or more unsupportable handlers, becomes a force-degradable
-  // `unsupported` marker (D-71-04). The shared `narrowUnsupportedKinds` helper
-  // maps the `hooks` kind to the single aggregate `unsupported hooks` reason,
-  // so a `contains hooks` token narrows to `unsupported hooks` on the install
-  // error surface -- byte-identical to the `list`/`info` per-kind path.
-  //
-  // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver does not
-  // emit a real `contains hooks` note; the degradable signal travels on the
-  // typed `unsupported[]` list. This pins the shared-helper mapping.)
-  //
-  // SURF-01 / D-64-07: the `hooks` kind is force-degradable, so it lives on the
-  // partially-available arm -- pass the arm discriminant (`true`) so the
-  // `contains <kind>` token routes through the component-axis helper.
-  assert.deepEqual(
-    [...narrowResolverReasons(["contains hooks"], ["hooks"], true)],
-    ["unsupported hooks"],
-  );
-});
-
-test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
-  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
-});
-
-test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as the sole remaining manifest-field carve-out", () => {
-  // HOOK-04 / D-58-02: `lspServers` is now the SOLE
-  // `MANIFEST_FIELD_REASONS` member. The `contains hooks` half was
-  // dropped (dead under v1.13). The `lspServers` detection token maps
-  // to the `lsp` Reason per SNM-36 / D-24-04; the catalog row form is
-  // `(unavailable) {lsp}`.
-  assert.deepEqual([...narrowResolverReasons(["contains lspServers"])], ["lsp"]);
-});
-
-test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-out-kind>` to {unsupported component}", () => {
-  // Resolver also emits `"contains monitors"`, `"contains themes"`,
-  // etc. for the other UNSUPPORTED_COMPONENT_KINDS members. Those are
-  // NOT the `lspServers` carve-out; their bare token routes through the
-  // SAME `narrowUnsupportedKinds` seam list/info use, so a non-carve-out
-  // component kind renders the truthful `{unsupported component}` marker
-  // (D-90-05) rather than borrowing the source-axis `{unsupported source}`.
-  //
-  // SURF-01 / D-64-07: this component-axis marker belongs to the partially-
-  // available arm, so pass the arm discriminant (`true`); on the structural
-  // `unavailable` arm the same note stays on the source axis (covered by the
-  // cross-surface parity suite).
-  const reasons = narrowResolverReasons(["contains monitors"], ["monitors"], true);
-  assert.deepEqual([...reasons], ["unsupported component"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
-  assert.deepEqual(
-    [...narrowResolverReasons(["unsupported source kind: foo"])],
-    ["unsupported source"],
-  );
-});
-
-test("260525-cjr B2: narrowResolverReasons -> EACCES note surfaces as `permission denied` (NOT `unsupported source`)", () => {
-  const reasons = narrowResolverReasons(["EACCES: permission denied opening '/.pi/agent/...'"]);
-  assert.deepEqual([...reasons], ["permission denied"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> EPERM also classifies as `permission denied`", () => {
-  const reasons = narrowResolverReasons(["EPERM: operation not permitted"]);
-  assert.deepEqual([...reasons], ["permission denied"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> ENOENT note surfaces as `source missing`", () => {
-  const reasons = narrowResolverReasons(["ENOENT: no such file or directory"]);
-  assert.deepEqual([...reasons], ["source missing"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> SyntaxError note surfaces as `unparseable`", () => {
-  const reasons = narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
-  assert.deepEqual([...reasons], ["unparseable"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> empty notes -> `unsupported source` (permissive fallback)", () => {
-  assert.deepEqual([...narrowResolverReasons([])], ["unsupported source"]);
-});
-
-test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `unsupported source` (permissive fallback)", () => {
-  // No carve-out, no `source` substring, no errno substring -- the
-  // permissive `unsupported source` fallback runs only here.
-  assert.deepEqual(
-    [...narrowResolverReasons(["something genuinely unclassifiable"])],
-    ["unsupported source"],
-  );
-});
-
 // ──────────────────────────────────────────────────────────────────────────
 // WB-01/WB-02 write-back, --local, WR-09, CFG-03
 // ──────────────────────────────────────────────────────────────────────────
@@ -4601,7 +4327,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
 // ───────────────────────────────────────────────────────────────────────────
 // WB-01 / UAT-05 / D-103-16 -- the three arms the declaration-following write
 // target must NOT have moved. Together they bound its blast radius to the one
-// case it fixes: a stamp that used to land in a file CFG-02 shadows.
+// case it fixes: a stamp landing in a file CFG-02 shadows.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the base file, local not created", async () => {
@@ -5473,384 +5199,6 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
 // FORCE-01/03/04/05 -- `--force` degrade gate selection
 // ───────────────────────────────────────────────────────────────────────────
 
-test("WDET-02: a conventional workflows directory requires partial install and never materializes", async () => {
-  const workflowName = "sentinel.workflow.yml";
-
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflow-reject-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      const seeded = await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "helper",
-        pluginVersion: "1.0.0",
-        pluginJsonVersion: "1.0.0",
-        skills: [{ sourceName: "tool" }],
-        workflows: [{ sourceName: workflowName, body: "steps:\n  - run: echo sentinel\n" }],
-      });
-
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "helper",
-      });
-
-      assert.deepEqual(notifications, [
-        {
-          severity: "error",
-          // The install gate runs before version resolution, so the existing
-          // rejection grammar has no version slot.
-          message:
-            "A plugin operation has failed.\n\n" +
-            "● mp [project]\n" +
-            "  ⊖ helper (partially-available) {workflows}\n" +
-            "    Re-run with --partial to install the supported components.",
-        },
-      ]);
-      const after = await loadState(locations.extensionRoot);
-      assert.equal(after.marketplaces["mp"]?.plugins.helper, undefined);
-      await assert.rejects(stat(path.join(locations.skillsTargetDir, "helper-tool")), {
-        code: "ENOENT",
-      });
-      assert.equal(
-        (await filesBelow(locations.scopeRoot)).some(
-          (file) => path.basename(file) === workflowName,
-        ),
-        false,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", workflowName), "utf8"),
-        "steps:\n  - run: echo sentinel\n",
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflow-partial-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      const seeded = await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "helper",
-        pluginVersion: "1.0.0",
-        pluginJsonVersion: "1.0.0",
-        skills: [{ sourceName: "tool" }],
-        workflows: [{ sourceName: workflowName, body: "steps:\n  - run: echo sentinel\n" }],
-      });
-
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "helper",
-        partial: true,
-      });
-
-      assert.deepEqual(notifications, [
-        {
-          message:
-            "● mp [project]\n" +
-            "  ◉ helper v1.0.0 (partially-installed) {workflows}\n\n" +
-            "/reload to pick up changes",
-        },
-      ]);
-      assert.ok(
-        (await readFile(path.join(locations.skillsTargetDir, "helper-tool", "SKILL.md"), "utf8"))
-          .length > 0,
-      );
-
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces["mp"]?.plugins.helper;
-      assert.ok(record !== undefined);
-      assert.deepEqual(record.compatibility.unsupported, ["workflows"]);
-      assert.deepEqual(Object.keys(record.resources), [
-        "skills",
-        "prompts",
-        "agents",
-        "mcpServers",
-        "hooks",
-      ]);
-      assert.deepEqual(record.resources.skills, ["helper-tool"]);
-      assert.equal(
-        (await filesBelow(locations.scopeRoot)).some(
-          (file) => path.basename(file) === workflowName,
-        ),
-        false,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", workflowName), "utf8"),
-        "steps:\n  - run: echo sentinel\n",
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflow-retry-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      const workflowBody = "steps:\n  - run: echo sentinel\n";
-      const seeded = await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "helper",
-        pluginVersion: "1.0.0",
-        pluginJsonVersion: "1.0.0",
-        skills: [{ sourceName: "tool" }],
-        commands: [{ sourceName: "deploy" }],
-        workflows: [{ sourceName: workflowName, body: workflowBody }],
-      });
-
-      await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
-      await writeFile(locations.commandsStagingDir, "not-a-dir");
-
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "helper",
-        partial: true,
-      });
-
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.match(notifications[0]?.message ?? "", /⊘ helper v1\.0\.0 \(failed\)/);
-      assert.doesNotMatch(notifications[0]?.message ?? "", /\/reload|Re-run with --partial/);
-      await assert.rejects(stat(path.join(locations.skillsTargetDir, "helper-tool")), {
-        code: "ENOENT",
-      });
-      await assert.rejects(stat(path.join(locations.promptsTargetDir, "helper:deploy.md")), {
-        code: "ENOENT",
-      });
-      const interrupted = await loadState(locations.extensionRoot);
-      assert.equal(interrupted.marketplaces.mp?.plugins.helper, undefined);
-      assert.equal(
-        (await filesBelow(locations.scopeRoot)).some(
-          (file) => path.basename(file) === workflowName,
-        ),
-        false,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", workflowName), "utf8"),
-        workflowBody,
-      );
-
-      await rm(locations.commandsStagingDir);
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "helper",
-        partial: true,
-      });
-
-      assert.deepEqual(notifications[1], {
-        message:
-          "● mp [project]\n" +
-          "  ◉ helper v1.0.0 (partially-installed) {workflows}\n\n" +
-          "/reload to pick up changes",
-      });
-      assert.ok(
-        (await readFile(path.join(locations.skillsTargetDir, "helper-tool", "SKILL.md"), "utf8"))
-          .length > 0,
-      );
-      assert.ok(
-        (await readFile(path.join(locations.promptsTargetDir, "helper:deploy.md"), "utf8")).length >
-          0,
-      );
-
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces.mp?.plugins.helper;
-      assert.ok(record !== undefined);
-      assert.deepEqual(record.compatibility.unsupported, ["workflows"]);
-      assert.deepEqual(Object.keys(record.resources), [
-        "skills",
-        "prompts",
-        "agents",
-        "mcpServers",
-        "hooks",
-      ]);
-      assert.deepEqual(record.resources.skills, ["helper-tool"]);
-      assert.deepEqual(record.resources.prompts, ["helper:deploy"]);
-      assert.deepEqual(record.resources.agents, []);
-      assert.deepEqual(record.resources.mcpServers, []);
-      assert.deepEqual(record.resources.hooks, []);
-      assert.equal(
-        (await filesBelow(locations.scopeRoot)).some(
-          (file) => path.basename(file) === workflowName,
-        ),
-        false,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", workflowName), "utf8"),
-        workflowBody,
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("WDET-06: opaque workflow bytes cannot block installation or execute commands", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflow-opaque-"));
-    const malformedName = "malformed.workflow.yml";
-    const commandName = "command.workflow.yml";
-    const malformedBody = "{ this is not valid workflow data";
-    const executionSentinel = path.join(cwd, "workflow-command-executed");
-    const commandBody =
-      "steps:\n" +
-      `  - run: ${JSON.stringify(
-        `${process.execPath} -e ${JSON.stringify(
-          `require("node:fs").writeFileSync(${JSON.stringify(executionSentinel)}, "executed")`,
-        )}`,
-      )}\n`;
-
-    try {
-      const locations = locationsFor("project", cwd);
-      const seeded = await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "helper",
-        pluginVersion: "1.0.0",
-        pluginJsonVersion: "1.0.0",
-        skills: [{ sourceName: "tool" }],
-        workflows: [
-          { sourceName: malformedName, body: malformedBody },
-          { sourceName: commandName, body: commandBody },
-        ],
-      });
-
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "helper",
-        partial: true,
-      });
-
-      assert.equal(notifications.length, 1);
-      assert.ok(
-        (await readFile(path.join(locations.skillsTargetDir, "helper-tool", "SKILL.md"), "utf8"))
-          .length > 0,
-      );
-
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces.mp?.plugins.helper;
-      assert.ok(record !== undefined);
-      assert.deepEqual(record.compatibility.unsupported, ["workflows"]);
-      assert.deepEqual(Object.keys(record.resources), [
-        "skills",
-        "prompts",
-        "agents",
-        "mcpServers",
-        "hooks",
-      ]);
-      assert.equal(
-        (await filesBelow(locations.scopeRoot)).some((file) =>
-          [malformedName, commandName].includes(path.basename(file)),
-        ),
-        false,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", malformedName), "utf8"),
-        malformedBody,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", commandName), "utf8"),
-        commandBody,
-      );
-      await assert.rejects(stat(executionSentinel), { code: "ENOENT" });
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("D-106-06: structural failure wins over a workflows soft signal under partial install", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflow-structural-"));
-    const workflowName = "structural-sentinel.workflow.yml";
-    try {
-      const locations = locationsFor("project", cwd);
-      const seeded = await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "helper",
-        skills: [{ sourceName: "tool" }],
-        workflows: [{ sourceName: workflowName }],
-      });
-      await writeFile(path.join(seeded.pluginRoot, ".mcp.json"), "{ not json");
-
-      const { ctx, pi, notifications } = makeCtx();
-      const outcome = await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "helper",
-        partial: true,
-      });
-
-      assert.deepEqual(notifications, [
-        {
-          severity: "error",
-          message:
-            "A plugin operation has failed.\n\n" +
-            "● mp [project]\n" +
-            "  ⊘ helper (unavailable) {unsupported source}",
-        },
-      ]);
-      assert.equal(outcome.status, "failed");
-      assert.equal(Object.hasOwn(outcome, "pluginRoot"), false);
-
-      const after = await loadState(locations.extensionRoot);
-      assert.equal(after.marketplaces["mp"]?.plugins.helper, undefined);
-      await assert.rejects(stat(path.join(locations.skillsTargetDir, "helper-tool")), {
-        code: "ENOENT",
-      });
-      assert.equal(
-        (await filesBelow(locations.scopeRoot)).some(
-          (file) => path.basename(file) === workflowName,
-        ),
-        false,
-      );
-      assert.equal(
-        await readFile(path.join(seeded.pluginRoot, "workflows", workflowName), "utf8"),
-        "steps: []\n",
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
 test("FORCE-01: force on an unsupported plugin installs the supported components and skips the unsupported ones", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force01-"));
@@ -6139,7 +5487,7 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
 
       // Probe reports the `pi-subagents` companion loaded -> no missing
       // companion -> the success row keeps its info stamp (no summary line).
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
       await installPlugin({
         ctx,
         pi,
@@ -6318,6 +5666,78 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+const INSTALL_REMOTE_URLS = [
+  "https://example.com/org/repo.git",
+  "https://example.com/org/mono.git",
+  "https://github.com/org/repo.git",
+  "https://github.com/org/private.git",
+  "https://gitlab.com/o/r.git",
+  "https://gitlab.example.com/o/private.git",
+  "https://gitlab.example.com/o/r.git",
+] as const;
+
+function makeMockGitOps(options: {
+  readonly fixtureSourceDir: string;
+  readonly cloneThrows?: Error;
+  readonly head?: string;
+  readonly localRefs?: Readonly<Record<string, string>>;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+  readonly remoteResolveMap?: Readonly<Record<string, string>>;
+}): {
+  readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
+  readonly state: {
+    readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
+    readonly checkoutCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["checkout"];
+    readonly resolveRemoteRefCalls: ReturnType<
+      typeof createGitOpsFake
+    >["state"]["calls"]["resolveRemoteRef"];
+  };
+} {
+  const remoteRefs = {
+    ...Object.fromEntries(
+      Object.entries(options.remoteRefs ?? {}).map(([ref, oid]) => [ref.split("/").at(-1)!, oid]),
+    ),
+    ...(options.remoteResolveMap ?? {}),
+  };
+  const fake = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: INSTALL_REMOTE_URLS,
+    cloneFixture: { boundary: "local", sourceDir: options.fixtureSourceDir },
+    ...(options.cloneThrows !== undefined && { cloneError: options.cloneThrows }),
+    ...(options.head !== undefined && { initialOid: options.head, remoteHead: options.head }),
+    ...(options.localRefs !== undefined && { localRefs: options.localRefs }),
+    ...(Object.keys(remoteRefs).length > 0 && { remoteRefs }),
+  });
+  const gitOps: typeof fake.gitOps = {
+    ...fake.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneWithoutCallbacks } = cloneOptions;
+      await fake.gitOps.clone(cloneWithoutCallbacks);
+    },
+    async resolveRef(resolveOptions) {
+      if (resolveOptions.ref === "refs/remotes/origin/HEAD") {
+        const remoteMain = fake.state.localRefs["refs/remotes/origin/main"];
+        if (remoteMain !== undefined) {
+          return remoteMain;
+        }
+      }
+
+      return fake.gitOps.resolveRef(resolveOptions);
+    },
+    async resolveRemoteRef(resolveOptions) {
+      const { auth: _auth, ...resolveWithoutCallbacks } = resolveOptions;
+      return fake.gitOps.resolveRemoteRef(resolveWithoutCallbacks);
+    },
+  };
+  return {
+    gitOps,
+    state: {
+      cloneCalls: fake.state.calls.clone,
+      checkoutCalls: fake.state.calls.checkout,
+      resolveRemoteRefCalls: fake.state.calls.resolveRemoteRef,
+    },
+  };
+}
 
 /**
  * Bind the clone-cache seam entrypoints to a mock gitOps so install's
@@ -6329,6 +5749,45 @@ function seamWith(gitOps: GitOps): InstallCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
+  };
+}
+
+const INSTALL_DEVICE_CODE = {
+  device_code: "MOCK_DEVICE_CODE",
+  expires_in: 900,
+  interval: 0,
+  user_code: "ABCD-1234",
+  verification_uri: "https://github.com/login/device",
+} as const;
+
+function installDeviceFlow(
+  options: {
+    readonly pollResponses?: Parameters<typeof createDeviceFlowFake>[0]["pollResponses"];
+  } = {},
+): ReturnType<typeof createDeviceFlowFake> {
+  return createDeviceFlowFake({
+    boundary: "memory",
+    deviceCode: INSTALL_DEVICE_CODE,
+    network: "disabled",
+    ...(options.pollResponses === undefined ? {} : { pollResponses: options.pollResponses }),
+  });
+}
+
+function captureInstallAuth(inner: InstallCloneCacheSeam): {
+  readonly calls: Array<{ readonly auth: GitAuthBundle | undefined; readonly cloneUrl: string }>;
+  readonly seam: InstallCloneCacheSeam;
+} {
+  const calls: Array<{ auth: GitAuthBundle | undefined; cloneUrl: string }> = [];
+  return {
+    calls,
+    seam: {
+      materializeOrRefreshPluginMirror: inner.materializeOrRefreshPluginMirror,
+      materializePluginClone: (options) => {
+        calls.push({ auth: options.auth, cloneUrl: options.cloneUrl });
+        return inner.materializePluginClone(options);
+      },
+      resolvePluginPin: inner.resolvePluginPin,
+    },
   };
 }
 
@@ -7197,80 +6656,6 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
   });
 });
 
-// ---------------------------------------------------------------------------
-// CMP-4 / SCOPE-01 -- the cross-scope remedy trailer's two negative arms. Both
-// must render the bare `{marketplace not added}` row byte-identically to the pre-remedy
-// form: the trailer is advisory and may never alter, delay, or replace the
-// failure it annotates.
-// ---------------------------------------------------------------------------
-
-test("CMP-4 / SCOPE-01: absent in BOTH scopes renders the bare row with no remedy trailer", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-noremedy-"));
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "user",
-        cwd,
-        marketplace: "ghost-mp",
-        plugin: "hello",
-      });
-
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {marketplace not added}",
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("CMP-4 / SCOPE-01: an UNREADABLE other-scope state.json still renders the bare row and does NOT throw", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-corrupt-other-"));
-    try {
-      // The probe reads PROJECT state to decide whether the remedy applies.
-      // Corrupt it: `loadState` throws on malformed JSON. The probe runs AFTER
-      // `withLockedStateTransaction` has returned, so its try/catch is gone,
-      // and no edge handler catches -- an escaping throw would surface as an
-      // unhandled rejection with ZERO notifications instead of a failure row.
-      const projectLocations = locationsFor("project", cwd);
-      await mkdir(projectLocations.extensionRoot, { recursive: true });
-      await writeFile(
-        path.join(projectLocations.extensionRoot, "state.json"),
-        "{ this is not json",
-        "utf8",
-      );
-
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "user",
-        cwd,
-        marketplace: "ghost-mp",
-        plugin: "hello",
-      });
-
-      // The row survives intact -- losing the advisory remedy is the correct
-      // degradation; losing the failure row is not.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {marketplace not added}",
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
 // D-141-03: a discovery warning has to reach the user in BOTH modes. It says
 // the installed artifact set is smaller than what the author shipped, and the
 // install row's resource count gives the user no baseline to notice that.
@@ -7363,6 +6748,2684 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("plugin install authentication: threads a GitHub provider bundle to the pinned clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-github-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gh",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        authMemo: new Map(),
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "gh",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "sha-a1b2c3d4e5f6",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(authCapture.calls.length, 1);
+      assert.deepStrictEqual(
+        authCapture.calls.map(({ auth, cloneUrl }) => ({
+          authHost: auth?.host,
+          authRequiredType: typeof auth?.onAuthRequired,
+          cloneUrl,
+          credentialOps: auth?.credentialOps,
+        })),
+        [
+          {
+            authHost: "github.com",
+            authRequiredType: "function",
+            cloneUrl: "https://github.com/org/repo",
+            credentialOps: credentials.credentialOps,
+          },
+        ],
+      );
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: leaves a providerless clone authless", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-providerless-"));
+    try {
+      // arrange
+      const cloneUrl = "https://gitlab.example.com/o/r";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "public",
+        source: { source: "url", url: cloneUrl, sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "public",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "sha-a1b2c3d4e5f6",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(authCapture.calls, [{ auth: undefined, cloneUrl }]);
+      assert.deepStrictEqual(
+        git.state.cloneCalls.map(({ auth, ref, singleBranch, url }) => ({
+          auth,
+          ref,
+          singleBranch,
+          url,
+        })),
+        [{ auth: undefined, ref: undefined, singleBranch: undefined, url: `${cloneUrl}.git` }],
+      );
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: threads the GitLab provider bundle onto the canonical clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-gitlab-"));
+    try {
+      // arrange
+      const cloneUrl = "https://gitlab.com/o/r";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gitlab",
+        source: { source: "url", url: cloneUrl, sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "gitlab",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "sha-a1b2c3d4e5f6",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(authCapture.calls.length, 1);
+      assert.deepStrictEqual(
+        authCapture.calls.map(({ auth, cloneUrl: recordedCloneUrl }) => ({
+          authHost: auth?.host,
+          cloneUrl: recordedCloneUrl,
+          credentialOps: auth?.credentialOps,
+        })),
+        [{ authHost: "gitlab.com", cloneUrl, credentialOps: credentials.credentialOps }],
+      );
+      assert.deepStrictEqual(
+        git.state.cloneCalls.map(({ url }) => url),
+        [`${cloneUrl}.git`],
+      );
+      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: memoizes one Device Flow result across same-host installs", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-memo-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "first",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const secondSha = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
+      await writeFile(
+        path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "first", source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA } },
+            {
+              name: "second",
+              source: { source: "github", repo: "org/private", sha: secondSha },
+            },
+          ],
+        }),
+      );
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const authCapture = captureInstallAuth(seamWith(git.gitOps));
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow({
+        pollResponses: [
+          { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
+        ],
+      });
+      const authMemo = new Map<string, Awaited<ReturnType<GitAuthBundle["onAuthRequired"]>>>();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const firstOutcome = await installPlugin({
+        authMemo,
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "first",
+        scope: "project",
+      });
+      const secondOutcome = await installPlugin({
+        authMemo,
+        cloneCacheSeam: authCapture.seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "second",
+        scope: "project",
+      });
+      const firstAuthResult = await authCapture.calls[0]?.auth?.onAuthRequired();
+      const secondAuthResult = await authCapture.calls[1]?.auth?.onAuthRequired();
+
+      // assert
+      assert.deepStrictEqual(
+        [firstOutcome, secondOutcome],
+        [
+          {
+            declaresAgents: false,
+            declaresMcp: false,
+            resourcesChanged: true,
+            status: "installed",
+            version: "sha-a1b2c3d4e5f6",
+          },
+          {
+            declaresAgents: false,
+            declaresMcp: false,
+            resourcesChanged: true,
+            status: "installed",
+            version: "sha-b2c3d4e5f607",
+          },
+        ],
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "Open https://github.com/login/device and enter: ABCD-1234",
+          severity: "info",
+        },
+      ]);
+      assert.deepStrictEqual(
+        [firstAuthResult, secondAuthResult],
+        [
+          {
+            authAttempted: true,
+            cred: { password: "token", username: "x-access-token" },
+            ok: true,
+          },
+          {
+            authAttempted: true,
+            cred: { password: "token", username: "x-access-token" },
+            ok: true,
+          },
+        ],
+      );
+      assert.deepStrictEqual(deviceFlow.calls, {
+        pollToken: [
+          { clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "MOCK_DEVICE_CODE", intervalSec: 0 },
+        ],
+        requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
+      });
+      assert.deepStrictEqual(credentials.calls, {
+        approve: [
+          {
+            credential: { password: "token", username: "x-access-token" },
+            host: "github.com",
+          },
+        ],
+        fill: [],
+        reject: [],
+      });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: classifies a providerless 401 without a cause line", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-401-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "private",
+        source: {
+          source: "url",
+          url: "https://gitlab.example.com/o/private",
+          sha: GIT_SOURCE_SHA,
+        },
+      });
+      const cloneError = Object.assign(new Error("HTTP 401 from clone"), {
+        code: "HttpError",
+        data: { statusCode: 401 },
+      });
+      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "private",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "HTTP 401 from clone\n\ncause: HTTP 401 from clone",
+        error: cloneError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ private (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: preserves a network failure outside authentication narrowing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-network-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "network",
+        source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
+      });
+      const cloneError = Object.assign(new Error("connect ENETUNREACH 10.0.0.1:443"), {
+        code: "ENETUNREACH",
+      });
+      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "network",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "connect ENETUNREACH 10.0.0.1:443\n\ncause: connect ENETUNREACH 10.0.0.1:443",
+        error: cloneError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed)\n    cause: connect ENETUNREACH 10.0.0.1:443",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: contains a non-Error clone failure without synthesizing a row cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-non-error-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "oddball",
+        source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
+      });
+      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const cloneCache = seamWith(git.gitOps);
+      const seam: InstallCloneCacheSeam = {
+        materializeOrRefreshPluginMirror: cloneCache.materializeOrRefreshPluginMirror,
+        materializePluginClone: async () => {
+          await Promise.resolve();
+          throw "disk exploded"; // eslint-disable-line @typescript-eslint/only-throw-error
+        },
+        resolvePluginPin: cloneCache.resolvePluginPin,
+      };
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seam,
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "oddball",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "disk exploded\n\ncause: disk exploded",
+        error: new Error("disk exploded"),
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ oddball (failed)\n    cause: disk exploded",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("plugin install authentication: classifies a cancelled Device Flow clone without a cause line", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-cancelled-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "private",
+        source: { source: "github", repo: "org/private", sha: GIT_SOURCE_SHA },
+      });
+      const cloneError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = installDeviceFlow();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        credentialOps: credentials.credentialOps,
+        ctx,
+        cwd,
+        deviceFlowHttp: deviceFlow.http,
+        marketplace: "mp",
+        pi,
+        plugin: "private",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "cancelled\n\ncause: cancelled",
+        error: cloneError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ private (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger returns the marketplace-absent discriminant without mutating state", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-absent-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
+      const { ctx } = makeCtx();
+
+      // act
+      const result = await runInstallLedger(state, locations, {
+        ctx,
+        cwd,
+        marketplace: "missing",
+        plugin: "empty",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(result, { kind: "marketplace-absent" });
+      assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger projects a complete empty-plugin summary and preserves a caller pin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-summary-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "empty",
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const { ctx } = makeCtx();
+
+      // act
+      const result = await runInstallLedger(state, locations, {
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pinVersionOverride: "pinned-by-caller",
+        plugin: "empty",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(result, {
+        kind: "installed",
+        summary: {
+          frontmatterDegradations: [],
+          resolved: {
+            componentPaths: { agents: [], commands: [], skills: [] },
+            defaultEnabled: true,
+            installable: true,
+            mcpServers: {},
+            name: "empty",
+            notes: [],
+            pluginRoot,
+            state: "installable",
+            supported: [],
+            unsupported: [],
+          },
+          stagedAgentNames: [],
+          stagedMcpServerNames: [],
+        },
+      });
+      assert.strictEqual(state.marketplaces.mp?.plugins.empty?.version, "pinned-by-caller");
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger unwinds the completed phases when a plugin appears at state commit", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-race-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "empty",
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const marketplace = state.marketplaces.mp;
+      assert.ok(marketplace !== undefined);
+      const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        enabled: true,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        resolvedSource: "/raced/plugin",
+        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "raced",
+      };
+      let pluginReads = 0;
+      marketplace.plugins = new Proxy(marketplace.plugins, {
+        get(target, property, receiver): unknown {
+          if (property === "empty") {
+            pluginReads += 1;
+            return pluginReads >= 2 ? racedRecord : undefined;
+          }
+
+          const value: unknown = Reflect.get(target, property, receiver);
+          return value;
+        },
+      });
+      const capture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      const operation = runInstallLedger(
+        state,
+        locations,
+        { ctx, cwd, marketplace: "mp", plugin: "empty", scope: "project" },
+        capture,
+      );
+
+      // assert
+      await assert.rejects(operation, {
+        message: 'Plugin "empty" was installed concurrently in marketplace "mp".',
+        name: "ConcurrentInstallError",
+      });
+      assert.strictEqual(pluginReads, 2);
+      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger unwinds when its marketplace disappears before state commit", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-marketplace-race-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "empty",
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const marketplace = state.marketplaces.mp;
+      assert.ok(marketplace !== undefined);
+      let marketplaceReads = 0;
+      state.marketplaces = new Proxy(state.marketplaces, {
+        get(target, property, receiver): unknown {
+          if (property === "mp") {
+            marketplaceReads += 1;
+            return marketplaceReads >= 4 ? undefined : marketplace;
+          }
+
+          const value: unknown = Reflect.get(target, property, receiver);
+          return value;
+        },
+      });
+      const capture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      const operation = runInstallLedger(
+        state,
+        locations,
+        { ctx, cwd, marketplace: "mp", plugin: "empty", scope: "project" },
+        capture,
+      );
+
+      // assert
+      await assert.rejects(operation, {
+        message: 'Marketplace "mp" disappeared from state during install of "empty".',
+        name: "Error",
+      });
+      assert.strictEqual(marketplaceReads, 4);
+      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: ordered bridge cleanup leaks remain explicit and retry is idempotent", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-leaks-"));
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    let removal: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "complete",
+        skills: [{ sourceName: "audit" }],
+      });
+      const cleanupRoots = [
+        locations.skillsStagingDir,
+        locations.commandsStagingDir,
+        locations.agentsStagingDir,
+      ];
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const leakedTargets: string[] = [];
+      let cleanupFault = true;
+      removal = t.mock.method(
+        filesystemPromises,
+        "rm",
+        async (
+          target: Parameters<typeof originalRm>[0],
+          options?: Parameters<typeof originalRm>[1],
+        ) => {
+          const targetPath = String(target);
+          if (
+            cleanupFault &&
+            cleanupRoots.some((root) => targetPath.startsWith(`${root}${path.sep}`))
+          ) {
+            leakedTargets.push(targetPath);
+            throw new Error("staging cleanup denied");
+          }
+
+          await originalRm(target, options);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "complete",
+        scope: "project",
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      cleanupFault = false;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "complete",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        leakedTargets.map((target) =>
+          cleanupRoots.findIndex((root) => target.startsWith(`${root}${path.sep}`)),
+        ),
+        [0, 1, 2],
+      );
+      assert.deepStrictEqual(first, {
+        declaresAgents: true,
+        declaresMcp: false,
+        postCommitWarnings: [
+          `failed to clean up skills staging directory at ${leakedTargets[0]}: staging cleanup denied`,
+          `failed to clean up commands staging directory at ${leakedTargets[1]}: staging cleanup denied`,
+          "[reviewer] source description was missing or empty -- using fallback",
+          `failed to clean up agents staging directory at ${leakedTargets[2]}: staging cleanup denied`,
+        ],
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assertRetryFailure(second, 'Plugin "complete" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(notifications, []);
+      assert.notStrictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      const isLeakedStagingEntry = (entry: string): boolean =>
+        /^pi-claude-marketplace\/(?:agents|commands|skills)-staging\/[0-9a-f-]{36}\/$/.test(entry);
+      assert.strictEqual(firstTree.filter(isLeakedStagingEntry).length, 3);
+      assert.deepStrictEqual(
+        firstTree.filter((entry) => !isLeakedStagingEntry(entry)),
+        [
+          "agents/",
+          `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
+          "pi-claude-marketplace/",
+          "pi-claude-marketplace/agents-index.json",
+          "pi-claude-marketplace/agents-staging/",
+          "pi-claude-marketplace/commands-staging/",
+          "pi-claude-marketplace/data/",
+          "pi-claude-marketplace/data/mp/",
+          "pi-claude-marketplace/data/mp/complete/",
+          "pi-claude-marketplace/resources/",
+          "pi-claude-marketplace/resources/prompts/",
+          "pi-claude-marketplace/resources/prompts/complete:deploy.md",
+          "pi-claude-marketplace/resources/skills/",
+          "pi-claude-marketplace/resources/skills/complete-audit/",
+          "pi-claude-marketplace/resources/skills/complete-audit/SKILL.md",
+          "pi-claude-marketplace/skills-staging/",
+          "pi-claude-marketplace/state.json",
+        ],
+      );
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
+        {
+          agents: [`${GENERATED_AGENT_PREFIX}complete-reviewer`],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["complete:deploy"],
+          skills: ["complete-audit"],
+        },
+      );
+    } finally {
+      removal?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("install rejects the selected entry when its defense-in-depth validator fails", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-entry-revalidation-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "invalid",
+      });
+      const validation = t.mock.method(PLUGIN_ENTRY_VALIDATOR, "Check", () => false);
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "invalid",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause:
+          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.\n\ncause: Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
+        error: new Error(
+          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
+        ),
+        status: "failed",
+      });
+      assert.strictEqual(validation.mock.callCount(), 1);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger rejects a hooks file that changes after resolver validation", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-reparse-race-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let read: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hooky",
+      });
+      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      let hooksReads = 0;
+      read = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === hooksPath) {
+            hooksReads += 1;
+            if (hooksReads === 2) {
+              return "{";
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const capture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      const operation = runInstallLedger(
+        state,
+        locations,
+        { ctx, cwd, marketplace: "mp", plugin: "hooky", scope: "project" },
+        capture,
+      );
+
+      // assert
+      await assert.rejects(operation, {
+        message:
+          "hooks.json re-parse failed: hooks.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+        name: "Error",
+      });
+      assert.strictEqual(hooksReads, 2);
+      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+    } finally {
+      read?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: post-save hook-cache failure stays installed and retry is idempotent", async (t) => {
+  const { resetRoutingState, setParsedConfig } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-race-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let read: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const poison: CacheEntry = {
+        get config(): CacheEntry["config"] {
+          throw new Error("routing rebuild denied");
+        },
+        ifPredicates: new Map(),
+        marketplace: "poison-marketplace",
+        pluginId: "poison-plugin",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "project",
+      };
+      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hooky",
+      });
+      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      let activeSchedule = firstSchedule;
+      let activeHooksReads = 0;
+      let hookCacheFault = true;
+      read = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === hooksPath) {
+            activeHooksReads += 1;
+            activeSchedule.push(
+              activeHooksReads === 1
+                ? "resolve:hooks"
+                : activeHooksReads === 2
+                  ? "commit:hooks"
+                  : hookCacheFault
+                    ? "post-save:hook-cache:failed"
+                    : "post-save:hook-cache:ok",
+            );
+            if (activeHooksReads === 3 && hookCacheFault) {
+              throw new Error("post-save hook read denied");
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const locations = locationsFor("project", cwd);
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      hookCacheFault = false;
+      activeHooksReads = 0;
+      activeSchedule = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(first, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: false,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assertRetryFailure(second, 'Plugin "hooky" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(firstSchedule, [
+        "resolve:hooks",
+        "commit:hooks",
+        "post-save:hook-cache:failed",
+      ]);
+      assert.deepStrictEqual(secondSchedule, []);
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hooky/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/hooks/hooky/",
+        "pi-claude-marketplace/hooks/hooky/hooks.json",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
+        { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
+      );
+    } finally {
+      read?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: disabled cascade failure preserves shrunken record and retry is safely idempotent", async (t) => {
+  const { resetRoutingState, setParsedConfig } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-disable-hooks-mcp-failure-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let read: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        entryDefaultEnabled: false,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        mcpServers: { server: { command: "node", args: ["server.js"] } },
+        pluginName: "hooky",
+      });
+      const cacheError = new Error("routing rebuild denied");
+      const poison: CacheEntry = {
+        get config(): CacheEntry["config"] {
+          throw cacheError;
+        },
+        ifPredicates: new Map(),
+        marketplace: "poison-marketplace",
+        pluginId: "poison-plugin",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "project",
+      };
+      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const mcpError = new Error("mcp cleanup denied");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      let activeSchedule = firstSchedule;
+      let activeMcpReads = 0;
+      let mcpFault = true;
+      read = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === locations.mcpJsonPath) {
+            activeMcpReads += 1;
+            activeSchedule.push(
+              activeMcpReads === 1
+                ? "prepare:mcp"
+                : activeMcpReads === 2
+                  ? "commit:mcp"
+                  : mcpFault
+                    ? "disable:mcp:failed"
+                    : "disable:mcp:ok",
+            );
+            if (activeMcpReads === 3 && mcpFault) {
+              throw mcpError;
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const first = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      const firstTree = await retryTree(locations.scopeRoot);
+      mcpFault = false;
+      activeMcpReads = 0;
+      activeSchedule = secondSchedule;
+      const second = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(first, {
+        cause: "mcp cleanup denied",
+        error: mcpError,
+        status: "failed",
+      });
+      assertRetryFailure(second, 'Plugin "hooky" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(firstSchedule, ["prepare:mcp", "commit:mcp", "disable:mcp:failed"]);
+      assert.deepStrictEqual(secondSchedule, []);
+      assert.deepStrictEqual(notifications, []);
+      assert.notStrictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
+      assert.match(firstConfigBytes, /"enabled": false/);
+      assert.strictEqual(firstConfigBytes, await readFile(locations.configJsonPath, "utf8"));
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "mcp.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
+        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+      );
+      await assert.rejects(stat(path.join(locations.hooksDir, "hooky", "hooks.json")), /ENOENT/);
+    } finally {
+      read?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("orchestrated install returns the invalid-config outcome without emitting", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orchestrated-invalid-config-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+      const stateBytes = await readFile(path.join(locations.extensionRoot, "state.json"), "utf8");
+      const expectedError = new Error(
+        'Config file "claude-plugins.json" failed schema validation.',
+      );
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: 'Config file "claude-plugins.json" failed schema validation.',
+        error: expectedError,
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(
+        await readFile(path.join(locations.extensionRoot, "state.json"), "utf8"),
+        stateBytes,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("orchestrated install reports when the state write does not retain its fresh record", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-fresh-record-race-"));
+    const originalParse: (text: string) => unknown = JSON.parse;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        entryDefaultEnabled: false,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "vanishing",
+      });
+      const parse = t.mock.method(JSON, "parse", (text: string): unknown => {
+        const parsed = originalParse(text);
+        if (STATE_VALIDATOR.Check(parsed)) {
+          const marketplace = parsed.marketplaces.mp;
+          if (marketplace !== undefined) {
+            marketplace.plugins = new Proxy(marketplace.plugins, {
+              set(target, property, value, receiver) {
+                return property === "vanishing"
+                  ? true
+                  : Reflect.set(target, property, value, receiver);
+              },
+            });
+          }
+        }
+
+        return parsed;
+      });
+      const { ctx, notifications, pi } = makeCtx();
+      const expectedError = new Error(
+        'installPlugin: internal error -- the state phase left no record for plugin "vanishing" to disable.',
+      );
+
+      // act
+      const outcome = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "vanishing",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause:
+          'installPlugin: internal error -- the state phase left no record for plugin "vanishing" to disable.',
+        error: expectedError,
+        status: "failed",
+      });
+      assert.ok(parse.mock.callCount() >= 1);
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.vanishing,
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("runInstallLedger preserves installedAt while replacing an existing disabled record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ledger-existing-record-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "existing",
+        preInstall: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const { ctx } = makeCtx();
+
+      // act
+      const result = await runInstallLedger(state, locations, {
+        allowExistingRecord: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        plugin: "existing",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(result.kind, "installed");
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.existing, {
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        enabled: true,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        resolvedSource: path.join(cwd, "mp-src", "plugins", "existing"),
+        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        updatedAt: state.marketplaces.mp?.plugins.existing?.updatedAt,
+        version: "0.0.1",
+      });
+      assert.notEqual(
+        state.marketplaces.mp?.plugins.existing?.updatedAt,
+        "2026-01-01T00:00:00.000Z",
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("install forwards explicit map-model and version-pin entrypoint options", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-explicit-options-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "plain",
+      });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        mapModel: false,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        pinVersionOverride: "pinned-by-entrypoint",
+        plugin: "plain",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: false,
+        status: "installed",
+        version: "pinned-by-entrypoint",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp?.plugins
+          .plain,
+        {
+          compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+          enabled: true,
+          installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
+            ?.plugins.plain?.installedAt,
+          resolvedSource: pluginRoot,
+          resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+          updatedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
+            ?.plugins.plain?.updatedAt,
+          version: "pinned-by-entrypoint",
+        },
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("an unpinned ref-only source forwards the moving ref to its cold mirror clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-unpinned-ref-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "moving",
+        source: { ref: "main", source: "url", url: "https://example.com/org/repo" },
+      });
+      const headSha = "1234567890abcdef1234567890abcdef12345678";
+      const git = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: headSha,
+        localRefs: { "refs/heads/main": headSha },
+        remoteRefs: { "refs/remotes/origin/main": headSha },
+      });
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "moving",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: `sha-${headSha.slice(0, 12)}`,
+      });
+      assert.deepStrictEqual(
+        git.state.cloneCalls.map(({ ref, singleBranch, url }) => ({ ref, singleBranch, url })),
+        [{ ref: "main", singleBranch: true, url: "https://example.com/org/repo.git" }],
+      );
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(
+        (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp?.plugins
+          .moving?.resolvedSha,
+        headSha,
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("standalone install normalizes a non-Error lock-directory failure", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-lock-non-error-"));
+    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
+    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      mkdirMock = t.mock.method(
+        filesystemPromises,
+        "mkdir",
+        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
+          if (String(args[0]) === locations.extensionRoot) {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error
+            throw "lock directory unavailable";
+          }
+
+          return originalMkdir(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        cause: "lock directory unavailable\n\ncause: lock directory unavailable",
+        error: new Error("lock directory unavailable"),
+        status: "failed",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed)",
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(mkdirMock.mock.callCount(), 1);
+    } finally {
+      mkdirMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: commands prepare failure after a committed skill converges on the same root", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-commands-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const faultTree = await retryTree(locations.scopeRoot);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          agentsStagingDir: locations.agentsStagingDir,
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryPartialFailure(
+        first,
+        retryStagingMkdirPrefix(locations.commandsStagingDir),
+        RETRY_STAGING_UUID,
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await pathExists(locations.configJsonPath), false);
+      assert.notStrictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(faultTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/retryable/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/retryable:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: skills prepare failure with no committed phases converges on the same root", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-skills-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.skillsStagingDir), { recursive: true });
+      await writeFile(locations.skillsStagingDir, "fault: skills staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.skillsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryPartialFailure(
+        first,
+        retryStagingMkdirPrefix(locations.skillsStagingDir),
+        RETRY_STAGING_UUID,
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
+      assert.deepStrictEqual(secondSchedule, ["prepare:skills", "commit:skills"]);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/skills-staging",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/retryable/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/",
+        "pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: agents prepare failure after committed commands unwinds newest first", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-agents-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews changes.\ntools: Read,Grep\n---\n\nBody.\n",
+      );
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.agentsStagingDir), { recursive: true });
+      await writeFile(locations.agentsStagingDir, "fault: agents staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentTarget: path.join(
+            locations.agentsDir,
+            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+          ),
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.agentsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryPartialFailure(
+        first,
+        retryStagingMkdirPrefix(locations.agentsStagingDir),
+        RETRY_STAGING_UUID,
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: true,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "undo:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-staging",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable-audit")).length, 2);
+      assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable:deploy")).length, 1);
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.includes("retryable-reviewer")).length,
+        1,
+      );
+      assert.strictEqual(
+        finalTree.some((entry) => entry.includes("-staging/") && /[0-9a-f-]{36}/.test(entry)),
+        false,
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: hooks reparse failure after three bridges retries without reseeding", async (t) => {
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-hooks-"));
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let readMock: ReturnType<typeof t.mock.method> | undefined;
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews changes.\ntools: Read,Grep\n---\n\nBody.\n",
+      );
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      let activeHookReads = 0;
+      let hooksFault = true;
+      readMock = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === hooksPath) {
+            activeHookReads += 1;
+            if (activeHookReads === 2) {
+              activeSchedule.current.push("prepare:hooks");
+              if (hooksFault) {
+                return "{";
+              }
+            }
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentTarget: path.join(
+            locations.agentsDir,
+            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+          ),
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      hooksFault = false;
+      activeHookReads = 0;
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryPartialFailure(
+        first,
+        "hooks.json re-parse failed: hooks.json is not valid JSON: ",
+        /^Expected property name or '\}' in JSON at position \d+/,
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: true,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+        "prepare:hooks",
+        "undo:agents",
+        "undo:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+        "prepare:hooks",
+      ]);
+      assert.deepStrictEqual(firstTree, [
+        "agents/",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable;
+      assert.deepStrictEqual(record?.resources, {
+        agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+        hooks: ["retryable"],
+        mcpServers: [],
+        prompts: ["retryable:deploy"],
+        skills: ["retryable-audit"],
+      });
+      assert.deepStrictEqual(record?.hookEntries, [{ event: "PreToolUse", matcher: "" }]);
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(finalTree.filter((entry) => entry.endsWith("hooks.json")).length, 1);
+      assert.strictEqual(
+        finalTree.some((entry) => /[0-9a-f-]{36}/.test(entry)),
+        false,
+      );
+    } finally {
+      restoreSchedule?.();
+      readMock?.mock.restore();
+      syncBuiltinESMExports();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: MCP prepare failure after hooks compensates every completed bridge", async (t) => {
+  const { resetRoutingState } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-mcp-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      resetRoutingState();
+      const locations = locationsFor("project", cwd);
+      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+        agents: [{ sourceName: "reviewer" }],
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        mcpServers: { server: { command: "node" } },
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews changes.\ntools: Read,Grep\n---\n\nBody.\n",
+      );
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(locations.mcpJsonPath, { recursive: true });
+      // Read back the runtime's own errno wording: later majors append the offending path to it.
+      // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
+      // composition: the probe is the same read production makes, so it moves with whatever is on
+      // disk. A fixture that drifted to a missing file would report ENOENT on both sides and leave
+      // this case green against a different failure entirely.
+      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch((error: unknown) => {
+        const errno = error as NodeJS.ErrnoException;
+        assert.deepStrictEqual(
+          { code: errno.code, syscall: errno.syscall },
+          { code: "EISDIR", syscall: "read" },
+        );
+        return errno.message;
+      });
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentTarget: path.join(
+            locations.agentsDir,
+            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+          ),
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.mcpJsonPath, { recursive: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(first, readFailure);
+      assert.deepStrictEqual(second, {
+        declaresAgents: true,
+        declaresMcp: true,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+        "undo:agents",
+        "undo:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+        "prepare:agents",
+        "commit:agents",
+      ]);
+      assert.strictEqual(firstTree.includes("mcp.json/"), true);
+      assert.strictEqual(
+        firstTree.some((entry) => entry.endsWith("hooks.json")),
+        false,
+      );
+      assert.strictEqual(
+        firstTree.some((entry) => entry.includes("retryable-audit/SKILL.md")),
+        false,
+      );
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          hooks: ["retryable"],
+          mcpServers: ["server"],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(finalTree.filter((entry) => entry === "mcp.json").length, 1);
+      assert.strictEqual(
+        finalTree.some((entry) => /[0-9a-f-]{36}/.test(entry)),
+        false,
+      );
+    } finally {
+      restoreSchedule?.();
+      resetRoutingState();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: non-containment undo failure reports ordered rollback partials then recovers", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-rollback-partial-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
+      const undoFault = { enabled: true, message: "skill undo denied", target: skillTarget };
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget,
+          undoFault,
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      undoFault.enabled = false;
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      const expectedCause = assertRetryPartialFailure(
+        first,
+        retryStagingMkdirPrefix(locations.commandsStagingDir),
+        RETRY_STAGING_UUID,
+      );
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ retryable v0.0.1 (failed) {rollback partial}\n" +
+            `    cause: ${expectedCause}\n` +
+            "    [skills] (rollback failed)\n" +
+            "      cause: skill undo denied",
+          severity: "error",
+        },
+        {
+          message: "● mp [project]\n  ● retryable v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "undo:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "undo:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md"),
+        true,
+      );
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["retryable:deploy"],
+          skills: ["retryable-audit"],
+        },
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable-audit/SKILL.md")).length,
+        1,
+      );
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable:deploy.md")).length,
+        1,
+      );
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: containment failure preserves the refused residue and succeeds after unlink", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-containment-"));
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await symlink("/tmp/retry-proof-decoy", skillTarget);
+      const expectedRefusal =
+        `skill target destination contains symlink ${skillTarget} -> ` +
+        `/tmp/retry-proof-decoy (parent: ${locations.skillsTargetDir}, target: ${skillTarget}).`;
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget,
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await filesystemPromises.unlink(skillTarget);
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
+      assert.strictEqual(first.status, "failed");
+      assert.ok(first.error instanceof SymlinkRefusedError);
+      assert.strictEqual(first.error.name, "SymlinkRefusedError");
+      assert.strictEqual(first.error.parent, locations.skillsTargetDir);
+      assert.strictEqual(first.error.child, skillTarget);
+      assert.strictEqual(first.error.linkPath, skillTarget);
+      assert.strictEqual(first.error.linkTarget, "/tmp/retry-proof-decoy");
+      assert.strictEqual(first.error.message, expectedRefusal);
+      assert.strictEqual(first.cause, `${expectedRefusal}\n\ncause: ${expectedRefusal}`);
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ retryable v0.0.1 (failed)\n" +
+            `    cause: ${expectedRefusal}`,
+          severity: "error",
+        },
+        {
+          message: "● mp [project]\n  ● retryable v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
+      assert.deepStrictEqual(secondSchedule, ["prepare:skills", "commit:skills"]);
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit"),
+        true,
+      );
+      assert.strictEqual(firstTree.includes("pi-claude-marketplace/skills-staging/"), true);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+      );
+      assert.strictEqual((await stat(skillTarget)).isDirectory(), true);
+    } finally {
+      restoreSchedule?.();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: install: state commit race after staged work retries from unchanged state bytes", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-state-race-"));
+    const originalParse: (text: string) => unknown = JSON.parse;
+    let parseMock: ReturnType<typeof t.mock.method> | undefined;
+    let restoreSchedule: (() => void) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
+        commands: [{ sourceName: "deploy" }],
+        cwd,
+        entryDefaultEnabled: false,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "retryable",
+        skills: [{ sourceName: "audit" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const manifestBytes = await readFile(manifestPath, "utf8");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      let eraseFreshRecord = true;
+      parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
+        const parsed = originalParse(text);
+        if (eraseFreshRecord && STATE_VALIDATOR.Check(parsed)) {
+          const marketplace = parsed.marketplaces.mp;
+          if (marketplace !== undefined) {
+            marketplace.plugins = new Proxy(marketplace.plugins, {
+              set(target, property, value, receiver) {
+                return property === "retryable"
+                  ? true
+                  : Reflect.set(target, property, value, receiver);
+              },
+            });
+          }
+        }
+
+        return parsed;
+      });
+      restoreSchedule = observeRetryBridgeSchedule(
+        t,
+        {
+          agentsStagingDir: locations.agentsStagingDir,
+          commandsStagingDir: locations.commandsStagingDir,
+          commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
+          skillsStagingDir: locations.skillsStagingDir,
+          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+        },
+        activeSchedule,
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      eraseFreshRecord = false;
+      activeSchedule.current = secondSchedule;
+      const second = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "retryable",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(Object.keys(first).sort(), ["cause", "error", "status"]);
+      assert.strictEqual(first.status, "failed");
+      assert.ok(first.error instanceof Error);
+      assert.match(
+        first.error.message,
+        /^installPlugin: internal error -- the state phase left no record for plugin "retryable" to disable\.$/,
+      );
+      assert.strictEqual(first.cause, first.error.message);
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstStateBytes, stateBytes);
+      assert.match(firstConfigBytes, /"enabled": false/);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "undo:skills",
+        "commit:skills",
+        "prepare:commands",
+        "commit:commands",
+      ]);
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md"),
+        true,
+      );
+      assert.strictEqual(
+        firstTree.includes("pi-claude-marketplace/resources/prompts/retryable:deploy.md"),
+        true,
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable;
+      assert.deepStrictEqual(record?.resources, {
+        agents: [],
+        hooks: [],
+        mcpServers: [],
+        prompts: ["retryable:deploy"],
+        skills: ["retryable-audit"],
+      });
+      assert.strictEqual(record?.enabled, true);
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable-audit/SKILL.md")).length,
+        1,
+      );
+      assert.strictEqual(
+        finalTree.filter((entry) => entry.endsWith("retryable:deploy.md")).length,
+        1,
+      );
+    } finally {
+      restoreSchedule?.();
+      parseMock?.mock.restore();
+      await rm(cwd, { force: true, recursive: true });
     }
   });
 });

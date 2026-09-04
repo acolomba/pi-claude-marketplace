@@ -1,6 +1,6 @@
 import test from "node:test";
 
-import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
+import { assertNoForbiddenSurface } from "./source-scan.ts";
 
 /**
  * DFEN-07 architectural surface guard (D-103-08, D-103-09).

@@ -1,628 +1,491 @@
-# Architecture Research
+# Architecture Research: v1.19 Unit Test Refactor
 
-**Domain:** Brownfield bridge layer — Claude plugin hooks → Pi extension event bus, integrated into the v1.12 declarative config + load-time reconcile architecture of `pi-claude-marketplace`.
-**Researched:** 2026-06-13
-**Confidence:** HIGH (every integration point cites a real file under `extensions/pi-claude-marketplace/`; Pi-host event surface verified against the locally-installed `@earendil-works/pi-coding-agent` peer dep)
+**Domain:** Brownfield TypeScript unit-test ownership and direct-coverage refactor
+**Researched:** 2026-08-28
+**Confidence:** HIGH
 
-> Subsequent-milestone integration study. Pressure-tests the locked v1.13 hook-bridge design from `<milestone_context>`, surfaces integration gaps, and produces concrete code seams the roadmapper can lift directly into phase boundaries. Web ecosystem research is not applicable; the only authorities are this repo's source, the v1.12 ARCHITECTURE.md template, and `docs/research/claude-hooks-vs-pi-events.md`.
+## Executive Recommendation
 
----
+Keep the production architecture that exists at HEAD. Build the milestone around its
+204 current production modules, not around the abandoned Phase 106/107 partition.
+Each executable plan must own exactly one production source and its mirrored unit
+test. Each plan must finish with one atomic commit for that pair.
 
-## 1. Standard Architecture
+The roadmap should start at Phase 108 and follow the live dependency direction:
+domain and platform, shared contracts, persistence and transaction, bridges,
+orchestrators, edge commands, and finally the extension entry point. This order lets
+lower-level public contracts stabilize before their consumers receive direct tests.
+It also makes the large lifecycle and composition modules depend on already-proven
+seams.
 
-### Existing layering (confirmed in source, unchanged by v1.13)
+Treat every one of the 204 pairs as open. The audit labels and retained commits are
+diagnostic brownfield evidence. They are never completion proof. A `PASS` pair still
+needs a v1.19 plan, current direct-coverage evidence, and its own commit.
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ index.ts          extension entry: pi.on("resources_discover") -> reconcile, │
-│                   then aggregateDiscoveredResources;                          │
-│                   registerClaudePluginCommand, registerClaudeMarketplaceTools │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ edge/             register.ts (slash-command + session_start TC-7 wrapper)    │
-│                   router.ts, handlers/{plugin,marketplace}, completions, args │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ orchestrators/    marketplace/{add,remove,autoupdate,update,info,list}        │
-│                   plugin/{install,uninstall,update,reinstall,info,list,       │
-│                           enable-disable,bootstrap,discover-names}            │
-│                   import/{marketplaces(planner),execute,settings,refs}        │
-│                   reconcile/{plan,apply,pending,notify,apply-outcomes,types}  │
-│                   discover.ts (resources_discover aggregator)                 │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ bridges/          skills | commands | agents | mcp  (stage/unstage)           │
-│ domain/           resolver (NFR-7 discriminated union), source, manifest,     │
-│                   version, name, components/{plugin,mcp}                      │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ transaction/      withStateGuard, withLockedStateTransaction (per-scope       │
-│                   proper-lockfile, retries:0), runPhases (ledger), rollback   │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ persistence/      state-io.ts (STATE_SCHEMA, JIT validator, atomic write),    │
-│                   config-io.ts (CONFIG_SCHEMA), config-merge.ts,              │
-│                   migrate.ts, migrate-config.ts, config-write-back.ts,        │
-│                   agents-index-{io,schema}.ts, locations.ts (branded paths)   │
-│ platform/         pi-api, git, git-credential                                 │
-│ shared/           notify.ts (closed-set output catalog), atomic-json,         │
-│                   path-safety, errors                                         │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+Cross-cutting work must ride with a source-test pair that owns the contract. For
+example, the resolver pair owns the required `installable: true | false`
+discriminant. Structural gates run throughout the milestone, but they do not justify
+gate-only executable plans.
 
-### What v1.13 adds (new components in **bold**, modified in *italics*)
+## Current HEAD Architecture
 
-```
-                        ┌────────────────────────────────────────────────┐
-  index.ts ──► pi.on("resources_discover") ──► applyReconcile (unchanged)
-       │                                       │
-       │                                       └─► ALSO rebuilds bridge
-       │                                            routing tables (NEW)
-       │
-       └──► **bridge/install(pi)** (NEW, runs ONCE at extension factory time
-             before resources_discover handler returns the first time):
-              registers one composite pi.on(...) per supported Pi event type,
-              plus pi.events.on(...) for soft-dep buses. Handlers are
-              installed exactly once; routing tables are mutable.
+The live extension is a layered TypeScript system under
+`extensions/pi-claude-marketplace/`. The dependency flow is mostly inward from the
+entry point and command surface toward orchestration, domain, persistence, and
+platform seams.
 
-  bridges/hooks/    NEW component bridge (parallel to skills/commands/agents/mcp)
-                    plan.ts        – pure: hooks.json -> stage plan
-                    stage.ts       – atomic copy of hooks.json under
-                                     <extensionRoot>/hooks/<plugin>/hooks.json
-                    unstage.ts     – rm -rf the per-plugin hooks subtree
-                    discover.ts    – plugin -> resolved hook config (parser)
-                    matcher.ts     – literal + pipe-OR compile -> Set<string>
-                    payloads/      – per-event field translators (bucket A/B/D)
-                    dispatch.ts    – composite handler + routing tables
-                    spawn.ts       – child-process exec + stdout-JSON parser
-
-  hooks/            **NEW domain primitive** under domain/components/hooks.ts
-                    typebox schema for one hooks.json entry (event, matcher,
-                    hooks[], plus tolerated extension fields)
-
-  *persistence/state-io.ts*  STATE_SCHEMA bumps schemaVersion 1 -> 2; PLUGIN
-                             record gains `resources.hooks: readonly Routing[]`
-                             (replaces a per-event Map, see §5.2).
-
-  *domain/resolver.ts*       Walks <pluginRoot>/hooks/hooks.json as a new
-                             standalone-file component (the array already
-                             lists it as `hooks` -> "hooks/hooks.json"; today
-                             it's in the unsupported set; v1.13 moves it to
-                             supported).
-
-  *orchestrators/plugin/{install,uninstall,update,reinstall}.ts*
-                             Add the hooks bridge to the 4-bridge cascade
-                             ordering. Hooks stage AFTER mcp, before state
-                             commit (PI-9 extended).
-
-  *orchestrators/reconcile/apply.ts*
-                             After per-scope install/uninstall settles, call
-                             bridge.rebuildRoutingTables(state) so dispatch
-                             reflects the new desired set on /reload.
-
-  *info.ts / list.ts*        New `hooks` component appears in components-list
-                             rendering. New per-row marker {requires <dep>}
-                             when a hook event soft-deps on pi-subagents.
-
-  *shared/notify.ts*         Possible new closed-set token if hook-install
-                             warnings (asyncRewake-extension surface) are
-                             rendered as a distinct reason. See §6.3.
-
-  shared/event-router.ts     **NEW** event-id -> Set<RoutingEntry> mutable
-                             table; the composite handler reads from here.
+```text
+Pi extension entry (index.ts)
+            |
+            v
+       edge commands
+            |
+            v
+ lifecycle and composition orchestrators
+       |          |          |
+       v          v          v
+    bridges   transaction  persistence
+       |          |          |
+       +----------+----------+
+                  |
+                  v
+          domain / shared / platform
 ```
 
----
+This is a dependency diagram, not a request to create new directories. Some shared
+and platform modules are intentionally used by higher and lower layers. The roadmap
+must use actual imports and callers to sequence pairs, not enforce a theoretical
+layer model that the repository does not have.
 
-## 2. Component Responsibilities
+### Component Boundaries
 
-| Component                                       | New / Modified | Responsibility                                                                                                                                                                                                                                                            |
-| ----------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `domain/components/hooks.ts`                    | **NEW**        | TypeBox schema for one hooks.json entry; forward-compatible parser that preserves unknown payload-extension fields. Output is a discriminated `ParsedHookEntry`; bucket-H events parse cleanly but are tagged `bucket: "H"` so the stage step can drop them.              |
-| `bridges/hooks/plan.ts`                         | **NEW**        | Pure: takes a resolved plugin's `hooks/hooks.json` content, returns a `HookStagePlan` (entries to stage + entries dropped with reason). No I/O. Mirrors `bridges/agents/plan.ts` shape.                                                                                  |
-| `bridges/hooks/stage.ts`                        | **NEW**        | Atomic copy of `hooks.json` to `<extensionRoot>/hooks/<plugin>/hooks.json` via `atomicWriteJson` after `assertPathInside(<extensionRoot>/hooks/, ...)`. Returns a `Routing[]` for state.                                                                                  |
-| `bridges/hooks/unstage.ts`                      | **NEW**        | `rm -rf <extensionRoot>/hooks/<plugin>/` after path-containment check. Idempotent.                                                                                                                                                                                       |
-| `bridges/hooks/discover.ts`                     | **NEW**        | Reads the staged hooks.json for a plugin and surfaces its event list for `info.ts`/`list.ts`.                                                                                                                                                                            |
-| `bridges/hooks/matcher.ts`                      | **NEW**        | Compile-time: turns `"Edit|Write|MultiEdit"` into `Set<string>` and `"*"`/empty into `MATCH_ALL`. No regex engine.                                                                                                                                                       |
-| `bridges/hooks/payloads/<event>.ts`             | **NEW** (~16)  | One file per supported Claude event; each exports `translate(piEvent) -> ClaudeHookPayload` and `applyResponse(claudeResp) -> PiEventResult`. Bucket A is mostly field renaming; bucket D files own the synthesis comments per `docs/research/...md`.                  |
-| `bridges/hooks/dispatch.ts`                     | **NEW**        | The composite `pi.on(piEventName, handler)` callbacks + the routing-table lookups. Installed exactly once per Pi event type at extension factory time. Reads from `shared/event-router.ts`.                                                                              |
-| `bridges/hooks/spawn.ts`                        | **NEW**        | Child-process exec of the hook command with the staged hooks-dir as CWD; stdout-JSON parsed with the same forward-tolerant schema as the entry parser; timeout + nonzero-exit-treated-as-block per Claude spec.                                                          |
-| `shared/event-router.ts`                        | **NEW**        | Module-singleton `Map<PiEventName, Map<RoutingKey, RoutingEntry[]>>`. Mutable: cleared + rebuilt by `applyReconcile` on every `/reload`. The composite handler holds no closure-captured routing state; reads from the module every dispatch.                            |
-| `bridges/hooks/lifecycle.ts`                    | **NEW**        | Two exports: `installComposites(pi)` (call ONCE at factory) and `rebuildRoutingTables(state, locations)` (call from `applyReconcile` after each scope's reconcile completes).                                                                                            |
-| `persistence/state-io.ts`                       | *MODIFIED*     | `STATE_SCHEMA.schemaVersion: Type.Literal(1)` -> `Type.Union([Literal(1), Literal(2)])` during the grace window; migrate v1 -> v2 by initialising `resources.hooks = []` on every plugin record. After migration window, drop v1. See §5.4.                              |
-| `persistence/migrate.ts`                        | *MODIFIED*     | Add a `migrateV1ToV2` pass: pure, additive (`resources.hooks ??= []`), no uninstall, no network. Mirrors the v1.12 autoupdate-scrub structure (gated migration, fire-and-forget persist).                                                                                |
-| `domain/resolver.ts`                            | *MODIFIED*     | Move `hooks` from the unsupported standalone-file set into the supported set; the resolver's `componentPaths`-like surface gains a `hooks?: string` (relative path to `hooks/hooks.json` when present) so the install orchestrator can locate it without re-walking.    |
-| `orchestrators/plugin/{install,uninstall,update,reinstall}.ts` | *MODIFIED* | Extend the PI-9 staging order: `skills+prompts -> agents -> mcp -> hooks -> state commit`. Roll back hooks first on phase failure (reverse order).                                                                                                                       |
-| `orchestrators/plugin/info.ts`, `list.ts`       | *MODIFIED*     | Add `hooks` to the resolved-components surface; render under the existing `subject [scope] (status) {reason}` grammar; per-row `{requires pi-subagents}` already exists -- add `{requires pi-mcp}` reuse where a hook event soft-deps on it (none today, but the seam stays).                                                                                                                   |
-| `orchestrators/reconcile/apply.ts`              | *MODIFIED*     | After the per-scope apply pass returns, call `rebuildRoutingTables(state, loc)` for that scope. Routing tables are scope-aware (per-scope plugin records).                                                                                                                |
-| `shared/notify.ts`                              | *MODIFIED*     | Possible new closed-set `Reason` for "hook payload extension ignored" (e.g. `"async rewake unsupported"`). Catalog-UAT update in lockstep. May also reuse an existing reason -- decision deferred to the notify phase (see §6.3).                                       |
+| Component           | Modules | Responsibility                                                                                   | Main dependencies                                         |
+| ------------------- | ------: | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `domain/`           |      20 | Resolution, manifests, identities, versions, hook metadata, GitHub authentication rules          | `platform/`, `shared/`                                    |
+| `platform/`         |       3 | Git, credential, and Pi runtime ports                                                            | `shared/`                                                 |
+| `shared/`           |      19 | Errors, notifications, formatting, paths, configuration, concurrency, and common value utilities | selected platform types/APIs                              |
+| `persistence/`      |       9 | Atomic durable stores for registries, ledgers, settings, caches, and snapshots                   | `domain/`, `platform/`, `shared/`                         |
+| `transaction/`      |       3 | Install and lifecycle transaction coordination and rollback                                      | `persistence/`, `shared/`                                 |
+| `bridges/agents/`   |       9 | Claude agent to Pi agent translation and staging                                                 | domain, persistence, platform, shared                     |
+| `bridges/commands/` |       5 | Claude command to Pi prompt-template translation and staging                                     | domain, persistence, platform, shared                     |
+| `bridges/skills/`   |       8 | Claude skill to Pi skill translation and staging                                                 | domain, persistence, platform, shared                     |
+| `bridges/mcp/`      |       9 | Claude MCP to Pi MCP adapter translation and staging                                             | domain, persistence, platform, shared                     |
+| `bridges/hooks/`    |      31 | Hook conversion, routing, dispatch, execution, and state                                         | domain, persistence, platform, shared                     |
+| `orchestrators/`    |      57 | Plugin, marketplace, import, reconcile, discovery, and presentation workflows                    | all lower layers                                          |
+| `edge/`             |      30 | Command parsing, validation, scope choice, and user-facing dispatch                              | orchestrators, domain, shared, platform                   |
+| root `index.ts`     |       1 | Extension composition, command registration, hook installation, and reload lifecycle             | edge, hooks, orchestrators, persistence, platform, shared |
 
----
+### Boundary Facts That Plans Must Preserve
 
-## 3. Recommended Project Structure (additions only)
+- Hook routing state is isolated in `bridges/hooks/routing-state.ts` to break a live
+  dependency cycle.
+- Plugin and marketplace ledgers do not import each other. Workflows cross that
+  boundary through leaf seams such as `orchestrators/marketplace/shared.ts` or through
+  injected dependencies.
+- The bridge families do not import one another. They share domain and persistence
+  contracts instead.
+- Plugin install uses the transaction runner. Other lifecycle operations have their
+  own rollback shapes and must not be forced into install's transaction abstraction.
+- Offline and no-network behavior is an architectural contract. Read-only commands
+  and warm-cache paths must not gain network dependencies.
+- User-visible output goes through `ctx.ui.notify`. Direct stdout or stderr writes are
+  outside the command and bridge contract.
+- Whole-repository cycle and unused-boundary checks remain the job of Fallow. Pair
+  tests should not reproduce a second dependency scanner.
 
-```
-extensions/pi-claude-marketplace/
-├── bridges/
-│   └── hooks/                       # NEW: 4th component bridge
-│       ├── plan.ts                  # NEW: pure planner
-│       ├── stage.ts                 # NEW: atomic copy of hooks.json
-│       ├── unstage.ts               # NEW: per-plugin rm -rf
-│       ├── discover.ts              # NEW: reader for info/list
-│       ├── matcher.ts               # NEW: pipe-OR compile
-│       ├── dispatch.ts              # NEW: composite pi.on handlers
-│       ├── lifecycle.ts             # NEW: installComposites + rebuildRoutingTables
-│       ├── spawn.ts                 # NEW: child-process exec + parse
-│       └── payloads/
-│           ├── session-start.ts     # NEW (A)
-│           ├── user-prompt-submit.ts# NEW (A)
-│           ├── pre-tool-use.ts      # NEW (A)
-│           ├── post-tool-use.ts     # NEW (A)
-│           ├── post-tool-use-failure.ts # NEW (A)
-│           ├── pre-compact.ts       # NEW (A)
-│           ├── post-compact.ts      # NEW (A)
-│           ├── session-end.ts       # NEW (A)
-│           ├── file-changed.ts      # NEW (B)
-│           ├── cwd-changed.ts       # NEW (D)
-│           ├── post-tool-batch.ts   # NEW (D)
-│           ├── user-prompt-expansion.ts # NEW (D)
-│           ├── stop.ts              # NEW (D, load-bearing -- ralph-wiggum canary)
-│           ├── stop-failure.ts      # NEW (D)
-│           ├── subagent-start.ts    # NEW (A+B, soft-dep pi-subagents)
-│           └── subagent-stop.ts     # NEW (A+B, soft-dep pi-subagents)
-├── domain/
-│   └── components/
-│       └── hooks.ts                 # NEW: ParsedHookEntry + parser
-├── shared/
-│   └── event-router.ts              # NEW: routing-table singleton
-├── persistence/
-│   ├── state-io.ts                  # MODIFIED: schemaVersion 1 -> 2
-│   └── migrate.ts                   # MODIFIED: migrateV1ToV2
-└── index.ts                         # MODIFIED: + bridge.installComposites(pi)
+## Unit-Test Ownership Architecture
+
+The milestone adds a strict one-to-one ownership view over the existing production
+tree.
+
+```text
+extensions/pi-claude-marketplace/<relative-path>.ts
+                         |
+                         | exactly one mirrored owner
+                         v
+tests/<relative-path>.test.ts
+                         |
+                         +-- imports the production module directly
+                         +-- covers its exported behavior directly
+                         +-- reaches 100% functions, lines, and branches
 ```
 
-### Structure rationale
+Tests in `tests/architecture/` and `tests/integration/` can prove cross-module
+contracts. They are supplemental evidence only. They cannot replace a mirrored unit
+test or contribute ownership credit for a source pair.
 
-- **`bridges/hooks/` is the 4th sibling, not an `orchestrators/` member.** Hooks are a *component type* (parallel to skills, commands, agents, mcpServers), and the project already locates per-component logic under `bridges/`. The new bridge inherits the same plan/stage/unstage/discover quartet the other three bridges expose; this keeps the cascade-extension in `plugin/install.ts` mechanical -- "add one more cascade phase" -- and matches the v1.7 saga discipline (each bridge owns its rollback, the orchestrator owns sequencing).
-- **`bridges/hooks/dispatch.ts` + `shared/event-router.ts` split.** Dispatch holds the *handlers* (composite `pi.on(...)` callbacks); the router holds the *routing table* (event -> plugin entries). The split is load-bearing: handlers are installed exactly once at extension-factory time and never re-registered (Pi has no `pi.off()` -- see §7.1); only the table is mutated on `/reload`. Putting the table in `shared/` (where `notify.ts` and other singletons live) keeps `bridges/hooks/` import-graph-flat.
-- **`domain/components/hooks.ts` next to `plugin.ts`/`mcp.ts`.** The resolver already imports `PLUGIN_MANIFEST_VALIDATOR` and `MCP_SERVERS_VALIDATOR` from `domain/components/`. A `HOOKS_VALIDATOR` sibling completes the convention. The schema is forward-compatible by construction (preserves unknown payload-extension fields).
-- **Per-event payload file under `bridges/hooks/payloads/`.** Each Claude event has different shape, different bucket, different synthesis caveats (B/D entries carry the loss-mode comments adjacent to their synthesizers per `docs/research/...md` §"Synthesis caveats"). One file per event makes "regression test for `Stop` synthesis" mechanically obvious and keeps the dispatcher under 200 LoC.
+### Current Pair Baseline
 
----
+The canonical pair audit contains 204 rows.
 
-## 4. Architectural Patterns
+| Audit label     |   Pairs | Planning meaning                                       |
+| --------------- | ------: | ------------------------------------------------------ |
+| `PASS`          |      59 | Existing evidence to inspect; pair remains open        |
+| `COVERAGE_FAIL` |      83 | Mirrored test exists but direct coverage is incomplete |
+| `MISSING`       |      60 | Mirrored test is absent                                |
+| `TEST_FAIL`     |       2 | Focused test or environment failed; pair remains open  |
+| **Total open**  | **204** | **Every pair receives one executable plan and commit** |
 
-### Pattern 1: Composite-per-Pi-event handler with mutable routing table (resolves the locked-design Q1)
+The current corresponding-test gate reports 107 violations: 60 missing tests, 43
+unexpected tests, and four wrong imports. Both planted negative controls pass. These
+numbers are a starting diagnostic, not a completion ledger.
 
-**What:** Install **one** `pi.on(piEventName, handler)` per Pi event type at extension-factory time (`bridge.installComposites(pi)` invoked synchronously from `index.ts`). The handler does no plugin logic; it looks up its routing table in `shared/event-router.ts` and dispatches to every matching plugin's translator.
+One audit failure for `orchestrators/marketplace/add.ts` passes when the unchanged
+test can create its Unix socket, so its plan must preserve the behavior while making
+the test hermetic. `orchestrators/plugin/update.ts` has three reproducible assertion
+failures around unavailable Git-source candidates. Its own lifecycle pair must own
+that correction.
 
-**Why this is right (vs. one `pi.on(...)` per plugin):**
+## Recommended Phase Architecture
 
-1. **Pi has no `pi.off()`.** Verified in `@earendil-works/pi-coding-agent` package: `ExtensionAPI` exposes `pi.on`, `pi.events: EventBus`, `pi.sendUserMessage`, `pi.registerCommand`, `pi.registerTool` -- *no `off`/`unsubscribe`*. Per-plugin `pi.on(...)` registrations from a previous load would persist on `/reload`, accumulate every reload, and fire on stale plugin state. With per-plugin handlers, a plugin uninstall could not actually disable its hooks until process restart -- a direct NFR-2 violation ("no fix may require a Pi process restart; `Run /reload` must suffice").
-2. **A "disabled" flag inside per-plugin handlers does not fix this.** Even with the flag, every reload installs N more handlers; after K reloads, K-1 of them are dead weight. Pi's event-fan-out cost grows unboundedly across reloads -- a long-running session pays for this.
-3. **Composite handlers + a mutable routing table installed exactly once gives O(reload-count) handler installs = 1**, with routing-table rebuild being the only per-reload work. The composite reads the table on every dispatch; nothing is stale because the table is the single source of truth.
+The following grouping covers each production module exactly once. The phase counts
+sum to 204.
 
-**Cost of routing-table rebuild per `/reload`:** Walk `state.plugins` (already in memory after `loadState`) for both scopes, iterate `record.resources.hooks`, populate `Map<PiEventName, Map<RoutingKey, RoutingEntry[]>>`. Pure synchronous data shuffle, no I/O. For the empirical first-party catalog (5 hook-using plugins, mostly 1-4 entries each) this is dozens of map inserts -- well under 1ms. Scales linearly with installed-plugin count, with a small constant.
+| Phase | Group                               | Pair count | Dependency rationale                                                                                                  |
+| ----: | ----------------------------------- | ---------: | --------------------------------------------------------------------------------------------------------------------- |
+|   108 | Domain and Platform                 |         23 | Stabilize foundational values, resolver result, Git ports, credentials, and GitHub authentication before consumers    |
+|   109 | Shared Contracts                    |         19 | Prove errors, paths, configuration, notifications, and common utilities used by all later layers                      |
+|   110 | Persistence and Transaction         |         12 | Prove formats, atomic writes, idempotency, ledger isolation, and rollback coordination after their value contracts    |
+|   111 | Non-Hook Component Bridges          |         31 | Cover agents, commands, skills, and MCP conversion and staging on stable lower seams                                  |
+|   112 | Hook Runtime                        |         31 | Isolate the larger hook conversion, routing, dispatch, and execution subsystem                                        |
+|   113 | Orchestrator Support and Presenters |         35 | Prove small seams, classifiers, discovery helpers, messaging modules, and planning helpers before lifecycle composers |
+|   114 | Plugin and Marketplace Lifecycle    |         14 | Cover the large state-changing plugin and marketplace workflows after their collaborators                             |
+|   115 | Composition Orchestrators           |          8 | Cover import, reconcile, bootstrap, and edge-dependency composition after lifecycle primitives                        |
+|   116 | Edge Surface                        |         30 | Cover parsing and command dispatch after all invoked workflows have stable contracts                                  |
+|   117 | Extension Entry and Final Gate      |          1 | Cover root registration and composition, then close all global structural gates                                       |
 
-**Deterministic dispatch ordering rule (locked-design Q1 edge case — two plugins, same event, overlapping matcher):** Sort routing entries by `(scope, plugin)` using the existing `compareByNameThenScope` from `shared/notify.ts` (project-first tie-break, then alphabetical). This is the same comparator the v1.3 output-grammar settled on; reusing it means catalog UAT renderings of hook-related rows match every other multi-plugin surface. Within a single plugin's entries, preserve `hooks.json` source order (Claude Code's documented behavior: matchers run in declared order within a hook config).
+Phases 111 and 112 can be prepared in parallel after Phase 110 because their source
+trees are independent. Keep their commits and plans separate. Phase 113 must precede
+the lifecycle phase because the lifecycle modules depend on these helpers and
+presenters. Phase 115 follows lifecycle because its modules compose those workflows.
 
-**Concurrency model (locked-design Q5 follow-up):** Within ONE composite handler invocation, dispatch is **sequential and awaited per routing entry**. This matches Claude Code's per-event serial semantics and is the only model that lets a hook's `{"decision": "block"}` short-circuit the rest of the chain. Across DIFFERENT Pi event types, Pi's own dispatch model controls -- the bridge does not coordinate cross-event ordering (Pi already serializes per-event-type in the agent loop). Document this in `bridges/hooks/dispatch.ts` header comment alongside the bucket-D synthesis caveats.
+### Phase 113 Boundary
 
-**Tradeoff acknowledged:** A composite handler is harder to per-plugin-debug than a per-plugin handler. Mitigation: a single debug-log line per dispatch with `(plugin, event, matcherHit, decision)` makes traceability mechanical (see §6.4 for the debug-log seam). Net: the no-unsubscribe constraint is decisive; the composite shape is the only one that satisfies NFR-2.
+Use the live modules, not a new support directory. The intended 35 pairs are:
 
-### Pattern 2: Hooks bridge mirrors the existing 4-bridge cascade contract
+- Five top-level support modules: authentication host, discovery, plugin path,
+  scope fan-out, and orchestrator types.
+- Fifteen plugin support and presentation modules: clone cache, clone garbage
+  collection, name discovery, Git-source probing, state classification, shared
+  helpers, update-row formatting, and the eight current messaging modules.
+- Six marketplace support and presentation modules: shared helpers and five current
+  messaging modules.
+- Five import support modules: execute messaging, marketplaces, references, settings,
+  and types.
+- Four reconcile support modules: apply outcomes, planning, reconcile messaging, and
+  types.
 
-**What:** `bridges/hooks/{plan,stage,unstage,discover}.ts` matches the file partition and seam shape of `bridges/agents/`, `bridges/mcp/`, `bridges/skills/`, `bridges/commands/`. The cascade orchestrator (`orchestrators/plugin/install.ts`) extends from 4 bridges to 5 by inserting a `stageHooks(...)` call in the same shape as `stageMcpServers(...)`.
+### Phase 114 Boundary
 
-**Why:** v1.7 hardened the cascade into a per-bridge sequential-roll-forward + reverse-walk-on-failure ledger pattern (`transaction/runPhases.ts`). New bridges that conform to that shape inherit the rollback discipline automatically; bridges that don't conform create a surface where future failure modes cannot be pinned by `tests/transaction/phase-ledger.test.ts`. Conforming is cheap: `bridges/hooks/stage.ts` is a single `atomicWriteJson` of `hooks.json` (no per-entry copy -- the whole file moves as one unit), and `unstage.ts` is one `rm -rf`. The bridge's containment guarantee falls out of the per-plugin subdirectory under `<extensionRoot>/hooks/<plugin>/` -- no cross-plugin write is reachable.
+The 14 lifecycle pairs are the eight plugin workflows (`enable-disable`, `fetch`,
+`info`, `install`, `list`, `reinstall`, `uninstall`, and `update`) and the six
+marketplace workflows (`add`, `autoupdate`, `info`, `list`, `remove`, and `update`).
+These are high-value integration boundaries, but each remains one source-test pair.
 
-### Pattern 3: State schema bump as additive optional, not breaking
+### Phase 115 Boundary
 
-**What:** `STATE_SCHEMA.schemaVersion` widens from `Type.Literal(1)` to `Type.Union([Literal(1), Literal(2)])`; the per-plugin `resources` object gains `hooks: Type.Array(Type.Object({event: ..., matcher: ..., bucket: ..., softDep: Type.Optional(...), ignoredExtensionFields: Type.Optional(Type.Record(...))}))`. The field is **required at v2** but **absent at v1**; the migration synthesizes `[]` for every existing plugin record on first load under v1.13 code.
+The eight composition pairs are `edge-deps`, the two import composers (`execute` and
+the import barrel), plugin bootstrap, and four reconcile composers (`apply`,
+`backfill`, `notify`, and `pending`).
 
-**Migration semantics (resolves the locked-design Q2 first-load behavior):**
+## Within-Phase Execution Sequence
 
-- First load of a v1.12 state.json under v1.13 code: `loadState` reads `schemaVersion === 1`; the existing `migrateLegacyMarketplaceRecords` chain gains a step that walks every `marketplaces[*].plugins[*]` and sets `resources.hooks ??= []` (additive, idempotent), then sets `schemaVersion = 2`. Persisted fire-and-forget by `persistMigratedState` (same shape as the v1.12 autoupdate scrub).
-- Mid-flight crash before migrated persist: harmless. Next load re-runs the migration; same fixed point.
-- A `claude-plugins.json` declared plugin's `enabled: true` whose state record has `resources.hooks: []` is a regular state -- it just means "no hooks staged yet (or this plugin declares none)." The reconcile loop's install step is the one that actually populates `resources.hooks` by calling `bridges/hooks/stage.ts`.
-- Downgrade safety (v1.13 state.json read by v1.12 code): typebox's strict mode would *reject* `schemaVersion: 2`. Acceptable -- downgrades aren't a supported path; the user would have to manually delete state.json. Document in CHANGELOG.
+The pair is the smallest executable unit. A phase can use waves, but a wave must not
+change pair ownership.
 
-**Concrete TypeBox diff (resolves locked-design Q2 schema shape):**
+1. Test type-only contracts, leaf values, and leaf adapter ports first.
+2. Test small exported helpers that are imported by other modules in the phase.
+3. Test stateful modules and persistence adapters after their schemas and values.
+4. Test presenters before the workflows that call them.
+5. Test lifecycle workflows before composition modules.
+6. Test barrels after their leaf exports are stable.
+7. Test the root entry point last.
+
+Serialize pairs when one changes a public contract used by the other or when both
+must edit the same concern-local test support file. Other pairs in the same phase can
+run in parallel. Never let parallel plans share ownership of a source, mirrored test,
+or commit.
+
+## Executable Pair Plan Shape
+
+Every plan should use the same evidence-producing sequence.
+
+### 1. Declare Ownership
+
+Name one exact production source and its one exact mirrored test. Record the audit
+label as baseline context only. Name any supplemental tests that contain behavior
+currently owned by the source.
+
+### 2. Trace the Public Contract
+
+Read the source, its exports, its callers and importers, the mirrored test, and related
+architecture or integration tests. Decide which observable behavior belongs in the
+mirrored test. Do not infer the contract from the old patch or retired phase plans.
+
+### 3. Consolidate Test Ownership
+
+Move source-owned cases from unexpected supplemental unit files into the mirrored
+test. Keep a supplemental test only when it genuinely proves a multi-module contract.
+Do not delete tests solely to make the corresponding-test gate green.
+
+### 4. Make the Smallest Production Change
+
+If the module cannot be tested through its exported surface, add a narrow production
+dependency or port that improves the real design. Prefer an optional dependency,
+explicit callback, clock, filesystem port, process boundary, or existing adapter.
+Keep the change inside the current module boundary unless current callers prove that
+a new production module is necessary.
+
+### 5. Write Direct Unit Tests
+
+Use `node:test` and `node:assert/strict`. Use explicit Arrange, Act, and Assert
+comments. Create fresh mutable state and a fresh temporary directory per case. Use
+strong mocks for promised interactions. Cover success, failure, absence, boundary,
+and retry behavior through exports only.
+
+Type-only files still require a mirrored test with compile-time contract assertions.
+Barrels must prove runtime binding identity for value exports and compile-time
+availability for type exports. The behaviorful root `index.ts` is not a barrel.
+
+### 6. Prove the Pair
+
+Run the focused test and the direct-coverage command for the exact source. Require
+100% functions, lines, and branches. Run type checking, linting, and affected
+contract tests when the public surface changes. Confirm that no test-only export,
+module replacement, or shared mutable state was introduced.
+
+### 7. Commit the Pair
+
+Create one commit that represents one source-test pair. Concern-local support edits
+may ride in the commit only when they exist to test that pair. A plan must not combine
+two production sources to reduce commit count.
+
+## Cross-Cutting Contract Carriers
+
+Cross-cutting concerns still need a single accountable source pair. Use these carrier
+pairs instead of creating non-pair executable plans.
+
+| Contract                                                          | Owning pair or pairs                                               |    Phase | Verification boundary                                                                |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------ | -------: | ------------------------------------------------------------------------------------ |
+| Resolver root safety                                              | `domain/resolver.ts`                                               |      108 | Runtime arm tests plus compile-time rejection of `pluginRoot` on unavailable results |
+| Git and credential adapter parity                                 | `platform/git.ts`, `platform/git-credential.ts`                    |      108 | Public port behavior and concern-local adapter contract cases                        |
+| Device Flow HTTP reachability                                     | `domain/github-auth.ts`                                            |      108 | Public authentication workflow with a production-reachable injected HTTP port        |
+| Version internals remain private                                  | `domain/version.ts`                                                |      108 | Test public version behavior; remove tests of private hashing constants              |
+| Hook metadata and diagnostics                                     | Relevant domain metadata pair and hook routing/dispatch pairs      | 108, 112 | Public translation and dispatch behavior; no private tool-name exports               |
+| Notification grammar and output routing                           | Shared notify/reason/context pairs and each current messaging pair | 109, 113 | Direct message tests plus supplemental architecture checks                           |
+| Durable formats and atomic writes                                 | Each persistence module                                            |      110 | Round trip, corrupted/absent state, retry, and atomic replacement behavior           |
+| Bridge atomicity and foreign-content preservation                 | Each bridge stage/unstage module                                   | 111, 112 | Direct bridge pair tests plus supplemental cross-bridge integration cases            |
+| Update preload, staging warnings, and unavailable-source behavior | `orchestrators/plugin/update.ts`                                   |      114 | Public update outcomes and rollback/notification effects                             |
+| Reconcile entry isolation                                         | `orchestrators/reconcile/apply.ts`                                 |      115 | One entry failure does not stop other entries or arms                                |
+| Correspondence and direct-coverage enforcement                    | Every pair; final closure with root `index.ts`                     | All, 117 | Pair checks continuously; full gates and negative controls at milestone close        |
+
+If a carrier exposes a defect in gate code, repair that gate in the carrier's pair
+commit. Do not introduce a gate-only phase or plan. Gate implementation already at
+HEAD is baseline infrastructure, not proof that any pair is complete.
+
+## Resolver Discriminant Contract
+
+The resolver's three-state `state` field and the new boolean discriminant serve
+different purposes. Keep both. `state` distinguishes fully installable from partially
+available results. `installable` makes root access type-safe.
 
 ```typescript
-// persistence/state-io.ts — DIFF
-const HOOK_ROUTING_SCHEMA = Type.Object({
-  // The Claude event name as written in hooks.json (canonical form;
-  // bucket-H entries are dropped at parse time and never recorded here).
-  event: Type.Union([
-    Type.Literal("SessionStart"),
-    Type.Literal("UserPromptSubmit"),
-    Type.Literal("PreToolUse"),
-    Type.Literal("PostToolUse"),
-    Type.Literal("PostToolUseFailure"),
-    Type.Literal("PostToolBatch"),
-    Type.Literal("UserPromptExpansion"),
-    Type.Literal("PreCompact"),
-    Type.Literal("PostCompact"),
-    Type.Literal("SessionEnd"),
-    Type.Literal("Stop"),
-    Type.Literal("StopFailure"),
-    Type.Literal("FileChanged"),
-    Type.Literal("CwdChanged"),
-    Type.Literal("SubagentStart"),
-    Type.Literal("SubagentStop"),
-  ]),
-  // Literal name OR pipe-OR alternation; never a regex (NON-GOAL).
-  matcher: Type.String(),
-  bucket: Type.Union([
-    Type.Literal("A"), Type.Literal("B"), Type.Literal("D"),
-    Type.Literal("soft-dep-conditional"),
-  ]),
-  softDep: Type.Optional(Type.Union([Type.Literal("pi-subagents")])),
-  // Forward-compat: preserve unknown payload-extension fields (e.g.
-  // asyncRewake) so a re-stage round-trips byte-identical (and the
-  // install-time warning lists exactly what was tolerated).
-  ignoredExtensionFields: Type.Optional(
-    Type.Record(Type.String(), Type.Unknown()),
-  ),
-});
-
-const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
-  // ...existing fields unchanged...
-  resources: Type.Object({
-    skills: Type.Array(Type.String()),
-    prompts: Type.Array(Type.String()),
-    agents: Type.Array(Type.String()),
-    mcpServers: Type.Array(Type.String()),
-    hooks: Type.Array(HOOK_ROUTING_SCHEMA),         // NEW
-  }),
-  // ...
-});
-
-export const STATE_SCHEMA = Type.Object({
-  schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2)]),   // WIDEN
-  marketplaces: Type.Record(Type.String(), MARKETPLACE_RECORD_SCHEMA),
-});
+type ResolvedPlugin =
+  | {
+      installable: true;
+      state: "installable";
+      pluginRoot: string;
+      // Current installable fields remain here.
+    }
+  | {
+      installable: true;
+      state: "partially-available";
+      pluginRoot: string;
+      // Current partial-result fields remain here.
+    }
+  | {
+      installable: false;
+      state: "unavailable";
+      name: string;
+      notes: readonly string[];
+      // No pluginRoot.
+    };
 ```
 
-**Note:** `hooks` is array-shaped, **not** a `Map<EventName, Routing[]>`. A single plugin may declare two entries for the same event with different matchers; the array preserves declaration order (which Claude Code honors at dispatch time). The router-table builder (`event-router.ts`) does the grouping.
-
-### Pattern 4: Routing-table rebuild is a side-effect of reconcile, not a parallel mechanism
-
-**What:** `orchestrators/reconcile/apply.ts` already drives the full set of install/uninstall/enable/disable transitions per scope on every `/reload` (RECON-01..05). After its per-scope apply pass returns, before the single notify, call `bridge.rebuildRoutingTables(state, loc)` once per scope. The function is pure-ish: reads state in memory, mutates the `shared/event-router.ts` singleton, returns void.
-
-**Why** (resolves the locked-design Q1 "rebuild on every /reload" cost concern): The reconcile pass is the only path that mutates `state.json` after the initial extension factory. By piggybacking on its single notify and its per-scope completion barrier, the rebuild is:
-
-- Atomic w.r.t. the file (it reads the state object already loaded under the per-scope lock).
-- Idempotent (clearing + rebuilding gives the same table for the same state).
-- Free of cross-scope races (each scope owns its rebuild call serially within the apply pass).
-- Triggered by the same events that mutate the disk state, with no separate lifecycle to keep in sync.
-
-The cost of one full rebuild is bounded by `total installed plugins * avg hooks per plugin * avg events per hook`. For the empirical first-party catalog this is sub-millisecond. Even at 100 installed plugins with 5 hooks/plugin/3 events = 1500 map inserts: still microsecond-scale on Node 22.
-
-### Pattern 5: Bucket-D synthesizers own their loss-mode comments + dedicated tests
-
-**What:** Each bucket-D payload file (`bridges/hooks/payloads/{cwd-changed,post-tool-batch,user-prompt-expansion,stop,stop-failure}.ts`) carries its loss-mode comment block adjacent to the synthesizer body. The `docs/research/claude-hooks-vs-pi-events.md` "Synthesis caveats" table is the canonical wording -- the comment block in code lifts it verbatim.
-
-**Why:** The risk surfaced in `docs/research/...md` is that bucket-D synthesizers "could quietly drift if Pi grows new tools, transform stages, or execution patterns." A canary plugin (`ralph-wiggum` for `Stop`) is named in the research note. Pinning each loss mode in a per-file regression test (`tests/bridges/hooks/payloads/stop.test.ts` -> "block-to-continue round-trip via pi.sendUserMessage") makes the synthesis contract executable: a future Pi change that breaks the synthesizer breaks the test, not user installs.
-
-### Pattern 6: Soft-dep wiring uses the existing `softDepStatus(pi)` probe, not a new probe
-
-**What:** `pi-subagents` presence is already probed by `softDepStatus(pi)` from `platform/pi-api.ts`. When `pi-subagents` is present, the bridge subscribes to `pi.events.on("subagent:async-started" / "subagent:async-complete", ...)` from inside `installComposites(pi)`; when absent, it skips those subscriptions and the routing table for `SubagentStart`/`SubagentStop` simply has no path that reaches a real handler. The per-row `{requires pi-subagents}` marker on `list`/`info` rows uses the existing `shared/notify.ts` `Dependency = "agents" | "mcp"` mechanism (which already drives the equivalent marker for agents/mcp); hooks reuse `Dependency = "agents"` because `pi-subagents` is the same soft dep that drives the agents bridge today.
-
-**Why this is not a new soft-dep:** Adding a third Dependency token would force a closed-set bump in `notify.ts` plus a catalog-UAT change for every renderer that touches the row. Reusing `"agents"` keeps the wire-format unchanged. The reader interpretation is unambiguous: any row that says `{requires pi-subagents}` is missing the pi-subagents host that BOTH the agents bridge AND the subagent-hook bridge need.
-
----
-
-## 5. Data Flow
-
-### 5.1 Install-time data flow (new path through existing install orchestrator)
-
-```
-/claude:plugin install x@mp [--local]
-  └─► edge -> orchestrators/plugin/install.ts::installPlugin
-        └─► withLockedStateTransaction(loc, async tx => {
-              // existing phases:
-              await stageSkillsAndPrompts(plan)             // bridges/skills + commands
-              await stageAgents(plan)                       // bridges/agents
-              await stageMcpServers(plan)                   // bridges/mcp
-              // NEW phase, between mcp and state commit:
-              const hookPlan = planHooks(resolved.hooks)    // bridges/hooks/plan.ts
-              const hookRouting = await stageHooks(hookPlan, loc) // bridges/hooks/stage.ts
-              tx.state...resources.hooks = hookRouting      // discriminated record
-              writeBackPluginEntry(loc, ...)                // v1.12 write-back, unchanged
-              await tx.save()                               // existing state save
-            })
-        └─► notify(...)                                     // existing; +
-                                                            // {hook payload extension ignored}
-                                                            // reason if any
-```
-
-Where:
-
-- `planHooks` parses `hooks.json` via `domain/components/hooks.ts`, drops bucket-H events (silent, debug-log only), separates `softDep`-conditional entries from direct entries, collects unknown payload-extension field names (for the install-time warning if any).
-- `stageHooks` does `atomicWriteJson(<extensionRoot>/hooks/<plugin>/hooks.json, hookPlan.content)` after `assertPathInside` against `<extensionRoot>/hooks/`. Containment falls out: per-plugin subdir.
-
-### 5.2 Runtime data flow (the new dispatch path)
-
-```
-Pi fires PreToolUse-equivalent event (tool_call)
-  └─► composite handler (registered once at extension factory)
-        └─► router.lookup("tool_call", event.toolName) -> RoutingEntry[]
-              (sorted project-first-then-alphabetical; deterministic)
-              └─► for each entry (sequential, awaited):
-                    └─► matcher.matches(entry.matcher, event.toolName)?
-                          ├─ no  -> continue (no log, no spawn)
-                          └─ yes -> spawn child process
-                                    └─► stdin: translate(event) per payloads/pre-tool-use.ts
-                                    └─► stdout: JSON parse; apply response:
-                                          - decision:"block" -> Pi tool_call returns
-                                              { block: true, reason }
-                                          - permissionDecision -> map to Pi semantics
-                                          - updatedInput -> mutate event.input in place
-                                    └─► nonzero exit -> treat as block + capture stderr
-                                    └─► timeout -> treat as block + log
-                    └─► debug-log: (plugin, event, decision, durationMs)
-              └─► return aggregated Pi event result (first-blocker-wins or merge per event spec)
-```
-
-**Concurrency clarification (resolves locked-design Q5):** Within a single composite handler invocation, the `for each entry` loop is `for ... of` with `await` per body. Two routing entries for the same event NEVER run in parallel. This matches Claude Code's documented per-event semantics; the bridge's invariant comment block in `dispatch.ts` should cite this explicitly so a future "optimize with Promise.all" PR is unambiguously wrong. Across different Pi events (e.g. a `tool_call` and a `tool_result` fire in close succession), Pi's own event loop is the serializer -- the bridge does not interpose.
-
-### 5.3 `/reload` flow (extension of the v1.12 reconcile)
-
-```
-Pi /reload
-  └─► pi.on("resources_discover") handler [index.ts]
-        ├─► applyReconcile({ ctx, pi, cwd: event.cwd })   // RECON-01..05
-        │     ├─ readPassForScope(user)  -> plan
-        │     ├─ readPassForScope(project) -> plan
-        │     ├─ applyPassForScope(user)
-        │     │     └─ install/uninstall/enable/disable cascade
-        │     │     └─ NEW: bridge.rebuildRoutingTables(userState, userLoc)
-        │     ├─ applyPassForScope(project)
-        │     │     └─ install/uninstall/enable/disable cascade
-        │     │     └─ NEW: bridge.rebuildRoutingTables(projectState, projectLoc)
-        │     └─ single notify() — existing reconcile-applied-cascade
-        └─► aggregateDiscoveredResources(...) -> { skillPaths, promptPaths }
-```
-
-**Note on mid-/reload event delivery (Pitfall, see §7.4):** Between `applyReconcile` start and `rebuildRoutingTables` for a given scope, Pi could theoretically fire a tool_call event in the middle. The current routing table is from the *previous* reload's state; it may dispatch to a plugin we are about to uninstall. Mitigations: (a) Pi's event ordering is single-threaded within the agent loop, so during reconcile (which runs inside `resources_discover` handler, awaited by Pi) no agent-loop event can fire -- `resources_discover` is part of Pi's setup-phase, not a runtime event interleaved with agent turns. This means the rebuild boundary is **safe by Pi's call ordering**, not by our locking. Document the assumption in `lifecycle.ts` so a future change to Pi's discover-handler scheduling surfaces as a code review concern. (b) Even if Pi did fire an event during reconcile, the worst case is one stale dispatch to a plugin whose hooks.json is still on disk -- the spawn proceeds against the old file, which is the same content the in-memory routing table thinks should run. The next event after `rebuildRoutingTables` returns reads the new table. There is no data corruption path.
+The `domain/resolver.ts` pair must update its runtime schema or constructors together
+with the exported type. Its mirrored test must prove all runtime arms and include a
+compile-time negative assertion for `pluginRoot` on the unavailable arm. The change
+is additive for consumers that only inspect `state`, so it does not require a mass
+consumer rewrite or a separate migration plan. It does not change a persisted format.
 
-### 5.4 State.json schema bump migration (resolves locked-design Q2)
+## Verification Boundaries
 
-```
-load v1 state.json under v1.13 code:
-  loadState(extensionRoot)
-    └─ JSON.parse -> raw object with schemaVersion: 1, no plugin.resources.hooks
-    └─ migrateLegacyMarketplaceRecords(raw, configExists, scrubAutoupdate)
-        └─ existing autoupdate scrub (v1.12)
-        └─ NEW: migrateV1ToV2(raw):
-              for each marketplace:
-                for each plugin:
-                  plugin.resources.hooks ??= []
-              raw.schemaVersion = 2
-    └─ STATE_VALIDATOR.Check(raw)  // passes; schemaVersion is now in widened union
-    └─ persistMigratedState(raw)   // fire-and-forget, IL-3 sanctioned warn on fail
-    └─ return raw as ExtensionState
+### Pair Boundary
 
-load v2 state.json under v1.13 code:
-  loadState -> validates -> no migration -> return
-```
+- The mirrored test imports the production source directly.
+- The focused test passes.
+- Direct coverage for that source is 100% functions, lines, and branches.
+- Tests use only the exported surface.
+- Exactly one mirrored test owns the source.
+- The commit contains one production source-test pair.
 
-**Field-by-field accounting for the bump (resolves locked-design Q2 in full):**
+### Wave Boundary
 
-| Plugin-record field      | v1 status | v1.13 (v2) status                                  |
-| ------------------------ | --------- | -------------------------------------------------- |
-| `version`                | required  | unchanged                                          |
-| `resolvedSource`         | required  | unchanged                                          |
-| `compatibility.*`        | required  | unchanged                                          |
-| `resources.skills`       | required  | unchanged                                          |
-| `resources.prompts`      | required  | unchanged                                          |
-| `resources.agents`       | required  | unchanged                                          |
-| `resources.mcpServers`   | required  | unchanged                                          |
-| `resources.hooks`        | --        | required (defaults `[]` on migration)              |
-| `installedAt/updatedAt`  | required  | unchanged                                          |
+- Type checking and linting pass for the accumulated wave.
+- Direct dependents are retested when a public contract changes.
+- Shared support files have one current owner and no parallel edit collision.
 
-### 5.5 Per-plugin file isolation (resolves locked-design Q3)
+### Phase Boundary
 
-The v1.7-hardened containment model already says: each plugin owns its own subtree under each component-bridge's directory. For hooks, the subtree is `<scopeRoot>/pi-claude-marketplace/hooks/<plugin>/` (under the existing extensionRoot, NOT a new top-level dir under scopeRoot). This is correct because:
+- Every pair in the phase passes direct coverage independently.
+- Relevant architecture and integration suites pass.
+- `npm run check` remains green, apart from a separately recorded pre-existing
+  structural-gate gap that the phase has strictly reduced.
+- The global corresponding-test violation count never increases. It may remain nonzero
+  until later phases because the later source pairs are still open.
 
-- `assertPathInside(<extensionRoot>, ...)` already covers it; no new containment rule needed.
-- Uninstall = `rm -rf <extensionRoot>/hooks/<plugin>/`. Naturally drops the routing entries on the next `rebuildRoutingTables` because `state.plugins[mp][plugin].resources.hooks` was set to `[]` (or the record was removed entirely) inside the same locked uninstall transaction.
-- Cross-plugin sharing is impossible: two plugins write to two different subdirs; the bridge never reads a sibling plugin's file.
-- The `<plugin>` segment is the plugin's marketplace-derived name, which already passes through `assertSafeName` at install time (existing rule for `pluginDataDir`, line 184 of `locations.ts`). Reuse that helper for the hooks subdir: `path-separator chars, ".." / ".", ASCII control chars` are pre-rejected -- the existing defense applies.
+### Milestone Boundary
 
----
+Phase 117 closes the full repository, not only the entry pair. Require all of the
+following:
 
-## 6. Integration Points (code seams the roadmapper can name in phases)
+- `npm run test:corresponding`
+- `npm run test:coverage:direct:all`
+- the corresponding-test planted negative control
+- the direct-coverage planted negative control
+- `npm run check`
+- no missing, unexpected, or wrong-import pair violations
+- 204 pair commits represented by 204 completed pair plans
 
-| # | Boundary | File:Symbol | Phase ownership |
-|---|----------|-------------|-----------------|
-| 1 | Schema bump | `persistence/state-io.ts::STATE_SCHEMA`, `::PLUGIN_INSTALL_RECORD_SCHEMA` | Schema/state-split phase (blocker for everything else) |
-| 2 | State migration | `persistence/migrate.ts::migrateLegacyMarketplaceRecords` (add `migrateV1ToV2` call), `::persistMigratedState` (unchanged) | Same phase as (1) |
-| 3 | Hook parser + types | `domain/components/hooks.ts` (NEW); `domain/resolver.ts` (move `hooks` from unsupported standalone-file array on lines 156-162 into the supported set; surface a `hooks?: string` on the resolved-plugin shape near the `componentPaths` definition lines 41-44) | Parser phase (depends on (1) for schema shape) |
-| 4 | Matcher compile | `bridges/hooks/matcher.ts` (NEW) | Parser phase or its own (small, leaf) |
-| 5 | Stage / unstage / discover | `bridges/hooks/{plan,stage,unstage,discover}.ts` (NEW) | Bridge-shape phase (depends on (3)) |
-| 6 | Install cascade extension | `orchestrators/plugin/install.ts` (extend the 4-bridge cascade to 5); equivalent extensions in `uninstall.ts`, `update.ts`, `reinstall.ts` | Lifecycle phase (depends on (5)) |
-| 7 | Routing-table singleton + composites | `shared/event-router.ts` (NEW); `bridges/hooks/dispatch.ts` (NEW); `bridges/hooks/lifecycle.ts::installComposites` (NEW) | Dispatch-core phase (depends on (3,4); independent of (5,6)) |
-| 8 | Composite registration site | `index.ts` (line ~62, after `registerClaudePluginCommand`, before `registerClaudeMarketplaceTools`); ONE-LINE call: `installComposites(pi)` | Dispatch-core phase |
-| 9 | Routing-table rebuild call | `orchestrators/reconcile/apply.ts::applyPassForScope` (after the per-scope cascade returns, before the single notify) | Lifecycle integration phase (depends on (6,7)) |
-| 10 | Per-event payload translators | `bridges/hooks/payloads/<event>.ts` (NEW, ~16 files) | Per-bucket phases (A as one phase; B FileChanged as its own; each D event arguably its own; soft-dep subagent as own) |
-| 11 | Spawn + parse | `bridges/hooks/spawn.ts` (NEW) | Dispatch-core phase (parallel to payloads; both feed into (7)) |
-| 12 | Info / list surface | `orchestrators/plugin/info.ts` (extend `composePluginInfoComponents` around lines 200-220 to include `hooks` alongside `agents/commands/mcp/skills`); `orchestrators/plugin/list.ts` (extend the renderPluginRow's components field) | Surface phase (depends on (5) for `bridges/hooks/discover.ts`) |
-| 13 | Install-time warning emit | `orchestrators/plugin/install.ts` -> `notify(...)` (existing); new `Reason` value if needed (see §6.3) | Notify phase (same as (12) or separate) |
-| 14 | Debug log emit | All bucket sites where "dropped because semantically inapplicable" or "ignored extension field" fires. NO existing project-wide debug log seam exists — the codebase routes everything through `ctx.ui.notify` or throws. Recommend: a single `shared/debug-log.ts` (NEW) wrapping `console.debug` gated on `process.env.PI_CLAUDE_MARKETPLACE_DEBUG`; bridge files import from here. This is the smallest IL-2/IL-3-respecting seam (IL-3 already sanctions one `console.warn` for migration save failures; a structured `console.debug` gated on env is a narrow precedent extension). | Same phase that introduces (3) parser |
-| 15 | Bucket-H drop policy | `bridges/hooks/plan.ts` (silent drop + `debugLog("dropped %s:%s — bucket H", plugin, event)`); NO install-time warning | Same as (3) |
-| 16 | Hook-payload-extension tolerance | `domain/components/hooks.ts` (preserve unknown fields on entry); `bridges/hooks/plan.ts` (collect `ignoredExtensionFields`); install notify references known set (`asyncRewake`, `rewakeMessage`, `rewakeSummary`) | Same phase as parser (3) + notify phase (13) |
-| 17 | Soft-dep subscription | `bridges/hooks/lifecycle.ts::installComposites` -- inside, check `softDepStatus(pi).agents.present`; if true, `pi.events.on("subagent:async-started", ...)` / `"subagent:async-complete"` | Soft-dep phase |
+If the new structural gates are not yet part of `npm run check`, the root entry pair
+plan can own the final package-script wiring as a supporting task. This keeps the
+roadmap free of a non-pair executable plan. Supplemental architecture and integration
+tests remain contract evidence; they never replace direct pair proof.
 
-### 6.1 Hook schema bump — landing site
+## Patterns to Follow
 
-`persistence/state-io.ts` lines 39-87. The bump is mechanical:
+### Public-Surface Testability
 
-1. Add `HOOK_ROUTING_SCHEMA` definition above `PLUGIN_INSTALL_RECORD_SCHEMA`.
-2. Add `hooks: Type.Array(HOOK_ROUTING_SCHEMA)` to the `resources` object literal (line 48).
-3. Widen `schemaVersion: Type.Literal(1)` (line 85) to `Type.Union([Type.Literal(1), Type.Literal(2)])`.
+Refactor a hidden dependency into a production-useful port, then test behavior through
+the exported workflow. Good seams include the existing filesystem, Git, Pi API,
+process, clock, and notification boundaries.
 
-The JIT validator (`STATE_VALIDATOR = Compile(STATE_SCHEMA)` line 92) recompiles automatically.
+### Concern-Local Test Support
 
-### 6.2 Reconcile routing-table rebuild — landing site
+Place a fake or contract suite with the concern it represents. A Git fake can support
+Git adapter pairs. A generic mock bucket shared by unrelated layers weakens ownership
+and creates parallel edit conflicts.
 
-`orchestrators/reconcile/apply.ts`. Today the per-scope apply pass returns `PerEntryOutcome[]`; the call site is inside `applyReconcile` (line ~70). Add **one line** after each scope's apply completes:
+### Stable Mutable-State Isolation
 
-```typescript
-bridge.rebuildRoutingTables(state, loc);
-```
+Construct ledgers, registries, hook routers, environment views, and temporary paths
+inside each test. An explicit state holder is preferable to a module-reset hook or
+module replacement.
 
-where `state` is the post-cascade in-memory state for that scope. Pure call, sub-millisecond, no I/O.
+### Supplemental Contract Catalogs
 
-### 6.3 `info.ts` / `list.ts` rendering — landing site
+Keep architecture tests for invariants that span multiple modules: import direction,
+no-network commands, output routing, persistence compatibility, foreign-content
+preservation, and public-surface shape. Use these tests at phase boundaries while
+unit pairs retain direct behavior ownership.
 
-`orchestrators/plugin/info.ts` line ~205: `composePluginInfoComponents(...)` returns an object with `agents/commands/mcp/skills` optional fields. Add `hooks?: readonly string[]` keyed by event name (e.g. `["PreToolUse(Edit|Write)", "Stop"]`) so an `info` row shows what events the plugin subscribes to and with what matcher. `list.ts` row composition (around line ~835) currently emits `{requires pi-subagents}` / `{requires pi-mcp}` on `installed`/`updated`/`reinstalled` rows; extend the trigger to also fire when the plugin has at least one soft-dep-conditional hook entry (SubagentStart/SubagentStop) AND `pi-subagents` is absent. Reuses the existing `Dependency = "agents"` token; no new closed-set member.
+## Anti-Patterns to Avoid
 
-### 6.4 `ctx.ui.notify()` install-time warning — landing site
+### Replaying the Abandoned Partition
 
-`orchestrators/plugin/install.ts` already builds a `PluginNotificationMessage` after the cascade. The install-time warning for "hook payload extension X ignored" is a *Reason* on the existing installed-row. Decision deferred to the notify phase: either (a) reuse an existing reason (none fits cleanly today), or (b) add ONE new `Reason` member to the closed set in `shared/notify.ts` -- e.g. `"async rewake unsupported"` -- and pin it in `tests/architecture/catalog-uat.test.ts` lockstep. Recommendation: option (b), one new reason, single new catalog UAT byte form -- minimal grammar disturbance.
+Do not recreate the retired resolver subtrees, source schema subtrees, notify shards,
+hook dispatcher shards, or per-verb orchestrator partitions from the old patch. Those
+paths describe an abandoned implementation attempt, not the current architecture.
 
-### 6.5 Debug log — landing site
+### Migration-History Commentary
 
-No project-wide debug-log helper exists today (verified by `grep -r "console\\.debug\|debugLog" extensions/pi-claude-marketplace/`). Introduce `shared/debug-log.ts`:
+Do not add source comments that explain the retired patch, Phase 106/107, old sharded
+coverage, or previous ownership mechanisms. Comments must explain current behavior
+only.
 
-```typescript
-// shared/debug-log.ts
-export function debugLog(template: string, ...args: unknown[]): void {
-  if (process.env.PI_CLAUDE_MARKETPLACE_DEBUG !== "1") return;
-  console.debug(`[pi-claude-marketplace] ${template}`, ...args);
-}
-```
+### Test-Only Production Surface
 
-The IL-2 "no direct stdout/stderr from command/bridge code" rule is preserved because (a) `console.debug` writes to stderr only when the env flag is set (operator-opted-in), and (b) the seam is single and centralized so a future tightening (route to a real Pi logger when one exists) is one file change.
+Do not export private constants, reset functions, singleton accessors, default
+adapters, or internal hook names only for tests. Use public workflow assertions or a
+real dependency seam.
 
----
+### Parallel Coverage Systems
 
-## 7. Anti-Patterns / Adversarial Review (resolves locked-design Q7)
-
-### Anti-Pattern 1: One `pi.on(...)` per plugin
-
-Already covered in §4 Pattern 1. Restated for the roadmapper: **do not** install N handlers per Pi event type. The lack of `pi.off()` means accumulated stale handlers across reloads is a silent NFR-2 violation. Phase-level test: `tests/architecture/hook-bridge-one-handler-per-event.ts` asserts `bridge.installComposites(pi)` calls `pi.on(...)` exactly K times where K = the count of supported Pi event types.
-
-### Anti-Pattern 2: Hidden coupling to Pi event names without a single source of truth
-
-Pi event names (`tool_call`, `tool_result`, `agent_end`, `session_start`, etc.) are referenced in every payload translator. A Pi rename of `tool_call` to `pre_tool_use` would silently break the bridge -- no compile error because `pi.on(eventName, handler)` takes any string. Mitigation: import event-name constants from `@earendil-works/pi-coding-agent`'s type surface (the peer dep exports typed event names; the `ExtensionAPI` type's `on` overload signature pins them). Concretely: `bridges/hooks/dispatch.ts` should use a const map `PI_EVENT_FOR_CLAUDE_EVENT: Record<ClaudeEventName, PiEventName>` typed against the peer-dep types so a Pi rename in a future peer-dep version is a compile error here.
-
-### Anti-Pattern 3: Letting hook spawn failures throw past the composite handler
-
-The Pi event chain expects the handler to return; a thrown error from a hook child-process spawn (timeout, EACCES, ENOENT on the command) must NOT propagate to Pi. Treat as "block" per Claude Code's exit-2 semantics, log via `debugLog`, continue. Phase-level test: a payload-translator test that injects a throwing spawn and asserts the composite handler returns a `{ block: true }` result with a captured reason.
-
-### Anti-Pattern 4: Bucket-D synthesizers presented as bucket-A behavior
-
-The `docs/research/...md` "Synthesis caveats" section calls out that `Stop`, `CwdChanged`, `PostToolBatch`, `UserPromptExpansion`, `StopFailure` are "approximation, document the loss." A future contributor reading only the dispatch file would not know which translators are lossy. Mitigation: per-file comment block lifted verbatim from `docs/research/...md` table, plus one regression test per bucket-D event named for the loss mode (e.g. `tests/bridges/hooks/payloads/cwd-changed.test.ts::"misses non-bash cwd changes (documented loss; pinned)"`).
-
-### Anti-Pattern 5: State-schema bump as a breaking validator change
-
-If `schemaVersion: Type.Literal(2)` replaces (rather than widens) `Literal(1)`, the first v1.13 load of an existing v1.12 state.json fails validation BEFORE the migration step runs (because today's order is: parse -> migrate -> validate, per `loadState` lines 174-200). The widen-then-migrate-then-validate order makes the migration window safe. Phase-level test: a fixture v1.12 state.json checked into `tests/persistence/fixtures/` that `loadState` accepts and migrates without warning.
-
-### Anti-Pattern 6: Symlinked hook configs trusted as file copies
-
-A malicious plugin author could ship `hooks/hooks.json` as a symlink pointing outside the plugin root. The resolver currently uses `readFile` (`domain/resolver.ts:19`), which follows symlinks silently. Mitigation: the bridge's `stage.ts` MUST `fs.realpath(hooks.json)` and then `assertPathInside(<pluginRoot>, realpath)` BEFORE copy. PI-14 already enforces `PathContainmentError` for path escapes; this extends the check to symlink targets.
-
-### Anti-Pattern 7: Plugin names with path-separator chars escaping the per-plugin subdir
-
-Handled by `assertSafeName(plugin)` which already rejects "/" and "\\" (verified in `locations.ts:184`). Reuse that exact helper for the hooks subdir construction.
-
-### Anti-Pattern 8: Routing-table rebuild assumed concurrent-safe with dispatch
-
-The routing-table singleton lives in `shared/event-router.ts`. Rebuild is mutation; dispatch is read. Node is single-threaded for JS execution, so the dispatch handler's `router.lookup(...)` call cannot interleave with the rebuild's `router.set(...)` -- but if we were to make rebuild async (e.g. await a per-plugin reload), the window opens. Lock the rebuild as fully synchronous and document the invariant in `event-router.ts` header. Phase-level test: assert `rebuildRoutingTables` is synchronous (`expect(typeof bridge.rebuildRoutingTables(state, loc)).toBe("undefined")` -- no Promise).
-
-### Anti-Pattern 9: Mid-/reload event delivery race
-
-Addressed in §5.3. The current safety argument relies on Pi's call ordering (resources_discover runs in setup-phase, not interleaved with agent-loop events). If Pi changes this, the bridge breaks silently. Document the assumption explicitly in `lifecycle.ts`; consider adding a lightweight invariant: route the rebuild through a Promise the dispatch handler awaits (`bridge.routingReady`) — set to `Promise.resolve()` initially, reset to a deferred promise at rebuild start, resolved at rebuild end. Adds dispatch latency only during the active rebuild window (microseconds).
-
----
-
-## 8. Suggested Build Order (rationale: not just "logical order"; says WHY phase N must precede N+1; resolves locked-design Q4)
-
-| Phase order proposed | Phase | Why this position |
-|---|---|---|
-| **1** | **State schema bump + migration** (`state-io.ts`, `migrate.ts`) | LEAF dependency. The schema shape is consumed by every later phase's state mutations. Migrating IN PLACE means a v1.13 install with no other phases shipping at least loads cleanly. |
-| **2** | **Hook parser + matcher + domain primitive** (`domain/components/hooks.ts`, `bridges/hooks/matcher.ts`, resolver patch to surface `hooks?`) | Pure / leaf-pure code. Depends on (1) for state shape; independent of dispatch. Tests are byte-form unit tests; no I/O. |
-| **3** | **Hooks bridge plan/stage/unstage** (`bridges/hooks/plan.ts`, `stage.ts`, `unstage.ts`, `discover.ts`) | Depends on (2). Atomic-write + path-containment is identical to existing 4 bridges; mechanical extension. |
-| **4** | **Install cascade extension** (`orchestrators/plugin/install.ts` + `uninstall.ts` + `update.ts` + `reinstall.ts`) | Depends on (3). Adds the 5th cascade phase. Each modified orchestrator gets one test for the new phase + rollback. |
-| **5** | **Dispatch core** (`shared/event-router.ts`, `bridges/hooks/dispatch.ts`, `bridges/hooks/lifecycle.ts`, `bridges/hooks/spawn.ts`, `index.ts` one-line wiring) | Depends on (2) for matcher; independent of (3,4). Can land in parallel with (3,4) if the two streams agree on the `Routing` shape from (1). The locked design Q4 question "is dispatch core (2) really independent of any bucket?" — yes: dispatch is the composite shape + spawn + routing; the payload-translator content lives in phase (6). The matcher choice (literal + pipe-OR) is fully determined by `docs/research/...md` and does not depend on any specific event's payload. |
-| **6a** | **Bucket A payload translators (8 events)** | Field rename only; ~30-50 LoC each. Can land in one phase because zero per-event synthesis risk. |
-| **6b** | **Bucket B: FileChanged** | One event; uses `node:fs.watch` (or its replacement). Standalone risk profile (watch semantics on Linux vs macOS); own phase. |
-| **6c** | **Bucket D, but with `Stop` as its own phase BEFORE the rest** | YES — answering locked-design Q4 directly: `Stop` is load-bearing (`ralph-wiggum` canary; 3 of 5 first-party hook-using plugins depend on block-to-continue). Pin its synthesizer + regression test in a dedicated phase so the milestone has a working answer to "does the bridge correctly round-trip Claude Code's most-used block contract" before bucket D's lower-risk events ship. The remaining D events (`CwdChanged`, `PostToolBatch`, `UserPromptExpansion`, `StopFailure`) can ship together in one follow-on phase. |
-| **7** | **Soft-dep wiring: SubagentStart/Stop** | Depends on (5) for composite handlers; depends on `softDepStatus(pi)` probe (existing). Conditional code path; soft-dep absent must degrade silently to "routing table has no entries for these events." |
-| **8** | **Lifecycle integration with reconcile** (`apply.ts` one-line rebuild call) | Depends on (5,6,7). Lands after the dispatch fabric is in place; one-line code change + an integration test that mutates state inside reconcile and asserts the routing table reflects it. |
-| **9** | **Info / list rendering + install-time notify warning + bucket-H drop policy + payload-extension tolerance** | The roadmapper asked whether (8) tolerance and (9) bucket-H drop should be one phase — YES. Both are parser-level concerns (`bridges/hooks/plan.ts`), both surface (or suppress) at install time via `ctx.ui.notify`, both share catalog-UAT byte-form work. Folding `info.ts`/`list.ts` rendering into the same phase keeps the entire "what the user SEES" surface in one merge. |
-
-**Two notes that diverge from the locked-design proposed order:**
-
-1. **`Stop` deserves its own phase between (5) and (6) — yes, hoist it.** The user's locked-design listed "(5) bucket D synthesizers (parallel: CwdChanged, PostToolBatch, UserPromptExpansion, Stop, StopFailure)." This research recommends splitting `Stop` into its own phase **6c-stop** that ships before the remaining four (**6c-rest**). Rationale: the canary plugin's correctness gates the whole milestone's "does the bridge work" answer; coupling its risk with four lower-risk synthesizers would mean a `Stop`-regression delays the entire phase.
-2. **Dispatch core (5) is independent of bucket A's payload shape, but only because the `Routing` interface in `shared/event-router.ts` carries `{ event: ClaudeEventName, matcher: string, plugin: string, scope: Scope, payloadModule: () => Promise<...> | ...}` -- the dispatcher does not look INSIDE the payload, only routes to it.** The bucket-A translators are therefore strictly downstream consumers. Confirm this contract in the (5)-phase tests so a later contributor doesn't accidentally bind dispatch to a bucket A field.
-
----
-
-## 9. Scalability / Concurrency
-
-| Concern | At 1 plugin with hooks | At 10 plugins | At 100 plugins |
-|---|---|---|---|
-| Composite handler registrations | K (= supported event count, ~16) | K | K |
-| Routing-table rebuild cost | < 0.1 ms | ~1 ms | ~10 ms |
-| Per-dispatch lookup | O(1) Map.get | O(1) Map.get | O(1) Map.get |
-| Per-dispatch fan-out | 1 spawn | up to N (sequential) | up to N (sequential) |
-| Memory | hundreds of bytes | KB | tens of KB |
-
-The dispatch chain is sequential within an event; cross-plugin parallelism is NOT used (matches Claude Code; required for the block-to-continue contract). At 100 plugins each subscribing to `PreToolUse`, a single tool call could trigger up to 100 sequential child-process spawns -- this is the same cost Claude Code itself pays. Operators concerned about latency should hold the per-marketplace `autoupdate` flag off and curate the installed plugin set; the bridge intentionally does no de-duplication beyond the routing-key Map lookup.
-
----
-
-## 10. Confidence Assessment
-
-| Area | Level | Reason |
-|------|-------|--------|
-| Dispatch model (composite + mutable table) | HIGH | Pi `pi.off()` absence verified by reading `@earendil-works/pi-coding-agent` exports; no `unsubscribe` surface. The composite shape is forced. |
-| State schema bump (v1 -> v2 with widen-then-migrate) | HIGH | Mirrors the v1.12 autoupdate-scrub pattern already in `migrate.ts`; tests pinning the pattern already exist as the template. |
-| Routing-table rebuild on reconcile | HIGH | The reconcile pass is the only post-factory state mutator; the seam is one-line. |
-| Bucket-D synthesizer correctness | MEDIUM | The `docs/research/...md` itself calls these "lossy or future-fragile." Phase-level regression tests pin the loss modes but cannot guarantee they catch every Pi runtime evolution. Recommend per-bucket-D event a runtime UAT against the canary plugin (`ralph-wiggum` for `Stop`). |
-| Soft-dep wiring for SubagentStart/Stop | HIGH | Reuses `softDepStatus(pi)` + `pi.events.on(...)`; the bus is documented (`docs/research/...md` §"Soft-dep extension event surfaces"). |
-| Info / list rendering | HIGH | Existing component-rendering surface already lists agents/commands/mcp/skills; adding `hooks` is a mechanical extension. |
-| Mid-/reload event safety | MEDIUM | Argument relies on Pi's `resources_discover` being in setup-phase (not interleaved with agent events). True today but undocumented as a Pi invariant; the lifecycle.ts comment recording the assumption is mandatory. |
-| Hook-payload-extension tolerance | HIGH | Parser-level (preserve unknown fields, install-time warning on known set). Identical pattern to the v1.12 forward-compat parser for `marketplace.json`. |
-
----
-
-## 11. Open Questions for the Roadmapper
-
-1. **Phase merge: should (6a) bucket A's 8 events be ONE phase or split (e.g. observation-only events vs. block-capable events)?** Recommendation: ONE phase. Per-event payload code is ~30-50 LoC; one phase keeps the regression-test surface dense.
-
-2. **`Stop`'s standalone phase — does it ship the regression test against `ralph-wiggum` as part of the same phase or as a follow-on UAT?** Recommendation: same phase, as a `tests/integration/ralph-wiggum.test.ts` that spins up a fake Pi event sequence and asserts the block-to-continue round-trip via `pi.sendUserMessage`. The runtime UAT against the real Pi process is a milestone-close gate, not a phase gate (matches the v1.12 milestone-close UAT pattern).
-
-3. **New `Reason` member for "async rewake unsupported" — should it be added in the parser phase or deferred to the install-notify phase?** Recommendation: deferred. Closed-set bumps in `shared/notify.ts` need catalog-UAT byte-form changes in lockstep (per the v1.10/v1.11 discipline in MEMORY: "any new token requires catalog-UAT byte forms in lockstep"). Folding it into the dedicated notify phase keeps the catalog disturbance in one merge.
-
-4. **Should `FileChanged` use `node:fs.watch` or `chokidar`?** Out of architecture scope; flag for stack research. The architectural shape (one watcher per matcher pattern under `bridges/hooks/payloads/file-changed.ts`, watcher lifecycle owned by the routing-table rebuild) is identical either way.
-
-5. **The Pi event-name constants — are they exported as a string union or as runtime const?** Need to verify against the peer dep's type surface at parser-phase kickoff. If a runtime const is exported, use it; otherwise pin the bridge's `PI_EVENT_FOR_CLAUDE_EVENT` map against the typed `pi.on(event: "...", ...)` overload signatures and assert via `tests/architecture/pi-event-name-binding.test.ts` that the keys are valid.
-
----
-
-## 12. Sources
-
-- **Real codebase, `extensions/pi-claude-marketplace/` (HIGH — primary authority):**
-  - `index.ts` (lines 1-68: `pi.on("resources_discover")` handler, reconcile-then-discover ordering, error boundary preserving NFR-2)
-  - `persistence/state-io.ts` (lines 39-92: STATE_SCHEMA shape, JIT validator, `schemaVersion: Literal(1)`)
-  - `persistence/locations.ts` (lines 38-104, 118-229: ScopedLocations branded shape, scopeRoot vs extensionRoot, `assertSafeName` reuse for new hooks subdir)
-  - `persistence/migrate.ts` (referenced shape; migrate-then-validate ordering; `persistMigratedState` fire-and-forget)
-  - `orchestrators/reconcile/apply.ts` (lines 1-150: per-scope read-pass under withLockedStateTransaction, per-scope apply-pass with NO outer lock, single notify at end)
-  - `orchestrators/reconcile/plan.ts` (lines 1-200: pure planner shape; reuse template for hook routing-table builder if needed)
-  - `orchestrators/plugin/list.ts` (lines 168-200: `Dependency = "agents" | "mcp"` reuse for `{requires pi-subagents}` marker; cascade-extension landing site)
-  - `orchestrators/plugin/info.ts` (lines 200-220: `composePluginInfoComponents` shape with agents/commands/mcp/skills)
-  - `domain/resolver.ts` (lines 41-78: NFR-7 discriminated `installable: true | false`; lines 153-162: standalone-file unsupported set including `hooks` today)
-  - `shared/notify.ts` (lines 1-30, 424, 469, 489: existing closed-set types `Dependency`/`Reason`/`Status`; soft-dep status probe; per-row marker mechanism)
-  - `bridges/{skills,commands,agents,mcp}/` (template shape for the new `bridges/hooks/`)
-- **`docs/research/claude-hooks-vs-pi-events.md` (HIGH — authority on bucket assignments, synthesis caveats, soft-dep audit, canary plugin):** Sections "Perfect-fidelity feasibility", "How each bucket B/C/D synthesizes", "Synthesis caveats", "Soft-dep extension event surfaces" (pi-subagents v0.24.3 publishes `subagent:async-started`/`-complete` on the shared `pi.events` bus).
-- **`@earendil-works/pi-coding-agent` peer dep (HIGH — Pi API surface):** Local install at `/home/acolomba/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/`. Confirmed exports include `ExtensionAPI`, `EventBus`, `createEventBus`. No `pi.off()` / `unsubscribe` surface in the public API. `pi.sendUserMessage(...)` documented in `examples/extensions/send-user-message.ts` (used by `Stop` bucket-D synthesizer for block-to-continue round-trip).
-- **`.planning/PROJECT.md` (HIGH — locked v1.13 scope and decisions; 16 supported events, 9 upstream-fixable out, 5 H-bucket silently dropped, `pi-subagents` soft-dep, full regex deferred).**
-- **`docs/prd/pi-claude-marketplace-prd.md` (HIGH — NFR-1/-2/-3/-5/-7/-10, IL-2/-3/-4 constraints):** Hooks join the supported component set in v1.13 (PROJECT.md "Out of Scope" amendment).
-- **`.planning/milestones/v1.12-research/ARCHITECTURE.md` (HIGH — template for v1.13's brownfield-integration shape; reconcile planner/executor split, withLockedStateTransaction pattern, per-scope lock discipline reused verbatim).**
-- **MEMORY (HIGH — operator preferences):** "Output row grammar subject-first" (hook surface row format must conform), "Source comment cleanup policy" / `.claude/rules/typescript-comments.md` (preserve decision IDs, not planning artifacts).
-- **NOT FETCHED (intentional):** Web ecosystem search. The brownfield integration question has zero ecosystem-survey value; every architecture decision is constrained by the v1.12 surface and the locked v1.13 design context.
-
----
-*Architecture research for: pi-claude-marketplace v1.13 Claude Hook Bridge*
-*Researched: 2026-06-13*
+Do not restore the sharded LCOV runner, reconciliation protocol, direct-coverage
+matrix baseline, ownership registry, adapter participation scanner, or targeted
+Fallow inventory. Use the current direct pair runner, correspondence gate, negative
+controls, normal type/lint checks, and whole-repository Fallow.
+
+### Historical Completion Credit
+
+Do not convert an audit `PASS`, an existing test, a retained commit, or a green
+supplemental suite directly into roadmap completion. Current isolated pair evidence is
+the only completion proof.
+
+### Large Refactors for Coverage
+
+Do not split a production file simply because it is large or hard to cover. First add
+the smallest real seam within the current module. A new production extraction creates
+another source pair and changes callers, so it requires explicit architectural need
+and revised pair accounting.
+
+## Hotspots and Integration Risks
+
+Large files deserve smaller test scenarios and stricter caller tracing, not automatic
+module splits.
+
+| Hotspot                                  | Approximate size | Main risk                                                                 | Recommended handling                                                 |
+| ---------------------------------------- | ---------------: | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `shared/notify.ts`                       |      4,135 lines | Message grammar and output paths are shared broadly                       | Stabilize in Phase 109; keep catalog-level checks supplemental       |
+| `orchestrators/plugin/update.ts`         |      3,240 lines | Network/cache selection, preload, staging warnings, and rollback interact | Give its pair a late lifecycle wave and retest all direct dependents |
+| `orchestrators/plugin/install.ts`        |      2,442 lines | Transaction phases and bridge staging interact                            | Prove transaction and bridge ports first                             |
+| `orchestrators/plugin/info.ts`           |      2,403 lines | Read-only behavior and presentation are intertwined                       | Prove presenters first; retain no-network checks                     |
+| `domain/resolver.ts`                     |      1,744 lines | Public union, schemas, paths, and availability rules meet                 | Make the discriminant change in Phase 108 before consumers           |
+| `orchestrators/plugin/reinstall.ts`      |      1,687 lines | Uninstall/install state preservation and retry behavior                   | Reuse public lifecycle seams; avoid shared mutable fixtures          |
+| `orchestrators/plugin/list.ts`           |      1,589 lines | Scope aggregation and presentation                                        | Prove fan-out and messaging modules first                            |
+| `orchestrators/plugin/enable-disable.ts` |      1,252 lines | Install ledger and staged artifact state must agree                       | Test durable state and retry paths directly                          |
+| `orchestrators/plugin/shared.ts`         |      1,243 lines | Many lifecycle callers depend on small semantic details                   | Complete in Phase 113 before lifecycle pairs                         |
+| `orchestrators/import/execute.ts`        |      1,130 lines | Multiple external formats converge into lifecycle calls                   | Complete import leaf helpers before composer                         |
+
+The pair for marketplace add must account for sandbox-sensitive Unix socket setup.
+The pair should inject or isolate the relevant boundary so ordinary unit execution
+does not depend on host socket permission, without changing marketplace behavior.
+
+## Scalability Considerations
+
+This milestone scales by pair count and dependency coordination, not by runtime user
+load.
+
+| Concern               | Early phases                                    | Middle phases                                       | Final phases                                             |
+| --------------------- | ----------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
+| Parallel work         | Leaf pairs with separate files can run together | Serialize public-contract carriers before consumers | Serialize edge and entry composition behind workflows    |
+| Shared test support   | Add only concern-local support                  | Assign one owner per shared support edit            | Freeze support before final global proof                 |
+| Structural-gate noise | Record baseline and prevent regression          | Violation count must decline as pairs close         | Require zero violations and passing negative controls    |
+| Coverage runtime      | Run exact source pair per plan                  | Run phase direct suite at phase close               | Run all 204 pairs plus full check                        |
+| Failure localization  | Pair command identifies one owner               | Phase suites identify integration regressions       | Global gates validate completeness only after pair proof |
+
+## Sources and Confidence
+
+All conclusions come from repository-local primary evidence at HEAD. External ecosystem
+research is not needed for this architecture decision.
+
+| Source                                                  | Use                                                                        | Confidence                                      |
+| ------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------- |
+| `.planning/PROJECT.md`                                  | v1.19 decisions, constraints, and Phase 108 start                          | HIGH                                            |
+| `.planning/codebase/ARCHITECTURE.md`                    | Live layer and dependency descriptions                                     | HIGH                                            |
+| `extensions/pi-claude-marketplace/**/*.ts`              | Actual modules, exports, callers, and imports                              | HIGH                                            |
+| `tests/**/*.test.ts`                                    | Current mirrored and supplemental test topology                            | HIGH                                            |
+| `docs/guidelines/typescript-unit-testing-guidelines.md` | Required pair, public-surface, coverage, and gate model                    | HIGH                                            |
+| `.claude/rules/typescript-unit-testing.md`              | Repository-enforced testing rules                                          | HIGH                                            |
+| `.planning/inputs/unit-test-refactor-handoff/`          | Retained contracts, corrections, abandoned mechanisms, and replay cautions | HIGH for decisions; LOW as implementation proof |
+| `/tmp/pi-cm-pair-audit.CJWiph/results.tsv`              | Current 204-pair diagnostic inventory                                      | HIGH as baseline; NONE as completion proof      |
+| `package.json` and test runner scripts                  | Current check and structural-gate wiring                                   | HIGH                                            |
+
+## Open Planning Questions
+
+- Decide the exact wave size within each phase after the planner builds the caller
+  graph for that phase. Do not change pair ownership to meet a target wave size.
+- Decide whether structural-gate package-script wiring is still absent when Phase 117
+  starts. If it is absent, keep it as support work in the root entry pair.
+- Re-run the audit immediately before roadmap finalization if HEAD changes. Counts in
+  this document describe the researched HEAD and must not silently drift.

@@ -8,27 +8,104 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionBeforeCompactEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("pre-compact: emits the PreCompact envelope with trigger=auto", () => {
-  // Pi's SessionBeforeCompactEvent does not expose a trigger source;
-  // the translator synthesizes `"auto"` matching Claude's documented
-  // default for context-pressure-driven compaction.
+test("emits the complete PreCompact envelope with an automatic trigger", () => {
+  // arrange
   const event = {
     type: "session_before_compact",
-    preparation: {} as unknown,
-    branchEntries: [] as unknown[],
+    preparation: {
+      firstKeptEntryId: "message-2",
+      messagesToSummarize: [],
+      turnPrefixMessages: [],
+      isSplitTurn: false,
+      tokensBefore: 4_096,
+      previousSummary: "Earlier summary",
+      fileOps: {
+        read: new Set(["/workspace/read.ts"]),
+        written: new Set(["/workspace/written.ts"]),
+        edited: new Set(["/workspace/edited.ts"]),
+      },
+      settings: {
+        enabled: true,
+        reserveTokens: 16_384,
+        keepRecentTokens: 4_096,
+      },
+    },
+    branchEntries: [
+      {
+        type: "thinking_level_change",
+        id: "entry-1",
+        parentId: null,
+        timestamp: "2026-08-31T05:08:00.000Z",
+        thinkingLevel: "medium",
+      },
+    ],
+    customInstructions: "Preserve decisions.",
+    reason: "threshold",
+    willRetry: false,
     signal: new AbortController().signal,
-  } as unknown as SessionBeforeCompactEvent;
+  } satisfies SessionBeforeCompactEvent;
+  const context = {
+    sessionId: "session-1",
+    transcriptPath: "/sessions/session-1.jsonl",
+    cwd: "/workspace/project",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-1",
+    transcript_path: "/sessions/session-1.jsonl",
+    cwd: "/workspace/project",
+    hook_event_name: "PreCompact",
+    trigger: "auto",
+  };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"PreCompact","trigger":"auto"}',
-  );
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+});
+
+test("preserves empty context strings in the complete PreCompact envelope", () => {
+  // arrange
+  const event = {
+    type: "session_before_compact",
+    preparation: {
+      firstKeptEntryId: "message-empty-context",
+      messagesToSummarize: [],
+      turnPrefixMessages: [],
+      isSplitTurn: false,
+      tokensBefore: 0,
+      fileOps: {
+        read: new Set<string>(),
+        written: new Set<string>(),
+        edited: new Set<string>(),
+      },
+      settings: {
+        enabled: true,
+        reserveTokens: 8_192,
+        keepRecentTokens: 2_048,
+      },
+    },
+    branchEntries: [],
+    reason: "manual",
+    willRetry: true,
+    signal: new AbortController().signal,
+  } satisfies SessionBeforeCompactEvent;
+  const context = {
+    sessionId: "",
+    transcriptPath: "",
+    cwd: "",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "",
+    transcript_path: "",
+    cwd: "",
+    hook_event_name: "PreCompact",
+    trigger: "auto",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
 });

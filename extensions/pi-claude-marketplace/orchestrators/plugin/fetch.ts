@@ -462,17 +462,16 @@ async function reasonedRow(
   meta: { version?: string; description?: string },
 ): Promise<FetchMsg> {
   const { resolveStrict } = await import("../../domain/resolver.ts");
-  const source = parsePluginSource(entry.source);
-  const isGitSource =
-    source.kind === "url" || source.kind === "git-subdir" || source.kind === "github";
 
   try {
-    const resolved = isGitSource
-      ? await resolveStrict(entry, {
-          marketplaceRoot,
-          resolveGitPluginRoot: makePresenceProbe(locations),
-        })
-      : await resolveStrict(entry, { marketplaceRoot });
+    // `reasonedRow` is reached only after `fetchOne` has materialized a git
+    // source and `freshRow` has classified that warm source as reason-bearing.
+    // Non-git sources return from `fetchOne` before `freshRow`, so the presence
+    // probe is the only reachable resolver policy here.
+    const resolved = await resolveStrict(entry, {
+      marketplaceRoot,
+      resolveGitPluginRoot: makePresenceProbe(locations),
+    });
 
     // Discriminate on the resolver's own three-way state so the reasons source
     // matches the classification (list-parity).
