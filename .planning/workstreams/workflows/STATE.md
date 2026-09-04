@@ -5,16 +5,16 @@ milestone_name: Workflow Bridge Replay onto main
 current_phase: 109
 current_phase_name: kind-inversion
 current_plan: Not started
-status: planning
-stopped_at: Phase 109 context gathered
-last_updated: "2026-09-04T20:20:53.401Z"
+status: ready_to_execute
+stopped_at: Phase 109 planned — 5 plans in 4 waves, plan-checker passed
+last_updated: "2026-09-04T22:49:13.899Z"
 last_activity: 2026-09-04
-last_activity_desc: Phase 109 context gathered — kind-inversion decisions captured
-state_head: dfd117d3c650d4853fece11699a24447d465ebd3
+last_activity_desc: Phase 109 planned — 5 plans across 4 waves, all gates verified
+state_head: cd84abc1238fc449ab57e5de099206a8b4ec54d8
 progress:
   total_phases: 9
   completed_phases: 0
-  total_plans: 0
+  total_plans: 5
   completed_plans: 0
   percent: 0
 ---
@@ -35,10 +35,12 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 109 — Kind inversion (not started)
-Plan: —
-Status: Planning artifacts and spike evidence ported; phases not yet planned
-Last activity: 2026-09-04 — Workstream ported onto `features/workflow`, spikes renumbered 021-026, engine claims re-measured against 3.10.1 (Spike 027)
+Phase: 109 (kind-inversion) — READY TO EXECUTE
+Plan: 0/5 complete
+Status: Context, research, patterns and validation written; 5 plans in 4 waves;
+plan-checker passed with no blockers or warnings
+Last activity: 2026-09-04 — Phase 109 planned; WINV-02 narrowed to its resolver clause
+after the planner found its second clause duplicated WLIF-01 (Phase 112)
 
 ## Progress
 

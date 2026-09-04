@@ -176,11 +176,21 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 6. `npm run check` is green.
 
 **Plans**: 5 plans in 4 waves
+**Wave 1**
 
 - [ ] 109-01-PLAN.md — Turn the five locking gates and the published catalog contract, and observe each one RED
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 109-02-PLAN.md — Move the kind across the closed sets and retire the dedicated reason, in two atomic commits
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 109-03-PLAN.md — Close the 68 compile-forced `componentPaths` construction sites
 - [ ] 109-04-PLAN.md — Close the 8 compiler-invisible payloads, turn the catalog fixtures and the classifier owner test
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 109-05-PLAN.md — Pin the 109-111 window at install level and take the phase through `npm run check`
 
 ### Phase 110: Domain and platform modules
