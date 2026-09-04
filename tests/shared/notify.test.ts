@@ -3349,7 +3349,7 @@ test("WR-05 / wrapDescription: two words whose `current.length + 1 + word.length
   assert.deepEqual(tail, [`    ${a} ${b}`, "    components: not resolved"]);
 });
 
-test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", (t) => {
+test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -3365,7 +3365,7 @@ test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summar
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {marketplace not added}",
     "error",
   ]);
 });
@@ -3405,7 +3405,7 @@ test("GRAM-02: standalone failed plugin-info renders `A plugin operation has fai
   ]);
 });
 
-test("INFO-04: {not added} row never carries a reload-hint (read-only surface)", (t) => {
+test("INFO-04: {marketplace not added} row never carries a reload-hint (read-only surface)", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -5005,7 +5005,7 @@ test("closed notification constants preserve exact public values", () => {
     "partially-available",
     "remote",
   ]);
-  assert.equal(REASONS.length, 39);
+  assert.equal(REASONS.length, 44);
 });
 
 for (const { name, input, expected } of [
@@ -6200,7 +6200,7 @@ test("summary computation preserves its read-only empty fallback after narrowing
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "\n\n⊘ official [user] (failed) {not added}",
+    "\n\n⊘ official [user] (failed) {marketplace not added}",
     "error",
   ]);
 });
@@ -6408,7 +6408,53 @@ test("an absent marketplace without a scope omits the scope bracket", (t) => {
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A marketplace operation has failed.\n\n⊘ official (failed) {not added}",
+    "A marketplace operation has failed.\n\n⊘ official (failed) {marketplace not added}",
+    "error",
+  ]);
+});
+
+for (const { scope, expectedReason } of [
+  { scope: "user", expectedReason: "marketplace not added to user scope" },
+  { scope: "project", expectedReason: "marketplace not added to project scope" },
+] as const) {
+  test(`an absent marketplace present in the other scope names the ${scope} scope that missed`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const pi = piWithBothLoaded();
+    const message = {
+      kind: "marketplace-not-added",
+      name: "official",
+      scope,
+      presentInOtherScope: true,
+    } satisfies NotificationMessage;
+
+    // act
+    notify(ctx as never, pi as never, message);
+
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+      `A marketplace operation has failed.\n\n⊘ official [${scope}] (failed) {${expectedReason}}`,
+      "error",
+    ]);
+  });
+}
+
+test("an absent marketplace claiming a sibling scope with no bracket keeps the plain token", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    kind: "marketplace-not-added",
+    name: "official",
+    presentInOtherScope: true,
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi as never, message);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A marketplace operation has failed.\n\n⊘ official (failed) {marketplace not added}",
     "error",
   ]);
 });

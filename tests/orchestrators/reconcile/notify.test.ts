@@ -484,7 +484,12 @@ describe("buildReconcileAppliedCascade", () => {
   test("renders the structural marketplace-absent marker as the not-found content reason", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [
-      { kind: "mp-remove-failed", scope: "user", marketplace: "absent-mp", reason: "not added" },
+      {
+        kind: "mp-remove-failed",
+        scope: "user",
+        marketplace: "absent-mp",
+        reason: "marketplace not added",
+      },
     ];
 
     // act

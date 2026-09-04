@@ -158,7 +158,9 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "permission denied",
     "source missing",
     "network unreachable",
-    "not added",
+    "marketplace not added",
+    "marketplace not added to user scope",
+    "marketplace not added to project scope",
     "orphan rewake",
     "authentication required",
     "dangling reference",
@@ -166,6 +168,9 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "malformed skill",
     "malformed command",
     "installs disabled",
+    "marketplace in user scope",
+    "marketplace in project scope",
+    "workflows",
   ];
 
   // act

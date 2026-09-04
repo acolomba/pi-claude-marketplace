@@ -98,6 +98,7 @@ const unsupportedConventionScenarios = [
   { kind: "themes", relativePath: "themes", stat: "dir" },
   { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
   { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
+  { kind: "workflows", relativePath: "workflows", stat: "dir" },
 ] as const;
 
 // ──────────────────────────────────────────────────────────────────────────

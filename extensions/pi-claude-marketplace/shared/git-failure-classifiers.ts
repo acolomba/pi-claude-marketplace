@@ -12,6 +12,43 @@
 // `source missing` fold, install's auth-only narrowing) stay thin wrappers at
 // their call sites.
 
+type GitTransportReason = "network unreachable" | "authentication required";
+type GitSourceAccessReason = GitTransportReason | "source missing";
+
+const SOURCE_ACCESS_HTTP_STATUS_REASONS = new Map<number, GitSourceAccessReason>([
+  [404, "source missing"],
+  [408, "network unreachable"],
+  [410, "source missing"],
+  [429, "network unreachable"],
+]);
+
+const NETWORK_ERRNO_CODES = new Set([
+  "ENETUNREACH",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "EAI_AGAIN",
+]);
+
+function classifySourceAccessHttpStatus(
+  statusCode: number | undefined,
+): GitSourceAccessReason | undefined {
+  if (statusCode === undefined) {
+    return undefined;
+  }
+
+  return SOURCE_ACCESS_HTTP_STATUS_REASONS.get(statusCode) ?? classifyServerHttpStatus(statusCode);
+}
+
+function classifyServerHttpStatus(statusCode: number): GitSourceAccessReason | undefined {
+  return statusCode >= 500 && statusCode < 600 ? "network unreachable" : undefined;
+}
+
+function classifyNetworkErrno(code: string | undefined): GitTransportReason | undefined {
+  return code !== undefined && NETWORK_ERRNO_CODES.has(code) ? "network unreachable" : undefined;
+}
+
 /**
  * Classify a git clone/fetch/materialize throw into the EXISTING closed-set
  * `network unreachable` / `authentication required` REASONS -- no new token.
@@ -47,15 +84,31 @@ export function classifyGitTransportFailure(
     return "authentication required";
   }
 
-  if (
-    code === "ENETUNREACH" ||
-    code === "ECONNREFUSED" ||
-    code === "ENOTFOUND" ||
-    code === "ETIMEDOUT" ||
-    code === "ECONNRESET" ||
-    code === "EAI_AGAIN"
-  ) {
-    return "network unreachable";
+  return classifyNetworkErrno(code);
+}
+
+/**
+ * Extend the shared transport ladder for a source-access operation. This
+ * opt-in layer keeps caller-specific fallthroughs unchanged while classifying
+ * repository absence and transient HTTP failures for commands such as
+ * `marketplace add`.
+ */
+export function classifyGitSourceAccessFailure(
+  err: unknown,
+): "network unreachable" | "authentication required" | "source missing" | undefined {
+  const transportReason = classifyGitTransportFailure(err);
+  if (transportReason !== undefined) {
+    return transportReason;
+  }
+
+  if (!(err instanceof Error)) {
+    return undefined;
+  }
+
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "HttpError") {
+    const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+    return classifySourceAccessHttpStatus(statusCode);
   }
 
   return undefined;

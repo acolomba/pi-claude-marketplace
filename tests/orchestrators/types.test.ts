@@ -297,8 +297,8 @@ void ({
   name: "alpha",
   notes: [],
   partition: "failed",
-  // @ts-expect-error not added is structural and never a content reason
-  reasons: ["not added"],
+  // @ts-expect-error marketplace not added is structural and never a content reason
+  reasons: ["marketplace not added"],
   scope: "project",
 } satisfies ReinstallFailedOutcome);
 
@@ -424,8 +424,8 @@ void ({
   name: "alpha",
   notes: [],
   partition: "skipped",
-  // @ts-expect-error not added is structural and never an update content reason
-  reasons: ["not added"],
+  // @ts-expect-error marketplace not added is structural and never an update content reason
+  reasons: ["marketplace not added"],
 } satisfies PluginUpdateSkippedOutcome);
 
 void ({

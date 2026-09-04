@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyGitTransportFailure } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
+import {
+  classifyGitSourceAccessFailure,
+  classifyGitTransportFailure,
+} from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
 for (const { title, createFailure } of [
   {
@@ -220,5 +223,75 @@ for (const { title, createFailure } of [
 
     // assert
     assert.strictEqual(reason, undefined);
+  });
+}
+
+// `classifyGitSourceAccessFailure` extends the transport ladder above with the
+// repository-absence and transient-HTTP arms `marketplace add` needs. Its cases
+// live here because both classifiers are exports of the same module.
+
+for (const { statusCode, expectedReason } of [
+  { statusCode: 404, expectedReason: "source missing" },
+  { statusCode: 410, expectedReason: "source missing" },
+  { statusCode: 408, expectedReason: "network unreachable" },
+  { statusCode: 429, expectedReason: "network unreachable" },
+  { statusCode: 500, expectedReason: "network unreachable" },
+  { statusCode: 503, expectedReason: "network unreachable" },
+  { statusCode: 599, expectedReason: "network unreachable" },
+  { statusCode: 418, expectedReason: undefined },
+  { statusCode: 600, expectedReason: undefined },
+] as const) {
+  test(`classifies source-access HTTP ${statusCode} as ${expectedReason ?? "unclassified"}`, () => {
+    // arrange
+    const failure = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+      code: "HttpError",
+      data: { statusCode },
+    });
+
+    // act
+    const reason = classifyGitSourceAccessFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, expectedReason);
+  });
+}
+
+for (const { title, createFailure, expectedReason } of [
+  {
+    title: "keeps the transport ladder's authentication verdict for a source access",
+    createFailure: () =>
+      Object.assign(new Error("HTTP Error: 401"), { code: "HttpError", data: { statusCode: 401 } }),
+    expectedReason: "authentication required",
+  },
+  {
+    title: "keeps the transport ladder's network verdict for a source access",
+    createFailure: () => Object.assign(new Error("Git transport failure"), { code: "ENOTFOUND" }),
+    expectedReason: "network unreachable",
+  },
+  {
+    title: "leaves a non-Error source-access failure unclassified",
+    createFailure: () => null,
+    expectedReason: undefined,
+  },
+  {
+    title: "leaves a source-access HTTP error without a status unclassified",
+    createFailure: () => Object.assign(new Error("HTTP Error"), { code: "HttpError" }),
+    expectedReason: undefined,
+  },
+  {
+    title: "leaves a non-HTTP source-access error for the caller to classify",
+    createFailure: () => Object.assign(new Error("permission denied"), { code: "EACCES" }),
+    expectedReason: undefined,
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = createFailure();
+
+    // act
+    const reason = classifyGitSourceAccessFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, expectedReason);
   });
 }

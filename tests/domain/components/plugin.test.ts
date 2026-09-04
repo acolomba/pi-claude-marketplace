@@ -48,6 +48,7 @@ describe("PLUGIN_ENTRY_SCHEMA", () => {
         userConfig: {},
         bin: {},
         settings: {},
+        workflows: {},
         mcpServers: {
           anyOf: [
             { type: "string" },
@@ -99,6 +100,7 @@ describe("PLUGIN_ENTRY_VALIDATOR", () => {
         userConfig: false,
         bin: ["plugin"],
         settings: { feature: true },
+        workflows: ["./workflows"],
       },
     },
     {
@@ -237,6 +239,7 @@ describe("PLUGIN_MANIFEST_VALIDATOR", () => {
         userConfig: false,
         bin: ["plugin"],
         settings: { feature: true },
+        workflows: ["./workflows"],
       },
     },
     {

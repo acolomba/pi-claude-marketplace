@@ -5,7 +5,7 @@ import { EXTENSION_VERSION } from "../../extensions/pi-claude-marketplace/shared
 
 test("exports the checked-in extension version", () => {
   // arrange
-  const expectedVersion = "0.17.0";
+  const expectedVersion = "0.18.1";
 
   // act
   const extensionVersion = EXTENSION_VERSION;

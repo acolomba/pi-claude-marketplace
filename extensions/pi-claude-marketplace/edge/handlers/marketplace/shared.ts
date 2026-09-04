@@ -8,7 +8,7 @@
 // to their orchestrator with `{ ctx, pi, name, cwd, scope? }`.
 //
 // Argument-parsing failures route through `notifyUsageError`; the orchestrator
-// owns per-scope projection / fan-out / the conditional `{not added}` forms.
+// owns per-scope projection / fan-out / the conditional `{marketplace not added}` forms.
 
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";

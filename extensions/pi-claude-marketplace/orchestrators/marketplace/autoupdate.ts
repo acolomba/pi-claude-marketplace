@@ -76,7 +76,7 @@ import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
-import { classifyAutoupdateFlip } from "./shared.ts";
+import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -167,7 +167,7 @@ function missingEverywhere(
  *
  * ATTR-05: this row no longer handles the missing-marketplace case -- an
  * explicit-scope `MarketplaceNotFoundError` is routed to the standalone
- * `MarketplaceNotAddedMessage` `{not added}` variant by `setMarketplaceAutoupdate`
+ * `MarketplaceNotAddedMessage` `{marketplace not added}` variant by `setMarketplaceAutoupdate`
  * BEFORE this helper is reached. This helper now only maps `StateLockHeldError`
  * (-> `lock held`, whose message carries the retry hint) and other non-not-found
  * flip errors (-> the permissive `not found` fallback).
@@ -199,11 +199,13 @@ function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOA
  * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
  *
  * Missing-marketplace errors are collected by the sole caller and routed
- * through the aggregate `{not added}` path. Every error reaching this helper --
- * notably `StateLockHeldError`, whose message carries an actionable retry hint --
- * keeps the synthetic failed-plugin child whose `cause` drives the renderer's
- * depth-5 cause-chain trailer (the MarketplaceNotificationMessage header carries
- * no `cause` per SNM-10).
+ * through the aggregate `{marketplace not added}` path -- `classifyAutoupdateFlip`
+ * raises `MarketplaceNotFoundError` only for a NAMED flip, and every named
+ * not-found is taken by `shouldCollectNotFound`. Every error reaching this
+ * helper -- notably `StateLockHeldError`, whose message carries an actionable
+ * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
+ * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
+ * header carries no `cause` per SNM-10).
  */
 function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: Error): void {
   const failureName = opts.name ?? "(unknown)";
@@ -512,16 +514,22 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     if (first !== undefined) {
       // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
       // iterated scope is a missing-marketplace precondition. Route it to the
-      // standalone MarketplaceNotAddedMessage `(failed) {not added}` variant
+      // standalone MarketplaceNotAddedMessage `(failed) {marketplace not added}` variant
       // instead of the former reason-LESS bare `(failed)` row.
       // Scope bracket: an explicit `opts.scope` carries it; the bare form
       // carries `first.scope` (the scope where the first not-found was
       // observed), per the RESEARCH recommendation.
       const failureName = opts.name;
+      const missScope = opts.scope ?? first.scope;
       notify(opts.ctx, opts.pi, {
         kind: "marketplace-not-added",
         name: failureName,
-        scope: opts.scope ?? first.scope,
+        scope: missScope,
+        ...(await crossScopeFlag({
+          cwd: opts.cwd,
+          marketplace: failureName,
+          scope: missScope,
+        })),
       });
     }
 

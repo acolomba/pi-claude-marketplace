@@ -589,7 +589,7 @@ test("PU-5 / D-01: standalone uninstall of an already-gone plugin -> error row (
   });
 });
 
-test("ATTR-04 / M4: marketplace record itself absent -> LOUD {not added} (explicit scope)", async () => {
+test("ATTR-04 / M4: marketplace record itself absent -> LOUD {marketplace not added} (explicit scope)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-pu5b-"));
     try {
@@ -611,7 +611,7 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {not added} (explic
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {marketplace not added}",
       );
       // No state mutation -- the resolver short-circuits before the guard.
       const after = await loadState(locations.extensionRoot);
@@ -622,7 +622,7 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {not added} (explic
   });
 });
 
-test("SCOPE-01: explicit-scope uninstall of an other-scope-only target -> LOUD {not added} with requested bracket", async () => {
+test("SCOPE-01: explicit-scope uninstall of an other-scope-only target names the scope the container sits in", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-scope01-"));
     try {
@@ -653,14 +653,17 @@ test("SCOPE-01: explicit-scope uninstall of an other-scope-only target -> LOUD {
         plugin: "hello",
       });
 
-      // SCOPE-01: not silent, not {not in manifest} -- the requested-scope
-      // bracket communicates "not added in the scope you asked for"; the
-      // operator infers the other scope. The user record is untouched.
+      // SCOPE-01: not silent, not {not in manifest}. Nothing of the
+      // marketplace is installed at the requested scope, so the PLUGIN is the
+      // row's subject and the brace names where the container really is
+      // beside `not installed`. The user record is untouched.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {not added}",
+        "A plugin operation has failed.\n\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {not installed, marketplace in user scope}",
       );
       const userAfter = await loadState(userLocations.extensionRoot);
       assert.ok("hello" in (userAfter.marketplaces["mp"]?.plugins ?? {}), "user record retained");
@@ -1730,7 +1733,7 @@ test("WR-06 uninstall orchestrated mode -- marketplace removed after resolution 
   });
 });
 
-test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
+test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'marketplace not added' } no notifications", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-na-"));
     try {
@@ -1749,7 +1752,7 @@ test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { stat
       assert.ok(outcome);
       assert.equal(outcome.status, "failed");
       if (outcome.status === "failed") {
-        assert.equal(outcome.reason, "not added");
+        assert.equal(outcome.reason, "marketplace not added");
         assert.ok(outcome.error instanceof MarketplaceNotFoundError);
       }
     } finally {

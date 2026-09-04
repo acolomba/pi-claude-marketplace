@@ -499,6 +499,12 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
       value: "install --partial ",
       description: "Install over collisions and unsupported components (not unavailable)",
     },
+    {
+      label: "--local",
+      value: "install --local ",
+      description:
+        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    },
   ]);
 });
 

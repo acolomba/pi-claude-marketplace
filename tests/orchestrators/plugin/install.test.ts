@@ -731,7 +731,7 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
   });
 });
 
-test("ATTR-01 / M1: marketplace itself absent -> standalone {not added} on the marketplace subject", async () => {
+test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not added} on the marketplace subject", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3b-"));
     try {
@@ -757,7 +757,7 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {not added} on the m
       // not-added state.
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}",
       );
       assert.equal(outcome.status, "failed");
 
@@ -3148,13 +3148,14 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       // project-only marketplace and the CMP-3 fallback is user->? only (it
       // does NOT fall back project, so the user-target miss is terminal).
       // The marketplace is "not added in user", surfaced via the standalone
-      // `marketplace-not-added` variant with the `[user]` bracket -- NOT
-      // `{not in manifest}` on a plugin row.
+      // `marketplace-not-added` variant with the `[user]` bracket and the
+      // scope-qualified reason naming where the container actually sits --
+      // NOT `{not in manifest}` on a plugin row.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
       );
 
       const userAfter = await loadState(userLocations.extensionRoot);

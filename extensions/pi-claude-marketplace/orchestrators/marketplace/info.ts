@@ -15,6 +15,8 @@ import { notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
+import { crossScopeFlag } from "./shared.ts";
+
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -98,14 +100,18 @@ async function buildBlock(
 }
 
 /**
- * The `{not added}` bare-row failure (catalog state D-03 / INFO-04 scope
+ * The `{marketplace not added}` bare-row failure (catalog state D-03 / INFO-04 scope
  * mismatch). Built as the dedicated `MarketplaceNotAddedMessage` variant
  * (TYPE-01 / D-46-01), which carries only the marketplace `name` and an
  * optional `scope`; `renderMarketplaceNotAdded` emits the bare column-0 row
- * `⊘ <name> [scope?] (failed) {not added}` with no marketplace header (there
+ * `⊘ <name> [scope?] (failed) {marketplace not added}` with no marketplace header (there
  * is no marketplace to head).
  */
-function buildNotAddedMessage(name: string, scope: Scope | undefined): NotificationMessage {
+async function buildNotAddedMessage(
+  cwd: string,
+  name: string,
+  scope: Scope | undefined,
+): Promise<NotificationMessage> {
   return {
     kind: "marketplace-not-added",
     name,
@@ -113,6 +119,7 @@ function buildNotAddedMessage(name: string, scope: Scope | undefined): Notificat
     // `[scope]` bracket); OMITTED when `--scope` was undefined and BOTH scopes
     // missed (D-03: "absent from both scopes" body has no `[scope]` bracket).
     ...(scope !== undefined && { scope }),
+    ...(await crossScopeFlag({ cwd, marketplace: name, scope })),
   };
 }
 
@@ -158,7 +165,7 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   });
 
   if (found.length === 0) {
-    notify(opts.ctx, opts.pi, buildNotAddedMessage(opts.name, opts.scope));
+    notify(opts.ctx, opts.pi, await buildNotAddedMessage(opts.cwd, opts.name, opts.scope));
     return;
   }
 

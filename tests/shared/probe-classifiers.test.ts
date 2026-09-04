@@ -263,6 +263,18 @@ describe("narrowUnsupportedKinds", () => {
     assert.deepStrictEqual(reasons, expectedReasons);
   });
 
+  test("classifies workflows as the dedicated workflows reason", () => {
+    // arrange
+    const kinds = ["workflows"];
+    const expectedReasons = ["workflows"] satisfies readonly UnsupportedReason[];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, expectedReasons);
+  });
+
   test("classifies hooks and lspServers independently", () => {
     // arrange
     const kinds = ["hooks", "lspServers"];

@@ -453,7 +453,8 @@ test("reports a named marketplace absent from both implicit scopes", async () =>
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const boundary = notificationBoundary({
-      message: "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {marketplace not added}",
       severity: "error",
     });
 
@@ -477,7 +478,8 @@ test("reports a named marketplace absent from an explicit user scope", async () 
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const boundary = notificationBoundary({
-      message: "A marketplace operation has failed.\n\n⊘ missing-mp [user] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ missing-mp [user] (failed) {marketplace not added}",
       severity: "error",
     });
 

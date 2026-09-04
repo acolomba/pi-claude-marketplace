@@ -190,7 +190,10 @@ async function dualScopeCase(testContext: TestContext): Promise<{
 
 function assertFailedOutcome(
   outcome: RemoveMarketplaceOutcome | undefined,
-  expected: { readonly cause: string; readonly reason: "invalid manifest" | "not added" },
+  expected: {
+    readonly cause: string;
+    readonly reason: "invalid manifest" | "marketplace not added";
+  },
 ): asserts outcome is Extract<RemoveMarketplaceOutcome, { status: "failed" }> {
   assert.ok(outcome !== undefined);
   assert.strictEqual(outcome.status, "failed");
@@ -225,7 +228,8 @@ test("reports an explicit-scope missing marketplace without mutating project sta
   assert.strictEqual(outcome, undefined);
   assert.deepStrictEqual(notification.calls, [
     {
-      message: "A marketplace operation has failed.\n\n⊘ absent [project] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ absent [project] (failed) {marketplace not added}",
       severity: "error",
     },
   ]);
@@ -252,7 +256,7 @@ test("returns the complete orchestrated missing-marketplace outcome without noti
 
   // assert
   assertFailedOutcome(outcome, {
-    reason: "not added",
+    reason: "marketplace not added",
     cause: 'Marketplace "absent" not found in project, user scopes.',
   });
   assert.ok(outcome.error instanceof MarketplaceNotFoundError);
@@ -468,7 +472,7 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
   ]);
   assert.strictEqual(await readFile(locations.pluginClonesDir, "utf8"), "not a directory");
   assertFailedOutcome(retryOutcome, {
-    reason: "not added",
+    reason: "marketplace not added",
     cause: 'Marketplace "gc-failure" not found in user scope.',
   });
   assert.deepStrictEqual(retryNotification.calls, []);

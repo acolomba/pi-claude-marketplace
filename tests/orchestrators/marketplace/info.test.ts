@@ -587,7 +587,8 @@ test("INFO-04: explicit user scope ignores a project-only marketplace", async ()
     );
     const before = await snapshotEnvironment(home, cwd);
     const boundary = notificationBoundary({
-      message: "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {marketplace not added to user scope}",
       severity: "error",
     });
 
@@ -625,7 +626,8 @@ test("INFO-04: explicit project scope ignores a user-only marketplace", async ()
     );
     const before = await snapshotEnvironment(home, cwd);
     const boundary = notificationBoundary({
-      message: "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {marketplace not added to project scope}",
       severity: "error",
     });
 
@@ -649,7 +651,7 @@ test("D-03: implicit scope renders an absent marketplace without a scope bracket
     // arrange
     const before = await snapshotEnvironment(home, cwd);
     const boundary = notificationBoundary({
-      message: "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
+      message: "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}",
       severity: "error",
     });
 

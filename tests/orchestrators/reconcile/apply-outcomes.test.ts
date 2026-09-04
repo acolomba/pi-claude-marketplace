@@ -290,7 +290,7 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   // @ts-expect-error disabled plugin reasons exclude the structural marketplace-only reason
-  reasons: ["not added"],
+  reasons: ["marketplace not added"],
 } satisfies PluginDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
@@ -325,7 +325,7 @@ void ({
   scope: "project",
   basename: "state.json",
   // @ts-expect-error invalid blocks reject the structural marketplace-only reason
-  reason: "not added",
+  reason: "marketplace not added",
 } satisfies InvalidBlockOutcome);
 void ({
   kind: "invalid-block",

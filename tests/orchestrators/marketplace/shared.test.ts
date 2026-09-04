@@ -16,6 +16,8 @@ import {
   cascadeUnstagePlugin,
   classifyAutoupdateFlip,
   loadVisibleMarketplaces,
+  crossScopeFlag,
+  marketplaceInOtherScope,
   narrowCascadeFailure,
   refreshGitHubClone,
   resolveScopeFromState,
@@ -995,7 +997,7 @@ test("resolveScopeOrNotifyNotAdded emits exact bytes for a bare miss", async (t)
   await saveMarketplaces(user.locations, []);
   await saveMarketplaces(project.locations, []);
   const boundary = notificationBoundary({
-    message: "A marketplace operation has failed.\n\n⊘ missing (failed) {not added}",
+    message: "A marketplace operation has failed.\n\n⊘ missing (failed) {marketplace not added}",
     severity: "error",
   });
 
@@ -1071,7 +1073,8 @@ test("resolveScopeOrNotifyNotAdded emits exact scoped bytes for an explicit miss
   await saveMarketplaces(user.locations, []);
   await saveMarketplaces(project.locations, []);
   const boundary = notificationBoundary({
-    message: "A marketplace operation has failed.\n\n⊘ missing [user] (failed) {not added}",
+    message:
+      "A marketplace operation has failed.\n\n⊘ missing [user] (failed) {marketplace not added}",
     severity: "error",
   });
 
@@ -1085,6 +1088,145 @@ test("resolveScopeOrNotifyNotAdded emits exact scoped bytes for an explicit miss
   // assert
   assert.equal(resolved, undefined);
   boundary.verifyAll();
+});
+
+test("resolveScopeOrNotifyNotAdded names the sibling scope holding the container on an explicit miss", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(t, "notify-sibling");
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, [marketplaceRecord("official", "project", cwd)]);
+  const boundary = notificationBoundary({
+    message:
+      "A marketplace operation has failed.\n\n⊘ official [user] (failed) {marketplace not added to user scope}",
+    severity: "error",
+  });
+
+  // act
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "official", scope: "user" },
+    userLocations,
+    projectLocations,
+  );
+
+  // assert
+  assert.equal(resolved, undefined);
+  boundary.verifyAll();
+});
+
+test("resolveScopeOrNotifyNotAdded names the user scope holding the container on an explicit project miss", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(
+    t,
+    "notify-sibling-project",
+  );
+  await saveMarketplaces(userLocations, [marketplaceRecord("official", "user", cwd)]);
+  await saveMarketplaces(projectLocations, []);
+  const boundary = notificationBoundary({
+    message:
+      "A marketplace operation has failed.\n\n⊘ official [project] (failed) {marketplace not added to project scope}",
+    severity: "error",
+  });
+
+  // act
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "official", scope: "project" },
+    userLocations,
+    projectLocations,
+  );
+
+  // assert
+  assert.equal(resolved, undefined);
+  boundary.verifyAll();
+});
+
+for (const scope of ["user", "project"] satisfies readonly Scope[]) {
+  test(`marketplaceInOtherScope finds a container recorded opposite an explicit ${scope} scope`, async (t) => {
+    // arrange
+    const { cwd, userLocations, projectLocations } = await createHermeticScopes(
+      t,
+      `other-scope-${scope}`,
+    );
+    const holder = scope === "user" ? projectLocations : userLocations;
+    const holderScope: Scope = scope === "user" ? "project" : "user";
+    await saveMarketplaces(userLocations, []);
+    await saveMarketplaces(projectLocations, []);
+    await saveMarketplaces(holder, [marketplaceRecord("official", holderScope, cwd)]);
+
+    // act
+    const elsewhere = await marketplaceInOtherScope({ cwd, marketplace: "official", scope });
+
+    // assert
+    assert.strictEqual(elsewhere, true);
+  });
+}
+
+test("marketplaceInOtherScope reports a container absent from the sibling scope", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(
+    t,
+    "other-scope-miss",
+  );
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, []);
+
+  // act
+  const elsewhere = await marketplaceInOtherScope({ cwd, marketplace: "missing", scope: "user" });
+
+  // assert
+  assert.strictEqual(elsewhere, false);
+});
+
+test("marketplaceInOtherScope degrades an unreadable sibling state to no claim", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(t, "other-scope-bad");
+  await saveMarketplaces(userLocations, []);
+  await mkdir(projectLocations.extensionRoot, { recursive: true });
+  await writeFile(path.join(projectLocations.extensionRoot, "state.json"), "{");
+
+  // act
+  const elsewhere = await marketplaceInOtherScope({ cwd, marketplace: "official", scope: "user" });
+
+  // assert
+  assert.strictEqual(elsewhere, false);
+});
+
+test("crossScopeFlag probes no scope when the row carries no bracket", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(t, "flag-bare");
+  await saveMarketplaces(userLocations, [marketplaceRecord("official", "user", cwd)]);
+  await saveMarketplaces(projectLocations, [marketplaceRecord("official", "project", cwd)]);
+
+  // act
+  const flag = await crossScopeFlag({ cwd, marketplace: "official", scope: undefined });
+
+  // assert
+  assert.deepStrictEqual(flag, {});
+});
+
+test("crossScopeFlag marks a container recorded in the scope the command did not target", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(t, "flag-present");
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, [marketplaceRecord("official", "project", cwd)]);
+
+  // act
+  const flag = await crossScopeFlag({ cwd, marketplace: "official", scope: "user" });
+
+  // assert
+  assert.deepStrictEqual(flag, { presentInOtherScope: true });
+});
+
+test("crossScopeFlag claims nothing when both scopes miss", async (t) => {
+  // arrange
+  const { cwd, userLocations, projectLocations } = await createHermeticScopes(t, "flag-absent");
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, []);
+
+  // act
+  const flag = await crossScopeFlag({ cwd, marketplace: "missing", scope: "user" });
+
+  // assert
+  assert.deepStrictEqual(flag, {});
 });
 
 test("loadVisibleMarketplaces preserves input record order in one selected scope", async (t) => {

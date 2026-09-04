@@ -276,7 +276,8 @@ test("treats the scope-target flag as the name positional rather than a scope se
   // assert
   assert.deepStrictEqual(notifications, [
     {
-      message: "A marketplace operation has failed.\n\n⊘ --local [project] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ --local [project] (failed) {marketplace not added}",
       severity: "error",
     },
   ]);

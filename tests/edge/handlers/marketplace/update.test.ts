@@ -427,7 +427,8 @@ test("takes the scope-target flag as the marketplace name instead of rejecting i
   // assert
   assert.deepStrictEqual(notifications, [
     {
-      message: "A marketplace operation has failed.\n\n⊘ --local [user] (failed) {not added}",
+      message:
+        "A marketplace operation has failed.\n\n⊘ --local [user] (failed) {marketplace not added}",
       severity: "error",
     },
   ]);

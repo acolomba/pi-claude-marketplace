@@ -78,3 +78,16 @@ npm run test:coverage:direct:report   # every pair, recorded rather than enforce
 It runs the same one focused test per pair, records the gate's verdict for each, and writes one JSON row per pair to `coverage/all-pairs-report.ndjson`. It is a reporting tool, not a gate: it does not stop at a shortfall, and its exit code is not a coverage verdict -- a zero says the report was written, nothing more. Only the two commands above decide whether coverage is complete, and both still refuse a shortfall. It is as slow as they are, so it too has no CI job.
 
 Each row carries a `verdict` of `complete`, `type-only` or `accepted-shortfall`. The report does not read the broken-windows ledger, so `accepted-shortfall` says only that the gate refused the row. Read the refused rows against the table above: seven rows carrying those readings is the expected result today, and an eighth row -- or one of the seven reading differently -- is a real failure. Anything else that goes wrong, such as a focused test that failed, fails the report rather than filing a coverage verdict for a pair it never measured.
+
+## Vendored skills
+
+Every skill lives under `.agents/skills/`, `.claude/skills/` holds symlinks to them, and Pi reads `.agents/skills/` directly. Some of them are vendored from other repositories: `skills-lock.json` names each vendored skill and its source, and `THIRD_PARTY_NOTICES.md` records its version and license. A skill absent from `skills-lock.json` is written in this repository and needs neither entry.
+
+To update a skill:
+
+```bash
+npx skills@latest update <name> -p -y
+npx skills@latest remove <name> -a pi -y
+```
+
+The installer copies the skill directory only, and some upstream repositories keep the license at the repository root. The `update` command links every agent whose directory exists, so it creates a `.pi/skills/` symlink. The `remove -a pi` command deletes only that link. After an update, check that the `LICENSE` file is still in place, and record the new version and commit in `THIRD_PARTY_NOTICES.md`.

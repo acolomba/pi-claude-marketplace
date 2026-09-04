@@ -115,6 +115,9 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   "https://github.com/owner/repo.git",
   "https://gitlab.example.com/team/mp.git",
   "https://gitlab.example.com/team/private-mp.git",
+  "https://gitlab.example.com/team/missing-mp.git",
+  "https://gitlab.example.com/team/flaky-mp.git",
+  "https://gitlab.example.com/team/gone-mp.git",
   "https://GitHub.com/acme/mp.git",
   "https://gitlab.com/team/mp.git",
 ] as const;
@@ -215,6 +218,13 @@ function makeCtx(expectedNotifications = 1): {
   }
 
   return { ctx, pi, notifications };
+}
+
+function httpError(statusCode: number): Error {
+  return Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+    code: "HttpError",
+    data: { statusCode },
+  });
 }
 
 async function withTmpScope<T>(
@@ -2136,10 +2146,7 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const httpErr = Object.assign(new Error("HTTP 403 from clone"), {
-      code: "HttpError",
-      data: { statusCode: 403 },
-    });
+    const httpErr = httpError(403);
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
@@ -2159,6 +2166,105 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
     // assert
     assert.ok(note);
     assert.ok(note.message.includes("(failed) {authentication required}"));
+  });
+});
+
+test("D-76-09: a missing repository HttpError renders (failed) {source missing} via notify()", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(404),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/missing-mp",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ https://gitlab.example.com/team/missing-mp [project] (failed) {source missing}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+for (const { statusCode, reason } of [
+  { statusCode: 429, reason: "network unreachable" },
+  { statusCode: 500, reason: "network unreachable" },
+]) {
+  test(`D-76-09: a transient HTTP ${statusCode} clone failure renders (failed) {${reason}}`, async () => {
+    await withTmpScope(async ({ cwd }) => {
+      // arrange
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+        cloneThrows: httpError(statusCode),
+      });
+
+      // act
+      await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/flaky-mp",
+        gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n" +
+            `⊘ https://gitlab.example.com/team/flaky-mp [project] (failed) {${reason}}`,
+          severity: "error",
+        },
+      ]);
+    });
+  });
+}
+
+test("D-76-09 orchestrated mode -- a gone repository returns the source-missing outcome without notifying", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx(0);
+    const cloneThrows = httpError(410);
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/gone-mp",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneThrows,
+      cause: "HTTP Error: 410",
+    });
+    assert.deepStrictEqual(notifications, []);
   });
 });
 

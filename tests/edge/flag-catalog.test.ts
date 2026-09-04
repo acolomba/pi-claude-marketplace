@@ -8,6 +8,12 @@
 // order, the fresh parse-set, the scope-target exclusion, and the exported verb
 // key list -- and states no claim about which flags a verb carries.
 //
+// The complete-bit filter has no observable drop today: every catalog entry is
+// both `parse: true` and `complete: true`, so nothing reaches the filter that it
+// removes. The cases below pin what the filter carries through -- name,
+// description, catalog order -- and a future `complete: false` entry is what
+// would make the drop arm discriminable again.
+//
 // Two cases name SCOPE_TARGET_FLAG in their expectation on purpose: the promise
 // there is the identity relation between two exports (the name
 // passThroughFlagNames drops is the one SCOPE_TARGET_FLAG holds). Writing the
@@ -86,9 +92,15 @@ test("completionFlagEntries carries the description of a single-entry verb throu
   assert.deepStrictEqual(completionEntries, expectedEntries);
 });
 
-test("completionFlagEntries drops a parse-accepted entry the catalog does not mark completable", () => {
+test("completionFlagEntries offers the scope-target flag of a verb that declares only that flag", () => {
   // arrange
-  const expectedEntries: { name: string; description?: string }[] = [];
+  const expectedEntries = [
+    {
+      name: SCOPE_TARGET_FLAG,
+      description:
+        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    },
+  ];
 
   // act
   const completionEntries = completionFlagEntries("uninstall");

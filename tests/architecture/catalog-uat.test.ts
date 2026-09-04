@@ -901,6 +901,29 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WDET-04: a workflow-bearing plugin uses the existing partial inventory
+    // grammar. The typed reason has info severity and adds no hint or reload
+    // trailer before installation.
+    "workflow-partially-available-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-available",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["workflows"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // FSTAT-02 / D-66-03: list-surface inventory row for a recorded-installed
     // plugin currently re-resolving `partially-available`. The derived `partially-installed`
     // token wears the dedicated `◉` glyph, distinct from the clean `●`
@@ -1183,6 +1206,31 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WDET-04: explicit partial consent installs the supported components and
+    // reports the dropped workflow kind through the existing success grammar.
+    "workflow-partial-install-success": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-installed",
+                severity: "info",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["workflows"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // DFEN-04 / OUT-01 / OUT-04: the install ran whole and then unstaged
     // because the plugin's own `defaultEnabled` said so. The `◍` row names the
     // author-declared cause and carries the frozen enable-hint trailer; no
@@ -1254,6 +1302,30 @@ const FIXTURES: FixtureMap = {
                 status: "partially-available",
                 name: "helper",
                 reasons: ["unsupported hooks", "lsp"],
+                partialHint: true,
+                severity: "error",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WDET-04: a normal install rejects a workflow-bearing plugin through the
+    // existing partially-available error row and partial-install hint.
+    "workflow-install-rejection": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-available",
+                name: "helper",
+                reasons: ["workflows"],
                 partialHint: true,
                 severity: "error",
               },
@@ -1356,6 +1428,36 @@ const FIXTURES: FixtureMap = {
         kind: "marketplace-not-added",
         name: "ghost-mp",
         scope: "project",
+      } satisfies NotificationMessage,
+    },
+
+    // CMP-4 / SCOPE-01: the container exists in the scope the install did not
+    // target, so the brace carries the cross-scope structural token INSTEAD of
+    // `marketplace not added`. The message field is a BOOLEAN -- notify.ts owns the bytes.
+    // The bare-row state above is the SAME variant with the flag omitted, which
+    // is what a miss in both scopes emits.
+    "missing-marketplace-not-added-cross-scope": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "mp",
+        scope: "user",
+        presentInOtherScope: true,
+      } satisfies NotificationMessage,
+    },
+
+    // The project-target direction of the same claim. Unreachable from
+    // `install` (the CMP-3 fallback adopts a user-scope marketplace into
+    // project scope) but reachable from every other verb that renders this row.
+    "missing-marketplace-not-added-cross-scope-project": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "mp",
+        scope: "project",
+        presentInOtherScope: true,
       } satisfies NotificationMessage,
     },
   },
@@ -1461,6 +1563,31 @@ const FIXTURES: FixtureMap = {
                 status: "failed",
                 name: "helper",
                 reasons: ["not installed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SCOPE-01: the container is registered in the scope the command did not
+    // target, so the brace names it beside `not installed` -- the scope word is
+    // always the OPPOSITE of the row's bracket.
+    "already-gone-cross-scope": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["not installed", "marketplace in project scope"],
                 severity: "error",
                 needsReload: false,
               },
@@ -1819,6 +1946,32 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SCOPE-01: the container is registered in the scope the command did not
+    // target, so the brace names it beside `not installed`.
+    "reinstall-not-installed-cross-scope": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "hello",
+                reasons: ["not installed", "marketplace in user scope"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-03 / SCOPE-01 / M6 / M7 / M8: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,
@@ -1851,6 +2004,33 @@ const FIXTURES: FixtureMap = {
   // /claude:plugin update -- multi-plugin cascade; version-arrow rows.
   // -------------------------------------------------------------------------
   "/claude:plugin update": {
+    // SCOPE-01: `update <plugin>@<mp> --scope <scope>` where the container sits
+    // one scope over. The plugin is the subject and the brace names where the
+    // container really is -- the scope word is the OPPOSITE of the bracket.
+    "update-not-installed-cross-scope": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "hello",
+                reasons: ["not installed", "marketplace in project scope"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // UGRM-01: the bulk-update up-to-date `beta` row is suppressed at the
     // orchestrator, so the fixture omits it. UGRM-02: the `tally` override owns
     // the success category (one realized `updated` row -> `1 updated`); the
@@ -2945,7 +3125,7 @@ const FIXTURES: FixtureMap = {
   //     * scope-mismatch-not-added       (anchor; byte-identical)
   //
   // Severity routing: every success + fan-out state is `info` (omits
-  // `expectedSeverity`); the two `{not added}` failure states route to
+  // `expectedSeverity`); the two `{marketplace not added}` failure states route to
   // `"error"`. The `scope-mismatch-not-added` fixture
   // (annotation, fence body, payload, severity) is
   // byte-identical.
@@ -3060,14 +3240,14 @@ const FIXTURES: FixtureMap = {
       // TYPE-01: the dedicated `marketplace-not-added` variant. `scope` is
       // OMITTED so the renderer emits no `[scope]` token -- absent-from-both
       // states have no bracket because the marketplace is in NEITHER scope.
-      // Byte form is unchanged (`⊘ ghost-mp (failed) {not added}`).
+      // Byte form is unchanged (`⊘ ghost-mp (failed) {marketplace not added}`).
       message: {
         kind: "marketplace-not-added",
         name: "ghost-mp",
       } satisfies NotificationMessage,
     },
 
-    // Byte form preserved byte-identical (`⊘ my-mp [user] (failed) {not added}`).
+    // Byte form preserved byte-identical (`⊘ my-mp [user] (failed) {marketplace not added}`).
     // The fixture shape is re-keyed to the TYPE-01 variant; the rendered BYTES
     // are unchanged.
     "scope-mismatch-not-added": {
@@ -3133,11 +3313,11 @@ const FIXTURES: FixtureMap = {
   //     * components-not-resolved                      (external-source marker)
   //   - Failure states:
   //     * missing-plugin-not-in-manifest               ({not in manifest})
-  //     * missing-marketplace-not-added-absent-from-both  ({not added}, no [scope])
-  //     * missing-marketplace-not-added-scope-mismatch    ({not added}, with [scope])
+  //     * missing-marketplace-not-added-absent-from-both  ({marketplace not added}, no [scope])
+  //     * missing-marketplace-not-added-scope-mismatch    ({marketplace not added}, with [scope])
   //
   // Severity routing: every success + fan-out + components-not-resolved
-  // state is `info` (omits `expectedSeverity`); the three `{not added}` /
+  // state is `info` (omits `expectedSeverity`); the three `{marketplace not added}` /
   // `{not in manifest}` failure states route to `"error"`; the three D-96-04
   // fetch-skip notes are the only `"warning"` states on this surface.
   // -------------------------------------------------------------------------
@@ -3599,7 +3779,7 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       // TYPE-01 variant. `name` carries the MARKETPLACE name (the user-facing
       // failure is "the marketplace is not added"). `scope` OMITTED -> no
-      // bracket. Byte form unchanged (`⊘ ghost-mp (failed) {not added}`).
+      // bracket. Byte form unchanged (`⊘ ghost-mp (failed) {marketplace not added}`).
       message: {
         kind: "marketplace-not-added",
         name: "ghost-mp",
@@ -3611,7 +3791,7 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       // TYPE-01 variant. `--scope user` requested explicitly -> renderer emits
       // the `[user]` bracket. Byte form unchanged
-      // (`⊘ ghost-mp [user] (failed) {not added}`).
+      // (`⊘ ghost-mp [user] (failed) {marketplace not added}`).
       message: {
         kind: "marketplace-not-added",
         name: "ghost-mp",
@@ -3667,7 +3847,7 @@ const FIXTURES: FixtureMap = {
     },
 
     // ATTR-06 / S3 / D-48-C Shape 1: explicit-scope remove of a name not added
-    // in the requested scope -> standalone `marketplace-not-added` `{not added}`
+    // in the requested scope -> standalone `marketplace-not-added` `{marketplace not added}`
     // variant carrying the requested scope bracket (pre-guard miss; no raw
     // MarketplaceNotFoundError escapes the orchestrator).
     "remove-missing-not-added": {
@@ -4041,7 +4221,7 @@ const FIXTURES: FixtureMap = {
 
     // ATTR-05 / S1 / D-48-C Shape 1: an explicit-scope flip of a name not
     // added in the requested scope routes to the standalone
-    // `marketplace-not-added` `{not added}` variant carrying the requested
+    // `marketplace-not-added` `{marketplace not added}` variant carrying the requested
     // scope bracket -- superseding the former reason-less / `{not found}` form.
     "autoupdate-missing-not-added": {
       pi: piWithBothLoaded(),
@@ -4234,10 +4414,10 @@ const FIXTURES: FixtureMap = {
 
     "enable-not-installed": {
       pi: piWithBothLoaded(),
-      // WR-03: marketplace present, plugin row absent -> actionable skip
-      // (`not installed` is NOT benign, so the cascade routes to warning
-      // per D-28-03 and carries the skipped-summary line).
-      expectedSeverity: "warning",
+      // WR-03 / D-01: marketplace present, plugin row absent. Nothing was
+      // enabled or disabled, so the operation was NOT carried out -> `error`,
+      // the same stamp every sibling verb applies to `["not installed"]`.
+      expectedSeverity: "error",
       message: {
         marketplaces: [
           {
@@ -4246,10 +4426,36 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "skipped",
-                severity: "warning",
+                severity: "error",
                 needsReload: false,
                 name: "foo-plugin",
                 reasons: ["not installed"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SCOPE-01: the container is registered in the scope the command did not
+    // target. The brace names it beside `not installed` so this miss stops
+    // rendering byte-identically to `enable-not-installed` above -- the two take
+    // different remedies. The scope word is the OPPOSITE of the row's bracket.
+    "enable-not-installed-cross-scope": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "error",
+                needsReload: false,
+                name: "foo-plugin",
+                reasons: ["not installed", "marketplace in user scope"],
               },
             ],
           },
@@ -5024,14 +5230,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 173 is the number of annotated examples in
+  // Exact count, not a floor: 182 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    173,
-    `Expected exactly 173 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    182,
+    `Expected exactly 182 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

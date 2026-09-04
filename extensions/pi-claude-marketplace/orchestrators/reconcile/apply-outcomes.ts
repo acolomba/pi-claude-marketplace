@@ -14,7 +14,7 @@
 //   - planner-only:    invalid-block (CFG-03 from the read pass)
 //
 // Failure variants carry `reason: Reason` (broader than ContentReason so the
-// structural `"not added"` sentinel can flow through; mirrors the orchestrator
+// structural `"marketplace not added"` sentinel can flow through; mirrors the orchestrator
 // outcome shapes). Success variants carry the minimum fields the projection
 // renders.
 //

@@ -29,7 +29,9 @@ import {
   errorMessage,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
+import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
@@ -42,7 +44,9 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
+import type { ContentReason, PluginSkippedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -202,25 +206,44 @@ export type CrossScopePluginResolution =
  * agree across orchestrators (a per-file copy would defeat `instanceof` by
  * class identity). The enumeration catch in each entrypoint detects it via
  * `instanceof` and emits ONE standalone `MarketplaceNotAddedMessage`
- * (`{not added}` on the marketplace subject) before any cascade row exists.
+ * (`{marketplace not added}` on the marketplace subject) before any cascade row exists.
  *
  * `requestedScope` carries the explicitly-requested scope so the `[scope]`
  * bracket reads "not added in the scope you asked for" (SCOPE-01); it is
  * OMITTED for the bare form that missed in both scopes (no bracket).
  *
- * Structural (not REASONS): `{not added}` is the hard-coded brace of
+ * Structural (not REASONS): `{marketplace not added}` is the hard-coded brace of
  * `renderMarketplaceNotAdded`, reachable only via the dedicated variant -- no
  * new `REASONS` member is introduced (D-47-B).
  */
 export class MarketplaceNotAddedSignal extends Error {
   readonly marketplace: string;
   readonly requestedScope?: Scope;
-  constructor(marketplace: string, requestedScope?: Scope) {
+  /**
+   * SCOPE-01: set when the miss is really "nothing is installed at the scope
+   * you named" -- see `missIsNotInstalled`. The handler then renders the
+   * PLUGIN row `(skipped|failed) {not installed}` instead of the marketplace
+   * row, because the container's registration scope is not what the operator
+   * asked about. Carries the plugin so the row has a subject; both fields are
+   * set together or not at all.
+   */
+  readonly notInstalledAt?: Scope;
+  readonly plugin?: string;
+  constructor(
+    marketplace: string,
+    requestedScope?: Scope,
+    notInstalled?: { readonly scope: Scope; readonly plugin: string },
+  ) {
     super(`Marketplace "${marketplace}" not added.`);
     this.name = "MarketplaceNotAddedSignal";
     this.marketplace = marketplace;
     if (requestedScope !== undefined) {
       this.requestedScope = requestedScope;
+    }
+
+    if (notInstalled !== undefined) {
+      this.notInstalledAt = notInstalled.scope;
+      this.plugin = notInstalled.plugin;
     }
   }
 }
@@ -300,6 +323,81 @@ export async function resolveCrossScopePluginTarget(opts: {
   }
 
   return { kind: "marketplace-absent" };
+}
+
+/**
+ * SCOPE-01: does this miss mean "nothing is installed at the scope you named"
+ * rather than "no such marketplace"? Returns the requested scope when so, and
+ * `undefined` when the marketplace row is the truthful complaint.
+ *
+ * The lifecycle verbs -- uninstall / enable / disable -- act on an INSTALL
+ * RECORD, so a container registered one scope over is not what the operator
+ * asked about, and telling them to add the marketplace would not make the
+ * command succeed. Two resolutions mean the same thing to them:
+ *   - `other-scope`  -- the plugin is installed, just not here.
+ *   - `marketplace-absent` where the container is registered in the other
+ *     scope -- nothing is installed here either.
+ *
+ * A marketplace absent from BOTH scopes keeps the marketplace row on purpose:
+ * a typo'd marketplace name would otherwise read as a plugin that is merely
+ * not installed, hiding the real mistake.
+ *
+ * The bare (no `--scope`) form never qualifies -- it consulted both scopes
+ * already, and its `marketplace-absent` carries no `requestedScope`.
+ */
+export async function missIsNotInstalled(opts: {
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly resolution: CrossScopePluginResolution;
+}): Promise<Scope | undefined> {
+  const { resolution } = opts;
+  if (resolution.kind === "other-scope") {
+    return resolution.requestedScope;
+  }
+
+  if (resolution.kind !== "marketplace-absent" || resolution.requestedScope === undefined) {
+    return undefined;
+  }
+
+  const elsewhere = await marketplaceInOtherScope({
+    cwd: opts.cwd,
+    marketplace: opts.marketplace,
+    scope: resolution.requestedScope,
+  });
+  return elsewhere ? resolution.requestedScope : undefined;
+}
+
+/**
+ * SCOPE-01 / D-01: the reason set every absent-target lifecycle row carries.
+ *
+ * Two misses used to render byte-identically. "The marketplace is here and you
+ * never installed this plugin" and "the marketplace is one scope over, so
+ * nothing of it is installed here" are different situations with different
+ * remedies -- install the plugin, versus target the other scope or add the
+ * marketplace at the one you named -- and a row that states neither cannot be
+ * acted on. The cross-scope arm names the container's actual scope; the
+ * in-scope arm stays the bare `{not installed}` it always was.
+ *
+ * `notInstalledAt` is `missIsNotInstalled`'s answer: the scope the operator
+ * NAMED, returned ONLY when the container is registered in the other one. Both
+ * of that helper's arms prove that placement -- `other-scope` found the plugin
+ * row itself under the sibling scope's container, and the `marketplace-absent`
+ * arm returns the scope only after `marketplaceInOtherScope` answered `true`.
+ * The token is therefore the FLIP of the argument, and it is derived from a
+ * probe already paid for; this helper adds no read of its own.
+ *
+ * `undefined` (the container is in the named scope, or both scopes were
+ * consulted and both missed) keeps the bare set.
+ */
+export function absentTargetReasons(notInstalledAt?: Scope): readonly ContentReason[] {
+  if (notInstalledAt === undefined) {
+    return ["not installed"];
+  }
+
+  return [
+    "not installed",
+    notInstalledAt === "user" ? "marketplace in project scope" : "marketplace in user scope",
+  ];
 }
 
 /**
@@ -722,7 +820,7 @@ export async function resolveInstalledPluginTarget(opts: {
  *     unqualified path that missed everywhere (no-bracket form).
  *
  * No raw `MarketplaceNotFoundError` escapes -- the absent case is a structural
- * arm the update entrypoint maps to the standalone `{not added}` emission.
+ * arm the update entrypoint maps to the standalone `{marketplace not added}` emission.
  */
 export type ScopedMarketplaceResolution =
   | { readonly kind: "resolved"; readonly scope: Scope; readonly locations: ScopedLocations }
@@ -733,7 +831,7 @@ export type ScopedMarketplaceResolution =
  * CMP-5: unqualified `@marketplace` update targets project installs before user
  * installs. Returns a discriminated result instead of throwing
  * `MarketplaceNotFoundError` (M11) so the update direct path can emit the
- * standalone `{not added}` variant for the marketplace-existence precondition.
+ * standalone `{marketplace not added}` variant for the marketplace-existence precondition.
  *
  * CMP-5 precedence for the resolved arm is UNCHANGED (project-with-plugins ->
  * user-with-plugins -> project-empty -> user-empty). All reads are `loadState`
@@ -1129,7 +1227,7 @@ export function applyPartialCascadeFold(
  * or recorded only in the sibling scope.
  *
  * RECON-03 / D-47-A: orchestrated callers get the typed failure carrying the
- * structural `not added` sentinel; standalone callers get the canonical
+ * structural `marketplace not added` sentinel; standalone callers get the canonical
  * `MarketplaceNotAddedMessage` row and `undefined`, because the row IS the
  * outcome on that path.
  *
@@ -1138,6 +1236,12 @@ export function applyPartialCascadeFold(
  * policy is one decision, so it lives here once; the return shape is the
  * `failed` arm both `UninstallPluginOutcome` and `EnableDisablePluginOutcome`
  * already declare, so neither union is widened by sharing it.
+ *
+ * CMP-4 / SCOPE-01: the message carries NO `presentInOtherScope` flag. Both
+ * callers consult `missIsNotInstalled` FIRST and reach this emitter only when it
+ * answered `undefined` -- which already establishes that the marketplace is not
+ * recorded in the sibling scope either. A `crossScopeFlag` probe here would
+ * re-read the sibling `state.json` only to re-derive that same `false`.
  */
 export function emitMarketplaceNotAdded(args: {
   readonly ctx: ExtensionContext;
@@ -1148,7 +1252,7 @@ export function emitMarketplaceNotAdded(args: {
 }):
   | {
       readonly status: "failed";
-      readonly reason: "not added";
+      readonly reason: "marketplace not added";
       readonly error: Error;
       readonly cause: string;
     }
@@ -1158,7 +1262,12 @@ export function emitMarketplaceNotAdded(args: {
     const scopeList: readonly Scope[] =
       requestedScope === undefined ? ["project", "user"] : [requestedScope];
     const err = new MarketplaceNotFoundError(marketplace, scopeList);
-    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+    return {
+      status: "failed",
+      reason: "marketplace not added",
+      error: err,
+      cause: errorMessage(err),
+    };
   }
 
   notify(ctx, pi, {
@@ -1167,6 +1276,80 @@ export function emitMarketplaceNotAdded(args: {
     ...(requestedScope !== undefined && { scope: requestedScope }),
   });
   return undefined;
+}
+
+/**
+ * ATTR-02 / ATTR-03 / D-47-A / SCOPE-01: emit the ONE standalone notification a
+ * `MarketplaceNotAddedSignal` is owed, for the update and reinstall target
+ * enumerators that raise it.
+ *
+ * Two arms, and which one fires is a property of the SIGNAL, not of the verb:
+ *   - `notInstalledAt` + `plugin` set: the container sits one scope over, so
+ *     nothing is installed at the scope the operator named. The PLUGIN is the
+ *     subject, on the same `(skipped)` row an in-scope marketplace with no
+ *     record yields -- but the brace names the container's actual scope beside
+ *     `not installed` (SCOPE-01, via `absentTargetReasons`), because the two
+ *     misses take different remedies and a shared byte form states neither.
+ *   - otherwise: the marketplace row itself, `{marketplace not added}`
+ *     (structural, no new REASONS member per D-47-B). `requestedScope` (when
+ *     present) renders the `[scope]` bracket; the bare both-scopes-miss form
+ *     carries no bracket and, per `crossScopeFlag`, is owed no sibling probe.
+ *
+ * The only per-verb variable is the `CommandContext`, so it is the only
+ * parameter: `notifyWithContext` reads `Messaging.label` and dispatches the row
+ * body through `render.skipped`, both of which stay the caller's own. Narrowing
+ * the parameter to `CommandContext<"skipped", PluginSkippedMessage>` -- rather
+ * than making this function generic over the caller's full `Status`/`Msg` pair
+ * -- is what lets the row literal below stay a checked `PluginSkippedMessage`
+ * instead of an unchecked widening; a verb whose render map omits a `skipped`
+ * arm is a compile error at ITS call site.
+ *
+ * SEV-04 / D-01: the row is stamped `error`. Its reasons always lead with
+ * `not installed` -- an absent target, i.e. the requested operation was NOT
+ * carried out -- so both verbs' own skip-severity rules
+ * (`update.ts::cascadeSkipSeverity`, `reinstall.ts`'s in-scope skipped arm)
+ * collapse to the same constant here. Neither rule can be CALLED from this
+ * module: both live in files that import this one, so reaching back for them
+ * would close a module cycle.
+ */
+export async function emitMarketplaceNotAddedSignal(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly cwd: string;
+  readonly context: CommandContext<"skipped", PluginSkippedMessage>;
+  readonly err: MarketplaceNotAddedSignal;
+}): Promise<void> {
+  const { ctx, pi, cwd, context, err } = args;
+
+  if (err.notInstalledAt !== undefined && err.plugin !== undefined) {
+    notifyWithContext(ctx, pi, context, [
+      {
+        name: err.marketplace,
+        scope: err.notInstalledAt,
+        plugins: [
+          {
+            status: "skipped",
+            name: err.plugin,
+            reasons: absentTargetReasons(err.notInstalledAt),
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ]);
+    return;
+  }
+
+  notify(ctx, pi, {
+    kind: "marketplace-not-added",
+    name: err.marketplace,
+    ...(err.requestedScope !== undefined && { scope: err.requestedScope }),
+    ...(await crossScopeFlag({
+      cwd,
+      marketplace: err.marketplace,
+      scope: err.requestedScope,
+    })),
+  });
 }
 
 /**

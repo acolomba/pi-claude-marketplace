@@ -2663,15 +2663,15 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
   });
 });
 
-// ─── ATTR-02 missing marketplace -> standalone {not added} (both forms) ───────
+// ─── ATTR-02 missing marketplace -> standalone {marketplace not added} (both forms) ───────
 
 // ATTR-02 / SCOPE-01: `@<mp>` form against an absent marketplace with an
 // explicit `--scope` emits the standalone `MarketplaceNotAddedMessage`
-// (`{not added}` on the marketplace subject) carrying the requested-scope
+// (`{marketplace not added}` on the marketplace subject) carrying the requested-scope
 // bracket -- NOT the former `(failed) {not found}` synthetic plugin row (M10/M11
 // misattribution). No raw MarketplaceNotFoundError/Error escapes the
 // orchestrator.
-test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {not added} [scope] bracket", async () => {
+test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {marketplace not added} [scope] bracket", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-mp-"));
     try {
@@ -2690,7 +2690,7 @@ test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {not 
       // (SCOPE-01); no summary line, no cause-chain trailer.
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2699,9 +2699,9 @@ test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {not 
 });
 
 // ATTR-02: `<plugin>@<mp>` form against an absent marketplace with an explicit
-// scope converges on the SAME standalone `{not added}` emission as the `@<mp>`
+// scope converges on the SAME standalone `{marketplace not added}` emission as the `@<mp>`
 // form (both flow through enumerateMarketplaceTarget).
-test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalone {not added} [scope] bracket", async () => {
+test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalone {marketplace not added} [scope] bracket", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-pl-"));
     try {
@@ -2718,7 +2718,7 @@ test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalo
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {marketplace not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2727,9 +2727,9 @@ test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalo
 });
 
 // ATTR-02: bare `@<mp>` form (no `--scope`) against a marketplace absent in BOTH
-// scopes -> standalone `{not added}` with NO `[scope]` bracket (absent-from-both
+// scopes -> standalone `{marketplace not added}` with NO `[scope]` bracket (absent-from-both
 // form; no requested scope to report).
-test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standalone {not added}, no bracket", async () => {
+test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standalone {marketplace not added}, no bracket", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-bare-"));
     try {
@@ -2746,7 +2746,7 @@ test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standal
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2755,9 +2755,9 @@ test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standal
 });
 
 // SCOPE-01: explicit-scope `@<mp>` against a marketplace present ONLY in the
-// other scope -> standalone `{not added}` carrying the REQUESTED scope bracket
+// other scope -> standalone `{marketplace not added}` carrying the REQUESTED scope bracket
 // ("not added in the scope you asked for"; the operator infers the other scope).
-test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not added} [requestedScope]", async () => {
+test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified not-added row [requestedScope]", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-other-"));
     try {
@@ -2784,7 +2784,7 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2793,12 +2793,17 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not
 });
 
 // SCOPE-01: explicit-scope `<plugin>@<mp>` against a marketplace present ONLY in
-// the other scope -> standalone `{not added}` carrying the REQUESTED scope
-// bracket. The plugin form reaches this via `resolveInstalledPluginTarget`
-// returning the explicit scope blindly, then `enumerateMarketplaceTarget`
-// finding `mp === undefined` for that scope and raising the signal -- the
-// companion of the `@<mp>` form test above (WR-01 gap closure).
-test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> standalone {not added} [requestedScope]", async () => {
+// the other scope -> the PLUGIN row under the REQUESTED scope bracket, NOT the
+// marketplace row the `@<mp>` form emits: the container sits one scope over, so
+// nothing is installed at the scope named. The brace joins the cross-scope
+// token to `not installed`, naming the scope that HOLDS the container -- always
+// the opposite of the bracket.
+// The plugin form reaches this via `resolveInstalledPluginTarget` returning the
+// explicit scope blindly, then `enumerateMarketplaceTarget` finding
+// `mp === undefined` for that scope and raising the signal -- the companion of
+// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / D-01: an absent
+// target means the operation was NOT carried out, so the row is `error`.
+test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skipped) {not installed, marketplace in project scope}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-plugin-other-"));
     try {
@@ -2824,7 +2829,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> standal
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (skipped) {not installed, marketplace in project scope}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -6105,7 +6110,7 @@ test("FORCE-05: --force cannot bypass a missing marketplace", async () => {
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

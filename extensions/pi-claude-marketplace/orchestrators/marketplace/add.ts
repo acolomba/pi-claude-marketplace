@@ -66,7 +66,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -129,7 +129,7 @@ export type AddMarketplaceNotifications =
  *
  * `reason` is typed as `Reason` (not `ContentReason`) so the `applyReconcile`
  * caller can dispatch on the broader closed set, including the
- * structural `"not added"` sentinel surfaced by the `remove` sibling. This
+ * structural `"marketplace not added"` sentinel surfaced by the `remove` sibling. This
  * adopts a broader-than-the-plan type to keep the orchestrated outcome
  * dispatchable end-to-end without a separate marker field.
  */
@@ -253,19 +253,13 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
       return "source missing";
     }
 
-    // GAUTH-02: delegate the isomorphic-git `HttpError` 401/403 challenge /
-    // `UserCanceledError` (a declined or failed Device Flow) / network-errno
-    // ladder to the shared classifier (`shared/git-failure-classifiers.ts`)
-    // instead of a hand-rolled copy, so `add` cannot drift out of sync with
-    // `install.ts`/`update.ts` (plugin)/`fetch.ts`, which already delegate to
-    // it. WR-03: a clone network failure (errno-carrying throw from the
-    // github guard's gitOps.clone) is the NFR-5 per-entry soft-fail the
-    // catalog's `soft-fail-mixed` state documents as `{network unreachable}`.
-    // The clone-catch only cleans staging and rethrows unclassified, so the
-    // failure must be recognised HERE -- otherwise the reason falls through
-    // to `unparseable`, falsely implying a corrupted manifest when the
-    // truth is an auth challenge or the user's network being down.
-    const transportReason = classifyGitTransportFailure(err);
+    // GAUTH-02 / D-76-09: delegate git clone errors to the source-access
+    // classifier. It includes the shared auth/network ladder and adds
+    // repository-missing plus transient HTTP statuses for this source-access
+    // boundary. The opt-in layer keeps other callers' fallthrough semantics
+    // unchanged. The clone catch only cleans staging and rethrows, so this
+    // boundary must classify the error before Pi renders a raw exception.
+    const transportReason = classifyGitSourceAccessFailure(err);
     if (transportReason !== undefined) {
       return transportReason;
     }

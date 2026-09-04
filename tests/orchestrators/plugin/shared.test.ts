@@ -11,9 +11,12 @@ import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
+  absentTargetReasons,
   emitMarketplaceNotAdded,
+  emitMarketplaceNotAddedSignal,
   enableRowDependencies,
   MarketplaceNotAddedSignal,
+  missIsNotInstalled,
   maybeWritePluginConfigBack,
   pickAgentsSourceDir,
   removePluginRecord,
@@ -27,6 +30,7 @@ import {
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
   type CrossPluginGeneratedNames,
+  type CrossScopePluginResolution,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -44,6 +48,8 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import type { PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -166,6 +172,26 @@ async function saveScopedState(
       ]),
     ),
   });
+}
+
+/**
+ * A notification boundary that RECORDS instead of expecting: the two
+ * `emitMarketplaceNotAddedSignal` arms are discriminated by the bytes they
+ * produce, so the case compares the whole recorded list rather than pinning a
+ * call count up front.
+ */
+function makeRecordingBoundary(notifications: { message: string; severity?: string }[]): {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+} {
+  const ui = {
+    notify(message: string, severity?: string) {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    },
+  } as unknown as ExtensionContext["ui"];
+  const ctx = { ui } as ExtensionContext;
+  const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
+  return { ctx, pi };
 }
 
 async function writeConfig(filePath: string, config: ScopeConfig): Promise<void> {
@@ -296,7 +322,139 @@ describe("MarketplaceNotAddedSignal", () => {
     assert.equal(signal.marketplace, "ghost");
     assert.equal(signal.requestedScope, "project");
   });
+
+  test("carries the named scope and the plugin subject when nothing is installed there", () => {
+    // arrange
+    const marketplace = "mp";
+
+    // act
+    const signal = new MarketplaceNotAddedSignal(marketplace, "project", {
+      scope: "project",
+      plugin: "hello",
+    });
+
+    // assert
+    assert.equal(signal.name, "MarketplaceNotAddedSignal");
+    assert.equal(signal.message, 'Marketplace "mp" not added.');
+    assert.equal(signal.marketplace, "mp");
+    assert.equal(signal.requestedScope, "project");
+    assert.equal(signal.notInstalledAt, "project");
+    assert.equal(signal.plugin, "hello");
+  });
 });
+
+describe("missIsNotInstalled", () => {
+  test("names the requested scope when the plugin row was found under the sibling scope", async () => {
+    // arrange
+    const resolution = {
+      kind: "other-scope",
+      presentIn: "project",
+      requestedScope: "user",
+    } satisfies CrossScopePluginResolution;
+
+    // act
+    const notInstalledAt = await missIsNotInstalled({
+      cwd: "/work/project",
+      marketplace: "mp",
+      resolution,
+    });
+
+    // assert
+    assert.strictEqual(notInstalledAt, "user");
+  });
+
+  test("names no scope for a resolved target", async () => {
+    await withTempScopes(async ({ cwd }) => {
+      // arrange
+      const resolution = {
+        kind: "resolved",
+        scope: "project",
+        locations: locationsFor("project", cwd),
+      } satisfies CrossScopePluginResolution;
+
+      // act
+      const notInstalledAt = await missIsNotInstalled({ cwd, marketplace: "mp", resolution });
+
+      // assert
+      assert.strictEqual(notInstalledAt, undefined);
+    });
+  });
+
+  test("names no scope for a bare form that consulted both scopes", async () => {
+    // arrange
+    const resolution = { kind: "marketplace-absent" } satisfies CrossScopePluginResolution;
+
+    // act
+    const notInstalledAt = await missIsNotInstalled({
+      cwd: "/work/project",
+      marketplace: "mp",
+      resolution,
+    });
+
+    // assert
+    assert.strictEqual(notInstalledAt, undefined);
+  });
+
+  test("names the requested scope when the container is registered in the other one", async () => {
+    await withTempScopes(async ({ cwd }) => {
+      // arrange
+      await saveScopedState(cwd, "project", { mp: {} });
+      const resolution = {
+        kind: "marketplace-absent",
+        requestedScope: "user",
+      } satisfies CrossScopePluginResolution;
+
+      // act
+      const notInstalledAt = await missIsNotInstalled({ cwd, marketplace: "mp", resolution });
+
+      // assert
+      assert.strictEqual(notInstalledAt, "user");
+    });
+  });
+
+  test("names no scope when the container is missing from both scopes", async () => {
+    await withTempScopes(async ({ cwd }) => {
+      // arrange
+      await saveScopedState(cwd, "project", {});
+      const resolution = {
+        kind: "marketplace-absent",
+        requestedScope: "user",
+      } satisfies CrossScopePluginResolution;
+
+      // act
+      const notInstalledAt = await missIsNotInstalled({ cwd, marketplace: "mp", resolution });
+
+      // assert
+      assert.strictEqual(notInstalledAt, undefined);
+    });
+  });
+});
+
+for (const { notInstalledAt, expectedReasons } of [
+  { notInstalledAt: undefined, expectedReasons: ["not installed"] },
+  {
+    notInstalledAt: "user",
+    expectedReasons: ["not installed", "marketplace in project scope"],
+  },
+  {
+    notInstalledAt: "project",
+    expectedReasons: ["not installed", "marketplace in user scope"],
+  },
+] satisfies readonly {
+  notInstalledAt: Scope | undefined;
+  expectedReasons: readonly string[];
+}[]) {
+  test(`absentTargetReasons answers ${expectedReasons.join(", ")} for ${notInstalledAt ?? "an in-scope container"}`, () => {
+    // arrange
+    const namedScope = notInstalledAt;
+
+    // act
+    const reasons = absentTargetReasons(namedScope);
+
+    // assert
+    assert.deepStrictEqual(reasons, expectedReasons);
+  });
+}
 
 describe("resolveCrossScopePluginTarget", () => {
   test("resolves an explicit scope whose marketplace container exists", async () => {
@@ -1508,7 +1666,7 @@ describe("emitMarketplaceNotAdded", () => {
     // assert
     assert.ok(failure !== undefined);
     assert.equal(failure.status, "failed");
-    assert.equal(failure.reason, "not added");
+    assert.equal(failure.reason, "marketplace not added");
     assert.ok(failure.error instanceof MarketplaceNotFoundError);
     assert.equal(failure.error.mpName, "ghost");
     assert.deepStrictEqual(failure.error.scopes, ["project", "user"]);
@@ -1535,7 +1693,7 @@ describe("emitMarketplaceNotAdded", () => {
     // assert
     assert.ok(failure !== undefined);
     assert.equal(failure.status, "failed");
-    assert.equal(failure.reason, "not added");
+    assert.equal(failure.reason, "marketplace not added");
     assert.ok(failure.error instanceof MarketplaceNotFoundError);
     assert.equal(failure.error.mpName, "ghost");
     assert.deepStrictEqual(failure.error.scopes, ["project"]);
@@ -1558,7 +1716,7 @@ describe("emitMarketplaceNotAdded", () => {
       .once();
     when(() => {
       ui.notify(
-        "A marketplace operation has failed.\n\n⊘ ghost [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost [user] (failed) {marketplace not added}",
         "error",
       );
     })
@@ -1593,7 +1751,10 @@ describe("emitMarketplaceNotAdded", () => {
       .thenReturn(ui)
       .once();
     when(() => {
-      ui.notify("A marketplace operation has failed.\n\n⊘ ghost (failed) {not added}", "error");
+      ui.notify(
+        "A marketplace operation has failed.\n\n⊘ ghost (failed) {marketplace not added}",
+        "error",
+      );
     })
       .thenReturn(undefined)
       .once();
@@ -1612,6 +1773,82 @@ describe("emitMarketplaceNotAdded", () => {
     verify(ctx);
     verify(ui);
     verify(pi);
+  });
+});
+
+describe("emitMarketplaceNotAddedSignal", () => {
+  test("renders the plugin row when nothing of the container is installed at the named scope", async () => {
+    // arrange
+    const renderedRows: PluginSkippedMessage[] = [];
+    const context = {
+      Messaging: { label: "Plugin reinstall" },
+      render: {
+        skipped: (row) => {
+          renderedRows.push(row);
+          return `⊘ ${row.name} (skipped)`;
+        },
+      },
+    } satisfies CommandContext<"skipped", PluginSkippedMessage>;
+    const notifications: { message: string; severity?: string }[] = [];
+    const { ctx, pi } = makeRecordingBoundary(notifications);
+
+    // act
+    await emitMarketplaceNotAddedSignal({
+      ctx,
+      pi,
+      cwd: "/work/project",
+      context,
+      err: new MarketplaceNotAddedSignal("mp", "project", { scope: "project", plugin: "hello" }),
+    });
+
+    // assert
+    assert.deepStrictEqual(renderedRows, [
+      {
+        status: "skipped",
+        name: "hello",
+        reasons: ["not installed", "marketplace in user scope"],
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped)",
+        severity: "error",
+      },
+    ]);
+  });
+
+  test("renders the marketplace row when the container is absent from every scope", async () => {
+    await withTempScopes(async ({ cwd }) => {
+      // arrange
+      const context = {
+        Messaging: { label: "Plugin reinstall" },
+        render: {
+          skipped: (row) => `⊘ ${row.name} (skipped)`,
+        },
+      } satisfies CommandContext<"skipped", PluginSkippedMessage>;
+      const notifications: { message: string; severity?: string }[] = [];
+      const { ctx, pi } = makeRecordingBoundary(notifications);
+
+      // act
+      await emitMarketplaceNotAddedSignal({
+        ctx,
+        pi,
+        cwd,
+        context,
+        err: new MarketplaceNotAddedSignal("ghost", "user"),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n⊘ ghost [user] (failed) {marketplace not added}",
+          severity: "error",
+        },
+      ]);
+    });
   });
 });
 

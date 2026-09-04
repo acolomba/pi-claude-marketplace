@@ -1911,7 +1911,7 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
 // WR-03: marketplace present, plugin row absent -> (skipped) {not installed}
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WR-03: enable on a present marketplace whose plugin row is absent renders (skipped) {not installed} at warning severity", async () => {
+test("WR-03: enable on a present marketplace whose plugin row is absent renders (skipped) {not installed} at error severity", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Seed state with the marketplace container but a DIFFERENT plugin row.
     // arrange
@@ -1933,10 +1933,10 @@ test("WR-03: enable on a present marketplace whose plugin row is absent renders 
     });
     // assert
     assert.equal(notifications.length, 1);
-    // `not installed` is NOT benign -> warning severity (D-28-03), and the
-    // taxonomy must NOT misuse `{not in manifest}` (reserved for "plugin
-    // absent from a PRESENT manifest").
-    assert.equal(notifications[0]!.severity, "warning");
+    // D-01: nothing was enabled, so the operation was NOT carried out and the
+    // row stamps `error`. The taxonomy must NOT misuse `{not in manifest}`
+    // (reserved for "plugin absent from a PRESENT manifest").
+    assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /⊘ foo \(skipped\) \{not installed\}/);
     assert.ok(
       !notifications[0]!.message.includes("{not in manifest}"),
@@ -1966,7 +1966,10 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /⊘ ghost-mp \[user\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ ghost-mp \[user\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -2104,7 +2107,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
   });
 });
 
-test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
+test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'marketplace not added' } no notifications", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { ctx, notifications } = makeCtx(cwd);
@@ -2125,7 +2128,7 @@ test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns {
     assert.ok(outcome);
     assert.equal(outcome.status, "failed");
     if (outcome.status === "failed") {
-      assert.equal(outcome.reason, "not added");
+      assert.equal(outcome.reason, "marketplace not added");
       assert.ok(outcome.error instanceof MarketplaceNotFoundError);
     }
   });
@@ -2148,7 +2151,10 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
     // assert
     assert.equal(outcome, undefined, "standalone (omitted) returns undefined");
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /⊘ ghost-mp-byte \[user\] \(failed\) \{not added\}/);
+    assert.match(
+      notifications[0]!.message,
+      /⊘ ghost-mp-byte \[user\] \(failed\) \{marketplace not added\}/,
+    );
   });
 });
 
@@ -2798,7 +2804,37 @@ test("orchestrated enable failure returns the exact source classification and pe
   });
 });
 
-test("an explicit user request reports not-added when the plugin exists only in project scope", async () => {
+test("SCOPE-01 orchestrated mode -- a container one scope over returns the not-installed skip without notifying", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await writeUserState(home, {
+      cwd,
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      scope: "project",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "skipped", name: "foo", reason: "not installed" });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("SCOPE-01: an explicit user request names the project scope the marketplace container sits in", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await writeUserState(home, {
@@ -2825,7 +2861,10 @@ test("an explicit user request reports not-added when the plugin exists only in 
     assert.equal(outcome, undefined);
     assert.deepStrictEqual(notifications, [
       {
-        message: "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● mp [user]\n" +
+          "  ⊘ foo (skipped) {not installed, marketplace in project scope}",
         severity: "error",
       },
     ]);

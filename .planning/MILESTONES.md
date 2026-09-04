@@ -18,6 +18,22 @@
 **Closeout:** override_closeout - all ten phases complete with `verification_status: passed`, 48/48 requirements satisfied, 5/5 integration seams wired, and all ten phases `nyquist_compliant: true` after four validation files were reconciled or reconstructed at close. Phase 117 carries one accepted operator override: `npm run test:coverage:direct:all` exits 1 on a clean tree because the gate refuses the first accepted D-116-01a shortfall, which is the amended D-117-20 working as designed; SC-4 and SUITE-05 predate that amendment and their literal "passes" clause is recorded as superseded. Final gates on both interpreters: `npm test` 5144 tests / 295 suites / 0 fail on Node v22.22.2 **and** v26.8.1, `test:integration` 31/31, typecheck / lint / fallow all clean. Known verification overrides: 17 newly acknowledged, 0 carried forward from a prior close (see STATE.md Deferred Items). An eighteenth could not be suppressed - phase 25's deferred items live in a markdown table the acknowledge writer cannot match - and is disclosed in STATE.md instead of being silently dropped.
 
 ---
+## workflows-detection -- Workflow Detection (Shipped: 2026-08-29)
+
+**Phases completed:** 1 phase (106), 4 plans, 8 tasks
+
+**Driver:** Claude plugins can contain workflow components that Pi cannot run. The extension must detect those components, report them truthfully, and preserve the existing partial-install boundary.
+
+**Key accomplishments:**
+
+- Marketplace entries and plugin manifests accept an opaque `workflows` declaration. The strict and loose resolver paths also detect only the literal `<pluginRoot>/workflows/` directory, including the current `claude-security` and `code-modernization` layouts.
+- Every workflow signal produces one deduplicated unsupported kind after structural validation. All reason-bearing surfaces use the shared classifier and render the exact `{workflows}` reason with the existing partial status grammar.
+- A normal install rejects the plugin without mutation. An install with `--partial` stages only supported components and stores `workflows` in `compatibility.unsupported`.
+- Workflow files remain source-only. The install ledger, five-key resource record, two-key reload discovery result, and runtime executor set have no workflow entry.
+
+**Closeout:** `verified_closeout` -- 1/1 phase verified, 6/6 requirements complete, 5/5 integration seams wired, and 4/4 end-to-end flows complete. Nyquist coverage is compliant. Security closed all 9 threats. The terminal UI review scored 24/24. The final `npm run check` passed with 3,649 unit tests, 21 integration assertions, and no failures. The open-artifact audit found no items.
+
+**Archive:** `.planning/workstreams/workflows-detection/milestones/workflows-detection-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`
 
 ---
 
