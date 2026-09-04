@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "inventoryMode": "shard",
+  "plan": "01-03",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_ADVERSARIAL-BRIEF.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "complete",
+      "outcome": "control document"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_AREAS.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    }
+  ],
+  "sourceClaims": [],
+  "findings": [],
+  "decisions": [],
+  "scopeChanges": []
+}
