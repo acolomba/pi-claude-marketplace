@@ -913,10 +913,9 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "partially-available",
+                status: "available",
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["workflows"],
               },
             ],
           },
@@ -1218,13 +1217,12 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "partially-installed",
-                severity: "info",
-                needsReload: true,
+                status: "installed",
                 name: "helper",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: ["workflows"],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },
@@ -1328,7 +1326,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "partially-available",
                 name: "helper",
-                reasons: ["workflows"],
+                reasons: ["unsupported component"],
                 partialHint: true,
                 severity: "error",
               },
