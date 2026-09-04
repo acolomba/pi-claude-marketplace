@@ -68,8 +68,8 @@ None — discussion stayed within phase scope.
 | MOD-02                | “All 19 shared-contract pairs complete the pair contract.” | The pair matrix below identifies the public contract, accepted-HEAD condition, direct-coverage gap, state boundary, and focused verification for every P109 pair. [VERIFIED: .planning/REQUIREMENTS.md:87-93,183-205] |
 | </phase_requirements> |
 
-**Researched:** 2026-08-29  
-**Domain:** Hermetic TypeScript unit contracts for shared values, errors, filesystem/cache behavior, environment effects, and notification rendering  
+**Researched:** 2026-08-29
+**Domain:** Hermetic TypeScript unit contracts for shared values, errors, filesystem/cache behavior, environment effects, and notification rendering
 **Confidence:** HIGH for repository findings; MEDIUM for official language/runtime documentation
 
 ## Summary
@@ -370,32 +370,32 @@ These are the only owner layouts for Phase 109; supplemental architecture tests 
 
 ### Pitfall 1: A 100% baseline is mistaken for compliance
 
-**What goes wrong:** Five accepted-HEAD pairs already show 100/100/100, but their cases retain old structure or evidence style. [VERIFIED: focused audit, 2026-08-29]  
+**What goes wrong:** Five accepted-HEAD pairs already show 100/100/100, but their cases retain old structure or evidence style. [VERIFIED: focused audit, 2026-08-29]
 **How to avoid:** Plan a real normalization task for P109-01/05/10/16/19 and re-run focused coverage afterward. [VERIFIED: D-01]
 
 ### Pitfall 2: Completion-cache tests leak process state
 
-**What goes wrong:** The two memory maps survive between cases in the same process, and disk files can rehydrate stale state. [VERIFIED: completion-cache.ts:132-145,250-439]  
+**What goes wrong:** The two memory maps survive between cases in the same process, and disk files can rehydrate stale state. [VERIFIED: completion-cache.ts:132-145,250-439]
 **How to avoid:** Use unique scope/marketplace identifiers and temp cache paths, invalidate through public seams, and reserve the existing whole-cache reset for its own contract case rather than shared setup. [VERIFIED: completion-cache.ts:383-439; D-04]
 
 ### Pitfall 3: Notification consolidation silently loses a contract
 
-**What goes wrong:** Deleting legacy suites before mapping distinct dispatch, reason-selection, hook, soft-dependency, and exact-byte behavior can erase evidence; blindly copying all 174 cases creates duplicates instead. [VERIFIED: codebase suite audit, 2026-08-29; D-05 through D-08]  
+**What goes wrong:** Deleting legacy suites before mapping distinct dispatch, reason-selection, hook, soft-dependency, and exact-byte behavior can erase evidence; blindly copying all 174 cases creates duplicates instead. [VERIFIED: codebase suite audit, 2026-08-29; D-05 through D-08]
 **How to avoid:** Create a case-level migration ledger inside the P109-14 plan, mark every legacy case `move`, `split`, or `duplicate`, and delete only after the new owners pass. [VERIFIED: D-05 through D-08]
 
 ### Pitfall 4: Filesystem failures depend on permissions or timing
 
-**What goes wrong:** `chmod` and symlink race techniques can behave differently under privileged CI and skipped cases violate CASE-04. [VERIFIED: existing fs-utils/path-safety owner audit, 2026-08-29; .planning/REQUIREMENTS.md:29-36]  
+**What goes wrong:** `chmod` and symlink race techniques can behave differently under privileged CI and skipped cases violate CASE-04. [VERIFIED: existing fs-utils/path-safety owner audit, 2026-08-29; .planning/REQUIREMENTS.md:29-36]
 **How to avoid:** Use real temporary boundaries for normal behavior and current-context method substitution only for deterministic exceptional Node API branches; keep any production refactor internal and behavior-preserving. [VERIFIED: .claude/rules/typescript-unit-testing.md:124-151,221-225; D-04]
 
 ### Pitfall 5: Exact values are derived from production
 
-**What goes wrong:** Importing icons/reasons or calling helpers to build an expected notification lets production and expectation drift together. [VERIFIED: legacy suite audit, 2026-08-29]  
+**What goes wrong:** Importing icons/reasons or calling helpers to build an expected notification lets production and expectation drift together. [VERIFIED: legacy suite audit, 2026-08-29]
 **How to avoid:** Put a complete literal byte string on every notification row and complete literal objects/arrays in other assertions. [VERIFIED: D-07; .claude/rules/typescript-unit-testing.md:89-109]
 
 ### Pitfall 6: Type-only evidence invents runtime work
 
-**What goes wrong:** A fake `test()` or phase comments imply runtime behavior that the module does not have. [VERIFIED: .claude/rules/typescript-unit-testing.md:211-218]  
+**What goes wrong:** A fake `test()` or phase comments imply runtime behavior that the module does not have. [VERIFIED: .claude/rules/typescript-unit-testing.md:211-218]
 **How to avoid:** Keep positive and negative compile-time expressions at module scope and accept zero runtime cases for type-only proof. [VERIFIED: D-03]
 
 ## State of the Art
@@ -548,5 +548,5 @@ The test framework, scripts, direct-coverage harness, and the other eleven owner
 - Pitfalls: HIGH — grounded in current coverage output, current tests, and locked phase decisions. [VERIFIED: focused audit and 109-CONTEXT.md, 2026-08-29]
 - External runtime/language behavior: MEDIUM — cited to official Node.js and TypeScript documentation through the research seam. [CITED: official docs listed above]
 
-**Research date:** 2026-08-29  
+**Research date:** 2026-08-29
 **Valid until:** 2026-09-28; repository-specific coverage/path findings must be re-audited if Phase 109 implementation begins after shared code changes. [VERIFIED: current HEAD audit date, 2026-08-29]

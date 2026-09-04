@@ -1,9 +1,9 @@
 # Phase 112: Hook Runtime - Pattern Map
 
-**Mapped:** 2026-08-30  
-**Source-test pairs classified:** 31  
-**Supplemental files classified:** 8 designated carrier files  
-**Explicit production edits:** 1 (`stage.ts`, conditional dead-branch removal)  
+**Mapped:** 2026-08-30
+**Source-test pairs classified:** 31
+**Supplemental files classified:** 8 designated carrier files
+**Explicit production edits:** 1 (`stage.ts`, conditional dead-branch removal)
 **Owner analogs found:** 31 / 31
 
 ## Scope and pattern authority
@@ -600,10 +600,10 @@ These gaps do not require a production test seam or another package.
 ## Metadata
 
 **Analog search scope:** completed Phase 109-111 owners, current hook owners as behavior
-inventories, and eight designated supplemental suites  
+inventories, and eight designated supplemental suites
 **Primary directories:** `tests/{bridges,platform,shared,architecture,integration}` and
-`extensions/pi-claude-marketplace/bridges/hooks`  
-**Primary analog files read:** 9  
-**Pattern extraction date:** 2026-08-30  
-**Code discovery:** CodeGraph first, then non-overlapping targeted reads  
+`extensions/pi-claude-marketplace/bridges/hooks`
+**Primary analog files read:** 9
+**Pattern extraction date:** 2026-08-30
+**Code discovery:** CodeGraph first, then non-overlapping targeted reads
 **Deferred ideas used:** none

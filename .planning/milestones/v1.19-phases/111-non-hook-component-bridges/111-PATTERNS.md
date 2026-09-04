@@ -1,7 +1,7 @@
 # Phase 111: Non-Hook Component Bridges - Pattern Map
 
-**Mapped:** 2026-08-30  
-**Files classified:** 31 mirrored owners plus 4 supplemental-suite files  
+**Mapped:** 2026-08-30
+**Files classified:** 31 mirrored owners plus 4 supplemental-suite files
 **Analogs found:** 31 / 31 owner tests; supplemental cleanup is mapped separately
 
 ## Mapping Rule
@@ -251,7 +251,7 @@ or export a private helper to reach coverage.
 **Apply to:** agents `stage`/`unstage`, commands `stage`/`unstage`, MCP
 `stage`/`unstage`, and skills `stage`/`unstage`.
 
-**Structural analog:** `tests/persistence/state-io.test.ts`  
+**Structural analog:** `tests/persistence/state-io.test.ts`
 **Behavior inventory:** each owner's current mirrored test plus only the supplemental
 cases assigned in the disposition map.
 
@@ -594,7 +594,7 @@ Do not copy these properties from the current Phase-111 bridge or supplemental t
 ## Metadata
 
 **Analog search scope:** `tests/domain`, `tests/persistence`, `tests/platform`,
-`tests/shared`, `tests/bridges`, and the direct-coverage carrier  
-**Primary analog files read:** 5  
-**Phase-owner and supplemental inventories reviewed:** 31 owners and 4 supplemental files  
+`tests/shared`, `tests/bridges`, and the direct-coverage carrier
+**Primary analog files read:** 5
+**Phase-owner and supplemental inventories reviewed:** 31 owners and 4 supplemental files
 **Pattern extraction date:** 2026-08-30

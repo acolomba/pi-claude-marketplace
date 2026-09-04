@@ -163,9 +163,9 @@ No Phase 113 requirement is orphaned: MOD-06 appears in all 35 plan frontmatters
 | Retained architecture/parity/integration artifacts | MOD-06                     |     18 |       0 | None     | Cross-module parity, byte equality, architecture prohibition, or end-to-end behavior                     | ✓ PROVES WIDER CONTRACT |
 | P113-25 mock harness                               | MOD-06 / TEST-03 / TEST-04 | Active |       0 | None     | Plain typed canned values plus exact interaction counts and explicit verification of all remaining mocks | ✓ PROVES PAIR CONTRACT  |
 
-**Disabled tests on requirements:** 0.  
-**Circular expected-value generation:** 0. Filesystem writes in owners build case-local inputs, not expected snapshots.  
-**Insufficient assertions:** 0 for product behavior.  
+**Disabled tests on requirements:** 0.
+**Circular expected-value generation:** 0. Filesystem writes in owners build case-local inputs, not expected snapshots.
+**Insufficient assertions:** 0 for product behavior.
 **Interaction-double violations:** 0. The original P113-25 violation is closed and retained in the audit trail below.
 
 ## Anti-Patterns Found
@@ -196,10 +196,10 @@ No gap, open threat, missing artifact, unwired owner, behavior-unverified truth,
 
 ## Verification Metadata
 
-**Verification approach:** Goal-backward from the Phase 113 goal, four roadmap criteria, 176 PLAN truths, 62 PLAN artifacts, 35 key links, and MOD-06.  
-**Must-have source:** ROADMAP success criteria + all 35 PLAN frontmatters + MOD-06's pair-contract completion gate.  
+**Verification approach:** Goal-backward from the Phase 113 goal, four roadmap criteria, 176 PLAN truths, 62 PLAN artifacts, 35 key links, and MOD-06.
+**Must-have source:** ROADMAP success criteria + all 35 PLAN frontmatters + MOD-06's pair-contract completion gate.
 **Automated checks:** Initial verification: 35/35 direct pairs, 8/8 phase carriers, global typecheck, tracked formatting, 4,590/4,590 unit tests, and 10/10 integration files passed locally. Re-verification after `f871aa3d`: P113-25 owner, exact 63/14/445 direct coverage, prohibited scan, targeted ESLint/Prettier, commit diff check, global typecheck, and 8/8 phase carriers all passed. A clean detached checkout at `f871aa3d` then passed the complete `npm run check`: typecheck, lint, fallow, formatting, 4,590/4,590 unit tests, and 21/21 integration tests.
-**Human checks required:** 0.  
+**Human checks required:** 0.
 **Final verdict:** **PASSED** — 181/181 must-haves verified; no gaps remain.
 
 ---

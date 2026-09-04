@@ -1,10 +1,10 @@
 # Phase 113: Orchestrator Support and Presenters - Pattern Map
 
-**Mapped:** 2026-08-31  
-**Source-test pairs classified:** 35 / 35  
-**Existing mirrored owners:** 12  
-**Owners to create:** 23  
-**Current direct-coverage passes:** 1 (`P113-05`, still noncompliant with direct-import and case-style rules)  
+**Mapped:** 2026-08-31
+**Source-test pairs classified:** 35 / 35
+**Existing mirrored owners:** 12
+**Owners to create:** 23
+**Current direct-coverage passes:** 1 (`P113-05`, still noncompliant with direct-import and case-style rules)
 **CodeGraph:** queried before file search and source reads
 
 ## Scope and pattern authority

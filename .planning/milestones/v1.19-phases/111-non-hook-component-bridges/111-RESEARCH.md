@@ -1,7 +1,7 @@
 # Phase 111: Non-Hook Component Bridges - Research
 
-**Researched:** 2026-08-30  
-**Domain:** TypeScript `node:test` owner-test refactor for filesystem-backed component bridges  
+**Researched:** 2026-08-30
+**Domain:** TypeScript `node:test` owner-test refactor for filesystem-backed component bridges
 **Confidence:** HIGH
 
 <user_constraints>
@@ -335,65 +335,65 @@ The ten absent filenames are exactly `tests/bridges/agents/index.test.ts`, `test
 
 ### Pitfall 1: Treating a Baseline PASS as Completion
 
-**What goes wrong:** a pair has 100-percent counters but still violates owner-local fixture, phase-comment, complete-value, or cleanup policy.  
-**Why it happens:** coverage measures execution, not test design.  
-**How to avoid:** normalize all 31 owners and run the focused test, direct carrier, and typecheck after the rewrite.  
+**What goes wrong:** a pair has 100-percent counters but still violates owner-local fixture, phase-comment, complete-value, or cleanup policy.
+**Why it happens:** coverage measures execution, not test design.
+**How to avoid:** normalize all 31 owners and run the focused test, direct carrier, and typecheck after the rewrite.
 **Warning signs:** an unchanged PASS test still reads `tests/bridges/_fixtures`, lacks lowercase phases, or asserts partial fields. [VERIFIED: .planning/phases/111-non-hook-component-bridges/111-CONTEXT.md:37-54]
 
 ### Pitfall 2: Hiding Complete Scenarios in a “Helper”
 
-**What goes wrong:** a helper writes the meaningful source document or calculates the expected output, so the case no longer states its contract independently.  
-**Why it happens:** stage trees and long frontmatter documents create pressure to deduplicate.  
-**How to avoid:** factories may allocate a fresh tree or return fresh small values only; each case owns its meaningful source and full expected result.  
+**What goes wrong:** a helper writes the meaningful source document or calculates the expected output, so the case no longer states its contract independently.
+**Why it happens:** stage trees and long frontmatter documents create pressure to deduplicate.
+**How to avoid:** factories may allocate a fresh tree or return fresh small values only; each case owns its meaningful source and full expected result.
 **Warning signs:** one helper receives a scenario label, imports a production constant, or returns both input and expected output. [VERIFIED: .planning/phases/111-non-hook-component-bridges/111-CONTEXT.md:23-30,145-151]
 
 ### Pitfall 3: Leaving Single-Owner Evidence in Supplemental Suites
 
-**What goes wrong:** the mirrored owner lacks direct coverage while an integration test duplicates the same public operation.  
-**Why it happens:** historical suites accumulated before the one-pair contract.  
-**How to avoid:** move byte-identity, foreign-agent, MCP no-op, and agent no-op evidence to their direct owners; delete each redundant suite after its last case moves.  
+**What goes wrong:** the mirrored owner lacks direct coverage while an integration test duplicates the same public operation.
+**Why it happens:** historical suites accumulated before the one-pair contract.
+**How to avoid:** move byte-identity, foreign-agent, MCP no-op, and agent no-op evidence to their direct owners; delete each redundant suite after its last case moves.
 **Warning signs:** a supplemental case imports only one bridge family or asserts only one module's result. [VERIFIED: tests/bridges/integration-materialization-gate.test.ts:57-148] [VERIFIED: tests/bridges/integration-foreign-content.test.ts:63-204] [VERIFIED: tests/bridges/agents/convert-byte-identity.test.ts:75-281]
 
 ### Pitfall 4: Deleting a Fixture Before Its Last Consumer
 
-**What goes wrong:** later orchestrator or architecture tests fail even though the owner refactor passes.  
-**Why it happens:** `tests/bridges/_fixtures` is not used only by mirrored bridge owners.  
-**How to avoid:** run a repository-wide `rg` for the exact fixture path at deletion time; delete only when all remaining consumers are either absorbed or genuinely do not need it.  
+**What goes wrong:** later orchestrator or architecture tests fail even though the owner refactor passes.
+**Why it happens:** `tests/bridges/_fixtures` is not used only by mirrored bridge owners.
+**How to avoid:** run a repository-wide `rg` for the exact fixture path at deletion time; delete only when all remaining consumers are either absorbed or genuinely do not need it.
 **Warning signs:** a plan removes an entire fixture root without listing every current consumer. [VERIFIED: .planning/phases/111-non-hook-component-bridges/111-CONTEXT.md:26-27,106-110]
 
 ### Pitfall 5: Asserting Only the Happy Lifecycle
 
-**What goes wrong:** commit passes, but abort cleanup, replacement rollback, finalize, malformed input, foreign content, containment, or missing-file branches remain uncovered.  
-**Why it happens:** staged bridges have multiple public transitions and error arms.  
-**How to avoid:** build an explicit lifecycle matrix per stage/unstage owner and assert the whole return record plus exact filesystem state after each transition.  
+**What goes wrong:** commit passes, but abort cleanup, replacement rollback, finalize, malformed input, foreign content, containment, or missing-file branches remain uncovered.
+**Why it happens:** staged bridges have multiple public transitions and error arms.
+**How to avoid:** build an explicit lifecycle matrix per stage/unstage owner and assert the whole return record plus exact filesystem state after each transition.
 **Warning signs:** branch counts trail line counts; backup/staging directories are never inspected after cleanup. [VERIFIED: extensions/pi-claude-marketplace/bridges/agents/stage.ts:325-564] [VERIFIED: extensions/pi-claude-marketplace/bridges/mcp/stage.ts:201-400]
 
 ### Pitfall 6: Losing Byte, Order, or Foreign-Content Contracts
 
-**What goes wrong:** a normalized parse-equivalent object passes while CRLF bytes, warning order, top-level foreign keys, or rollback bytes change.  
-**Why it happens:** deep partial assertions ignore serialization and ordering.  
-**How to avoid:** independently author complete strings/records and check pre/post bytes for conversion, MCP merge, agents-index, and rollback cases.  
+**What goes wrong:** a normalized parse-equivalent object passes while CRLF bytes, warning order, top-level foreign keys, or rollback bytes change.
+**Why it happens:** deep partial assertions ignore serialization and ordering.
+**How to avoid:** independently author complete strings/records and check pre/post bytes for conversion, MCP merge, agents-index, and rollback cases.
 **Warning signs:** snapshots, `includes`-only assertions, or expectations derived from parsed actual data. [VERIFIED: .planning/phases/111-non-hook-component-bridges/111-CONTEXT.md:52-54]
 
 ### Pitfall 7: Using Runtime Tests for Erased Types
 
-**What goes wrong:** meaningless runtime assertions are added or production gets a runtime export solely to create LCOV.  
-**Why it happens:** type-only modules emit no runtime statements.  
-**How to avoid:** use positive `satisfies` plus targeted `@ts-expect-error`; let the direct carrier return exact mode `"type-only"` when transpilation proves no runtime statements. The quoted mode is verbatim.  
+**What goes wrong:** meaningless runtime assertions are added or production gets a runtime export solely to create LCOV.
+**Why it happens:** type-only modules emit no runtime statements.
+**How to avoid:** use positive `satisfies` plus targeted `@ts-expect-error`; let the direct carrier return exact mode `"type-only"` when transpilation proves no runtime statements. The quoted mode is verbatim.
 **Warning signs:** `test("types exist")`, `assert.ok(true)`, or a new production constant mirroring a union. [VERIFIED: .claude/rules/typescript-unit-testing.md:205-219] [VERIFIED: scripts/test-coverage-direct.mjs:166-235]
 
 ### Pitfall 8: Mutating Shared Environment State Without Restoration
 
-**What goes wrong:** collision and staging cases become order-dependent or touch the developer's Pi directory.  
-**Why it happens:** `PI_CODING_AGENT_DIR` influences local path resolution.  
-**How to avoid:** snapshot the exact variable, point it at a fresh root, and restore/delete it in the same test context.  
+**What goes wrong:** collision and staging cases become order-dependent or touch the developer's Pi directory.
+**Why it happens:** `PI_CODING_AGENT_DIR` influences local path resolution.
+**How to avoid:** snapshot the exact variable, point it at a fresh root, and restore/delete it in the same test context.
 **Warning signs:** file-scope environment mutation or cleanup only at suite end. [VERIFIED: tests/bridges/mcp/collision-slots.test.ts:15-30]
 
 ### Pitfall 9: Weakening Security Guards to Reach Coverage
 
-**What goes wrong:** tests bypass path containment, symlink refusal, ownership markers, first-declarer collision order, or literal `"__proto__"` copying.  
-**Why it happens:** malicious and foreign cases are harder to construct.  
-**How to avoid:** construct hostile local inputs and assert the current public rejection/preservation behavior through the owner.  
+**What goes wrong:** tests bypass path containment, symlink refusal, ownership markers, first-declarer collision order, or literal `"__proto__"` copying.
+**Why it happens:** malicious and foreign cases are harder to construct.
+**How to avoid:** construct hostile local inputs and assert the current public rejection/preservation behavior through the owner.
 **Warning signs:** private function exports, mocked path modules, or unsafe fixture symlinks shared across cases. [VERIFIED: extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts:1-24] [VERIFIED: extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts:20-42]
 
 ## Code Examples
@@ -704,5 +704,5 @@ The current stable OWASP ASVS release is `5.0.0`. For this local-filesystem phas
 - Validation: HIGH — exact inventory, missing files, direct carrier semantics, and baseline counts were verified this session. [VERIFIED: .planning/REQUIREMENTS.md:258-292] [VERIFIED: scripts/test-coverage-direct.mjs:25-69,166-288]
 - Security: MEDIUM — concrete local controls were verified in source; ASVS applicability is mapped from official ASVS 5.0.0 documentation. [VERIFIED: extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts:1-24] [CITED: https://owasp.org/www-project-application-security-verification-standard/]
 
-**Research date:** 2026-08-30 [VERIFIED: session date, 2026-08-30]  
+**Research date:** 2026-08-30 [VERIFIED: session date, 2026-08-30]
 **Valid until:** 2026-09-29 [ASSUMED] — re-run baseline and fixture-consumer audits if source changes before planning.

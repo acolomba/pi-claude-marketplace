@@ -121,8 +121,8 @@
 None — discussion stayed within phase scope.
 </user_constraints>
 
-**Researched:** 2026-08-30  
-**Domain:** TypeScript hook routing, subprocess lifecycle, async registry, timers, persistence, and direct owner-test refactoring  
+**Researched:** 2026-08-30
+**Domain:** TypeScript hook routing, subprocess lifecycle, async registry, timers, persistence, and direct owner-test refactoring
 **Confidence:** HIGH for repository behavior and baseline coverage; MEDIUM for Node runtime documentation because the official pages were retrieved through web search rather than Context7. [VERIFIED: .planning/phases/112-hook-runtime/112-CONTEXT.md:1-249] [CITED: https://nodejs.org/api/test.html]
 
 <phase_requirements>
@@ -439,58 +439,58 @@ The source graph contains no required production redesign, but ordering avoids s
 
 ### Pitfall 1: Treating 100% coverage as completed ownership
 
-**What goes wrong:** A PASS owner keeps weak names, missing phase comments, impossible casts, partial inputs, or supplemental duplicate authority.  
-**Why it happens:** The direct tool measures executed statements/branches, not the milestone’s case and design rules.  
-**How to avoid:** Re-author and re-prove all 31 owners, including the 14 baseline passes, then run lint/typecheck/correspondence.  
+**What goes wrong:** A PASS owner keeps weak names, missing phase comments, impossible casts, partial inputs, or supplemental duplicate authority.
+**Why it happens:** The direct tool measures executed statements/branches, not the milestone’s case and design rules.
+**How to avoid:** Re-author and re-prove all 31 owners, including the 14 baseline passes, then run lint/typecheck/correspondence.
 **Warning signs:** No lowercase phase markers, `as unknown as`, plan IDs in titles, partial property assertions, or a direct behavior case living only under `tests/architecture`. [VERIFIED: .planning/phases/112-hook-runtime/112-CONTEXT.md:21-41] [VERIFIED: focused test-style audit, 2026-08-30]
 
 ### Pitfall 2: Assuming one child terminal ordering
 
-**What goes wrong:** Both `error` and a late exit/close settle twice, timers remain live, or output is parsed before pipes drain.  
-**Why it happens:** Node allows `error` with or without a later `exit`, while `close` follows exit/error and stdio closure.  
-**How to avoid:** Stage every behaviorally distinct order, guard settlement, and assert timer/listener cleanup.  
+**What goes wrong:** Both `error` and a late exit/close settle twice, timers remain live, or output is parsed before pipes drain.
+**Why it happens:** Node allows `error` with or without a later `exit`, while `close` follows exit/error and stdio closure.
+**How to avoid:** Stage every behaviorally distinct order, guard settlement, and assert timer/listener cleanup.
 **Warning signs:** A double resolves without testing the late terminal event, or a test emits only `close` for all paths. [CITED: https://nodejs.org/api/child_process.html#event-error] [CITED: https://nodejs.org/api/child_process.html#event-close]
 
 ### Pitfall 3: Counting characters instead of UTF-8 bytes
 
-**What goes wrong:** Multibyte payloads exceed the documented cap or split characters become replacement glyphs.  
-**Why it happens:** JavaScript string length is UTF-16 code units; process limits are bytes, and chunks need stateful decoding.  
-**How to avoid:** Use exact-cap/one-byte-over multibyte cases through `Buffer.byteLength` and the public `StringDecoder` path, including `end()` flush.  
+**What goes wrong:** Multibyte payloads exceed the documented cap or split characters become replacement glyphs.
+**Why it happens:** JavaScript string length is UTF-16 code units; process limits are bytes, and chunks need stateful decoding.
+**How to avoid:** Use exact-cap/one-byte-over multibyte cases through `Buffer.byteLength` and the public `StringDecoder` path, including `end()` flush.
 **Warning signs:** Tests call `.length` for byte promises or convert each `Buffer` independently. [VERIFIED: extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts:48-85] [VERIFIED: extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts:428-472] [CITED: https://nodejs.org/api/string_decoder.html]
 
 ### Pitfall 4: Sharing process, router, or registry state
 
-**What goes wrong:** Cases pass alone but fail in a different order or concurrently; live children/files remain after failure.  
-**Why it happens:** Global `beforeEach`, shared temp roots, direct state readers, and cleanup registered after acting hide ownership.  
-**How to avoid:** Arrange lifecycle cleanup and `t.after()` first, use one root/child/entry per case, and serialize only unavoidable process-global mutations.  
+**What goes wrong:** Cases pass alone but fail in a different order or concurrently; live children/files remain after failure.
+**Why it happens:** Global `beforeEach`, shared temp roots, direct state readers, and cleanup registered after acting hide ownership.
+**How to avoid:** Arrange lifecycle cleanup and `t.after()` first, use one root/child/entry per case, and serialize only unavoidable process-global mutations.
 **Warning signs:** Module-scope mutable fixtures, `beforeEach(reset...)`, a fixed `/tmp` path, or test cache reload. [VERIFIED: .planning/phases/112-hook-runtime/112-CONTEXT.md:87-101] [VERIFIED: .claude/rules/typescript-unit-testing.md:36-42,151,182-192]
 
 ### Pitfall 5: Forcing dead defensive branches with invalid types
 
-**What goes wrong:** Tests encode events or states no production caller can construct and freeze unreachable code instead of public behavior.  
-**Why it happens:** The 100% branch gate exposes guards introduced only for local narrowing.  
-**How to avoid:** Trace callers first; if the state is impossible under the exported boundary, remove/simplify the owning branch and typecheck callers.  
+**What goes wrong:** Tests encode events or states no production caller can construct and freeze unreachable code instead of public behavior.
+**Why it happens:** The 100% branch gate exposes guards introduced only for local narrowing.
+**How to avoid:** Trace callers first; if the state is impossible under the exported boundary, remove/simplify the owning branch and typecheck callers.
 **Warning signs:** Double assertions to an impossible event, direct private-helper access, or a custom collection that violates the source invariant. [VERIFIED: .planning/REQUIREMENTS.md:79-106] [VERIFIED: .claude/rules/typescript-unit-testing.md:182-209]
 
 ### Pitfall 6: Losing optional-key absence
 
-**What goes wrong:** An expected optional field is emitted as `undefined`, survives serialization differently, or an unexpected key slips into an envelope.  
-**Why it happens:** Property-by-property assertions do not compare exact object shape.  
-**How to avoid:** Deep-compare the whole explicit envelope and use `Object.hasOwn` when absence itself is promised.  
+**What goes wrong:** An expected optional field is emitted as `undefined`, survives serialization differently, or an unexpected key slips into an envelope.
+**Why it happens:** Property-by-property assertions do not compare exact object shape.
+**How to avoid:** Deep-compare the whole explicit envelope and use `Object.hasOwn` when absence itself is promised.
 **Warning signs:** `assert.equal(payload.field, undefined)` without a key-set assertion. [VERIFIED: .planning/phases/112-hook-runtime/112-CONTEXT.md:103-119]
 
 ### Pitfall 7: Editing one supplemental suite from multiple parallel plans
 
-**What goes wrong:** Pair commits overlap, cases disappear before their owner lands, or two plans retain different authorities.  
-**Why it happens:** Large legacy suites combine several owners.  
-**How to avoid:** Assign one final carrier per supplemental file and add explicit dependencies on every owner that must absorb evidence first.  
+**What goes wrong:** Pair commits overlap, cases disappear before their owner lands, or two plans retain different authorities.
+**Why it happens:** Large legacy suites combine several owners.
+**How to avoid:** Assign one final carrier per supplemental file and add explicit dependencies on every owner that must absorb evidence first.
 **Warning signs:** Two plan file lists name the same architecture test. [VERIFIED: .planning/REQUIREMENTS.md:94-106] [VERIFIED: supplemental-suite audit, 2026-08-30]
 
 ### Pitfall 8: Unsafe orphan testing
 
-**What goes wrong:** A unit test signals a real or recycled PID, especially on non-Linux systems where `/proc` ownership cannot be verified.  
-**Why it happens:** Orphan behavior is process-wide and tempting to test with the live process table.  
-**How to avoid:** Use `OrphanProbes`; assert Linux marker equality before `SIGKILL` and non-Linux soft skip; never pass a real arbitrary PID.  
+**What goes wrong:** A unit test signals a real or recycled PID, especially on non-Linux systems where `/proc` ownership cannot be verified.
+**Why it happens:** Orphan behavior is process-wide and tempting to test with the live process table.
+**How to avoid:** Use `OrphanProbes`; assert Linux marker equality before `SIGKILL` and non-Linux soft skip; never pass a real arbitrary PID.
 **Warning signs:** Direct `process.kill` outside the default probe or a non-Linux test expecting a kill. [VERIFIED: extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:154-176,545-593,659-718]
 
 ## Code Examples
@@ -673,5 +673,5 @@ Security enforcement is enabled because `.planning/config.json` does not set `se
 - Node runtime semantics: MEDIUM — official Node pages were retrieved via web search after Context7 was unavailable; the GSD confidence seam classified verified web search as MEDIUM. [CITED: https://nodejs.org/api/test.html] [CITED: https://nodejs.org/api/child_process.html]
 - Pitfalls and plan dependencies: HIGH — derived from locked decisions, current tests, production imports, and measured gaps. [VERIFIED: .planning/phases/112-hook-runtime/112-CONTEXT.md:18-132] [VERIFIED: CodeGraph/test audit, 2026-08-30]
 
-**Research date:** 2026-08-30  
+**Research date:** 2026-08-30
 **Valid until:** 2026-09-06 or the next hook-runtime source/test commit, whichever comes first. [VERIFIED: repository-state research policy for fast-moving live code]
