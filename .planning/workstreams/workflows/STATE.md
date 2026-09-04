@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 109
 current_phase_name: kind-inversion
-current_plan: Not started
-status: ready_to_execute
-stopped_at: Phase 109 planned — 5 plans in 4 waves, plan-checker passed
-last_updated: "2026-09-04T22:49:13.899Z"
+current_plan: 02
+status: in_progress
+stopped_at: Completed 109-01-PLAN.md
+last_updated: "2026-09-04T23:16:36.873Z"
 last_activity: 2026-09-04
-last_activity_desc: Phase 109 planned — 5 plans across 4 waves, all gates verified
-state_head: cd84abc1238fc449ab57e5de099206a8b4ec54d8
+last_activity_desc: Phase 109 Plan 01 executed — six locking gates turned and observed RED
+state_head: ec399bc8a66348db6c8ab8adf5a0f3af1d324fff
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -35,17 +35,26 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 109 (kind-inversion) — READY TO EXECUTE
-Plan: 0/5 complete
-Status: Context, research, patterns and validation written; 5 plans in 4 waves;
-plan-checker passed with no blockers or warnings
-Last activity: 2026-09-04 — Phase 109 planned; WINV-02 narrowed to its resolver clause
-after the planner found its second clause duplicated WLIF-01 (Phase 112)
+Phase: 109 (kind-inversion) — IN PROGRESS
+Plan: 1/5 complete (109-01 done; 109-02 is next, Wave 2)
+Status: The red slice landed. All five locking gates and the published byte
+contract now state the post-inversion reading of `workflows`, and each was
+observed failing against unmodified production code with its output captured in
+`109-01-SUMMARY.md`. No byte under `extensions/` has moved yet.
+Last activity: 2026-09-04 — 109-01 executed; three commits, six RED gates,
+`partial-vocabulary-guard` green
+
+**The D-109-06 window is now open.** Until Phase 111 lands, a workflow-bearing
+plugin resolves `installable`, renders `● (installed)` with no brace, and
+materializes zero workflow commands. Cut no release from this branch, and do NOT
+bump `EXTENSION_VERSION` before Phase 111 (A-03: a bump would fire the
+`supportedSetGrew` backfill convergence while no bridge exists to materialize
+anything).
 
 ## Progress
 
 **Phases Complete:** 0/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started
+**Current Plan:** 109-02 (109-01 of 5 complete)
 
 ```text
 [----------] 0%
@@ -53,7 +62,7 @@ after the planner found its second clause duplicated WLIF-01 (Phase 112)
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 109 | Kind inversion | Not started |
+| 109 | Kind inversion | In progress (1/5 plans) |
 | 110 | Domain and platform modules | Not started |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
@@ -157,11 +166,12 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-04T20:20:53.354Z
+**Last session:** 2026-09-04T23:16:36.814Z
 
-**Stopped At:** Phase 109 context gathered
-**Resume File:** .planning/workstreams/workflows/phases/109-kind-inversion/109-CONTEXT.md
-**Next Action:** `/gsd-plan-phase 109`.
+**Stopped At:** Completed 109-01-PLAN.md
+**Resume File:** None
+**Next Action:** `/gsd-execute-phase 109` — Wave 2 is `109-02`, the production
+edits the six red gates now demand.
 
 **Where the work lives:** the worktree
 `/home/acolomba/pi-claude-marketplace-workflows` on branch `features/workflow`.
@@ -231,10 +241,13 @@ re-persists `harness-worktree` as a side effect.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | — | — | — | — |
+| Phase 109 P01 | 22 min | 3 tasks | 7 files |
 
 ## Decisions
 
 _Recorded per phase as the milestone proceeds._
+
+- [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps
 
