@@ -14,6 +14,7 @@ void ("custom" satisfies PiToolName);
 describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
   for (const { claudeToolName, expectedPiToolName } of [
     { claudeToolName: "Bash", expectedPiToolName: "bash" },
+    { claudeToolName: "PowerShell", expectedPiToolName: "powershell" },
     { claudeToolName: "Read", expectedPiToolName: "read" },
     { claudeToolName: "Edit", expectedPiToolName: "edit" },
     { claudeToolName: "Write", expectedPiToolName: "write" },
@@ -37,6 +38,7 @@ describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
     // arrange
     const expectedMappings = {
       Bash: "bash",
+      PowerShell: "powershell",
       Read: "read",
       Edit: "edit",
       Write: "write",
@@ -74,6 +76,7 @@ describe("CLAUDE_TO_PI_TOOL_NAMES", () => {
 describe("mapPiToClaudeToolName", () => {
   for (const { piToolName, expectedClaudeToolName } of [
     { piToolName: "bash", expectedClaudeToolName: "Bash" },
+    { piToolName: "powershell", expectedClaudeToolName: "PowerShell" },
     { piToolName: "read", expectedClaudeToolName: "Read" },
     { piToolName: "edit", expectedClaudeToolName: "Edit" },
     { piToolName: "write", expectedClaudeToolName: "Write" },

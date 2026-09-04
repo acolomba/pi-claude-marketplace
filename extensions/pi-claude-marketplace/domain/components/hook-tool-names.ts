@@ -17,7 +17,7 @@
 // `PI_TO_CLAUDE_TOOL_NAMES satisfies Record<PiToolName, string>` where
 // `PiToolName = Exclude<ToolCallEvent["toolName"], string>` drops the
 // `CustomToolCallEvent` open-ended `string` arm and leaves only the
-// seven literal Pi tool names. Adding an eighth Pi tool literal to the
+// eight literal Pi tool names. Adding a ninth Pi tool literal to the
 // peer-dep `@earendil-works/pi-coding-agent` `ToolCallEvent` union
 // without adding a matching entry here red-fails `npm run typecheck`.
 //
@@ -35,18 +35,18 @@
 import type { ToolCallEvent } from "../../platform/pi-api.ts";
 
 /**
- * The seven Pi-form tool-name literals, derived from the peer-dep
+ * The eight Pi-form tool-name literals, derived from the peer-dep
  * `ToolCallEvent` discriminated union by filtering out the
  * `CustomToolCallEvent` arm (the one whose `toolName` is the open-ended
- * `string` type). The literal arms (`bash` | `read` | `edit` | `write`
- * | `grep` | `find` | `ls`) remain.
+ * `string` type). The literal arms (`bash` | `powershell` | `read` |
+ * `edit` | `write` | `grep` | `find` | `ls`) remain.
  *
  * D-58-04: a naive `Exclude<ToolCallEvent["toolName"], string>` would
  * evaluate to `never` because a union `"bash" | ... | string` collapses
  * to `string` at the property-access step. Walking the union arms via
  * `T extends { toolName: infer N }` with `string extends N` filtering
  * the `CustomToolCallEvent` arm preserves the literal `toolName` fields
- * on the seven specific arms.
+ * on the eight specific arms.
  */
 export type PiToolName = ToolCallEvent extends infer Event
   ? Event extends { toolName: infer Name }
@@ -57,7 +57,7 @@ export type PiToolName = ToolCallEvent extends infer Event
   : never;
 
 /**
- * Claude-form spelling of every Pi tool literal. Keys are the seven
+ * Claude-form spelling of every Pi tool literal. Keys are the eight
  * lowercase Pi tool names; values are the Claude-form PascalCase /
  * uppercase spellings used in `hooks/hooks.json` matcher tokens and
  * Claude tool_call payloads.
@@ -69,12 +69,18 @@ export type PiToolName = ToolCallEvent extends infer Event
  * mismatch so Glob matchers translate into a Pi event the dispatcher
  * can fire on.
  *
+ * `powershell -> PowerShell` is an exact match: Claude Code's own
+ * permission-rule prefix vocabulary already names `PowerShell`
+ * alongside `Bash` (see 61-DISCUSSION-LOG.md), so this is not a
+ * semantic-mismatch mapping the way `find -> Glob` is.
+ *
  * The `satisfies Record<PiToolName, string>` annotation is the
  * load-bearing compile-time exhaustiveness gate -- removing any of the
- * seven entries red-fails `npm run typecheck`.
+ * eight entries red-fails `npm run typecheck`.
  */
 const PI_TO_CLAUDE_TOOL_NAMES = {
   bash: "Bash",
+  powershell: "PowerShell",
   read: "Read",
   edit: "Edit",
   write: "Write",
@@ -87,7 +93,7 @@ const PI_TO_CLAUDE_TOOL_NAMES = {
 } as const satisfies Record<PiToolName, string>;
 
 /**
- * Inverse of `PI_TO_CLAUDE_TOOL_NAMES`. Keys are the seven Claude-form
+ * Inverse of `PI_TO_CLAUDE_TOOL_NAMES`. Keys are the eight Claude-form
  * tool names; values are the corresponding Pi-form literals.
  *
  * Hand-written rather than computed from the forward map so its keys
@@ -95,6 +101,7 @@ const PI_TO_CLAUDE_TOOL_NAMES = {
  */
 export const CLAUDE_TO_PI_TOOL_NAMES = {
   Bash: "bash",
+  PowerShell: "powershell",
   Read: "read",
   Edit: "edit",
   Write: "write",
@@ -108,8 +115,8 @@ export const CLAUDE_TO_PI_TOOL_NAMES = {
 /**
  * One-way Pi-form -> Claude-form tool-name translation used by the three
  * tool-event payload translators (PreToolUse / PostToolUse /
- * PostToolUseFailure). For the seven literal Pi tool names (`bash`,
- * `read`, `edit`, `write`, `grep`, `find`, `ls`) returns the locked
+ * PostToolUseFailure). For the eight literal Pi tool names (`bash`,
+ * `powershell`, `read`, `edit`, `write`, `grep`, `find`, `ls`) returns the locked
  * Claude-form spelling from `PI_TO_CLAUDE_TOOL_NAMES`; for any other
  * string returns the input unchanged.
  *
