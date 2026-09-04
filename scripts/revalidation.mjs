@@ -9,6 +9,8 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+/* eslint-disable sonarjs/cognitive-complexity */
+
 const DEFAULT_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CORPUS_ROOT = ".planning/reviews/unit-test-adversarial";
 const PHASE_ROOT = ".planning/phases/01-live-evidence-revalidation";
@@ -167,7 +169,7 @@ function terminalFinding(finding) {
 
 // Ledger validation intentionally centralizes cross-collection invariants so one
 // deterministic pass can report all actionable violations together.
-// eslint-disable-next-line sonarjs/cognitive-complexity
+// fallow-ignore-next-line complexity -- one pass must accumulate every linked-ledger violation deterministically.
 export function validateLedger(ledger, context = {}) {
   if (!isObject(ledger)) {
     throw new TypeError("ledger must be an object");
@@ -696,7 +698,7 @@ function readJson(projectRoot, relativePath) {
 }
 
 // CLI dispatch is kept in one boundary; all domain work remains in pure exports.
-// eslint-disable-next-line sonarjs/cognitive-complexity
+// fallow-ignore-next-line complexity -- command routing stays at the sole process boundary.
 function main(args = process.argv.slice(2)) {
   const { positional, options } = parseArgs(args);
   const command = positional[0];
