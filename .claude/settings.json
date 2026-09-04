@@ -3,5 +3,10 @@
     "typescript-lsp@claude-plugins-official": true,
     "humanizer@humanizer": true,
     "pr-review-toolkit@claude-plugins-official": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "test -f \"$CLAUDE_PROJECT_DIR/.claude/hooks/gsd-statusline.js\" && node \"$CLAUDE_PROJECT_DIR/.claude/hooks/gsd-statusline.js\"",
+    "padding": 0
   }
 }

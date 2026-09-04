@@ -2444,6 +2444,35 @@ BLOCKERs -- per-pair coverage is not evidence of assertion strength.
 Code seams: named per-finding throughout the corpus; the two synthesis
 documents carry `file:line` for every claim.
 
+## HKPS-01: if-field `PowerShell(...)` rule prefix support (now unblocked)
+
+Deferred as an idea in the archived `61-if-field-permission-rule-matcher/
+61-CONTEXT.md` (v1.13): "Pi has no PowerShell tool. v1.14+ may add a Pi
+PowerShell tool + corresponding bridge support." `@earendil-works/
+pi-coding-agent` 0.84.4 (2026-09-04 dependency bump, PR #158) adds exactly
+that -- a native `powershell` tool (`PowerShellToolCallEvent`,
+`createPowerShellTool`) -- so the blocker is resolved and this item is now
+actionable.
+
+That same dependency bump forced `hook-tool-names.ts`'s
+`satisfies Record<PiToolName, string>` exhaustiveness gate to add the eighth
+literal (PR #158). That fix is the identity-mapping layer only --
+`powershell <-> "PowerShell"` in `PI_TO_CLAUDE_TOOL_NAMES` /
+`CLAUDE_TO_PI_TOOL_NAMES` -- which already wires the top-level `matcher`
+field (`hooks/matcher.ts`) and the payload translators
+(`mapPiToClaudeToolName`) end to end.
+
+**What's still missing:** the `if:` field's per-tool predicate compiler.
+`IF_PREFIX_TARGETS` (`hook-if-targets.ts`) is a locked closed set -- `Bash` /
+`Read` / `Edit` / `Write` -- and `PowerShell(...)` still falls into
+`compileIfPredicate`'s unknown-prefix fail-open arm (D-61-02): it silently
+matches every event rather than filtering on the command, the same state
+`Bash(...)` was in before D-61 shipped. Landing this means a
+`compilePowerShellGlob` sibling to `compileBashGlob`
+(`bridges/hooks/if-field/index.ts`), a `PowerShell` entry in
+`IF_PREFIX_TARGETS` mapping to `{"powershell"}`, and test coverage mirroring
+the existing `Bash(...)` predicate suite.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
