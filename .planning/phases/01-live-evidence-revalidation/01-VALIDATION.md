@@ -25,6 +25,15 @@ created: "2026-09-04"
 | **Full suite command** | `npm run check` |
 | **Estimated runtime** | quick check under 30 seconds; full suite measured during execution |
 
+The final tracked implementation locations are `scripts/revalidation.mjs`,
+`scripts/revalidation.negative.mjs`, and
+`tests/architecture/revalidation.test.ts`. The canonical ledger uses normalized
+top-level `files`, `sourceClaims`, `findings`, `decisions`, and `scopeChanges`
+arrays as specified in `01-REVALIDATION-SCHEMA.md`. Mutation probes operate only
+on repository-local temporary copies of the required source-test pair and
+fixtures; they never patch the developer's live source or tests, and real state
+remains approval-gated (01-RESEARCH.md, Open Questions (RESOLVED)).
+
 ---
 
 ## Sampling Rate
@@ -42,10 +51,10 @@ created: "2026-09-04"
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 01-01-01 | 01-01 | 1 | RVAL-01, RVAL-02 | T-01-01 / T-01-02 | Reject path escape, malformed identities, invalid links, missing evidence, and view drift | unit + architecture | `node --test tests/architecture/revalidation.test.ts` | ❌ W0 | ⬜ pending |
 | 01-01-03 | 01-01 | 1 | RVAL-01 | T-01-01 | Accept only the locked, sorted 110-path inventory | unit + live manifest | `node scripts/revalidation.mjs inventory` | ❌ W0 | ⬜ pending |
-| 01-02-01…01-12-02 | 01-02…01-12 | 2 | RVAL-01, RVAL-02 | T-01-02-01…T-01-12-03 | Preserve claim identity and reject incomplete or unsafe evidence records in exclusive shards | unit + shard ledger | `node scripts/revalidation.mjs validate-shard --assignment .planning/phases/01-live-evidence-revalidation/01-CORPUS-ASSIGNMENT.md --plan 01-NN --shard .planning/phases/01-live-evidence-revalidation/shards/01-NN.json` | ❌ W0 | ⬜ pending |
-| 01-13-01 | 01-13 | 3 | RVAL-01, RVAL-02 | T-01-13-01 | Merge exact 110/110 evidence and block incomplete claims | live ledger | `node scripts/revalidation.mjs validate` | ❌ W0 | ⬜ pending |
-| 01-14-01…01-16-03 | 01-14…01-16 | 4-6 | RVAL-03 | T-01-14-01…T-01-16-02 | Keep operator decisions unresolved until every premise has terminal live evidence | decision ledger | `node scripts/revalidation.mjs validate --decision MF-DEC-NN` | ❌ W0 | ⬜ pending |
-| 01-17-02 | 01-17 | 7 | RVAL-04 | T-01-17-01 | Preserve historical traceability while removing stale-only scope from active requirements | artifact validation | `node scripts/revalidation.mjs scope-impact --check` | ❌ W0 | ⬜ pending |
+| 01-02-01…01-43-03 | 01-02…01-43 | 2 | RVAL-01, RVAL-02 | T-01-02-01…T-01-43-03 | Preserve claim identity and reject incomplete or unsafe evidence records in 42 measured exclusive shards; mutation probes use only isolated repository-local copies | unit + shard ledger | `node scripts/revalidation.mjs validate-shard --assignment .planning/phases/01-live-evidence-revalidation/01-CORPUS-ASSIGNMENT.md --plan 01-NN --shard .planning/phases/01-live-evidence-revalidation/shards/01-NN.json` | ❌ W0 | ⬜ pending |
+| 01-44-01 | 01-44 | 3 | RVAL-01, RVAL-02 | T-01-44-01 | Merge exact 110/110 evidence and block incomplete claims | live ledger | `node scripts/revalidation.mjs validate` | ❌ W0 | ⬜ pending |
+| 01-45-01…01-47-03 | 01-45…01-47 | 4-6 | RVAL-03 | T-01-45-01…T-01-47-02 | Keep operator decisions unresolved until every premise has terminal live evidence | decision ledger | `node scripts/revalidation.mjs validate --decision MF-DEC-NN` | ❌ W0 | ⬜ pending |
+| 01-48-02 | 01-48 | 7 | RVAL-04 | T-01-48-01 | Preserve historical traceability while removing stale-only scope from active requirements | artifact validation | `node scripts/revalidation.mjs scope-impact --check` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

@@ -393,22 +393,16 @@ This implements the locked single-source rule: JSON is canonical and drift is a 
 | A4 | Duplicate-link cycle rejection and semantic negative-fixture set are necessary validator details. | Architecture / Pitfalls | A different model can satisfy the locked integrity requirement if equally complete. |
 | A5 | No runtime-state migration is needed beyond repository artifacts. | Runtime State Inventory | An individual corpus finding may reveal external state requiring a separately approved probe. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Exact JSON field names and schema layout**
-   - What we know: status semantics, required evidence, routes, identities, and outputs are locked. [VERIFIED: .planning/phases/01-live-evidence-revalidation/01-CONTEXT.md:23-53]
-   - What's unclear: concrete property names and whether source claims are nested or normalized.
-   - Recommendation: choose normalized top-level `files`, `sourceClaims`, `findings`, `decisions`, and `scopeChanges`; document invariants before review starts. [ASSUMED]
+1. **Exact JSON field names and schema layout — RESOLVED**
+   - The canonical ledger is normalized with top-level `files`, `sourceClaims`, `findings`, `decisions`, and `scopeChanges` arrays. `files` holds one record per locked corpus path and links to namespaced source-claim IDs. `sourceClaims` preserves every report-local label or deterministic unlabeled ordinal and links to exactly one canonical finding. `findings` owns evidence status, routing, current source/test references, the discriminated validation record, rationale, and destination. `decisions` links premise finding IDs to evidence, options, selection/rejection, and downstream consequences. `scopeChanges` links each requirement/phase edit to findings and decisions. IDs and cross-links are unique, repository-relative paths are normalized POSIX paths, and array order is deterministic. `01-REVALIDATION-SCHEMA.md` is the executable prose contract and `01-REVALIDATION.json` is the canonical instance. [RESOLVED from D-01 through D-10 and planner design]
 
-2. **How to execute destructive mutation probes safely**
-   - What we know: hermetic probes are required, and real/destructive state requires approval. [VERIFIED: .planning/phases/01-live-evidence-revalidation/01-CONTEXT.md:67-70]
-   - What's unclear: whether planners will use temporary worktrees, reversible patches, or throwaway copied fixtures.
-   - Recommendation: use temporary copied fixtures for tooling mutations and isolated reversible patches only when a real source-test pair must be exercised; assert a clean targeted diff after each probe. [ASSUMED]
+2. **How to execute destructive mutation probes safely — RESOLVED**
+   - Copy the required source-test pair and supporting fixture files into a repository-local temporary directory, apply the mutation only inside that isolated copy, and run the focused test against the copy. Record the exact mutation, command, exit status, and observed surviving failure/pass behavior, then remove the temporary copy. Never patch the developer's live source or test files. Probes involving real user state, credentials, network access, or destructive access remain blocked on explicit approval and otherwise stay inconclusive. [RESOLVED from D-11 through D-14]
 
-3. **Current CodeGraph graph status**
-   - What we know: the CodeGraph CLI works and `.codegraph/` exists, but the separate GSD graphify feature reports disabled. [VERIFIED: live probes on 2026-09-04]
-   - What's unclear: none for planning; these are distinct facilities.
-   - Recommendation: use CodeGraph per AGENTS.md and do not enable GSD graphify as part of this phase. [ASSUMED]
+3. **Current CodeGraph graph status and final tracked validator locations — RESOLVED**
+   - Use the existing CodeGraph index per `AGENTS.md`; it is independent of the disabled GSD graphify feature, which remains out of scope. The validator/renderer is tracked at `scripts/revalidation.mjs`, its semantic negative runner at `scripts/revalidation.negative.mjs`, and its Node test suite at `tests/architecture/revalidation.test.ts`. These are the final paths used by every plan and by `01-VALIDATION.md`; no runtime mirror or generated alternate location is permitted. [RESOLVED from live CodeGraph/tooling inspection and the Wave 0 design]
 
 ## Environment Availability
 

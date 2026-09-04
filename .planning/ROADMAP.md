@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 17 plans
+**Plans:** 48 plans
 
 **Success Criteria**:
 
@@ -80,23 +80,54 @@ be narrowed or moved out of scope with evidence.
    requirements and remaining roadmap are revised before Phase 2 planning.
 
 Plans:
-- [ ] 01-01-PLAN.md — Build the validator, schema, planted tracer, and exact live inventory
-- [ ] 01-02-PLAN.md — Review corpus paths 001-010 into an exclusive shard
-- [ ] 01-03-PLAN.md — Review corpus paths 011-020 into an exclusive shard
-- [ ] 01-04-PLAN.md — Review corpus paths 021-030 into an exclusive shard
-- [ ] 01-05-PLAN.md — Review corpus paths 031-040 into an exclusive shard
-- [ ] 01-06-PLAN.md — Review corpus paths 041-050 into an exclusive shard
-- [ ] 01-07-PLAN.md — Review corpus paths 051-060 into an exclusive shard
-- [ ] 01-08-PLAN.md — Review corpus paths 061-070 into an exclusive shard
-- [ ] 01-09-PLAN.md — Review corpus paths 071-080 into an exclusive shard
-- [ ] 01-10-PLAN.md — Review corpus paths 081-090 into an exclusive shard
-- [ ] 01-11-PLAN.md — Review corpus paths 091-100 into an exclusive shard
-- [ ] 01-12-PLAN.md — Review corpus paths 101-110 into an exclusive shard
-- [ ] 01-13-PLAN.md — Merge all evidence and clear inconclusive gaps
-- [ ] 01-14-PLAN.md — Resolve operator decisions 1-3 one dossier at a time
-- [ ] 01-15-PLAN.md — Resolve operator decisions 4-6 one dossier at a time
-- [ ] 01-16-PLAN.md — Resolve operator decisions 7-9 one dossier at a time
-- [ ] 01-17-PLAN.md — Rewrite requirements and roadmap, then seal the hard gate
+- [ ] 01-01-PLAN.md — Build the validator, normalized ledger schema, hermetic mutation contract, and exact live inventory
+- [ ] 01-02-PLAN.md — Review corpus paths 001-002 into an exclusive measured shard
+- [ ] 01-03-PLAN.md — Review corpus paths 003-005 into an exclusive measured shard
+- [ ] 01-04-PLAN.md — Review corpus paths 006-008 into an exclusive measured shard
+- [ ] 01-05-PLAN.md — Review corpus paths 009-011 into an exclusive measured shard
+- [ ] 01-06-PLAN.md — Review corpus paths 012-013 into an exclusive measured shard
+- [ ] 01-07-PLAN.md — Review corpus paths 014-015 into an exclusive measured shard
+- [ ] 01-08-PLAN.md — Review corpus paths 016-018 into an exclusive measured shard
+- [ ] 01-09-PLAN.md — Review corpus paths 019-021 into an exclusive measured shard
+- [ ] 01-10-PLAN.md — Review corpus paths 022-024 into an exclusive measured shard
+- [ ] 01-11-PLAN.md — Review corpus paths 025-026 into an exclusive measured shard
+- [ ] 01-12-PLAN.md — Review corpus paths 027-028 into an exclusive measured shard
+- [ ] 01-13-PLAN.md — Review corpus paths 029-031 into an exclusive measured shard
+- [ ] 01-14-PLAN.md — Review corpus paths 032-033 into an exclusive measured shard
+- [ ] 01-15-PLAN.md — Review corpus paths 034-036 into an exclusive measured shard
+- [ ] 01-16-PLAN.md — Review corpus paths 037-038 into an exclusive measured shard
+- [ ] 01-17-PLAN.md — Review corpus paths 039-041 into an exclusive measured shard
+- [ ] 01-18-PLAN.md — Review corpus paths 042-043 into an exclusive measured shard
+- [ ] 01-19-PLAN.md — Review corpus paths 044-045 into an exclusive measured shard
+- [ ] 01-20-PLAN.md — Review corpus paths 046-047 into an exclusive measured shard
+- [ ] 01-21-PLAN.md — Review corpus paths 048-049 into an exclusive measured shard
+- [ ] 01-22-PLAN.md — Review corpus paths 050-051 into an exclusive measured shard
+- [ ] 01-23-PLAN.md — Review corpus paths 052-054 into an exclusive measured shard
+- [ ] 01-24-PLAN.md — Review corpus paths 055-056 into an exclusive measured shard
+- [ ] 01-25-PLAN.md — Review corpus paths 057-058 into an exclusive measured shard
+- [ ] 01-26-PLAN.md — Review corpus paths 059-061 into an exclusive measured shard
+- [ ] 01-27-PLAN.md — Review corpus paths 062-063 into an exclusive measured shard
+- [ ] 01-28-PLAN.md — Review corpus paths 064-066 into an exclusive measured shard
+- [ ] 01-29-PLAN.md — Review corpus paths 067-069 into an exclusive measured shard
+- [ ] 01-30-PLAN.md — Review corpus paths 070-072 into an exclusive measured shard
+- [ ] 01-31-PLAN.md — Review corpus paths 073-075 into an exclusive measured shard
+- [ ] 01-32-PLAN.md — Review corpus paths 076-078 into an exclusive measured shard
+- [ ] 01-33-PLAN.md — Review corpus paths 079-081 into an exclusive measured shard
+- [ ] 01-34-PLAN.md — Review corpus paths 082-084 into an exclusive measured shard
+- [ ] 01-35-PLAN.md — Review corpus paths 085-087 into an exclusive measured shard
+- [ ] 01-36-PLAN.md — Review corpus paths 088-090 into an exclusive measured shard
+- [ ] 01-37-PLAN.md — Review corpus paths 091-093 into an exclusive measured shard
+- [ ] 01-38-PLAN.md — Review corpus paths 094-096 into an exclusive measured shard
+- [ ] 01-39-PLAN.md — Review corpus paths 097-099 into an exclusive measured shard
+- [ ] 01-40-PLAN.md — Review corpus paths 100-102 into an exclusive measured shard
+- [ ] 01-41-PLAN.md — Review corpus paths 103-105 into an exclusive measured shard
+- [ ] 01-42-PLAN.md — Review corpus paths 106-108 into an exclusive measured shard
+- [ ] 01-43-PLAN.md — Review corpus paths 109-110 into an exclusive measured shard
+- [ ] 01-44-PLAN.md — Merge all 42 evidence shards and clear inconclusive gaps
+- [ ] 01-45-PLAN.md — Resolve operator decisions 1-3 one dossier at a time
+- [ ] 01-46-PLAN.md — Resolve operator decisions 4-6 one dossier at a time
+- [ ] 01-47-PLAN.md — Resolve operator decisions 7-9 one dossier at a time
+- [ ] 01-48-PLAN.md — Rewrite requirements and roadmap, then seal the hard gate
 
 ### Phase 2: Containment and Input Safety
 

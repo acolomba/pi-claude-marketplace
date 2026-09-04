@@ -1,119 +1,120 @@
 # Phase 01 Corpus Assignment
 
-This plan-time manifest is the exclusive assignment authority for the 110 corpus inputs. Paths are sorted bytewise by full repository-relative POSIX path. Each path appears exactly once and is owned by one review plan. Plan 01-01 must compare this table with an independent recursive walk and seed the same assignments into the canonical JSON. Plans 01-02 through 01-12 must read every assigned file individually and emit only their exclusive shard. Plan 01-13 must reject missing, extra, or repeated assignments before merging.
+This plan-time manifest is the exclusive assignment authority for the 110 corpus inputs. Paths remain sorted bytewise by full repository-relative POSIX path. Each path appears exactly once and is owned by one bounded review plan. Plan 01-01 compares this table with an independent recursive walk and seeds the same assignments into canonical JSON. Plans 01-02 through 01-43 read every assigned file individually and emit only their exclusive shard. Plan 01-44 rejects missing, extra, or repeated assignments before deterministic merge.
 
-| Ordinal | Plan | Corpus path |
-| ---: | :---: | --- |
-| 001 | 01-02 | `.planning/reviews/unit-test-adversarial/META-FINDINGS.md` |
-| 002 | 01-02 | `.planning/reviews/unit-test-adversarial/README.md` |
-| 003 | 01-02 | `.planning/reviews/unit-test-adversarial/_ADVERSARIAL-BRIEF.md` |
-| 004 | 01-02 | `.planning/reviews/unit-test-adversarial/_AREAS.md` |
-| 005 | 01-02 | `.planning/reviews/unit-test-adversarial/_AUDIT.md` |
-| 006 | 01-02 | `.planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md` |
-| 007 | 01-02 | `.planning/reviews/unit-test-adversarial/_FIRST-PASS-BRIEF.md` |
-| 008 | 01-02 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md` |
-| 009 | 01-02 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md` |
-| 010 | 01-02 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md` |
-| 011 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-hooks-gates.md` |
-| 012 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md` |
-| 013 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md` |
-| 014 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md` |
-| 015 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md` |
-| 016 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-adapters-state.md` |
-| 017 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-async-rewake.md` |
-| 018 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md` |
-| 019 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md` |
-| 020 | 01-03 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md` |
-| 021 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-payloads.md` |
-| 022 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md` |
-| 023 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md` |
-| 024 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/domain-components-hooks.md` |
-| 025 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/domain-components.md` |
-| 026 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/domain-core.md` |
-| 027 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md` |
-| 028 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md` |
-| 029 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/edge-completions.md` |
-| 030 | 01-04 | `.planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md` |
-| 031 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md` |
-| 032 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md` |
-| 033 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/edge-root.md` |
-| 034 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md` |
-| 035 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md` |
-| 036 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md` |
-| 037 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-rest.md` |
-| 038 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-enable-fetch.md` |
-| 039 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md` |
-| 040 | 01-05 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md` |
-| 041 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-c.md` |
-| 042 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md` |
-| 043 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md` |
-| 044 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md` |
-| 045 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-list-uninstall-a.md` |
-| 046 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-list-uninstall-b.md` |
-| 047 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-messaging.md` |
-| 048 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-reinstall-a.md` |
-| 049 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-reinstall-b.md` |
-| 050 | 01-06 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md` |
-| 051 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md` |
-| 052 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md` |
-| 053 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md` |
-| 054 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md` |
-| 055 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md` |
-| 056 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md` |
-| 057 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/persistence.md` |
-| 058 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/platform.md` |
-| 059 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/root-index.md` |
-| 060 | 01-07 | `.planning/reviews/unit-test-adversarial/adversarial/shared-concerns.md` |
-| 061 | 01-08 | `.planning/reviews/unit-test-adversarial/adversarial/shared-core.md` |
-| 062 | 01-08 | `.planning/reviews/unit-test-adversarial/adversarial/shared-notify-a.md` |
-| 063 | 01-08 | `.planning/reviews/unit-test-adversarial/adversarial/shared-notify-b.md` |
-| 064 | 01-08 | `.planning/reviews/unit-test-adversarial/adversarial/shared-notify-c.md` |
-| 065 | 01-08 | `.planning/reviews/unit-test-adversarial/adversarial/transaction.md` |
-| 066 | 01-08 | `.planning/reviews/unit-test-adversarial/architecture-boundary-gates.md` |
-| 067 | 01-08 | `.planning/reviews/unit-test-adversarial/architecture-catalog-uat.md` |
-| 068 | 01-08 | `.planning/reviews/unit-test-adversarial/architecture-hooks-gates.md` |
-| 069 | 01-08 | `.planning/reviews/unit-test-adversarial/architecture-notify-gates.md` |
-| 070 | 01-08 | `.planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md` |
-| 071 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-agents.md` |
-| 072 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-commands.md` |
-| 073 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md` |
-| 074 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md` |
-| 075 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md` |
-| 076 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md` |
-| 077 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md` |
-| 078 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md` |
-| 079 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-mcp.md` |
-| 080 | 01-09 | `.planning/reviews/unit-test-adversarial/bridges-skills.md` |
-| 081 | 01-10 | `.planning/reviews/unit-test-adversarial/domain-components-hooks.md` |
-| 082 | 01-10 | `.planning/reviews/unit-test-adversarial/domain-components.md` |
-| 083 | 01-10 | `.planning/reviews/unit-test-adversarial/domain-core.md` |
-| 084 | 01-10 | `.planning/reviews/unit-test-adversarial/domain-resolver.md` |
-| 085 | 01-10 | `.planning/reviews/unit-test-adversarial/edge-completions.md` |
-| 086 | 01-10 | `.planning/reviews/unit-test-adversarial/edge-handlers-marketplace.md` |
-| 087 | 01-10 | `.planning/reviews/unit-test-adversarial/edge-handlers-plugin.md` |
-| 088 | 01-10 | `.planning/reviews/unit-test-adversarial/edge-handlers-root.md` |
-| 089 | 01-10 | `.planning/reviews/unit-test-adversarial/edge-root.md` |
-| 090 | 01-10 | `.planning/reviews/unit-test-adversarial/orchestrators-import.md` |
-| 091 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md` |
-| 092 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md` |
-| 093 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md` |
-| 094 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md` |
-| 095 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md` |
-| 096 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md` |
-| 097 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md` |
-| 098 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md` |
-| 099 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md` |
-| 100 | 01-11 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md` |
-| 101 | 01-12 | `.planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md` |
-| 102 | 01-12 | `.planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md` |
-| 103 | 01-12 | `.planning/reviews/unit-test-adversarial/orchestrators-root.md` |
-| 104 | 01-12 | `.planning/reviews/unit-test-adversarial/persistence.md` |
-| 105 | 01-12 | `.planning/reviews/unit-test-adversarial/platform.md` |
-| 106 | 01-12 | `.planning/reviews/unit-test-adversarial/root-index.md` |
-| 107 | 01-12 | `.planning/reviews/unit-test-adversarial/shared-concerns.md` |
-| 108 | 01-12 | `.planning/reviews/unit-test-adversarial/shared-core.md` |
-| 109 | 01-12 | `.planning/reviews/unit-test-adversarial/shared-notify.md` |
-| 110 | 01-12 | `.planning/reviews/unit-test-adversarial/transaction.md` |
+Each plan estimate includes measured input bytes/4 plus 30,000 tokens for CodeGraph/source/test/probe/authoring work and 18,000 tokens per corpus file. No review plan exceeds 113,802 raw tokens.
+
+| Ordinal | Plan | Bytes | Corpus path |
+| ---: | :---: | ---: | --- |
+| 001 | 01-02 | 110198 | `.planning/reviews/unit-test-adversarial/META-FINDINGS.md` |
+| 002 | 01-02 | 1871 | `.planning/reviews/unit-test-adversarial/README.md` |
+| 003 | 01-03 | 11734 | `.planning/reviews/unit-test-adversarial/_ADVERSARIAL-BRIEF.md` |
+| 004 | 01-03 | 6383 | `.planning/reviews/unit-test-adversarial/_AREAS.md` |
+| 005 | 01-03 | 40968 | `.planning/reviews/unit-test-adversarial/_AUDIT.md` |
+| 006 | 01-04 | 6418 | `.planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md` |
+| 007 | 01-04 | 9541 | `.planning/reviews/unit-test-adversarial/_FIRST-PASS-BRIEF.md` |
+| 008 | 01-04 | 58360 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md` |
+| 009 | 01-05 | 39560 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md` |
+| 010 | 01-05 | 27339 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md` |
+| 011 | 01-05 | 50926 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-hooks-gates.md` |
+| 012 | 01-06 | 41590 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md` |
+| 013 | 01-06 | 48827 | `.planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md` |
+| 014 | 01-07 | 39164 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md` |
+| 015 | 01-07 | 40415 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md` |
+| 016 | 01-08 | 42419 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-adapters-state.md` |
+| 017 | 01-08 | 34576 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-async-rewake.md` |
+| 018 | 01-08 | 37885 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md` |
+| 019 | 01-09 | 38945 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md` |
+| 020 | 01-09 | 40041 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md` |
+| 021 | 01-09 | 35039 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-payloads.md` |
+| 022 | 01-10 | 41925 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md` |
+| 023 | 01-10 | 43173 | `.planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md` |
+| 024 | 01-10 | 34107 | `.planning/reviews/unit-test-adversarial/adversarial/domain-components-hooks.md` |
+| 025 | 01-11 | 39559 | `.planning/reviews/unit-test-adversarial/adversarial/domain-components.md` |
+| 026 | 01-11 | 44742 | `.planning/reviews/unit-test-adversarial/adversarial/domain-core.md` |
+| 027 | 01-12 | 45761 | `.planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md` |
+| 028 | 01-12 | 39617 | `.planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md` |
+| 029 | 01-13 | 36983 | `.planning/reviews/unit-test-adversarial/adversarial/edge-completions.md` |
+| 030 | 01-13 | 36909 | `.planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md` |
+| 031 | 01-13 | 44826 | `.planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md` |
+| 032 | 01-14 | 36200 | `.planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md` |
+| 033 | 01-14 | 36187 | `.planning/reviews/unit-test-adversarial/adversarial/edge-root.md` |
+| 034 | 01-15 | 48454 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md` |
+| 035 | 01-15 | 39887 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md` |
+| 036 | 01-15 | 22541 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md` |
+| 037 | 01-16 | 41562 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-rest.md` |
+| 038 | 01-16 | 48234 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-enable-fetch.md` |
+| 039 | 01-17 | 36148 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md` |
+| 040 | 01-17 | 22333 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md` |
+| 041 | 01-17 | 41042 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-c.md` |
+| 042 | 01-18 | 44373 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md` |
+| 043 | 01-18 | 44616 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md` |
+| 044 | 01-19 | 48683 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md` |
+| 045 | 01-19 | 38450 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-list-uninstall-a.md` |
+| 046 | 01-20 | 36058 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-list-uninstall-b.md` |
+| 047 | 01-20 | 39100 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-messaging.md` |
+| 048 | 01-21 | 54182 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-reinstall-a.md` |
+| 049 | 01-21 | 41096 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-reinstall-b.md` |
+| 050 | 01-22 | 50912 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md` |
+| 051 | 01-22 | 44172 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md` |
+| 052 | 01-23 | 43409 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md` |
+| 053 | 01-23 | 20836 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md` |
+| 054 | 01-23 | 40532 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md` |
+| 055 | 01-24 | 41123 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md` |
+| 056 | 01-24 | 43877 | `.planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md` |
+| 057 | 01-25 | 45744 | `.planning/reviews/unit-test-adversarial/adversarial/persistence.md` |
+| 058 | 01-25 | 49836 | `.planning/reviews/unit-test-adversarial/adversarial/platform.md` |
+| 059 | 01-26 | 29159 | `.planning/reviews/unit-test-adversarial/adversarial/root-index.md` |
+| 060 | 01-26 | 30420 | `.planning/reviews/unit-test-adversarial/adversarial/shared-concerns.md` |
+| 061 | 01-26 | 50123 | `.planning/reviews/unit-test-adversarial/adversarial/shared-core.md` |
+| 062 | 01-27 | 34166 | `.planning/reviews/unit-test-adversarial/adversarial/shared-notify-a.md` |
+| 063 | 01-27 | 41156 | `.planning/reviews/unit-test-adversarial/adversarial/shared-notify-b.md` |
+| 064 | 01-28 | 45568 | `.planning/reviews/unit-test-adversarial/adversarial/shared-notify-c.md` |
+| 065 | 01-28 | 41384 | `.planning/reviews/unit-test-adversarial/adversarial/transaction.md` |
+| 066 | 01-28 | 17493 | `.planning/reviews/unit-test-adversarial/architecture-boundary-gates.md` |
+| 067 | 01-29 | 16286 | `.planning/reviews/unit-test-adversarial/architecture-catalog-uat.md` |
+| 068 | 01-29 | 20258 | `.planning/reviews/unit-test-adversarial/architecture-hooks-gates.md` |
+| 069 | 01-29 | 14748 | `.planning/reviews/unit-test-adversarial/architecture-notify-gates.md` |
+| 070 | 01-30 | 18047 | `.planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md` |
+| 071 | 01-30 | 11466 | `.planning/reviews/unit-test-adversarial/bridges-agents.md` |
+| 072 | 01-30 | 15052 | `.planning/reviews/unit-test-adversarial/bridges-commands.md` |
+| 073 | 01-31 | 17814 | `.planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md` |
+| 074 | 01-31 | 15903 | `.planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md` |
+| 075 | 01-31 | 19179 | `.planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md` |
+| 076 | 01-32 | 11121 | `.planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md` |
+| 077 | 01-32 | 16399 | `.planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md` |
+| 078 | 01-32 | 10724 | `.planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md` |
+| 079 | 01-33 | 13221 | `.planning/reviews/unit-test-adversarial/bridges-mcp.md` |
+| 080 | 01-33 | 9673 | `.planning/reviews/unit-test-adversarial/bridges-skills.md` |
+| 081 | 01-33 | 16705 | `.planning/reviews/unit-test-adversarial/domain-components-hooks.md` |
+| 082 | 01-34 | 13793 | `.planning/reviews/unit-test-adversarial/domain-components.md` |
+| 083 | 01-34 | 11530 | `.planning/reviews/unit-test-adversarial/domain-core.md` |
+| 084 | 01-34 | 14924 | `.planning/reviews/unit-test-adversarial/domain-resolver.md` |
+| 085 | 01-35 | 10495 | `.planning/reviews/unit-test-adversarial/edge-completions.md` |
+| 086 | 01-35 | 14319 | `.planning/reviews/unit-test-adversarial/edge-handlers-marketplace.md` |
+| 087 | 01-35 | 12392 | `.planning/reviews/unit-test-adversarial/edge-handlers-plugin.md` |
+| 088 | 01-36 | 14209 | `.planning/reviews/unit-test-adversarial/edge-handlers-root.md` |
+| 089 | 01-36 | 8717 | `.planning/reviews/unit-test-adversarial/edge-root.md` |
+| 090 | 01-36 | 12888 | `.planning/reviews/unit-test-adversarial/orchestrators-import.md` |
+| 091 | 01-37 | 16765 | `.planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md` |
+| 092 | 01-37 | 19444 | `.planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md` |
+| 093 | 01-37 | 15385 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md` |
+| 094 | 01-38 | 18906 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md` |
+| 095 | 01-38 | 19536 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md` |
+| 096 | 01-38 | 21755 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md` |
+| 097 | 01-39 | 9216 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md` |
+| 098 | 01-39 | 18533 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md` |
+| 099 | 01-39 | 15257 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md` |
+| 100 | 01-40 | 14695 | `.planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md` |
+| 101 | 01-40 | 13290 | `.planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md` |
+| 102 | 01-40 | 15267 | `.planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md` |
+| 103 | 01-41 | 8259 | `.planning/reviews/unit-test-adversarial/orchestrators-root.md` |
+| 104 | 01-41 | 14014 | `.planning/reviews/unit-test-adversarial/persistence.md` |
+| 105 | 01-41 | 16799 | `.planning/reviews/unit-test-adversarial/platform.md` |
+| 106 | 01-42 | 6525 | `.planning/reviews/unit-test-adversarial/root-index.md` |
+| 107 | 01-42 | 4303 | `.planning/reviews/unit-test-adversarial/shared-concerns.md` |
+| 108 | 01-42 | 10538 | `.planning/reviews/unit-test-adversarial/shared-core.md` |
+| 109 | 01-43 | 19419 | `.planning/reviews/unit-test-adversarial/shared-notify.md` |
+| 110 | 01-43 | 12227 | `.planning/reviews/unit-test-adversarial/transaction.md` |
 
 Category proof: ordinals 001-007 are the seven briefs/synthesis/control documents; ordinals 008-065 are 58 adversarial reports; ordinals 066-110 are 45 first-pass reports.
-
