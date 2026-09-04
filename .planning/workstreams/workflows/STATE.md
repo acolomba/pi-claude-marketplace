@@ -2,11 +2,15 @@
 gsd_state_version: 1.0
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-status: planning
-last_updated: "2026-09-04T19:20:00.000Z"
-last_activity: 2026-09-04
 current_phase: 109
 current_phase_name: kind-inversion
+current_plan: Not started
+status: planning
+stopped_at: Phase 109 context gathered
+last_updated: "2026-09-04T20:20:53.401Z"
+last_activity: 2026-09-04
+last_activity_desc: Phase 109 context gathered — kind-inversion decisions captured
+state_head: dfd117d3c650d4853fece11699a24447d465ebd3
 progress:
   total_phases: 9
   completed_phases: 0
@@ -151,24 +155,27 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-08-16
+**Last session:** 2026-09-04T20:20:53.354Z
 
-**Stopped At:** Roadmap written for milestone workflow-hardening — 3 phases (106-108), 12/12 requirements mapped.
-**Resume File:** None
-**Next Action:** `/gsd-plan-phase 106`.
+**Stopped At:** Phase 109 context gathered
+**Resume File:** .planning/workstreams/workflows/phases/109-kind-inversion/109-CONTEXT.md
+**Next Action:** `/gsd-plan-phase 109`.
 
-**Where the work lives:** the worktree `.worktrees/workflows-spike` on branch
-`features/workflows-spike`, well ahead of `main`. The primary checkout is on
-`main` and carries none of this workstream's planning files. GSD tooling is
-gitignored and therefore absent from a fresh worktree — this worktree has
-`gsd-core`, `agents`, `hooks`, `scripts`, `commands/gsd-*.md` and the install
-state copied in from the primary checkout, with `workstream set workflows`
-applied. All of it is gitignore-matched, so `git status` stays clean. Run
-gsd-tools from the worktree, never from `main`.
+**Where the work lives:** the worktree
+`/home/acolomba/pi-claude-marketplace-workflows` on branch `features/workflow`.
+The primary checkout (`/home/acolomba/pi-claude-marketplace`) carries none of
+this workstream's planning files. The older `.worktrees/workflows-spike`
+worktree on `features/workflows-spike` still exists and is reference only — the
+replay reads it, never merges it. GSD tooling is gitignored and therefore absent
+from a fresh worktree; this one has `gsd-core`, `agents`, `hooks`, `scripts`,
+`commands/gsd-*.md` and the install state copied in from the primary checkout,
+with `workstream set workflows` applied. All of it is gitignore-matched, so
+`git status` stays clean. Run gsd-tools from this worktree, never from `main`.
 
-**Executors run SEQUENTIALLY here, never in agent worktrees.** `node_modules` is
-a symlink into the primary checkout, so an isolated agent worktree has no
-dependencies and could not run `npm run check` at all. Force the dispatch
+**Executors run SEQUENTIALLY here, never in agent worktrees.** This worktree's
+own `node_modules` is a real directory, but a freshly-created agent worktree has
+none, so it could not run `npm run check` at all. `workflow.use_worktrees` is
+`false` in `.planning/config.json` for the same reason. Force the dispatch
 sentinel (`query dispatch-isolation --raw --phase N --force-isolation none`)
 before every executor, reviewer and fixer dispatch — a bare call re-resolves and
 re-persists `harness-worktree` as a side effect.
@@ -192,9 +199,13 @@ re-persists `harness-worktree` as a side effect.
   Phase 116 edits that file, so the token is now in reach — clean it there
   rather than leaving it.
 
-- **`node_modules` here is a symlink** into the primary checkout, ignored only
-  via `.git/info/exclude` (local, uncommitted). It must be removed before
-  `gsd-cleanup` runs, which otherwise fails its worktree_dirty check.
+- **The `node_modules` cleanup hazard does not apply on this worktree.** It did
+  on `.worktrees/workflows-spike`, where `node_modules` was a symlink ignored
+  only via a local `.git/info/exclude` and had to be removed before
+  `gsd-cleanup` would pass its worktree_dirty check. Here it is a real
+  directory ignored by the committed `.gitignore:67`, and this worktree's
+  exclude file is empty — verified 2026-09-04. Re-check before running
+  `gsd-cleanup` from any other worktree.
 
 - **Four residual risks accepted in the `workflows` milestone**, recorded so they
   are not rediscovered as new defects: the commit double-fault branch (restore
