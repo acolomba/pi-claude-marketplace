@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.19
 status: Awaiting next milestone
-stopped_at: Phase 117 verified passed; milestone v1.19 ready for audit
+stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
 last_updated: "2026-09-04T03:59:38.393Z"
 last_activity: 2026-09-03
 last_activity_desc: Milestone v1.19 completed and archived
@@ -21,12 +21,13 @@ current_phase_name: Extension Entry and Final Gate
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-01 after Phase 113)
+See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 117 — Extension Entry and Final Gate
+**Current focus:** Planning the next milestone. v1.19 Unit Test Refactor shipped
+2026-09-04 and is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 

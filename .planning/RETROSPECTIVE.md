@@ -2,6 +2,53 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.19 -- Unit Test Refactor
+
+**Shipped:** 2026-09-04 (no npm release -- internal quality milestone)
+**Phases:** 10 (108-117) | **Plans:** 220 | **Tasks:** 317 | **Requirements:** 48/48 | **Tests:** 5,144 unit across 295 suites + 31 integration, 0 failures on BOTH Node v22.22.2 and v26.8.1 | **Audit:** tech_debt (no blockers; 10/10 phases, 5/5 integration seams, all ten phases `nyquist_compliant: true`)
+
+### What Was Built
+- One mirrored owner test per production module, 204 pairs, each reaching complete direct coverage **measured in isolation** rather than as a share of an aggregate run. The corresponding-test gate went from a HEAD baseline of 59 passing / 83 coverage-short / 60 missing / 2 failing to **zero violations**.
+- `tests/helpers/` dissolved entirely across three phases -- `source-scan.ts` to `tests/architecture/`, `notification-boundary.ts` to `tests/edge/`, `marketplace-seed.ts` to `tests/edge/handlers/`, `ipc-child.ts` to `tests/integration/`. No shared-double directory remains to accrete.
+- The extension entry point got its owner (`tests/index.test.ts`, branches 15/15, functions 3/3, lines 161/161), retiring two proxy suites that had stood in for it.
+- Seven modules accepted as one branch short under D-116-01a -- five compiler-forced, two structurally unreachable -- each pinned by identity in its own pair and none papered over by a pragma or a ledger-keyed gate verdict.
+- The gates were made to actually run: five gate scripts had been declared in `package.json` and invoked by nothing. Three now run inside `npm run check`; the two nine-minute sweeps got a documented cadence rather than a CI job that would be red nightly.
+
+### What Worked
+- **Building the control before the change it guards.** Plan 117-01 landed the glob-completeness test while it was still green, specifically so that 117-07's glob amendment could not be unguarded. When the amendment landed, the control was the thing that had to stay green -- and it did, on the first try.
+- **Plants over green runs.** Nearly every plan proved its claim by planting the fault, observing RED, reverting, observing GREEN, and recording the verbatim output. This repeatedly caught assertions that could not fail: 117-05 found its planned plant left the folded case green and had to sharpen it; 117-06 found its plan's literal plant did not discriminate and replaced it with one that did; the code review found two entry-point cases that passed with their fault injection disabled.
+- **Honest reporting of un-provable claims.** Several plans reported that a case could not fail independently, or that a control's green run proved only no-regression because the branch it guards is empty on this tree. That is more useful than a uniformly green report, and it is what let the review target real gaps.
+- **The executor that refused an instruction.** The second review-fix pass was told to fix five findings; it fixed four and refused the fifth because it contradicted the operator's own D-117-20. It priced the reversal with real measurements and filed it rather than quietly overriding a decision.
+- **Re-deriving every stated count.** A running theme: a "249-path" glob measured 248; "seventeen suites" measured nineteen; "two files ESLint touches" measured six, then thirteen; "two other scripts read this gate" measured zero; "16 sites across 7 suites" measured 12 across 10. Every one was caught because the plan told the executor to measure rather than trust.
+
+### What Was Inefficient
+- **The gates were decorative for the whole milestone and nobody noticed until the code review.** Nine phases built and strengthened gate scripts that no automated run invoked. The milestone's own central invariant was unenforced the entire time it was being established. CONVENTIONS.md already recorded this exact failure for `import-x/no-cycle`; the lesson was written down and still not applied.
+- **VALIDATION.md left unreconciled again -- fifth consecutive milestone.** Three phases sat at the plan-phase `draft` seed and one had no file at all. As in v1.15/v1.16/v1.17/v1.18, the coverage was real and `/gsd-validate-phase` simply never ran. This time it was closed at milestone close rather than carried, but only because the audit surfaced it.
+- **A decision record and a measurement disagreed for two phases before anyone checked.** D-117-20 specified COV-05 as "197 + 7". The true shape was 190 + 7 + 7, and it was unreachable as written because the seven accepted shortfalls were never accounted for. The plan inherited the wording verbatim into its `must_haves`, so the criterion was unsatisfiable from the moment it was planned.
+- **The interpreter moved under the tree mid-phase.** The PATH Node went v26.7.0 -> v26.8.1 during plan 117-11, and 26.7.0 is gone from the Cellar. Eleven whole-value assertions broke on an errno field the runtime owns. The baseline every earlier phase measured against no longer exists on this machine.
+- **The pre-close audit surfaced 18 items of which 4 were genuinely open v1.19 work.** Nine belonged to milestones closed months ago, three were resolved items the scanner reads as bullets, and one could not be acknowledged at all because its file is a markdown table the writer cannot match. Signal was outnumbered better than 4:1.
+
+### Patterns Established
+- **A gate wants a test that plants the violation, not one that reads the config.** Already in CONVENTIONS.md; this milestone applied it to the gates themselves, giving the correspondence gate's new `proxy-owned` verdict and the two previously-uncontrolled coverage verdicts their own planting controls.
+- **Land the control first, green, then make the change it guards.** 117-01 before 117-07 is the worked example.
+- **A report is not a gate.** When the all-pair artifact needed to be reproducible, the answer was a report-only command that records verdicts and blocks nothing -- explicitly distinguished from the ledger-keyed gate verdict D-117-20 bans. The gate's own diff for that change was three `export` keywords.
+- **Whole-value assertions must not capture runtime-owned values.** An errno `path` field, a JSON parser's sentence, a V8 message -- each is a value the runtime owns and can change between patch releases. Assert the contractual fields whole; read the runtime's own wording back rather than hardcoding it.
+- **An accepted shortfall is pinned by identity, never by a pragma.** Seven modules stay one branch short with a ledger entry each, and the gate keeps refusing them. The decision record moved to meet the measurement rather than the gate being taught to lie.
+
+### Key Lessons
+1. **Building a gate is not the same as wiring it.** A gate nothing invokes is decoration, and this milestone shipped nine phases of them before the check surfaced it. Add "what runs this, and in which CI job" to the definition of done for any gate.
+2. **A criterion inherited verbatim from a decision record can be unsatisfiable.** D-117-20's "197 + 7" was copied into a plan's `must_haves` and was impossible against the tree. Re-derive a decision's numbers against the code before planning to them.
+3. **`/gsd-validate-phase` still is not part of phase close.** Five consecutive milestones. It is not an intention problem any more; it needs to be a step in the phase's own gate chain or it will happen a sixth time.
+4. **Pin the interpreter, or expect the baseline to move.** Nothing in the repo pinned a local Node; CI pins 24, which is installed nowhere on this machine. Measuring on two interpreters is what turned an eleven-test mystery into a one-line diagnosis.
+5. **Instructing an executor to measure rather than trust is what caught every stale number.** Seven separate stated counts were wrong. None of them mattered, and all of them were caught -- because the plans said re-derive, not confirm.
+
+### Cost Observations
+- Model mix: opus executors, sonnet verifier/auditors; `use_worktrees: false`, so every plan ran sequentially on the main tree
+- Phases: 10 over 8 days (2026-08-28 -> 2026-09-04), 220 plans
+- Notable: two code-review iterations on the final phase alone (2 critical + 8 warning, then 5 more), and the review found the milestone's single largest gap -- that its gates ran nowhere -- in a phase whose own name was "Final Gate"
+
+---
+
 ## Milestone: v1.18 -- Manifest-Independent Installed Plugin Info
 
 **Shipped:** 2026-08-12 (npm 0.14.0, PR #120)
@@ -605,6 +652,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.3 | 5 | Drift contract via YAML frontmatter; byte-equality catalog UAT; atomic user-contract supersession commits |
 | v1.12 | 6 | Declarative desired-state config + load-time reconciliation; architecture-test ratchets (write-seams, cast allow-list, planner purity) |
 | v1.18 | 6 | Characterize-then-change phasing; predicate collapse behind an inverted drift gate ("no twin survives"); milestone extended mid-flight rather than opening a successor |
+| v1.19 | 10 | One mirrored owner test per production module, coverage measured in isolation; land-the-control-first sequencing; plants over green runs as the standard of proof |
 
 ### Cumulative Quality
 
@@ -616,6 +664,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.3 | 1249/1249 | Byte-equality catalog UAT + 34-rule MSG-* drift-guard plugin; v1.3 user-contract structurally enforced |
 | v1.12 | 1804 + 10 int | Config/state split architecture-tested; two-process reconcile race coverage; 5 review criticals fixed pre-ship |
 | v1.18 | 3386 + 18 int | COMPAT-01 no-expansion gate (closed sets, glyph roster, record key set, schema union, network clause) in one test; whole-tree predicate drift gate covering four spellings |
+| v1.19 | 5144 + 31 int | 204/204 mirrored pairs at zero correspondence violations; per-pair direct coverage measured in isolation; gate scripts finally wired into `npm run check`; green on two Node majors |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -623,3 +672,5 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 2. **Atomic transaction boundaries are non-negotiable.** v1.1's `withLockedStateTransaction` and v1.3's `c4d87d4` supersession commit both ship as single atomic units. Any cross-file user-contract change that can't fit in one commit is a design smell.
 3. **Discriminated unions catch design errors at the type level.** NFR-7's `installable: true | false` (v1.0), `failureClass: "manual-recovery" | "rollback-partial" | ...` (v1.3), `PluginCascadeRow.declaresAgents/Mcp` (v1.3), and `ManifestLookup` (v1.18) all use the same pattern: a closed-set discriminant where consumers can't read forbidden fields without narrowing — and in v1.18's case, where a boolean would have collapsed "no entry" and "no answer" into one wrong claim.
 4. **A duplicated predicate drifts; the gate must forbid the copy, not audit it.** v1.18 Phase 97 collapsed four copies of a disabled-state check and replaced a "does the twin have the right body" test with "no twin survives" — the only form that blocks a fifth. The generalizable half: when a field's meaning shifts, every predicate reading it needs re-auditing, because a guard whose conditions have become mutually exclusive excludes exactly one reachable shape and reports no error.
+5. **A gate that nothing invokes is indistinguishable from no gate.** v1.19 shipped nine phases of gate scripts that no automated run called, repeating the `import-x/no-cycle` failure CONVENTIONS.md already documented. The lesson being written down did not prevent it; wiring must be part of the gate's own definition of done.
+6. **Assert the contract, not the runtime's wording.** v1.19 lost eleven tests to a Node patch release adding a `path` field to an errno. Whole-value assertions are right; capturing values the runtime owns inside them is not.
