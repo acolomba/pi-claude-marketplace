@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-04T21:12:42.474Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-04T21:17:38.680Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 278231e2afff93248d7cb3506c364b07c596cd96
+state_head: d71be08a641101c3d0146c4d92e1110a10ea646b
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 4 of 69
+Plan: 5 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -187,6 +187,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P01 | 28 min | 3 tasks | 7 files |
 | Phase 01 P02 | 10 min | 2 tasks | 2 files |
 | Phase 01 P03 | 18min | 3 tasks | 2 files |
+| Phase 01 P04 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -402,6 +403,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: [Phase 01-02]: Treat the missing historical coverage report as an explicit evidence gap rather than current proof.
 - [Phase 01]: Administrative review instructions are explicit zero-claim controls, not current production findings.
 - [Phase 01]: The MCP home escape and retained coverage report are stale, while seven focused coverage shortfalls remain live.
+- [Phase 01]: Treat the first-pass reviewer instruction brief as an explicit zero-claim control document rather than converting operational directions into product findings.
+- [Phase 01]: Preserve the clean-list repair's historical method and counts while confirming its current result from the retained reports.
 
 ### Pending Todos
 
@@ -454,7 +457,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-03-PLAN.md
+**Stopped at:** Completed 01-04-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -463,7 +466,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T21:12:42.386Z
+Last session: 2026-09-04T21:17:38.594Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
