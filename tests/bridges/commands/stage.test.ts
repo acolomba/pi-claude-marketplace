@@ -51,6 +51,7 @@ function resolvedFor(
       skills: [],
       commands: [...commandPaths],
       agents: [],
+      workflows: [],
     },
     mcpServers: {},
     defaultEnabled: true,

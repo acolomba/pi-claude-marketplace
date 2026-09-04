@@ -130,7 +130,7 @@ function makeMaterializablePlugin(
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [...agents] },
+    componentPaths: { skills: [], commands: [], agents: [...agents], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   };

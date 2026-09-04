@@ -29,6 +29,7 @@ function resolvedPlugin(
       skills: [],
       commands: [...commands],
       agents: [],
+      workflows: [],
     },
     mcpServers: {},
     defaultEnabled: true,

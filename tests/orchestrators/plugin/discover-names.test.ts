@@ -21,6 +21,7 @@ function resolvedPlugin(
     readonly agents: readonly string[];
     readonly commands: readonly string[];
     readonly skills: readonly string[];
+    readonly workflows: readonly string[];
   },
 ): MaterializablePlugin {
   return {
@@ -28,6 +29,7 @@ function resolvedPlugin(
       agents: [...componentPaths.agents],
       commands: [...componentPaths.commands],
       skills: [...componentPaths.skills],
+      workflows: [...componentPaths.workflows],
     },
     defaultEnabled: true,
     installable: true,
@@ -75,6 +77,7 @@ test("composes generated names from every bridge in each bridge's declared order
     agents: ["agents"],
     commands: ["commands"],
     skills: ["skills"],
+    workflows: [],
   });
 
   // act
@@ -96,6 +99,7 @@ test("returns empty names and a null source when no components are declared", as
     agents: [],
     commands: [],
     skills: [],
+    workflows: [],
   });
 
   // act
@@ -119,6 +123,7 @@ test("returns an empty agent list with the selected relative source directory", 
     agents: ["agents"],
     commands: [],
     skills: [],
+    workflows: [],
   });
 
   // act
@@ -149,6 +154,7 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
     agents: ["agents"],
     commands: ["commands"],
     skills: ["skills"],
+    workflows: [],
   });
 
   // act
@@ -176,6 +182,7 @@ test("propagates a hard agent failure after successful skill and command discove
     agents: ["agents"],
     commands: ["commands"],
     skills: ["skills"],
+    workflows: [],
   });
 
   // act & assert
