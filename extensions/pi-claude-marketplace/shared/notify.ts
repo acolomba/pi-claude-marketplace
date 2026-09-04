@@ -80,7 +80,7 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 44-entry membership AND order are catalog-stable and MUST NOT change (new
+ * 43-entry membership AND order are catalog-stable and MUST NOT change (new
  * tokens append at the tail; existing entries never reorder). The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
@@ -231,10 +231,6 @@ export const REASONS = [
   // structural siblings bake theirs: the closed set is a catalog of literals.
   "marketplace in user scope",
   "marketplace in project scope",
-  // WDET-04 / D-106-04: a plugin declares workflows or has the conventional
-  // `<pluginRoot>/workflows/` directory. Workflows remain unsupported. This
-  // final reason identifies the dropped kind on each partial surface.
-  "workflows",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -926,8 +922,8 @@ export interface PluginUnavailableMessage extends MessageBase {
 /**
  * `(partially-available)` -- row for a not-installed, partially-available plugin
  * (USTAT-01 / D-64-01 / XSURF-01). The manifest is structurally sound but
- * carries unsupported kinds (LSP, partial hooks, other components, or
- * workflows). Thus, `--partial` can install its supported components. Mirrors
+ * carries unsupported kinds (LSP, partial hooks, or other components).
+ * Thus, `--partial` can install its supported components. Mirrors
  * `PluginUnavailableMessage` (carries REQUIRED `reasons`; NO `scope` (SNM-11);
  * no `dependencies`; PL-4 optional `description`). The list / info inventory
  * rows OMIT `partialHint` and render byte-frozen with no `--partial` trailer; the
@@ -1774,8 +1770,8 @@ export const ICON_PARTIALLY_INSTALLED = "◉";
 /**
  * USTAT-02 / D-64-01: dedicated glyph for a not-installed, partially-available
  * `partially-available` row (`⊖` U+2296, circled minus) -- a plugin whose manifest is
- * sound but carries unsupported kinds (LSP, partial hooks, other components,
- * or workflows). Thus, `--partial` can install its supported components. Stays in the circled-
+ * sound but carries unsupported kinds (LSP, partial hooks, or other
+ * components). Thus, `--partial` can install its supported components. Stays in the circled-
  * operator family with `ICON_UNINSTALLABLE` (`⊘`) but reads "diminished /
  * components dropped" rather than "blocked". DISTINCT from `⊘`
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-

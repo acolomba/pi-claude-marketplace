@@ -4,14 +4,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 44-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 43-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 44-entry set.
+ * 43-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -23,7 +23,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * length, so the two sentences above cannot drift from the tuple again without
  * a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
  * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
- * D-106-04 appended the dedicated `workflows` reason (43 to 44).
+ * D-106-04 appended the dedicated `workflows` reason (43 to 44). WINV-03 /
+ * D-109-01 reverses that term (44 to 43).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -93,8 +94,8 @@ export function companionSeverity(
 
 /**
  * D-09: unsupported-components / soft-dep reasons -- the topic group the user
- * named explicitly (hooks / LSP / workflows / companion-extension soft deps /
- * unsupported source / no-longer-installable).
+ * named explicitly (hooks / LSP / companion-extension soft deps / unsupported
+ * source / no-longer-installable).
  */
 type UnsupportedReason =
   | "unsupported hooks"
@@ -104,7 +105,6 @@ type UnsupportedReason =
   | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
   | "unsupported component"
-  | "workflows"
   | "no longer installable";
 
 /**
