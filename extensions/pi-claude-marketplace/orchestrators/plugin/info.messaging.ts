@@ -29,11 +29,10 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *     standalone `PluginInfoRow` shape cannot express it: its status set admits
  *     no `skipped`.
  *
- *     D-100-08 / ENBL-17: a recorded-but-disabled scope no longer emits a
- *     cascade row here. It goes through the same block builder every other
- *     installed record does and renders as a standalone `(disabled)` info row,
- *     so the second render arm that used to recompose that row is gone rather
- *     than left as a divergent copy of a surface nothing reaches.
+ *     D-100-08 / ENBL-17: a recorded-but-disabled scope emits no cascade row
+ *     here. It goes through the same block builder every other installed
+ *     record does and renders as a standalone `(disabled)` info row, keeping
+ *     one render path instead of a second arm that would duplicate it.
  *
  * The shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
  * and is CALLED here, never duplicated.

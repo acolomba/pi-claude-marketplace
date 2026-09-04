@@ -72,16 +72,16 @@ import type { Scope } from "../../shared/types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /
- * applied-cascade projections actually assign. The pending list no longer
- * assigns any marketplace-level status (add is immediate -> dropped; remove is
+ * applied-cascade projections actually assign. The pending list never assigns
+ * any marketplace-level status (add is immediate -> dropped; remove is
  * surfaced as per-plugin `will uninstall` child rows under a bare header --
  * WILL-01 / WILL-03 / D-65.1-02 / D-65.1-03), so only the apply-cascade
  * transition tokens (`"added"` / `"removed"` / `"failed"`) remain. The
  * `"updated"` / `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"`
  * members of `MarketplaceStatus` belong to other surfaces (autoupdate flip,
- * marketplace update); the reconcile projection never sets them, so the
- * previous defensive runtime throw at `blockToMarketplaceMessage` is replaced
- * by this type narrowing.
+ * marketplace update); the reconcile projection never sets them, so this type
+ * narrowing enforces the closed set at compile time rather than a runtime
+ * throw at `blockToMarketplaceMessage`.
  */
 type ReconcileBlockStatus = Extract<MarketplaceStatus, "added" | "removed" | "failed">;
 

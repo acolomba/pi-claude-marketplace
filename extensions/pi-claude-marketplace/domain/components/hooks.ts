@@ -184,7 +184,7 @@ function ifPredicateMapKey(
  * MATCH-03 extension: the success arm carries the compiled `ifPredicates`
  * side-Map. D-71-03 extension: the success arm's `value` is now the FILTERED
  * supported subset and `dropped` enumerates the skipped events / groups /
- * handlers; degradable supportability failures no longer fail the parse. The
+ * handlers; degradable supportability failures do not fail the parse. The
  * failure arm is reserved for structural defects: invalid JSON and schema
  * validation failures.
  * Generic in `P` so the bridge layer's concrete `IfPredicate` discriminated

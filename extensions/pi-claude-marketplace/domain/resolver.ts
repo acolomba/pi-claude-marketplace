@@ -1561,8 +1561,8 @@ async function resolveWithMode(
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
-  // `hooks` is no longer in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission
-  // is owned by step 8b. D-64-07: this signal does NOT feed `dirty` (it is
+  // `hooks` is not in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission is
+  // owned by step 8b. D-64-07: this signal does NOT feed `dirty` (it is
   // not a structural defect); it is read separately via `partial.unsupported`
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);

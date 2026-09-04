@@ -46,10 +46,10 @@
  *   through the shared helper, never through a `grep`-style subprocess. A
  *   subprocess line tool that classifies a file as binary reports nothing and
  *   exits cleanly, which would green the clause on a file it never inspected.
- *   The historical justification for this rule no longer applies on its own
- *   terms: the hook-dedup separator in the plugin info orchestrator is written
+ *   This guard is general rather than tied to any single file: the plugin
+ *   info orchestrator's hook-dedup separator is written
  *   as a `\u0000` ESCAPE with an inline comment saying why, so that file is
- *   ordinary text today and a line tool would in fact read it. The RULE stands
+ *   ordinary text, and a line tool would read it fine. The RULE stands
  *   regardless -- it is about what a scanner can silently skip, not about one
  *   file -- and it is recorded here so the point is not re-litigated.
  *
@@ -371,7 +371,7 @@ test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph
   // arrange
   // WR-07: the clause above asserts an ABSENCE, so a pattern that matched
   // nothing would pass it just as quietly as a correct one. Pin what the pattern
-  // is required to see, including the two spellings that used to slip past.
+  // is required to see, including the two spellings a simpler pattern would miss.
   const spellings = [
     'export const ICON_EIGHTH = "◎";',
     'export const ICON_EIGHTH: string = "◎";',

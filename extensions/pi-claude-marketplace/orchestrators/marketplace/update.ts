@@ -722,8 +722,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
     // pre-guard already emitted the standalone `{marketplace not added}` notification, so
     // return silently -- NO second contradictory notification, and crucially NO
-    // lying `{network unreachable}` (the raw MarketplaceNotFoundError no longer
-    // escapes; mirrors remove.ts).
+    // lying `{network unreachable}` (the raw MarketplaceNotFoundError does not
+    // escape; mirrors remove.ts).
     return;
   }
 

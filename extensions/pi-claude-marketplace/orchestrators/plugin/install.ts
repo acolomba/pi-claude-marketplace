@@ -778,8 +778,7 @@ async function preflightInstallResolve(
 /**
  * CR-01: the guard-FREE install ledger body -- the
  * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
- * sequence that previously lived inline in `installPlugin`'s
- * `withStateGuard` closure.
+ * sequence.
  *
  * Locking contract: the CALLER owns the per-scope state lock and the
  * load/save lifecycle. This function performs NO `withStateGuard` /
@@ -1030,8 +1029,8 @@ async function runInstallLedgerBody(
       // corruptions, per-agent frontmatter conversion notes, and D-07
       // duplicate-name skips. Only the last is a discovery truncation, and
       // the three are not separable here, so the whole array rides the
-      // hygiene channel (D-19-01) rather than the D-141-03 one. Folding it
-      // at all is the fix: it used to be dropped outright.
+      // hygiene channel (D-19-01) rather than the D-141-03 one, keeping
+      // every kind surfaced instead of any getting silently dropped.
       c.bridgeWarnings.push(...prep.result.warnings);
       const leak = await commitPreparedAgents(prep);
       if (leak !== undefined) {
@@ -2333,8 +2332,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // where a default-scope (user) install misses a project-only container. One
     // read-only probe of that scope decides which structural token the brace
     // carries. The probe never throws and never blocks the row (see
-    // `marketplaceInOtherScope`); a `false` answer renders the plain
-    // `{marketplace not added}` row byte-identically to before.
+    // `marketplaceInOtherScope`); a `false` answer adds no field, so the row
+    // renders the plain `{marketplace not added}` brace.
     notify(ctx, pi, {
       kind: "marketplace-not-added",
       name: marketplace,

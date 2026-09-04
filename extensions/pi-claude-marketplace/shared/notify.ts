@@ -39,11 +39,10 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * Closed-set source of truth: the `REASONS`, `STATUS_TOKENS`,
  * `PLUGIN_STATUSES` and `MARKETPLACE_STATUSES` const tuples and their derived
  * literal-union types `Reason`, `StatusToken`, `PluginStatus`,
- * `MarketplaceStatus` live in THIS file. `MARKERS` / `PATTERN_CLASSES` tuples
- * used to sit alongside them, but no call site ever indexed either one -- the
- * `<autoupdate>` / `<no autoupdate>` chevron tokens are written as literals at
- * their render sites in `renderMpHeader`, and the pattern-class labels only
- * ever named message shapes in prose -- so both are gone. The
+ * `MarketplaceStatus` live in THIS file. No `MARKERS` / `PATTERN_CLASSES`
+ * tuples sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
+ * tokens are written as literals at their render sites in `renderMpHeader`,
+ * and the pattern-class labels only ever named message shapes in prose. The
  * `compareByNameThenScope` comparator also lives here as the single per-scope
  * row-order policy across every list-rendering surface.
  *
@@ -64,10 +63,9 @@ import type { Dependency } from "./concerns/soft-dep.ts";
 // ---------------------------------------------------------------------------
 
 /**
- * CMC-11 closed reasons set. This tuple is the SOLE closed-set authority
- * (style guide v2.0 retired the binding YAML frontmatter at
- * `docs/messaging-style-guide.md`; the guide's prose references these
- * tuples). The set covers the
+ * CMC-11 closed reasons set. This tuple is the SOLE closed-set authority --
+ * `docs/messaging-style-guide.md` carries no binding YAML frontmatter of its
+ * own; the guide's prose references these tuples. The set covers the
  * autoupdate-flip idempotent rows (`"already autoupdate"` /
  * `"already no autoupdate"`) and the failure-class closed Reasons the catalog
  * UAT requires across uninstall / marketplace-remove partial / reinstall /
@@ -302,8 +300,8 @@ export function redactAbsolutePaths(text: string): string {
 
 /**
  * CMC-08 closed status-token set. This tuple is the SOLE closed-set
- * authority (style guide v2.0 retired the binding YAML frontmatter at
- * `docs/messaging-style-guide.md`).
+ * authority -- `docs/messaging-style-guide.md` carries no binding YAML
+ * frontmatter of its own.
  * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
@@ -795,9 +793,9 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  * renders this same row.
  * RLD-05 / D-07: the reload-hint is driven by the caller-stamped `needsReload`
  * -- the fresh-disable transition stamps `true`, the list / info inventory row
- * stamps `false` -- so the row's reload behavior no longer depends on a cascade
- * kind. Structurally distinct from `(unavailable)`: the byte form differs
- * (`(disabled)` vs `(unavailable)`).
+ * stamps `false` -- so the row's reload behavior comes from the per-row stamp,
+ * not a cascade kind. Structurally distinct from `(unavailable)`: the byte
+ * form differs (`(disabled)` vs `(unavailable)`).
  *
  * NO `dependencies` / `cause` / `rollbackPartial` by construction.
  *
@@ -1354,7 +1352,7 @@ export type MarketplaceNotificationMessage =
  * payload at construction time.
  *
  * RLD-05 / D-07: the `/claude:plugin disable` command's realized-transition
- * cascade no longer needs a distinguishing kind. The fresh `(disabled)` row
+ * cascade does not need a distinguishing kind. The fresh `(disabled)` row
  * stamps `needsReload: true` directly, while the list / info inventory
  * `(disabled)` rows stamp `needsReload: false`; the RLD-02 OR-reduce reads
  * those per-row facts, so the disable reload-hint is driven by the stamp, not
@@ -1618,8 +1616,8 @@ export interface MarketplaceNotAddedMessage {
    * A BOOLEAN, deliberately: the caller decides WHETHER the container was found
    * elsewhere, this file owns the BYTES. A caller-supplied string would put
    * user-visible prose back in the hands of the construction site, which is
-   * exactly what `docs/messaging-style-guide.md` retired. `scope` supplies the
-   * target scope, so no further field is needed.
+   * exactly what `docs/messaging-style-guide.md` disallows. `scope` supplies
+   * the target scope, so no further field is needed.
    */
   readonly presentInOtherScope?: boolean;
 }
@@ -1749,8 +1747,8 @@ export const ICON_UNINSTALLABLE = "⊘";
  * already in the grammar (`●` for `(installed)` / `(will install)`,
  * `○` for `(available)` / `(will uninstall)`).
  *
- * D-80-01: uses `◍` (U+25CD, circle with vertical fill). The `◌` (U+25CC,
- * dotted circle) it previously carried was reassigned to `ICON_REMOTE`.
+ * D-80-01: uses `◍` (U+25CD, circle with vertical fill), distinct from `◌`
+ * (U+25CC, dotted circle), which `ICON_REMOTE` uses instead.
  */
 export const ICON_DISABLED = "◍";
 
@@ -1758,7 +1756,7 @@ export const ICON_DISABLED = "◍";
  * RSTA-02 / D-80-01: dedicated glyph (`◌` U+25CC, dotted circle) for the
  * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
  * yet materialized locally. The dotted circle reads "declared but not
- * present". Reassigned from `ICON_DISABLED`, which now uses `◍` (U+25CD).
+ * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
  */
 export const ICON_REMOTE = "◌";
 

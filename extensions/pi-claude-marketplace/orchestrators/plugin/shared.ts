@@ -167,8 +167,8 @@ export interface ResolvedScopedPluginTarget {
  *
  * The NFR-7 discriminated-union precedent (`installable: true | false`)
  * applied to lifecycle scope resolution: the chokepoint distinguishes
- * three outcomes a single `undefined`/raw-throw return previously
- * collapsed.
+ * three outcomes that a single `undefined`/raw-throw return would
+ * collapse.
  *
  *   - `resolved`: the marketplace CONTAINER exists in the chosen scope
  *     (the plugin row may or may not be present -- the caller's
@@ -1231,8 +1231,7 @@ export function applyPartialCascadeFold(
  * `MarketplaceNotAddedMessage` row and `undefined`, because the row IS the
  * outcome on that path.
  *
- * `uninstall.ts` and `enable-disable.ts` both reach this state and previously
- * carried byte-identical copies of it under two different names. The routing
+ * `uninstall.ts` and `enable-disable.ts` both reach this state. The routing
  * policy is one decision, so it lives here once; the return shape is the
  * `failed` arm both `UninstallPluginOutcome` and `EnableDisablePluginOutcome`
  * already declare, so neither union is widened by sharing it.

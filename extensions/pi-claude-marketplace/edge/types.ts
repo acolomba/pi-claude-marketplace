@@ -11,8 +11,7 @@
 // This module declares `EdgeDeps` only. `SubcommandHandlers` is declared and
 // exported by `./router.ts` -- import it from there
 // (`import type { SubcommandHandlers } from "./router.ts"`, as `register.ts`
-// does). A convenience re-export used to let both types be imported from this
-// module, but nothing imported the pair together, so it is gone.
+// does).
 
 import type {
   ClaudeImportExecutionResult,

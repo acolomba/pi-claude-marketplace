@@ -3240,12 +3240,12 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
 });
 
 // ENBL-17 / NFR-5: the same zero-call boundary for the REROUTED disabled arm.
-// The enabled cases above cannot cover it: a disabled record used to return
-// before any fetch-capable builder ran, and it now travels the same path an
-// enabled one does. So "no network here" stopped being a property of the
-// control flow and became a claim needing an assertion that can fail. The
-// record is remote-SHAPED and the run carries `--fetch`, which is the input
-// that would drive a probe on the manifest-backed arm.
+// The enabled cases above cannot cover it: a disabled record travels the
+// same control-flow path a fetch-capable enabled one does, so "no network
+// here" is not a property of the control flow -- it is a claim needing an
+// assertion that can fail. The record is remote-SHAPED and the run carries
+// `--fetch`, which is the input that would drive a probe on the
+// manifest-backed arm.
 test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent record under `--fetch` makes ZERO seam calls", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -3736,9 +3736,9 @@ test("plugin info manifest absent: D-96-04: two state-only scopes under `--fetch
     // act
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
 
-    // INFO-09 / GRAM-04 boundary: the same input used to produce TWO `error`
-    // notifications, one per `(failed)` block. Both blocks are `(installed)`
-    // now, so they join ONE info-severity cascade, project-scope first.
+    // INFO-09 / GRAM-04 boundary: both blocks render `(installed)` rather
+    // than `(failed)`, so they join ONE info-severity cascade, project-scope
+    // first.
     // assert
     assert.equal(notifications.length, 2);
     assert.equal(notifications[0]!.severity, undefined);
@@ -3811,10 +3811,9 @@ test("D-100-08 / ENBL-17: bare info (no --scope) with a disabled record in one s
     // act
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", cwd });
 
-    // ONE notify: the disabled scope is no longer a foreign message kind, so
-    // both scopes ride the same cascade. The second notify the mixed
-    // disabled+info result used to force is gone with the divert that caused
-    // it.
+    // ONE notify: a disabled-scope row and an installed-scope row are the
+    // same message kind, so both scopes ride the same cascade instead of
+    // splitting into two notifications.
     // assert
     assert.equal(notifications.length, 1, JSON.stringify(notifications));
     const all = notifications[0]!.message;

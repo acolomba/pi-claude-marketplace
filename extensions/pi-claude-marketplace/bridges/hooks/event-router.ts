@@ -488,11 +488,10 @@ async function hydrateScopeFromState(
 
     for (const [pluginId, pluginRecord] of Object.entries(mpRecord.plugins)) {
       // ENBL-14 / D-100-05: a disabled plugin's hooks must not re-register.
-      // The protection used to be incidental -- disable deleted hooks.json, so
-      // the read below failed and only logged. ENBL-18 keeps `resources.hooks`
-      // populated on a disabled record, so a file restored by any means would
-      // hydrate again; the guard makes the deregistration explicit. Read
-      // through the single predicate so this site cannot drift from ENBL-05.
+      // ENBL-18 keeps `resources.hooks` populated on a disabled record, so a
+      // file restored by any means would hydrate again -- this guard is what
+      // stops it. Read through the single predicate so this site cannot
+      // drift from ENBL-05.
       if (isRecordedButDisabled(pluginRecord)) {
         continue;
       }

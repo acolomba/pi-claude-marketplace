@@ -147,10 +147,10 @@ export interface AsyncRewakeEntry {
 // Module state
 //
 // The registry Map, per-table persistence chains, and default orphan probes are
-// the only module-level cells left here. The `spawn` implementation and dispatchId generator
-// used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
-// both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
-// `dispatch-exec.ts` threads through from its own `deps` argument.
+// the only module-level cells left here. The `spawn` implementation and dispatchId
+// generator are parameters (`SpawnDeps` below) rather than test-only module-global
+// setters, so `dispatchHookExec` in `dispatch-exec.ts` threads them through from
+// its own `deps` argument.
 // ──────────────────────────────────────────────────────────────────────────
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();

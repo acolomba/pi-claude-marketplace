@@ -705,12 +705,12 @@ async function composeResolvedComponents(
  * D-96-04: one built block plus the identity of the arm that built it.
  *
  * `skipReason` is reported by the producer rather than re-derived from the
- * rendered row. The earlier inference read `status !== "failed" && reasons
- * includes "not in manifest"`, which is exact only for as long as the
- * state-only arm remains the sole producer of that pairing -- a future arm
- * stamping the same reason on a non-failed row would silently acquire a
- * `warning`-severity fetch-skip note on a read-only surface. A discriminator
- * costs one field and cannot drift.
+ * rendered row. Inferring it from `status !== "failed" && reasons includes
+ * "not in manifest"` would be exact only for as long as the state-only arm
+ * remains the sole producer of that pairing -- a future arm stamping the
+ * same reason on a non-failed row would silently acquire a `warning`-severity
+ * fetch-skip note on a read-only surface. A discriminator costs one field and
+ * cannot drift.
  *
  * D-100-08 / ENBL-17: the field carries the skip REASON rather than a
  * state-only boolean, because two independent causes now reach the same block

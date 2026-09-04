@@ -341,7 +341,7 @@ function pushMarketplaceRow(
  * The two warning reasons that reach a cascade row. D-05: the advisory
  * `marketplace-failed` / `unmappable-marketplace-source` reasons are dropped
  * before this point (the failing marketplace's own `(failed)` header carries
- * their structural signal), so their former arms here were unreachable. The
+ * their structural signal), so this function never sees them. The
  * parameter is narrowed to the reasons that survive, which makes routing a new
  * reason to a row a compile error at the call site.
  */
@@ -522,9 +522,9 @@ function buildImportNotificationMarketplaces(
  *
  * D-05: the switch runs over the closed `ImportBlockStatus` union alone, so
  * TypeScript proves it exhaustive and a fourth member fails to compile here.
- * The former defensive `default: throw` and the bare `case undefined:` list arm
- * are both gone: the import path assigns only these three tokens, and a
- * statusless header is unconstructible now that `status` is required.
+ * The import path assigns only these three tokens, and a statusless header
+ * is unconstructible because `status` is required, so no `default: throw` or
+ * `case undefined:` arm is needed.
  */
 function blockToMarketplaceMessage(
   block: MarketplaceBlock,
@@ -717,9 +717,9 @@ async function installOnePlannedPlugin(
   // so this same switch inside a `void` function would let a third arm fall
   // through, record the plugin in no bucket, render no cascade row, and
   // under-count the `Import: N successes` tally with every gate green. D-05:
-  // the union has exactly the two arms below, so the former
-  // `default: assertNever(outcome)` was unreachable dead code -- TS2366 on a
-  // missing arm is what replaces it.
+  // the union has exactly the two arms below, so a
+  // `default: assertNever(outcome)` arm would be unreachable dead code; TS2366
+  // on a missing arm enforces exhaustiveness instead.
   switch (outcome.status) {
     case "failed":
       // The collapsed `failed` status carries the typed Error directly. Narrow

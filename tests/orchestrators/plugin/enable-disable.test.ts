@@ -658,12 +658,12 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
       local: true,
     });
 
-    // This is not a leftover of the old flag-only rule. The flag is the user
-    // naming the file they want written, and a per-machine override that
-    // shadows a shared base declaration is the whole purpose of the local
-    // file. The declaration-following rule answers the question the user did
-    // NOT answer; it does not overrule the one they did. Contrast the case
-    // directly above, which is the same fixture with the flag dropped.
+    // A typed --local flag names the file the user wants written, and a
+    // per-machine override that shadows a shared base declaration is the
+    // whole purpose of the local file. The declaration-following rule
+    // answers the question the user did NOT answer; it does not overrule the
+    // one they did. Contrast the case directly above, which is the same
+    // fixture with the flag dropped.
     const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
     // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });

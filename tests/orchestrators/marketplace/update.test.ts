@@ -1769,7 +1769,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
 
     // assert
 
-    // MSG-RH-1 canonical reload-hint trailer (names no longer interpolated).
+    // MSG-RH-1 canonical reload-hint trailer (no names in the message).
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.match(first.message, /\/reload to pick up changes$/);
@@ -2205,7 +2205,7 @@ test("a non-Error cascade rejection safely renders the unreadable-manifest fallb
   });
 });
 
-// ── New tests covering previously uncovered paths ────────────────────
+// ── updateAllMarketplaces: scope enumeration, port forwarding, refresh edge cases ────
 
 test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketplace", async () => {
   // targets.push() for a marketplace discovered in the
@@ -2503,7 +2503,7 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
   // throws MarketplaceNotFoundError when absent from BOTH scopes; the pre-guard
   // catches it and routes to the bracketless standalone `(failed) {marketplace not added}`
   // variant. The call resolves WITHOUT rejection, proving the raw
-  // MarketplaceNotFoundError no longer escapes the orchestrator boundary.
+  // MarketplaceNotFoundError does not escape the orchestrator boundary.
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     // Leave state empty -- no marketplace named "ghost" in either scope.

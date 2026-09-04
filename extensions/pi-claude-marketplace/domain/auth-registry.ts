@@ -46,8 +46,8 @@ export interface GitAuthProvider {
 /**
  * GitHub descriptor carrying today's exact literals (byte-identity source for
  * the engine's default path). deviceCodeUrl/tokenUrl/clientId/scope and the
- * `x-access-token` credential mapping mirror the values previously hardcoded in
- * domain/github-auth.ts.
+ * `x-access-token` credential mapping are GitHub's real Device Flow values,
+ * injected into the generic engine in domain/github-auth.ts.
  */
 export const GITHUB_PROVIDER: GitAuthProvider = {
   id: "github",

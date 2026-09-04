@@ -89,8 +89,7 @@ export interface RoutingEntry {
 
 /**
  * One plugin's parsed hooks config as held in `parsedConfigCache`. Exported
- * (unlike its former module-private form in `event-router.ts`) because
- * `parsedConfigEntries` names it across the module boundary.
+ * because `parsedConfigEntries` names it across the module boundary.
  */
 export interface CacheEntry {
   readonly scope: Scope;

@@ -2646,8 +2646,8 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
 // BFILL-01 / RINST-01 / D-68-02: reinstall is force-capable. It resolves the
 // `installable | unsupported` union through `requireForceInstallable`, so a
 // plugin that re-resolves `unsupported` (here: a `.lsp.json` lspServers
-// convention file beside a supported skill) no longer throws `{not-installable}`
-// at the gate. Re-resolution stays cache-only (NFR-5). The persisted
+// convention file beside a supported skill) passes the gate instead of
+// throwing `{not-installable}`. Re-resolution stays cache-only (NFR-5). The persisted
 // compatibility record reflects the REAL supported/unsupported sets at the
 // SAME recorded version (a promotion-shaped repair, not an upgrade).
 async function seedThenDegradeToUnsupported(cwd: string): Promise<string> {
@@ -4171,10 +4171,10 @@ async function seedDisabledInstall(
   return { skillDir };
 }
 
-// A reinstall of a disabled plugin used to re-stage its artifacts, flip the
-// record to enabled, and report `(reinstalled)` over a configuration that still
-// said the plugin was off -- so a verb invoked to repair a plugin silently
-// turned it back on until the next reload undid that.
+// Re-staging artifacts and flipping a disabled record to enabled here would
+// let a verb invoked to repair a plugin silently turn it back on, over a
+// configuration that still says it is off, until the next reload undid that.
+// Reinstall over a disabled record must write and stage nothing instead.
 test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes nothing and stages nothing", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-"));
@@ -4213,9 +4213,9 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
 });
 
 // The two reinstall surfaces compose their rows through different code paths,
-// so a fix applied to one would leave the other telling the old, untruthful
-// story. The shared closed-set narrowing is what makes them agree; these two
-// cases are what stop them from drifting apart again.
+// so a fix applied to one could leave the other telling an untruthful story
+// that contradicts it. The shared closed-set narrowing is what makes them
+// agree; these two cases are what stop them from drifting apart again.
 test("DFEN-07 / D-103-12: the standalone reinstall renders one benign skipped row for a disabled plugin", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-row-"));

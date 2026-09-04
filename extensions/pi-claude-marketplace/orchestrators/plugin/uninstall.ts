@@ -397,7 +397,7 @@ async function sweepPluginFromConfigLayers(
  *
  * PU-2 / D-08: the per-plugin data dir is removed AFTER the state save, so an
  * EACCES on `rm` cannot strand state in installed=true. This is where the
- * PU-4 leaked-path warning used to surface.
+ * PU-4 leaked-path warning would surface, and D-19-01 swallows it here.
  *
  * PURL-05 / D-78-01: the git clone cache is reclaimed once no surviving
  * record references it. The GC derives live keys from the just-committed
@@ -489,11 +489,12 @@ function emitAlreadyGone(args: {
  *
  * D-115-10: the overload pair narrows the orchestrated-mode return to
  * `Promise<UninstallPluginOutcome>` (no `| undefined`), mirroring
- * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
- * outcome is now a compile error rather than a silent `continue`, so every
- * driven uninstall always materialises a row (or the deliberate PU-5
- * `converged` drop). The wide overload stays last so a caller holding the
- * entrypoint in a single-signature variable keeps its `undefined` arm.
+ * `setPluginEnabled`. An absent-outcome guard (`if (result === undefined)
+ * continue`) in a reconcile cascade would silently drop the row -- the
+ * overload makes that a compile error, so every driven uninstall always
+ * materialises a row (or the deliberate PU-5 `converged` drop). The wide
+ * overload stays last so a caller holding the entrypoint in a
+ * single-signature variable keeps its `undefined` arm.
  *
  * WR-01: what the overload proves and what it does not. It removes the
  * `undefined` arm AT THE CALL SITE, which is what makes a consumer's

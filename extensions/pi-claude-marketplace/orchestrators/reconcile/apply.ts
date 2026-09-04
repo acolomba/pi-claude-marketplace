@@ -560,9 +560,9 @@ async function applyPluginToggles(
   const successStatus: "enabled" | "disabled" = axes.enable ? "enabled" : "disabled";
   for (const op of ops) {
     // Y3 (PR #51): the orchestrated overload of setPluginEnabled returns
-    // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so the
-    // earlier `if (result === undefined) continue` silent-vanish guard is a
-    // compile error and has been removed. Closes S6's fourth loop without
+    // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so a
+    // `if (result === undefined) continue` silent-vanish guard would be a
+    // compile error. Closes S6's fourth loop without
     // duplicating the fail-loud wording in
     // `import/execute.ts::addOnePlannedMarketplace` (the type makes the
     // branch unreachable instead of routing through a row).
@@ -752,8 +752,9 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
       // S3 / PR #51: when the throw came from migrateFirstRunConfig's
       // inner saveConfig (EACCES on the scope dir blocking the atomic
       // tmp+rename), attribute to claude-plugins.json -- the file the
-      // load pass was trying to WRITE, not state.json. Pre-fix every
-      // read-pass throw lied about the failing file.
+      // load pass was trying to WRITE, not state.json. Without this special
+      // case, every read-pass throw would attribute to state.json regardless
+      // of which file actually failed.
       const isMigrateSave = err instanceof MigrateConfigSaveError;
       const basename = isMigrateSave ? path.basename(err.configFilePath) : "state.json";
       // Unwrap the cause for classification so the closed-set reason

@@ -270,8 +270,8 @@ export async function getArgumentCompletions(
     return topLevelCompletions(current);
   }
 
-  // RINST-01 / D-67-03: no reinstall force-flag positional strip -- the retired
-  // reinstall force flag is gone there. LIST-02 / D-67-02: `--partial` IS a
+  // RINST-01 / D-67-03: reinstall takes no overwrite flag, so it needs no
+  // positional strip here. LIST-02 / D-67-02: `--partial` IS a
   // recognized boolean flag for install/update, so it must be skipped during
   // positional extraction (else `install --partial <TAB>` mis-parses `--partial`
   // as the plugin positional and returns null). The head is the first positional

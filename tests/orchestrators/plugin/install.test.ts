@@ -4327,7 +4327,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
 // ───────────────────────────────────────────────────────────────────────────
 // WB-01 / UAT-05 / D-103-16 -- the three arms the declaration-following write
 // target must NOT have moved. Together they bound its blast radius to the one
-// case it fixes: a stamp that used to land in a file CFG-02 shadows.
+// case it fixes: a stamp landing in a file CFG-02 shadows.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the base file, local not created", async () => {

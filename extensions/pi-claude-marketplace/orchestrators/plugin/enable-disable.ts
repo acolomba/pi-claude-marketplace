@@ -623,11 +623,11 @@ async function emitUnresolvedTarget(args: {
  * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
  * Mirrors the `AddMarketplaceNotifications` discriminant pattern. The
  * standalone arm keeps `| undefined` because it fires its own `notify()` and
- * the caller has nothing to consume. The reconcile cascade
- * (`applyPluginToggles`) used to carry an `if (result === undefined) continue`
- * guard that silently dropped the row -- the overload makes that branch a
+ * the caller has nothing to consume. In the reconcile cascade
+ * (`applyPluginToggles`), an absent-outcome guard (`if (result === undefined)
+ * continue`) would silently drop the row -- the overload makes that branch a
  * compile error so the cascade always materialises a row (closes S6's fourth
- * loop in the same edit).
+ * loop).
  *
  * WR-01: what the overload proves and what it does not. It removes the
  * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
@@ -1100,7 +1100,7 @@ function dispatchOutcome(args: {
     outcome,
     probe: softDepStatus(pi),
   });
-  // RLD-05 / D-07: the disable verb no longer threads a distinguishing cascade
+  // RLD-05 / D-07: the disable verb does not thread a distinguishing cascade
   // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
   // artifacts were unstaged -- SNM-33), so the `/reload to pick up changes`
   // trailer fires via the RLD-02 OR-reduce of the per-row stamps. The disable

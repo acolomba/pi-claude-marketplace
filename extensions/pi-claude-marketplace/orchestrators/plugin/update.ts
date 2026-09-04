@@ -1602,12 +1602,11 @@ function nextDisabledPin(
 /**
  * WR-02 / NFR-3: would the refresh below write anything, judged from the record
  * `preflightUpdate` already loaded? A disabled record at an unchanged version
- * now falls THROUGH to the refresh, and the refresh opens a `retries: 0` scope
- * lock. On a scope where nothing moved, that turned a previously lock-free
- * no-op into a `StateLockHeldError` whenever another process held the lock --
- * and the bare-form batch aborts on that throw, taking every target after the
- * disabled one with it. A plugin with nothing to write must not pay for the
- * lock.
+ * falls THROUGH to the refresh, and the refresh opens a `retries: 0` scope
+ * lock even when nothing would move -- risking a `StateLockHeldError`
+ * whenever another process holds the lock, which would abort the bare-form
+ * batch on that throw, taking every target after the disabled one with it. A
+ * plugin with nothing to write must not pay for the lock.
  *
  * The snapshot is read outside the lock, so this answer is advisory about the
  * RECORD: the in-transaction guard re-derives the same comparison against the
@@ -2508,9 +2507,9 @@ function cascadeSkipSeverity(
  * XSURF-03: the partially-upgradable manual update-decline (`outcome.partialUpgradable`)
  * flips to the `partially-upgradable` token (consistent with how `list` describes
  * the same plugin) + the update-worded `--partial` trailer. The SEV-04 split
- * (targeted=warning / bulk=info) moves onto this status arm directly -- it is no
- * longer keyed on the reason string (the reason now carries the list-consistent
- * degrade kinds, not `no longer installable`). Every other skipped reason keeps
+ * (targeted=warning / bulk=info) is keyed on this status arm directly, not on
+ * the reason string -- the reason here carries the list-consistent degrade
+ * kinds, not `no longer installable`. Every other skipped reason keeps
  * `status: "skipped"` + the unchanged `cascadeSkipSeverity` judgment.
  */
 function projectSkippedOutcome(

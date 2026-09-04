@@ -186,8 +186,8 @@ export type DegradeKind = "skill" | "command";
  * The closed map from a degraded component kind to its one failure-class token.
  * A `Record<DegradeKind, FailureReason>` (via `satisfies`) so a new kind added to
  * `DegradeKind` fails to compile here until it is given a token -- the single
- * exhaustiveness guard replacing the two hand-maintained per-kind `if` ladders
- * the install and reconcile surfaces used to keep in sync by convention.
+ * exhaustiveness guard that keeps the install and reconcile surfaces from
+ * drifting out of per-kind sync.
  */
 const MALFORMED_REASON_BY_KIND = {
   skill: "malformed skill",

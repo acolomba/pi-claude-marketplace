@@ -5,7 +5,7 @@
 // separator followed by a name is the marketplace form, and anything else is
 // split into a plugin reference. RINST-01 / D-67-03 make the overwrite of
 // collisions and foreign content unconditional, so there is no command-local
-// overwrite flag and the retired one now fails as an unknown flag.
+// overwrite flag; passing one fails as an unknown flag.
 //
 // The interesting property is a TWO-STAGE flag rejection, and the two stages
 // emit DIFFERENT sentences:
@@ -765,7 +765,7 @@ for (const { args, label, offendingToken, summary } of [
   });
 }
 
-test("rejects the retired overwrite flag as an unknown flag rather than accepting it (RINST-01 / D-67-03)", async (t) => {
+test("rejects an overwrite flag (--force) as an unknown flag rather than accepting it (RINST-01 / D-67-03)", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "retired-overwrite-flag");
   await seedBothScopes(workspace);

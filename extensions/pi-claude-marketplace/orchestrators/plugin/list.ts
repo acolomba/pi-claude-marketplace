@@ -152,8 +152,8 @@ export type FilterBucket =
   | "partially-available"
   | "unavailable"
   // RSTA-07 / D-80-07: the `--remote` filter bucket -- a not-installed git source
-  // with no materialized clone. `--available` no longer admits it (intended
-  // behavior change); `--available --remote` restores the former `--available` set.
+  // with no materialized clone. `--available` alone excludes it;
+  // `--available --remote` together admit both buckets.
   | "remote";
 
 /**
@@ -181,8 +181,8 @@ export interface ListPluginsOptions {
   /** PL-1 union filter: include available (not-yet-installed installable) plugins. */
   readonly available?: boolean;
   /** PL-1 union filter: include STRUCTURALLY-uninstallable (⊘) plugins. A2:
-   *  narrowed to the resolver `unavailable` bucket -- it no longer admits the
-   *  not-installed `partially-available` rows (those are reached by `partially-available`). */
+   *  the resolver `unavailable` bucket only -- it excludes the not-installed
+   *  `partially-available` rows (those are reached by `partially-available`). */
   readonly unavailable?: boolean;
   /** LIST-01 / D-67-01 union filter: include NOT-installed plugins that resolve
    *  `partially-available` (the partially-available candidates). Keys on the internal
@@ -244,9 +244,9 @@ function shouldShow(
   }
 
   // RSTA-07: `--remote` selects the `(remote)` bucket -- a not-installed git
-  // source with no materialized clone. A cold git source now carries render
-  // status `"remote"` and bucket `"remote"`, so it no longer passes the
-  // `--available` arm above (the INTENDED behavior change).
+  // source with no materialized clone. A cold git source carries render
+  // status `"remote"` and bucket `"remote"`, so it does not pass the
+  // `--available` arm above.
   if (opts.remote === true && bucket === "remote") {
     return true;
   }
@@ -603,8 +603,8 @@ async function installedRowMessage(
 
   return {
     // The list-surface inventory row is `installed` with `needsReload: false`
-    // -- the stamped flag IS the old `present` reload-suppression (the
-    // OR-reduce reload-hint stays suppressed for steady-state inventory).
+    // -- the stamped flag suppresses the OR-reduce reload-hint for
+    // steady-state inventory.
     status: "installed",
     name: pluginName,
     dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp),

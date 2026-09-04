@@ -1298,8 +1298,8 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       // row has no soft-dep markers (plugin declares no agents / no mcp; the
       // @mp fixture sets only `hasSkill: true`). UGRM-02: the trailing tally
       // counts realized transitions only -- one `updated` row -> `1 updated`
-      // (the verb has no plural-s); the suppressed up-to-date row no longer
-      // inflates the count.
+      // (the verb has no plural-s); the suppressed up-to-date row does not
+      // inflate the count.
       assert.equal(
         body,
         "● mp [project]\n" +
@@ -5436,7 +5436,7 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
   });
 });
 
-// ─── S5: invalid config write-back no longer silently skips ─────────────────
+// ─── S5: invalid config write-back surfaces a named warning ────────────────
 
 for (const { title, local } of [
   { title: "base config", local: false },

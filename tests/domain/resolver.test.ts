@@ -105,10 +105,9 @@ const unsupportedConventionScenarios = [
 // PR-2: nine non-installable cases (1 test per case)
 // ──────────────────────────────────────────────────────────────────────────
 
-// PURL-01: a github source is no longer rejected as an unsupported kind. With
-// NO resolveGitPluginRoot injected (the pure path-only caller), it resolves
-// `unavailable` because git sources require a clone-cache resolver -- the
-// path-only back-compat arm, NOT the old "unsupported source kind" rejection.
+// PURL-01: a github source is a supported kind. With NO resolveGitPluginRoot
+// injected (the pure path-only caller), it resolves `unavailable` because git
+// sources require a clone-cache resolver -- the path-only back-compat arm.
 test("PR-2(1) github source with no clone resolver -> unavailable (requires clone resolver)", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, {});
@@ -124,8 +123,8 @@ test("PR-2(1) github source with no clone resolver -> unavailable (requires clon
   );
 });
 
-// PURL-01: same for an object-form url source -- no longer "unsupported source
-// kind: url"; without an injected callback it needs a clone resolver.
+// PURL-01: same for an object-form url source -- without an injected
+// callback it needs a clone resolver.
 test("PR-2(1) url source with no clone resolver -> unavailable (requires clone resolver)", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, {});
@@ -194,11 +193,10 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
   );
 });
 
-// HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
-// `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
-// rejected with "contains hooks" -- the resolver only owns convention-file
-// discovery; entry/manifest-level hooks-field semantics are deferred to
-// future dispatch work.
+// HOOK-01: hooks is a supported kind. A plugin declaring `hooks` at the entry
+// level with NO hooks/hooks.json on disk is not rejected with "contains
+// hooks" -- the resolver only owns convention-file discovery; entry/manifest-
+// level hooks-field semantics are deferred to future dispatch work.
 test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });

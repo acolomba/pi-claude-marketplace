@@ -171,8 +171,8 @@ interface SeedMarketplaceOpts {
    * every `resources.*` array, so a disabled record's inventory is whatever the
    * caller supplies. The load-bearing "currently disabled" marker is the
    * explicit `enabled: false` boolean alone (ENBL-05 /
-   * `persistence/state-io.ts::isRecordedButDisabled`); emptiness is no longer
-   * part of it. The default inventory seeds a populated `resources.skills` --
+   * `persistence/state-io.ts::isRecordedButDisabled`), not the emptiness of
+   * any resource array. The default inventory seeds a populated `resources.skills` --
    * a PRODUCTION installed record always has at least one populated array (the
    * resolver's `requireInstallable` gate rules out zero-component
    * installables). `hooksOnly: true` (D-63-04) seeds a hooks-only installed
@@ -490,8 +490,8 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
 // RSTA-01 / RSTA-07 / D-80-03 / D-80-07: the `(remote)` git-source row + the
 // `--remote` filter. A not-installed git source with no materialized clone
 // renders `◌ <name> (remote)` (bare) and lands in the `remote` filter bucket;
-// `--available` no longer admits it (the intended behavior change). A WARM clone
-// resolves the three-way verdict against the on-disk tree.
+// `--available` excludes it by design. A WARM clone resolves the three-way
+// verdict against the on-disk tree.
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1156,8 +1156,8 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
 //                     resolver bucket, which is independent of the render token.
 //   --installed    -> installed + force-installed + force-upgradable (all
 //                     installed-inventory render statuses) (A1).
-//   --unavailable  -> structural-unavailable ONLY; it no longer admits the
-//                     not-installed `unsupported` rows (A2 partition).
+//   --unavailable  -> structural-unavailable ONLY; excludes the not-installed
+//                     `unsupported` rows (A2 partition).
 // USTAT-01 / D-64-01: a not-installed `unsupported` plugin renders the
 // de-collapsed `(unsupported)` / `⊖` token; the filter buckets are unchanged.
 // ──────────────────────────────────────────────────────────────────────────
@@ -2713,12 +2713,11 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
 // Uncovered-path gap tests
 // ──────────────────────────────────────────────────────────────────────────
 
-// HOOK-01: hooks moved from UNSUPPORTED_COMPONENT_KINDS to the supported
-// set. A plugin declaring `hooks` at entry level with NO hooks/hooks.json
-// on disk is no longer rejected -- the resolver owns convention-file
-// discovery only; entry/manifest-level hooks-field semantics are deferred
-// to future dispatch work. The plugin now lands as `available`
-// (not installed, no admission blocker).
+// HOOK-01: hooks are a supported component kind. A plugin declaring `hooks`
+// at entry level with NO hooks/hooks.json on disk is not rejected -- the
+// resolver owns convention-file discovery only; entry/manifest-level
+// hooks-field semantics are deferred to future dispatch work. The plugin
+// lands as `available` (not installed, no admission blocker).
 test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -2783,9 +2782,9 @@ test("gap: plugin declaring lspServers field renders as ⊖ (unsupported) with {
   });
 });
 
-// HOOK-01 + D-57-04: hooks/hooks.json convention file now drives admission.
-// A PARSEABLE file admits the plugin (no longer unavailable); a MALFORMED
-// file flips to unavailable with the parse-failure note.
+// HOOK-01 + D-57-04: the hooks/hooks.json convention file drives admission.
+// A PARSEABLE file admits the plugin; a MALFORMED file flips to unavailable
+// with the parse-failure note.
 test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -3363,7 +3362,7 @@ test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its n
   });
 });
 
-// Manifest-absence cases consolidated from the former supplemental owner.
+// Manifest-absence cases.
 
 test("plugin list manifest absent: INV-01: an enabled, fully supported record absent from a LOADED manifest renders `{not in manifest}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
@@ -3617,13 +3616,13 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record wit
 // ENBL-16: the disabled row names manifest absence, and nothing else
 // ──────────────────────────────────────────────────────────────────────────
 
-// ENBL-16 / D-100-07 supersedes INV-04's no-reason clause. Manifest absence is
-// a DURABLE fact that constrains what the user can do next: `plugin enable`
-// re-runs the install ledger, which resolves from the marketplace manifest, so
-// a disabled record the manifest no longer declares cannot be re-enabled. The
-// bare row gave no warning before the attempt. Every OTHER reason stays
-// suppressed on this row -- they describe runtime behavior that is currently
-// suspended.
+// ENBL-16 / D-100-07 overrides INV-04's no-reason clause for this one case.
+// Manifest absence is a DURABLE fact that constrains what the user can do
+// next: `plugin enable` re-runs the install ledger, which resolves from the
+// marketplace manifest, so a disabled record the manifest no longer declares
+// cannot be re-enabled. Showing `{not in manifest}` warns the user before
+// they attempt it. Every OTHER reason stays suppressed on this row -- they
+// describe runtime behavior that is currently suspended.
 test("plugin list manifest absent: ENBL-16: a manifest-absent disabled record renders `(disabled) {not in manifest}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
