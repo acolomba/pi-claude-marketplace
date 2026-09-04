@@ -1,11 +1,11 @@
 ---
 name: google-typescript-style-review
-description: Review TypeScript source against the Google TypeScript Style Guide as adapted for the Homebridge plugin template — the rules the toolchain does not enforce. Use when reviewing or revising .ts files.
+description: Review TypeScript source against the Google TypeScript Style Guide as this project adopts it — the rules the toolchain does not enforce. Use when reviewing or revising .ts files.
 ---
 
 # Google TypeScript style review
 
-Review checks derived from the Google TypeScript Style Guide as adapted for the Homebridge plugin template. This skill is the review-time counterpart of the `google-typescript-style-rule.md` Claude Code rule; the two state the same rules and must not disagree. Points the template's configuration decides are marked *(template)*. When revising, produce the rule file's **Good** form.
+Review checks derived from the Google TypeScript Style Guide. Points this project decides for itself, rather than taking from the guide, are marked *(project)*.
 
 Review the files in the change under review. New files follow the rules completely; in an existing file, new code follows the file's conventions where the rules are silent but never violates a rule. Do not demand cleanups of unchanged code. Flag style-only churn mixed into a functional change; style-only edits go in their own change.
 
@@ -19,7 +19,7 @@ Where a rule overlaps the linter, review the part the linter cannot judge: every
 
 Grep the changed files for these tokens; every hit needs a stated justification or becomes a finding:
 
-`var` · `export default` outside `src/index.ts` · `export let` · `public` · `#` private fields · `const enum` · `debugger` · `with` · `eval` / `new Function` · `new String` / `new Number` / `new Boolean` / `new Object` / `new Array` / `Array(` · `parseInt` / `parseFloat` · `@ts-ignore` / `@ts-nocheck` · `@ts-expect-error` outside a unit test · `arguments` · `.bind(` · `<Type>value` assertions · `Object.defineProperty` · prototype or global modification.
+`var` · `export default` outside the extension entry point · `export let` · `public` · `#` private fields · `const enum` · `debugger` · `with` · `eval` / `new Function` · `new String` / `new Number` / `new Boolean` / `new Object` / `new Array` / `Array(` · `parseInt` / `parseFloat` · `@ts-ignore` / `@ts-nocheck` · `@ts-expect-error` outside a unit test · `arguments` · `.bind(` · `<Type>value` assertions · `Object.defineProperty` · prototype or global modification.
 
 ## Formatting the linter does not check
 
@@ -32,12 +32,12 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 ## Files and modules
 
 - File order: copyright JSDoc, `@fileoverview` JSDoc, imports, implementation — each present section separated by exactly one blank line.
-- File names are `lowerCamelCase`: `platformAccessory.ts`. *(template)*
-- Same-project imports are relative and carry the `.js` extension; flag long `../` chains. *(template)*
-- Import form matches usage: named imports for symbols used often or with clear names; a namespace import for many symbols from one large API or common names such as `Service`; a rename only to avoid a collision, name a generated symbol, or clarify an unclear name.
+- File names are `kebab-case`: `atomic-json.ts`. *(project)*
+- Same-project imports are relative and carry the `.ts` extension, because Node runs the sources directly with no build step; flag long `../` chains. *(project)*
+- Import form matches usage: named imports for symbols used often or with clear names; a namespace import for many symbols from one large API or common names such as `defaultGit`; a rename only to avoid a collision, name a generated symbol, or clarify an unclear name.
 - Default imports only for external code that offers nothing else; side-effect imports (`import 'x';`) only to load for side effects.
 - Imports used only as types are marked `import type` (or inline `type`); type re-exports use `export type`.
-- Exports are named. The one permitted default export is the Homebridge entry function in `src/index.ts`, a function declaration; any other default export is a finding.
+- Exports are named. The one permitted default export is the extension factory in `extensions/pi-claude-marketplace/index.ts`, a function declaration, because Pi's loader calls the module's default export; any other default export is a finding. *(project)*
 - Every export is used outside its module. No `export let`; a getter function over a module-local binding. Conditionals run before `export const`.
 - No class of static members as a namespace; constants and functions are exported directly. Code is namespaced with separate files, not `namespace` or `module {}`.
 
@@ -59,7 +59,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 - Injected values are parameter properties; every other field initializes at its declaration; no properties added or deleted after construction; an optional field initializes to `undefined`.
 - Every property never reassigned outside the constructor is `readonly`.
 - No `#private`; `private` instead. `public` appears only on a non-readonly public parameter property.
-- No private member read through `obj['name']`. *(template)*
+- No private member read through `obj['name']`. *(project)*
 - Getters are pure; no pass-through getter/setter pair over a field; no `Object.defineProperty` accessors.
 - Computed member names only for symbols; `[Symbol.iterator]()` only on logically iterable classes.
 - Module-local function over private static method; no `this` in a static context; statics called on the declaring class.
@@ -74,7 +74,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 - Callbacks are arrows forwarding their arguments explicitly (`.map((text) => Number(text))`) unless both signatures are stable; no named function with optional parameters passed to a higher-order function.
 - Default initializers have no side effects and no shared mutable value; several optional parameters without a natural order become a destructured options object.
 - Rest parameter, never `arguments`; spread, never `apply`; no `bind`/`call`/`apply` where an arrow or an explicit parameter works.
-- Parentheses around a single arrow parameter: `(accessory) => accessory.UUID`.
+- Parentheses around a single arrow parameter: `(record) => record.name`.
 
 ## Control flow
 
@@ -99,7 +99,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 - No `| null` or `| undefined` inside a type alias; optionals (`name?: string`) over `| undefined`; class fields initialized rather than optional.
 - Object types declared with `interface`, not a `type` alias of an object literal and not a class.
 - `T[]`/`readonly T[]` for simple element types, `Array<...>`/`ReadonlyArray<...>` otherwise.
-- Index signatures carry a meaningful label (`{ [serialNumber: string]: Accessory }`); `Map`/`Set` over an object as a map; `Record<Keys, Value>` for statically known keys.
+- Index signatures carry a meaningful label (`{ [marketplaceName: string]: MarketplaceRecord }`); `Map`/`Set` over an object as a map; `Record<Keys, Value>` for statically known keys.
 - The simplest construct that expresses the code; mapped and conditional types sparingly; interface extension over `Pick` and friends.
 - `any` avoided in favor of a specific type, generic, or narrowed `unknown`; an unavoidable `any` carries `// eslint-disable-next-line @typescript-eslint/no-explicit-any -- <reason>` and the reason holds.
 - No `{}` as a type; `unknown`, `Record<string, T>`, or `object`. Never `String`, `Number`, `Boolean`, or `Object` as types.
@@ -112,7 +112,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 | Style | Used for |
 | --- | --- |
 | `UpperCamelCase` | class, interface, type alias, enum, type parameter |
-| `lowerCamelCase` | variable, parameter, function, method, property, module alias, file name *(template)* |
+| `lowerCamelCase` | variable, parameter, function, method, property, module alias |
 | `CONSTANT_CASE` | module-level constant, `static readonly` field, enum member |
 
 - Names are descriptive to a new reader; no ambiguous or project-private abbreviations, no dropped letters; short names only in scopes of ten lines or fewer.
@@ -125,11 +125,11 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 
 - `/** JSDoc */` for what a user of the code reads, `//` for implementation notes.
 - Every top-level export is documented, plus any member whose purpose its name and type do not make obvious; a class comment says how and when to use it.
-- Method descriptions begin with a third-person verb phrase: `Registers the accessory ...`.
+- Method descriptions begin with a third-person verb phrase: `Registers the plugin ...`.
 - `@param`/`@return` only when they add information beyond the name and type; parameter properties documented with `@param` on the constructor; no types repeated in JSDoc; no `@private`/`@override`/`@implements`/`@enum` where the keyword is used.
 - A literal argument whose meaning is unclear carries a parameter-name comment (`/* delayMs= */ 5000`) — or the API should take an options object.
 - Deprecations carry `@deprecated` with directions for fixing call sites.
-- No decorators; Homebridge defines none, so plugin code uses none.
+- No decorators; the codebase defines none and `tsconfig.json` enables none. *(project)*
 
 ## Classifying findings
 
