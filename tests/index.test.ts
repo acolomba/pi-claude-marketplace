@@ -115,8 +115,15 @@ const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: 
  * reconcile, the plugin PATH recompute, and the project-scope half of the
  * resource aggregation. Naming the ordinals states which stage a case refuses;
  * asserting the total states that the stage list itself has not moved.
+ *
+ * Each of the three named ordinals has its own case, and each case asserts an
+ * observable only its own stage produces -- otherwise the ordinal is decoration
+ * and the case's title is a claim about a stage it is not pinned to. The fourth
+ * read has no case: the resource aggregation is the one stage outside a try, so
+ * refusing it is a throw out of the handler rather than an NFR-2 containment.
  */
 const CWD_READ_DEFERRED_HYDRATE = 1;
+const CWD_READ_RECONCILE = 2;
 const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
 const CWD_READS_PER_DISCOVER = 4;
 
@@ -628,12 +635,12 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   verifyBoundary();
 });
 
-// The two refusal cases below both seed one enabled plugin, so the plugin PATH
-// recompute has something to do. That is what separates them: the answer and the
-// emission count are identical either way, so a case that stated only those two
-// would be the pristine-workspace case written twice under a different title.
-// The recompute is downstream of the hydrate and is itself the stage the second
-// case refuses, so the PATH it leaves behind is the one observable that differs.
+// The three refusal cases below all seed one enabled plugin, so the plugin PATH
+// recompute has something to do. The answer and the read count are identical for
+// all three, so a case stating only those two would be the pristine-workspace
+// case written three times under three titles. What separates them is one
+// observable per stage: the PATH the recompute leaves behind, and which of the
+// two lines the reconcile stage emits.
 
 test("still answers when the deferred project-scope hydrate fails (NFR-2)", async (t) => {
   // arrange
@@ -641,20 +648,65 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
   const binDir = path.join(resolvedSource, "bin");
   await seedEnabledPlugin(scope.cwd, resolvedSource);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  // Seeded so the reconcile has something of its own to say. Without it this
+  // case passes with the refusal retargeted at the reconcile read, because a
+  // reconcile that never runs is silent and a reconcile with nothing to report
+  // is silent too.
+  await seedInvalidConfig(scope.cwd);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 2);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
   const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
+  const expectedNotifications: readonly Notification[] = [
+    { message: RECONCILE_CASCADE_FOR_INVALID_CONFIG, severity: "error" },
+  ];
 
   // act
   const discovered = await discover(refusal.event, ctx);
 
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
-  assert.deepStrictEqual(notifications, []);
+  // The refusal landed upstream of the reconcile, so the reconcile ran and
+  // reported its own refusal of the seeded config. Retargeted at the reconcile
+  // read this line becomes the raw `reconcile aborted` line instead.
+  assert.deepStrictEqual(notifications, expectedNotifications);
   assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
   // The refusal landed upstream of the recompute, so that stage still ran.
+  assert.deepStrictEqual(process.env.PATH, `/usr/bin${path.delimiter}${binDir}`);
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+  verifyBoundary();
+});
+
+test("still answers when the reconcile fails (NFR-2)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "reconcile-refused");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  const binDir = path.join(resolvedSource, "bin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 0);
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_RECONCILE);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
+  // The workspace is otherwise clean, so this line exists only because the
+  // reconcile stage was the one refused. Retargeted at either neighbouring read
+  // the refusal is swallowed silently and nothing is emitted at all.
+  const expectedNotifications: readonly Notification[] = [
+    {
+      message: `reconcile aborted: working directory read ${String(CWD_READ_RECONCILE)} refused`,
+      severity: "error",
+    },
+  ];
+
+  // act
+  const discovered = await discover(refusal.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, expectedNotifications);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // The recompute is downstream of the reconcile, so it still ran.
   assert.deepStrictEqual(process.env.PATH, `/usr/bin${path.delimiter}${binDir}`);
   assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
   verifyBoundary();
