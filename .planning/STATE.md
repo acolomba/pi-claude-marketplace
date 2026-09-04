@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.19
-status: Awaiting next milestone
-stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
-last_updated: "2026-09-04T03:59:38.393Z"
-last_activity: 2026-09-03
-last_activity_desc: Milestone v1.19 completed and archived
-state_head: 609eb6981589605a03daa90eddc1a1dd8b711228
+milestone: refine-unit-tests
+milestone_name: Refine Unit Tests
+status: planning
+last_updated: "2026-09-04T18:33:23.634Z"
+last_activity: 2026-09-04
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 220
-  completed_plans: 220
-milestone_name: Unit Test Refactor
-current_phase: 117
-current_phase_name: Extension Entry and Final Gate
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -31,10 +27,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone v1.19 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-03 — Milestone v1.19 completed and archived
+Status: Defining requirements
+Last activity: 2026-09-04 — Milestone refine-unit-tests started
 
 ## Performance Metrics
 

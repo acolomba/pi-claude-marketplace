@@ -10,6 +10,23 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: refine-unit-tests
+
+**Goal:** Revalidate the adversarial unit-test review and related backlog against
+the post-refactor codebase, discard stale findings, and fix only issues that
+still exist.
+
+**Target features:**
+
+- Revalidate `TESTQ-01`, `COV-01`, `FLOW-09`, `AGCOL-01`, `REASON-01`, and
+  `GAUTH-01` against the live code before planning their implementation.
+- Use the gate audit to settle `FLOW-07` from current evidence.
+- Fix confirmed production defects before test-only improvements.
+- Improve hermeticity, public-interface testing, assertion strength, injection
+  seams, and gate effectiveness without mechanically rewriting compliant tests.
+- Reassess the seven D-116-01a direct-coverage shortfalls and preserve current
+  behavior except where a confirmed production defect requires a change.
+
 ## Previous Milestone: v1.19 Unit Test Refactor (branch: features/unit-test-refactor, shipped 2026-09-04, no npm release)
 
 **Goal:** Each production TypeScript module has a clear corresponding test that
@@ -227,7 +244,9 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** nothing. v1.19 closed 2026-09-04; the next milestone is not yet defined.
+**In progress:** milestone `refine-unit-tests` is defining requirements. Phase
+numbering restarts at 1. Every carried review or backlog claim must be
+revalidated against the live post-v1.19 code before it authorizes work.
 
 **Just shipped:** v1.19 Unit Test Refactor (2026-09-04, Phases 108-117, 220 plans, 317 tasks;
 archived to `.planning/milestones/v1.19-*`). All 204 production modules now have exactly one
@@ -372,6 +391,19 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 
 ### Active
 
+<!-- Milestone refine-unit-tests (started 2026-09-04). Findings are hypotheses until revalidated against the live post-refactor tree. -->
+
+- [ ] Revalidate the two-pass unit-test review corpus and the bundled backlog
+  items against current code; strike, close, or rescope findings that no longer
+  hold.
+- [ ] Fix every revalidated production defect before broad test-only cleanup.
+- [ ] Replace weak or non-hermetic tests with public-contract proofs that fail
+  on the mutations they claim to guard.
+- [ ] Remove or repair inert gates and decide boundary-gate redundancy from a
+  current edge-by-edge comparison.
+- [ ] Make direct coverage enforceable without using coverage exclusions or
+  treating coverage as evidence of assertion strength.
+
 <!-- Milestone v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07, shipped 2026-08-12). -->
 
 - [x] `plugin list` includes enabled installation records missing from a valid manifest under `--installed`: fully supported records render `(installed) {not in manifest}`, while records with unsupported kinds retain `(partially-installed)` plus their existing reasons; disabled records remain `(disabled)` — validated in Phase 95 (2026-08-08; incl. the LLM tool-surface reason widening INV-05)
@@ -436,6 +468,11 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Telemetry, message catalogs, structured event channels** -- successor-architecture concerns beyond V1 (NFR-IL guidance)
 
 ## Context
+
+- **refine-unit-tests authority rule:** `.planning/reviews/unit-test-adversarial/`
+  and the bundled backlog items are discovery evidence, not current truth. Line
+  references anchor to pre-milestone commits and must be re-derived from the
+  live tree before a requirement or plan may depend on them.
 
 - **v1.19 imported evidence:** `.planning/inputs/unit-test-refactor-handoff/`
   preserves contracts and discovery data from the abandoned attempt. The current
@@ -577,6 +614,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-09-04 after starting milestone refine-unit-tests. The milestone revalidates the two-pass unit-test review plus COV-01, FLOW-09, AGCOL-01, REASON-01, GAUTH-01, and the FLOW-07 gate question against the post-v1.19 tree before fixing confirmed defects. Phase numbering restarts at 1; ecosystem research is skipped in favor of live-code validation._
 
 _Last updated: 2026-09-04 after the v1.19 Unit Test Refactor milestone closed. All 204 of 204 source-test pairs are complete and the corresponding-test gate reports zero violations. The retained all-pair result records 190 complete, 7 accepted D-116-01a single-branch shortfalls, and 7 type-only rows, and is regenerable by a report-only command that gates nothing. Phase 117 changed no production file; `tests/helpers/` no longer exists. The five gate scripts, previously declared and invoked by nothing, now run — three inside `npm run check`, two on a documented cadence. Closing gates: `npm test` 5,144 across 295 suites with 0 failures on BOTH Node v22.22.2 and v26.8.1, `test:integration` 31/31, typecheck, lint and fallow clean. Ten of ten phases verified and `nyquist_compliant: true`; 48 of 48 requirements satisfied; one accepted operator override on Success Criterion 4. Prior updates follow._
 *Last updated: 2026-08-29 after milestone workflows-detection shipped (Phase 106, 4 plans, 6/6 requirements, audit passed with 5/5 integration seams, 4/4 flows, 0 open threats, and terminal UI 24/24). The resolver now detects opaque workflow declarations and the literal `workflows/` directory, reports one `{workflows}` reason, rejects normal installation, and admits supported components with `--partial`. Workflow files remain source-only. Prior updates follow.*
