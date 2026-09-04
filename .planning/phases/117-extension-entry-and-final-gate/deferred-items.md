@@ -130,7 +130,30 @@ it and why that plan could not resolve it.
   `npm test` 5142/295/0 on v26.8.1, and the ten suites 411/411 on BOTH v22.22.2 and
   v26.8.1. Five plants confirm the assertions still fire. Ledger entry 28 is closed.
 
-## 6. The direct-coverage sweeps still have no automated control
+## 6. RESOLVED - The direct-coverage sweeps still have no automated control
+
+**Resolved 2026-09-04 by operator decision.** Two parts, closed differently:
+
+- *The gate refusing a shortfall stays.* D-117-20 stands unchanged: no ledger-keyed
+  accepted-shortfall list, because that is D-116-01a's banned coverage-exception pragma in
+  other clothes. `npm run test:coverage:direct:all` will keep exiting 1 on a clean tree for
+  as long as any D-116-01a shortfall stands. SC-4 and SUITE-05 were worded before the
+  D-117-20 amendment, so their literal "passes" clause is accepted as superseded and
+  recorded as an `overrides:` entry on `117-VERIFICATION.md`.
+- *The reproducibility half was fixed, not waived.* `npm run test:coverage:direct:report`
+  (commit `1495488b`) regenerates the 204-row artifact from the gate's own enumeration and
+  per-pair runner - 204 rows, 204 distinct source paths, identical
+  190 complete / 7 type-only / 7 accepted-shortfall split, row-by-row diff at exit 0. It is
+  a report, not a gate: it blocks nothing, and the gate's own diff in that commit is three
+  `export` keywords and nothing else.
+
+A drift check distinguishing an eighth shortfall from the accepted seven was assessed and
+deliberately NOT built: the report already reaches all 204 rows (where `--all` stops at 84),
+it could never run unattended on a nine-minute sweep, and it becomes redundant the moment the
+seven shortfalls close, at which point `--all` is itself the drift check. `CONTRIBUTING.md`
+instead states plainly that seven `accepted-shortfall` rows with those exact readings is the
+expected result and an eighth is a real failure.
+
 
 - **Found during:** code review iteration 2, finding WR-05 of `117-REVIEW-2.md`
 - **File:** `scripts/test-coverage-direct.mjs`, `CONTRIBUTING.md`, `package.json`
