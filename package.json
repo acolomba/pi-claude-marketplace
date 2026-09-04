@@ -86,7 +86,7 @@
     "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"tests/e2e/**/*.test.ts\"",
     "test:coverage:integration": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"tests/integration/**/*.test.ts\"",
     "test:coverage:direct": "node scripts/test-coverage-direct.mjs",
-    "test:coverage:direct:all": "node scripts/test-coverage-direct.mjs --all",
+    "test:coverage:direct:all": "mkdir -p coverage && node scripts/test-coverage-direct.mjs --all --report coverage/all-pairs.jsonl",
     "test:coverage:direct:negative": "node scripts/test-coverage-direct.negative.mjs",
     "test:coverage:unit": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/unit.lcov \"tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
     "test:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/e2e/**/*.test.ts\"",

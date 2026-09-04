@@ -49,6 +49,20 @@ npm run test:coverage:direct        # the pairs your branch changed
 npm run test:coverage:direct:all    # every pair in the tree
 ```
 
-Run the changed-pairs sweep before opening a pull request that adds or edits a production module. Run the whole-tree sweep at a milestone boundary.
+Run the changed-pairs sweep before opening a pull request that adds or edits a production module. Run the whole-tree sweep at a milestone boundary. It writes one JSON row per pair to `coverage/all-pairs.jsonl` as each pair lands, so a run that stops early still leaves a readable partial result, and a run that reaches the end reads that file back before reporting -- a row lost on the way fails it. `coverage/` is gitignored.
 
-Both stop at the first pair that falls short of complete direct coverage, which today includes the accepted single-branch shortfalls recorded in `.planning/WINDOWS.md`. Reaching one of those is the expected outcome, not a regression -- read the ledger entry for the module the sweep names before treating a stop as a failure. That is also why neither script can be a CI job yet: a job that is red every night reports nothing.
+Both stop at the first pair that falls short of complete direct coverage. Seven modules fall short today, each by one branch the compiler forces and no input can reach. Their readings, under `extensions/pi-claude-marketplace/`:
+
+| module                                | reading                     |
+| ------------------------------------- | --------------------------- |
+| `edge/args.ts`                        | branches 28/29, lines 86/89 |
+| `edge/completions/data.ts`            | branches 109/110            |
+| `edge/completions/provider.ts`        | branches 79/80              |
+| `edge/handlers/marketplace/update.ts` | branches 11/12              |
+| `edge/handlers/plugin/import.ts`      | branches 11/12              |
+| `edge/handlers/plugin/pending.ts`     | branches 9/10               |
+| `edge/handlers/shared.ts`             | branches 14/15, lines 83/85 |
+
+Stopping on one of those, with that exact reading, is the expected outcome rather than a regression. Each is pinned by identity in its own pair, and each is filed in the project's broken-windows ledger with the reason the arm is unreachable. A stop on any other module -- or on one of these reporting different numbers -- is a real failure.
+
+The gate is deliberately not taught this list: an exception list inside the gate is a coverage pragma by another name, and the seven are already pinned where they live. That is also why neither script has a CI job, since a job that is red every run reports nothing.
