@@ -13,9 +13,10 @@ The use of generative AI is welcome, provided these conditions are met:
 
 ## Development setup
 
-Prerequisites:
+Before doing any work on a fresh repository:
 
-- [Open GSD](https://www.opengsd.net/), specifically [gsd-core](https://opengsd.net/products/gsd-core).
+- `node_modules/` missing: run `npm install`.
+- `.claude/gsd-core/` missing: install GSD local to the repository with `npx -y @opengsd/gsd-core@latest --claude --local` (use `--codex --local` instead when running under Codex).
 
 ```bash
 npm install

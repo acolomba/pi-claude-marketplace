@@ -6,11 +6,10 @@
 /.pi/git/
 /.pi/npm/
 /.pi/sessions/
+/.pi-lens
 
 # gsd
 /.gsd
-# Content-addressed cache of research-provider responses, written by
-# gsd-core's research store. Derived data, regenerated on demand.
 /.planning/research/.cache/
 
 # claude
