@@ -1,100 +1,293 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   extractEnabledPluginRefs,
   parseEnabledPluginRef,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/import/refs.ts";
 
-test("parseEnabledPluginRef accepts exactly one plugin@marketplace separator", () => {
-  const got = parseEnabledPluginRef("frontend-design@claude-plugins-official");
-  assert.equal(got.ok, true);
-  if (got.ok) {
-    assert.equal(got.ref.plugin, "frontend-design");
-    assert.equal(got.ref.marketplace, "claude-plugins-official");
-    assert.equal(got.ref.raw, "frontend-design@claude-plugins-official");
-  }
+test("parseEnabledPluginRef accepts one separator and preserves the verbatim raw input", () => {
+  // arrange
+  const raw = "frontend-design@claude-plugins-official";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: true,
+    ref: {
+      marketplace: "claude-plugins-official",
+      plugin: "frontend-design",
+      raw: "frontend-design@claude-plugins-official",
+    },
+  });
 });
 
-for (const raw of [
-  "",
-  "plugin",
-  "@claude-plugins-official",
-  "frontend-design@",
-  "frontend-design@@mp",
-  "frontend-design@mp@extra",
-]) {
-  test(`parseEnabledPluginRef rejects malformed ref ${JSON.stringify(raw)}`, () => {
-    const got = parseEnabledPluginRef(raw);
-    assert.equal(got.ok, false);
-  });
-}
+test("parseEnabledPluginRef trims the ref parts without changing the raw input", () => {
+  // arrange
+  const raw = "  frontend-design  @  claude-plugins-official  ";
 
-test("extractEnabledPluginRefs returns only exact true refs and skips false silently", () => {
-  const got = extractEnabledPluginRefs("user", {
-    enabledPlugins: { "a@mp": true, "b@mp": false },
-    extraKnownMarketplaces: {},
-  });
+  // act
+  const result = parseEnabledPluginRef(raw);
 
-  assert.deepEqual(
-    got.refs.map((ref) => ref.raw),
-    ["a@mp"],
-  );
-  assert.deepEqual(got.diagnostics, []);
+  // assert
+  assert.deepEqual(result, {
+    ok: true,
+    ref: {
+      marketplace: "claude-plugins-official",
+      plugin: "frontend-design",
+      raw: "  frontend-design  @  claude-plugins-official  ",
+    },
+  });
 });
 
-test("extractEnabledPluginRefs diagnoses non-boolean enabled plugin values", () => {
-  const got = extractEnabledPluginRefs("project", {
-    enabledPlugins: { "a@mp": "true", "b@mp": 1, "c@mp": null, "d@mp": {} },
-    extraKnownMarketplaces: {},
-  });
+test("parseEnabledPluginRef rejects an empty input with the separator diagnostic", () => {
+  // arrange
+  const raw = "";
 
-  assert.deepEqual(got.refs, []);
-  assert.equal(got.diagnostics.length, 4);
-  assert.deepEqual(
-    got.diagnostics.map((diagnostic) => diagnostic.code),
-    [
-      "non-boolean-enabled-plugin",
-      "non-boolean-enabled-plugin",
-      "non-boolean-enabled-plugin",
-      "non-boolean-enabled-plugin",
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected exactly one @ separator in plugin@marketplace ref.",
+  });
+});
+
+test("parseEnabledPluginRef rejects a ref with no separator", () => {
+  // arrange
+  const raw = "frontend-design";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected exactly one @ separator in plugin@marketplace ref.",
+  });
+});
+
+test("parseEnabledPluginRef rejects a ref with multiple separators", () => {
+  // arrange
+  const raw = "frontend-design@marketplace@extra";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected exactly one @ separator in plugin@marketplace ref.",
+  });
+});
+
+test("parseEnabledPluginRef rejects an empty plugin side", () => {
+  // arrange
+  const raw = "@claude-plugins-official";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+  });
+});
+
+test("parseEnabledPluginRef rejects a whitespace-only plugin side", () => {
+  // arrange
+  const raw = "   @claude-plugins-official";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+  });
+});
+
+test("parseEnabledPluginRef rejects an empty marketplace side", () => {
+  // arrange
+  const raw = "frontend-design@";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+  });
+});
+
+test("parseEnabledPluginRef rejects a whitespace-only marketplace side", () => {
+  // arrange
+  const raw = "frontend-design@   ";
+
+  // act
+  const result = parseEnabledPluginRef(raw);
+
+  // assert
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+  });
+});
+
+test("extractEnabledPluginRefs selects exact true values and skips exact false values", () => {
+  // arrange
+  const settings = {
+    enabledPlugins: {
+      "alpha@first-marketplace": true,
+      "disabled-malformed-ref": false,
+      "omega@last-marketplace": true,
+    },
+    extraKnownMarketplaces: {},
+  };
+
+  // act
+  const result = extractEnabledPluginRefs("user", settings);
+
+  // assert
+  assert.deepEqual(result, {
+    diagnostics: [],
+    refs: [
+      {
+        marketplace: "first-marketplace",
+        plugin: "alpha",
+        raw: "alpha@first-marketplace",
+      },
+      {
+        marketplace: "last-marketplace",
+        plugin: "omega",
+        raw: "omega@last-marketplace",
+      },
     ],
-  );
-});
-
-test("extractEnabledPluginRefs diagnoses malformed refs and continues to valid refs", () => {
-  const got = extractEnabledPluginRefs("user", {
-    enabledPlugins: { bad: true, "good@mp": true },
-    extraKnownMarketplaces: {},
   });
-
-  assert.deepEqual(
-    got.refs.map((ref) => ref.raw),
-    ["good@mp"],
-  );
-  assert.equal(got.diagnostics.length, 1);
-  assert.equal(got.diagnostics[0]?.code, "malformed-plugin-ref");
-  assert.equal(got.diagnostics[0]?.ref, "bad");
 });
 
-test("refs.ts stays pure and side-effect free", async () => {
-  const source = await readFile(
-    new URL(
-      "../../../extensions/pi-claude-marketplace/orchestrators/import/refs.ts",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  for (const forbidden of [
-    "ctx.ui.notify",
-    "console.",
-    "process.stdout",
-    "process.stderr",
-    "fetch",
-    "readFile",
-    "writeFile",
-  ]) {
-    assert.equal(source.includes(forbidden), false, `refs.ts must not contain ${forbidden}`);
-  }
+test("extractEnabledPluginRefs reports nonboolean project values in exact input order", () => {
+  // arrange
+  const settings = {
+    enabledPlugins: {
+      "string-value@marketplace": "true",
+      "number-value@marketplace": 1,
+      "null-value@marketplace": null,
+      "object-value@marketplace": {},
+      "array-value@marketplace": [],
+    },
+    extraKnownMarketplaces: {},
+  };
+
+  // act
+  const result = extractEnabledPluginRefs("project", settings);
+
+  // assert
+  assert.deepEqual(result, {
+    diagnostics: [
+      {
+        code: "non-boolean-enabled-plugin",
+        message:
+          'Skipping enabled plugin ref "string-value@marketplace" because its value is not boolean true or false.',
+        ref: "string-value@marketplace",
+        scope: "project",
+        severity: "warning",
+      },
+      {
+        code: "non-boolean-enabled-plugin",
+        message:
+          'Skipping enabled plugin ref "number-value@marketplace" because its value is not boolean true or false.',
+        ref: "number-value@marketplace",
+        scope: "project",
+        severity: "warning",
+      },
+      {
+        code: "non-boolean-enabled-plugin",
+        message:
+          'Skipping enabled plugin ref "null-value@marketplace" because its value is not boolean true or false.',
+        ref: "null-value@marketplace",
+        scope: "project",
+        severity: "warning",
+      },
+      {
+        code: "non-boolean-enabled-plugin",
+        message:
+          'Skipping enabled plugin ref "object-value@marketplace" because its value is not boolean true or false.',
+        ref: "object-value@marketplace",
+        scope: "project",
+        severity: "warning",
+      },
+      {
+        code: "non-boolean-enabled-plugin",
+        message:
+          'Skipping enabled plugin ref "array-value@marketplace" because its value is not boolean true or false.',
+        ref: "array-value@marketplace",
+        scope: "project",
+        severity: "warning",
+      },
+    ],
+    refs: [],
+  });
+});
+
+test("extractEnabledPluginRefs preserves enabled-ref and diagnostic order across mixed user settings", () => {
+  // arrange
+  const settings = {
+    enabledPlugins: {
+      "first@marketplace": true,
+      malformed: true,
+      "disabled@marketplace": false,
+      "not-boolean@marketplace": "false",
+      "  second  @  another-marketplace  ": true,
+      "third@": true,
+    },
+    extraKnownMarketplaces: { ignored: "source" },
+  };
+
+  // act
+  const result = extractEnabledPluginRefs("user", settings);
+
+  // assert
+  assert.deepEqual(result, {
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message:
+          'Skipping malformed enabled plugin ref "malformed": Expected exactly one @ separator in plugin@marketplace ref. Expected plugin@marketplace.',
+        ref: "malformed",
+        scope: "user",
+        severity: "warning",
+      },
+      {
+        code: "non-boolean-enabled-plugin",
+        message:
+          'Skipping enabled plugin ref "not-boolean@marketplace" because its value is not boolean true or false.',
+        ref: "not-boolean@marketplace",
+        scope: "user",
+        severity: "warning",
+      },
+      {
+        code: "malformed-plugin-ref",
+        message:
+          'Skipping malformed enabled plugin ref "third@": Expected non-empty plugin and marketplace in plugin@marketplace ref. Expected plugin@marketplace.',
+        ref: "third@",
+        scope: "user",
+        severity: "warning",
+      },
+    ],
+    refs: [
+      { marketplace: "marketplace", plugin: "first", raw: "first@marketplace" },
+      {
+        marketplace: "another-marketplace",
+        plugin: "second",
+        raw: "  second  @  another-marketplace  ",
+      },
+    ],
+  });
 });

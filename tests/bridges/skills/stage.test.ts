@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { describe, test, type TestContext } from "node:test";
 
 import {
   abortPreparedSkills,
@@ -14,1061 +14,1890 @@ import {
   rollbackSkillsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
-// Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.resolve(__dirname, "..", "_fixtures");
+const filesystemPromises = createRequire(import.meta.url)(
+  "node:fs/promises",
+) as typeof import("node:fs/promises");
 
-function makeResolved(
-  name: string,
-  pluginRoot: string,
-  skillsDirAbs: string | undefined,
-): ResolvedPluginInstallable {
-  // D-07: componentPaths.skills is `readonly string[]`.
+async function allocateCasePaths(
+  t: TestContext,
+  prefix: string,
+): Promise<{
+  scopeRoot: string;
+  pluginRoot: string;
+  pluginDataDir: string;
+  locations: ReturnType<typeof locationsFor>;
+}> {
+  const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
+  const locations = locationsFor("project", scopeRoot);
+
   return {
-    state: "installable",
-    name,
-    pluginRoot,
-    supported: [],
-    unsupported: [],
-    notes: [],
-    componentPaths: {
-      skills: skillsDirAbs === undefined ? [] : [skillsDirAbs],
-      commands: [],
-      agents: [],
-    },
-    mcpServers: {},
-    defaultEnabled: true,
+    scopeRoot,
+    pluginRoot: path.join(scopeRoot, "plugin"),
+    pluginDataDir: path.join(scopeRoot, "plugin-data"),
+    locations,
   };
 }
 
-async function withTmpScope<T>(
-  fn: (ctx: { scopeRoot: string; locations: ReturnType<typeof locationsFor> }) => Promise<T>,
-): Promise<T> {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "skills-stage-"));
-  const locations = locationsFor("project", tmp);
-  try {
-    return await fn({ scopeRoot: tmp, locations });
-  } finally {
-    await cleanupStaging(tmp, "test-cleanup");
-  }
-}
-
-test("SK-1 commitPreparedSkills lands skills at <extensionRoot>/resources/skills/<generatedName>/SKILL.md", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
+describe("prepareStageSkills", () => {
+  test("returns a complete no-op without materializing bridge directories", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-noop-",
+    );
+    await mkdir(pluginRoot, { recursive: true });
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
       pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-    });
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
 
-    assert.equal(prepared.kind, "staged");
-    assert.deepEqual([...prepared.result.stagedNames].sort(), ["acme-helper", "acme-knowledge"]);
-
-    const leak = await commitPreparedSkills(prepared);
-    assert.equal(leak, undefined);
-
-    // Both target SKILL.md files exist after commit.
-    const knowledgeSkill = path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md");
-    const helperSkill = path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md");
-    const knowledgeStat = await stat(knowledgeSkill);
-    const helperStat = await stat(helperSkill);
-    assert.ok(knowledgeStat.isFile());
-    assert.ok(helperStat.isFile());
-
-    // Ancillary file inside acme-knowledge survived the cp.
-    const lookup = path.join(
-      locations.skillsTargetDir,
-      "acme-knowledge",
-      "resources",
-      "lookup.json",
-    );
-    const lookupStat = await stat(lookup);
-    assert.ok(lookupStat.isFile());
-  });
-});
-
-test("SK-3 prepared SKILL.md frontmatter has rewritten name (acme-knowledge / acme-helper)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
+    // act
     const prepared = await prepareStageSkills({
       locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-    });
-    await commitPreparedSkills(prepared);
-
-    const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
-    );
-    assert.match(knowledge, /^---\nname: acme-knowledge\n/m);
-
-    const helper = await readFile(
-      path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"),
-      "utf8",
-    );
-    // Helper source had `name: helper` -- after rewrite it should be acme-helper.
-    assert.match(helper, /^name: acme-helper$/m);
-    // The original `name: helper` line must be gone.
-    assert.ok(!/^name: helper$/m.test(helper), "original name line should be replaced");
-  });
-});
-
-test("SK-3 prepared SKILL.md preserves description and license fields", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-    });
-    await commitPreparedSkills(prepared);
-
-    const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
-    );
-    assert.ok(knowledge.includes("description: Knowledge base lookups for acme"));
-    assert.ok(knowledge.includes("license: MIT"));
-  });
-});
-
-test("SK-4 substituted SKILL.md body has no remaining ${CLAUDE_PLUGIN_ROOT} or ${CLAUDE_PLUGIN_DATA}", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const pluginDataDir = path.join(locations.dataRoot, "mp", "acme");
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
       resolved,
     });
-    await commitPreparedSkills(prepared);
+    const stagingDirectory = await stat(locations.skillsStagingDir).catch(() => undefined);
+    const targetDirectory = await stat(locations.skillsTargetDir).catch(() => undefined);
 
-    const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
-    );
-    assert.ok(
-      !knowledge.includes("${CLAUDE_PLUGIN_ROOT}"),
-      "ROOT placeholder should be substituted",
-    );
-    assert.ok(
-      !knowledge.includes("${CLAUDE_PLUGIN_DATA}"),
-      "DATA placeholder should be substituted",
-    );
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: { stagedNames: [], recorded: [], warnings: [], degraded: [] },
+    });
+    assert.strictEqual(stagingDirectory, undefined);
+    assert.strictEqual(targetDirectory, undefined);
   });
-});
 
-test("SK-4 substituted SKILL.md contains the resolved pluginRoot path verbatim", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+  test("copies recursive skill trees and authors complete staged bytes", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-recursive-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const betaDirectory = path.join(skillsDirectory, "beta");
+    await mkdir(path.join(alphaDirectory, "resources"), { recursive: true });
+    await mkdir(betaDirectory, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha skill\nlicense: MIT\n---\n\n" +
+        "Root: ${CLAUDE_PLUGIN_ROOT}\nData: ${CLAUDE_PLUGIN_DATA}\n" +
+        "Skill: ${CLAUDE_SKILL_DIR}\nProject: ${CLAUDE_PROJECT_DIR}\n",
+    );
+    await writeFile(
+      path.join(betaDirectory, "SKILL.md"),
+      "---\nname: beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n",
+    );
+    await writeFile(path.join(alphaDirectory, "resources", "lookup.json"), '{"keys":["a","b"]}\n');
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
+    const expectedAlphaBytes =
+      "---\nname: acme-alpha\ndescription: Alpha skill\nlicense: MIT\n---\n\nRoot: " +
+      pluginRoot +
+      "\nData: " +
+      pluginDataDir +
+      "\nSkill: " +
+      alphaTarget +
+      "\nProject: " +
+      scopeRoot +
+      "\n";
 
-    const pluginDataDir = path.join(locations.dataRoot, "mp", "acme");
+    // act
     const prepared = await prepareStageSkills({
       locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
       resolved,
     });
-    await commitPreparedSkills(prepared);
-
-    const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
+    assert.strictEqual(prepared.kind, "staged");
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+    const betaBytes = await readFile(path.join(prepared.stagingRoot, "acme-beta", "SKILL.md"));
+    const resourceBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "resources", "lookup.json"),
     );
-    assert.ok(knowledge.includes(pluginRoot), "substituted body should contain pluginRoot path");
-    assert.ok(knowledge.includes(pluginDataDir), "substituted body should contain pluginData path");
-  });
-});
+    const stagedTree = await readdir(prepared.stagingRoot);
 
-test("SK-4 / AG-8: a ${CLAUDE_PLUGIN_ROOT} in a body-synthesized description survives a backslash (Windows) plugin root (substitute-then-escape)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const srcRoot = await mkdtemp(path.join(os.tmpdir(), "skills-winpath-src-"));
-    try {
-      // No `description` -> the augment arm fills it from the first body paragraph,
-      // which references ${CLAUDE_PLUGIN_ROOT}, and re-emits it as a double-quoted
-      // scalar. If substitution happened AFTER escaping, a Windows path's backslashes
-      // would splice in raw and form an invalid `\U...` escape that the PARSE-02
-      // gate-2 backstop rejects -- hard-failing the whole prepare.
-      const skillsDir = path.join(srcRoot, "skills");
-      await mkdir(path.join(skillsDir, "winpath"), { recursive: true });
-      await writeFile(
-        path.join(skillsDir, "winpath", "SKILL.md"),
-        "---\nname: winpath\n---\nUses ${CLAUDE_PLUGIN_ROOT} at runtime.\n",
-      );
-
-      // A Windows-style plugin root (only used for substitution; the real source
-      // tree lives at srcRoot). Backslashes are the escape hazard under test.
-      const winPluginRoot = "C:\\Users\\me\\acme-plugin";
-
-      const prepared = await prepareStageSkills({
-        locations,
-        cwd: locations.scopeRoot,
-        marketplaceName: "mp",
-        pluginName: "acme",
-        pluginRoot: winPluginRoot,
-        pluginDataDir: "D:\\pi-data\\mp\\acme",
-        resolved: makeResolved("acme", srcRoot, skillsDir),
-      });
-
-      // Gate-2 did NOT throw: the value re-emitted with escaped backslashes.
-      assert.equal(prepared.kind, "staged");
-      assert.equal(prepared.result.degraded.length, 0);
-
-      await commitPreparedSkills(prepared);
-      const staged = await readFile(
-        path.join(locations.skillsTargetDir, "acme-winpath", "SKILL.md"),
-        "utf8",
-      );
-
-      assert.ok(!staged.includes("${CLAUDE_PLUGIN_ROOT}"), "the var must be substituted");
-      const { frontmatter } = parseFrontmatter(staged);
-      assert.equal(frontmatter.description, "Uses C:\\Users\\me\\acme-plugin at runtime.");
-    } finally {
-      await rm(srcRoot, { recursive: true, force: true });
-    }
-  });
-});
-
-test("AS-8 prepareStageSkills returns kind:'noop' when no discovered AND no previousNames", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // empty-mcp fixture has no skills/ dir.
-    const pluginRoot = path.join(FIXTURES, "empty-mcp");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
+    // assert
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["acme-alpha", "acme-beta"],
+      recorded: [
+        { generatedName: "acme-alpha", sourcePath: alphaDirectory, targetPath: alphaTarget },
+        { generatedName: "acme-beta", sourcePath: betaDirectory, targetPath: betaTarget },
+      ],
+      warnings: [],
+      degraded: [],
     });
-
-    assert.equal(prepared.kind, "noop");
-    assert.deepEqual([...prepared.result.stagedNames], []);
-    assert.deepEqual([...prepared.result.recorded], []);
-
-    // commit on noop is a no-op (returns undefined leak).
-    const leak = await commitPreparedSkills(prepared);
-    assert.equal(leak, undefined);
-
-    // abort on noop is also a no-op.
-    await abortPreparedSkills(prepared);
-  });
-});
-
-test("commitPreparedSkills removes previous-named target dirs before rename (re-stage path)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // Pre-populate a previous-named target dir.
-    const oldDir = path.join(locations.skillsTargetDir, "old-skill");
-    await mkdir(oldDir, { recursive: true });
-    await writeFile(path.join(oldDir, "SKILL.md"), "stale content");
-
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["old-skill"],
-    });
-    assert.equal(prepared.kind, "staged");
-
-    await commitPreparedSkills(prepared);
-
-    // old-skill should be gone.
-    const oldStat = await stat(oldDir).catch(() => null);
-    assert.equal(oldStat, null, "previous-named target dir should be removed");
-    // New skills should exist.
-    const newStat = await stat(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"));
-    assert.ok(newStat.isFile());
-  });
-});
-
-test("PRL-10 replacePreparedSkills can rollback to previous skill bytes", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
-    await mkdir(oldDir, { recursive: true });
-    await writeFile(path.join(oldDir, "SKILL.md"), "old skill bytes");
-
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["acme-knowledge"],
-    });
-
-    const replacement = await replacePreparedSkills(prepared);
-    const replaced = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
+    assert.deepStrictEqual(prepared._previousNames, []);
+    assert.deepStrictEqual(stagedTree, ["acme-alpha", "acme-beta"]);
+    assert.deepStrictEqual(alphaBytes, Buffer.from(expectedAlphaBytes));
+    assert.deepStrictEqual(
+      betaBytes,
+      Buffer.from("---\nname: acme-beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n"),
     );
-    assert.notEqual(replaced, "old skill bytes");
-    assert.ok(replaced.includes(pluginRoot));
-    assert.ok(replaced.includes(path.join(locations.dataRoot, "mp", "acme")));
-
-    const leaks = await rollbackSkillsReplacement(replacement);
-    assert.deepEqual([...leaks], []);
-    assert.equal(
-      await readFile(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"), "utf8"),
-      "old skill bytes",
-    );
-    assert.equal(
-      await stat(path.join(locations.skillsTargetDir, "acme-helper")).catch(() => null),
-      null,
-    );
+    assert.deepStrictEqual(resourceBytes, Buffer.from('{"keys":["a","b"]}\n'));
   });
-});
 
-test("PRL-10 finalizeSkillsReplacement removes backups and keeps staged content", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
-    await mkdir(oldDir, { recursive: true });
-    await writeFile(path.join(oldDir, "SKILL.md"), "old skill bytes");
-
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
+  test("keeps the first generated name and returns the complete collision warning", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-collision-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const winningDirectory = path.join(skillsDirectory, "acme-tool");
+    const losingDirectory = path.join(skillsDirectory, "tool");
+    await mkdir(winningDirectory, { recursive: true });
+    await mkdir(losingDirectory, { recursive: true });
+    await writeFile(
+      path.join(winningDirectory, "SKILL.md"),
+      "---\nname: acme-tool\ndescription: Winning skill\n---\n",
+    );
+    await writeFile(
+      path.join(losingDirectory, "SKILL.md"),
+      "---\nname: tool\ndescription: Losing skill\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
       pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["acme-knowledge"],
-    });
-    assert.equal(prepared.kind, "staged");
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedWarning =
+      'skill source "tool" in "' +
+      skillsDirectory +
+      '" elides to generated name "acme-tool", already produced by skill source ' +
+      '"acme-tool"; ignoring duplicate.';
 
-    const replacement = await replacePreparedSkills(prepared);
-    const leaks = await finalizeSkillsReplacement(replacement);
-    assert.deepEqual([...leaks], []);
-    assert.equal(await stat(prepared.stagingRoot).catch(() => null), null);
-
-    const restored = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
-    );
-    assert.notEqual(restored, "old skill bytes");
-    assert.ok(
-      (await stat(path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"))).isFile(),
-    );
-  });
-});
-
-test("PRL-10 replacePreparedSkills restores backups if an unrelated target blocks rename", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
-    await mkdir(oldDir, { recursive: true });
-    await writeFile(path.join(oldDir, "SKILL.md"), "old skill bytes");
-    const unrelatedDir = path.join(locations.skillsTargetDir, "acme-helper");
-    await mkdir(unrelatedDir, { recursive: true });
-    await writeFile(path.join(unrelatedDir, "SKILL.md"), "manual helper bytes");
-
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
+    // act
     const prepared = await prepareStageSkills({
       locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["acme-knowledge"],
-    });
-
-    await assert.rejects(() => replacePreparedSkills(prepared), /non-previous content/);
-    assert.equal(
-      await readFile(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"), "utf8"),
-      "old skill bytes",
-    );
-    assert.equal(
-      await readFile(path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"), "utf8"),
-      "manual helper bytes",
-    );
-  });
-});
-
-test("PRL-10 noop skills replacements rollback and finalize without leaks", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "empty-mcp");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-    });
-
-    const replacement = await replacePreparedSkills(prepared);
-    assert.equal(replacement.kind, "noop");
-    assert.deepEqual([...(await rollbackSkillsReplacement(replacement))], []);
-    assert.deepEqual([...(await finalizeSkillsReplacement(replacement))], []);
-  });
-});
-
-test("commitPreparedSkills tolerates ENOENT on previous-named target dirs", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["never-existed"],
-    });
-    assert.equal(prepared.kind, "staged");
-
-    // Should not throw.
-    const leak = await commitPreparedSkills(prepared);
-    assert.equal(leak, undefined);
-  });
-});
-
-test("abortPreparedSkills cleans up staging dir after partial prepare", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-    });
-    assert.equal(prepared.kind, "staged");
-
-    if (prepared.kind === "staged") {
-      // Staging dir exists pre-abort.
-      const preStat = await stat(prepared.stagingRoot);
-      assert.ok(preStat.isDirectory());
-
-      await abortPreparedSkills(prepared);
-
-      // Staging dir gone post-abort.
-      const postStat = await stat(prepared.stagingRoot).catch(() => null);
-      assert.equal(postStat, null, "staging root should be cleaned up");
-    }
-  });
-});
-
-test("prepareStageSkills surfaces appendLeakToError when a skill source is unreadable", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("POSIX-only chmod 0 failure path");
-    return;
-  }
-
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    t.skip("running as root -- chmod 0 has no effect");
-    return;
-  }
-
-  await withTmpScope(async ({ locations }) => {
-    // Synthesize a source skills dir with one unreadable skill.
-    const srcRoot = await mkdtemp(path.join(os.tmpdir(), "stage-leak-"));
-    try {
-      const skillsDir = path.join(srcRoot, "skills");
-      await mkdir(skillsDir, { recursive: true });
-      const evilSkill = path.join(skillsDir, "evil");
-      await mkdir(evilSkill);
-      await writeFile(path.join(evilSkill, "SKILL.md"), "---\nname: evil\n---");
-      // Make the skill dir unreadable so cp fails.
-      await chmod(evilSkill, 0o000);
-
-      const resolved = makeResolved("acme", srcRoot, skillsDir);
-      try {
-        await prepareStageSkills({
-          locations,
-          cwd: locations.scopeRoot,
-          marketplaceName: "mp",
-          pluginName: "acme",
-          pluginRoot: srcRoot,
-          pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-          resolved,
-        });
-        assert.fail("expected prepareStageSkills to throw");
-      } catch (err) {
-        assert.ok(err instanceof Error);
-        // The error should have either the original message or a leak append.
-        assert.ok(err.message.length > 0);
-      }
-
-      await chmod(evilSkill, 0o755);
-    } finally {
-      await cleanupStaging(srcRoot, "test-cleanup");
-    }
-  });
-});
-
-test("PRL-10 finalizeSkillsReplacement throws on unknown replacement handle (defensive)", async () => {
-  const bogus = { kind: "replaced" } as Parameters<typeof finalizeSkillsReplacement>[0];
-  await assert.rejects(() => finalizeSkillsReplacement(bogus), /Unknown skills replacement handle/);
-});
-
-test("PRL-10 replacePreparedSkills skips backup when previous skill dir vanished", async () => {
-  // The replace path's backup loop has a "skip if target doesn't exist"
-  // branch. Trigger: declare a previousSkillName whose target dir is not on
-  // disk; the backup loop should `continue` past it instead of attempting
-  // a rename that would throw ENOENT.
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["was-here-but-gone"], // never written to disk
-    });
-
-    const replacement = await replacePreparedSkills(prepared);
-    assert.equal(replacement.kind, "replaced");
-    const leaks = await rollbackSkillsReplacement(replacement);
-    assert.deepEqual([...leaks], []);
-  });
-});
-
-// TR-06 orphan tolerance in replacePreparedSkills ------------------------
-
-test("TR-06 replacePreparedSkills tolerates owned orphan dir from prior partial install", async () => {
-  // A previous partial install left an orphan skill dir at the target.
-  // Because the basename matches an owned previousSkillName, the 3-arm
-  // policy pre-removes the orphan via removeOrphanIfPresent and proceeds
-  // with the rename. The new staged content lands; the orphan bytes are
-  // overwritten.
-  await withTmpScope(async ({ locations }) => {
-    const orphanDir = path.join(locations.skillsTargetDir, "acme-knowledge");
-    await mkdir(orphanDir, { recursive: true });
-    await writeFile(path.join(orphanDir, "SKILL.md"), "orphan-bytes\n");
-    await writeFile(path.join(orphanDir, "leftover.txt"), "from-prior-attempt\n");
-
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-      previousSkillNames: ["acme-knowledge"],
-    });
-
-    const replacement = await replacePreparedSkills(prepared);
-    assert.equal(replacement.kind, "replaced");
-
-    // The orphan dir was removed (its leftover.txt is gone), and the new
-    // staged content (with rewritten frontmatter) landed in its place.
-    const replacedSkillMd = await readFile(
-      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
-      "utf8",
-    );
-    assert.notEqual(replacedSkillMd, "orphan-bytes\n");
-    assert.equal(
-      await stat(path.join(locations.skillsTargetDir, "acme-knowledge", "leftover.txt")).catch(
-        () => null,
-      ),
-      null,
-      "orphan leftover.txt must be gone (helper rm -r the whole owned orphan dir)",
-    );
-  });
-});
-
-test("SKILL-01 / PARSE-01 unparseable source frontmatter -> synthesized disable-model-invocation block, body verbatim, degrade record", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "unparseable-skill-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-      resolved,
-    });
-    assert.equal(prepared.kind, "staged");
-
-    // Degrade record: exactly one, carrying the generated name + a non-empty
-    // parse error (the actionable detail the install warning surfaces).
-    assert.equal(prepared.result.degraded.length, 1);
-    const record = prepared.result.degraded[0]!;
-    assert.ok(record.generatedName.length > 0);
-    assert.ok(record.parseError.length > 0, "parse error must be non-empty");
-
-    await commitPreparedSkills(prepared);
-
-    const staged = await readFile(
-      path.join(locations.skillsTargetDir, record.generatedName, "SKILL.md"),
-      "utf8",
-    );
-    // Synthesized frontmatter: generated name, disable-model-invocation, and the
-    // fixed placeholder description.
-    assert.match(staged, new RegExp(`^name: ${record.generatedName}$`, "m"));
-    assert.match(staged, /^disable-model-invocation: true$/m);
-    assert.match(staged, /^description: /m);
-    // Body preserved verbatim (the malformed frontmatter is discarded, not the body).
-    assert.ok(staged.includes("# Bad Skill\n\nThis body must survive verbatim."));
-    // Gate-2 parity: the staged bytes re-parse (do NOT throw) -- Pi accepts them.
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-  });
-});
-
-test("NREG-01 valid skill is staged byte-for-byte identical to a name-rewrite + var-substitution of the source (gates mutate nothing)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const pluginRoot = path.join(FIXTURES, "test-plugin");
-    const skillsDir = path.join(pluginRoot, "skills");
-    const resolved = makeResolved("acme", pluginRoot, skillsDir);
-
-    const pluginDataDir = path.join(locations.dataRoot, "mp", "acme");
-    const prepared = await prepareStageSkills({
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
       resolved,
     });
-    // The all-valid path degrades nothing.
-    assert.equal(prepared.result.degraded.length, 0);
 
-    await commitPreparedSkills(prepared);
-
-    // The `helper` source has `name: helper` (rewritten to `acme-helper`) and a
-    // `${CLAUDE_PLUGIN_DATA}` body reference. Build the expected bytes with
-    // INDEPENDENT literal string replacements -- NOT the production rewrite /
-    // substitute helpers -- so the assertion proves the read-only gates
-    // introduced no reformatting, re-quoting, or field reordering.
-    const source = await readFile(path.join(skillsDir, "helper", "SKILL.md"), "utf8");
-    const expected = source
-      .replace("name: helper", "name: acme-helper")
-      .replaceAll("${CLAUDE_PLUGIN_ROOT}", pluginRoot)
-      .replaceAll("${CLAUDE_PLUGIN_DATA}", pluginDataDir);
-
-    const staged = await readFile(
-      path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"),
-      "utf8",
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["acme-tool"],
+      recorded: [
+        {
+          generatedName: "acme-tool",
+          sourcePath: winningDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-tool"),
+        },
+      ],
+      warnings: [expectedWarning],
+      degraded: [],
+    });
+    assert.strictEqual(
+      await readFile(path.join(prepared.stagingRoot, "acme-tool", "SKILL.md"), "utf8"),
+      "---\nname: acme-tool\ndescription: Winning skill\n---\n",
     );
-    // Byte-for-byte: the only differences from source are the name rewrite and
-    // the two variable substitutions.
-    assert.equal(staged, expected);
   });
-});
 
-// SKILL-02 / WTU-01 / WTU-02 augment arm (gate-1 RETURN branch) ------------
+  test("degrades malformed frontmatter and preserves the normalized body bytes", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-malformed-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "broken");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\rname: [unterminated\rdescription: discarded\r---\r\r" +
+        "# Broken\r\rBody bytes survive.\r",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedBytes =
+      "---\nname: acme-broken\n" +
+      "description: Source frontmatter could not be parsed.\n" +
+      "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+    const expectedResult = {
+      stagedNames: ["acme-broken"],
+      recorded: [
+        {
+          generatedName: "acme-broken",
+          sourcePath: skillDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
+        },
+      ],
+      warnings: [],
+      degraded: [
+        {
+          generatedName: "acme-broken",
+          parseError:
+            "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
+            "name: [unterminated\ndescription: discarded\n^\n",
+        },
+      ],
+    };
 
-/**
- * Stage a single dynamically-authored source skill and return the staged
- * SKILL.md bytes. The source `name` is `s`, so the generated name is `acme-s`.
- */
-async function stageAugmentSource(
-  locations: ReturnType<typeof locationsFor>,
-  dataRoot: string,
-  sourceSkillMd: string,
-): Promise<string> {
-  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "augment-src-"));
-  try {
-    const skillsDir = path.join(srcRoot, "skills");
-    await mkdir(path.join(skillsDir, "s"), { recursive: true });
-    await writeFile(path.join(skillsDir, "s", "SKILL.md"), sourceSkillMd);
-
-    const resolved = makeResolved("acme", srcRoot, skillsDir);
+    // act
     const prepared = await prepareStageSkills({
       locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "mp",
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
       pluginName: "acme",
-      pluginRoot: srcRoot,
-      pluginDataDir: dataRoot,
+      pluginRoot,
+      pluginDataDir,
       resolved,
     });
-    await commitPreparedSkills(prepared);
-
-    return await readFile(path.join(locations.skillsTargetDir, "acme-s", "SKILL.md"), "utf8");
-  } finally {
-    await cleanupStaging(srcRoot, "test-cleanup");
-  }
-}
-
-test("SKILL-02 description-less skill stages a first-body-paragraph description and stays model-invocable", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const source =
-      "---\nname: no-desc\nversion: 1.0.0\n---\n\n" +
-      "# A Heading\n\n" +
-      "The first genuine prose paragraph.\nSecond line of that paragraph.\n\n" +
-      "A later paragraph that must not be captured.\n";
-
-    const staged = await stageAugmentSource(
-      locations,
-      path.join(locations.dataRoot, "mp", "acme"),
-      source,
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-broken", "SKILL.md"),
+      "utf8",
     );
 
-    const { frontmatter } = parseFrontmatter<{
-      name: string;
-      description: string;
-      "disable-model-invocation"?: boolean;
-    }>(staged);
-    assert.equal(frontmatter.name, "acme-s");
-    // The first-body paragraph spans two source lines; the safe single-line
-    // double-quoted scalar emitter collapses its internal newline to a space.
-    assert.equal(
-      frontmatter.description,
-      "The first genuine prose paragraph. Second line of that paragraph.",
-    );
-    // SKILL-02: filled skills stay model-invocable (no disable flag inserted).
-    assert.equal(frontmatter["disable-model-invocation"], undefined);
-    assert.ok(!staged.includes("disable-model-invocation"));
-    // The later paragraph is not part of the description.
-    assert.ok(!(frontmatter.description ?? "").includes("later paragraph"));
+    // assert
+    assert.deepStrictEqual(prepared.result, expectedResult);
+    assert.strictEqual(stagedBytes, expectedBytes);
   });
-});
 
-test("SKILL-02 empty probe: a description-less skill with no prose body still stages a non-empty description", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // Frontmatter parses cleanly; there is no description and no prose body.
-    const source = "---\nname: empty-body\n---\n";
-
-    const staged = await stageAugmentSource(
-      locations,
-      path.join(locations.dataRoot, "mp", "acme"),
-      source,
+  test("fills and caps descriptions without changing sibling frontmatter", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-description-",
     );
-
-    const { frontmatter } = parseFrontmatter<{ description: string }>(staged);
-    assert.ok(
-      typeof frontmatter.description === "string" && frontmatter.description.trim().length > 0,
-      "empty-body skill must still carry a non-empty description (Pi drops empty-desc skills)",
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const emptyDirectory = path.join(skillsDirectory, "empty");
+    const proseDirectory = path.join(skillsDirectory, "prose");
+    const foldedDirectory = path.join(skillsDirectory, "folded");
+    await mkdir(emptyDirectory, { recursive: true });
+    await mkdir(proseDirectory, { recursive: true });
+    await mkdir(foldedDirectory, { recursive: true });
+    await writeFile(path.join(emptyDirectory, "SKILL.md"), "---\nname: empty\nversion: 1\n---\n");
+    await writeFile(
+      path.join(proseDirectory, "SKILL.md"),
+      "---\nname: prose\nversion: 2\n---\n\n# Heading\n\n" +
+        "First prose line.\nSecond prose line.\n\nLater.\n",
     );
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-  });
-});
-
-test("WTU-01 / WTU-02 when_to_use is folded into the description and hard-cut at 1,536", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // Source combined length = 1000 + 1 (\n) + 536 = 1537 -> hard cut to 1536.
     const description = "a".repeat(1000);
     const whenToUse = "b".repeat(536);
-    const source = `---\nname: wtu\ndescription: ${description}\nwhen_to_use: ${whenToUse}\n---\n\nBody.\n`;
-
-    const staged = await stageAugmentSource(
-      locations,
-      path.join(locations.dataRoot, "mp", "acme"),
-      source,
-    );
-
-    const { frontmatter } = parseFrontmatter<{ description: string }>(staged);
-    // Hard cut to exactly 1,536 UTF-16 code units (no ellipsis).
-    assert.equal(frontmatter.description.length, 1536);
-    // The description carries the source description and the folded when_to_use
-    // tail (the single `\n` fold separator collapses to a space in the emitted
-    // double-quoted scalar).
-    assert.ok(frontmatter.description.startsWith("a".repeat(1000)));
-    assert.ok(frontmatter.description.includes("b"), "folded when_to_use tail present");
-    assert.ok(frontmatter.description.endsWith("b"), "tail is the when_to_use text");
-  });
-});
-
-test("WTU-02 / D-86-05 a >1024 combined description still parses to a non-empty description (Pi loads it)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    // Combined length = 1000 + 1 + 200 = 1201 (in the 1025..1536 range): no cut.
-    const description = "a".repeat(1000);
-    const whenToUse = "b".repeat(200);
-    const source = `---\nname: long\ndescription: ${description}\nwhen_to_use: ${whenToUse}\n---\n\nBody.\n`;
-
-    const staged = await stageAugmentSource(
-      locations,
-      path.join(locations.dataRoot, "mp", "acme"),
-      source,
-    );
-
-    // The staged bytes re-parse (do NOT throw) to a non-empty, >1024 description
-    // -- NOT secretly truncated to Pi's 1,024 warning threshold (D-86-05).
-    let parsed: { frontmatter: { description?: unknown } } | undefined;
-    assert.doesNotThrow(() => {
-      parsed = parseFrontmatter(staged);
-    });
-    const description2 = parsed?.frontmatter.description;
-    assert.ok(typeof description2 === "string" && description2.length > 1024);
-  });
-});
-
-test("SKILL-03 / WTU-01 a `>-` block-scalar description is replaced as a full node span, siblings byte-identical", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const source =
-      "---\n" +
-      "name: block\n" +
-      "description: >-\n" +
-      "  A folded block scalar description\n" +
-      "  spanning several source lines.\n" +
-      "version: 2.3.1\n" +
-      "tags: alpha, beta\n" +
-      "when_to_use: Use it when triggered.\n" +
-      "---\n\n" +
-      "Body prose.\n";
-
-    const staged = await stageAugmentSource(
-      locations,
-      path.join(locations.dataRoot, "mp", "acme"),
-      source,
-    );
-
-    // Gate-2 parity: the staged bytes re-parse (do NOT throw).
-    assert.doesNotThrow(() => parseFrontmatter(staged));
-    const { frontmatter } = parseFrontmatter<{
-      description: string;
-      version: string;
-      tags: string;
-    }>(staged);
-    // The folded scalar was folded WITH when_to_use into a single scalar.
-    assert.ok(frontmatter.description.includes("A folded block scalar description"));
-    assert.ok(frontmatter.description.endsWith("Use it when triggered."));
-    // Sibling keys survive byte-identically (still their exact source lines).
-    assert.ok(staged.includes("version: 2.3.1"), "version sibling byte-identical");
-    assert.ok(staged.includes("tags: alpha, beta"), "tags sibling byte-identical");
-    // The multi-line continuation lines are gone (collapsed into one scalar).
-    assert.ok(
-      !staged.includes("  spanning several source lines."),
-      "block-scalar continuation lines removed",
-    );
-  });
-});
-
-test("SKILL-01 lone-CR (\\r-only) unparseable source: the malformed frontmatter is not leaked into the synthesized body (line-ending parity with parseFrontmatter)", async () => {
-  await withTmpScope(async ({ locations }) => {
-    const srcRoot = await mkdtemp(path.join(os.tmpdir(), "skill-cr-src-"));
-    try {
-      // A classic-Mac (lone-CR) source whose closed `---` block holds malformed
-      // YAML. parseFrontmatter normalizes CR->LF and THROWS; the body extractor
-      // must normalize CR the same way so it locates the close and does NOT
-      // embed the malformed frontmatter block in the synthesized skill body.
-      const skillsDir = path.join(srcRoot, "skills");
-      await mkdir(path.join(skillsDir, "bad"), { recursive: true });
-      const loneCr =
-        "---\rname: [unterminated\rdescription: never reached\r---\r\r" +
-        "# Bad Skill\r\rThis body must survive verbatim.\r";
-      await writeFile(path.join(skillsDir, "bad", "SKILL.md"), loneCr);
-
-      const resolved = makeResolved("acme", srcRoot, skillsDir);
-      const prepared = await prepareStageSkills({
-        locations,
-        cwd: locations.scopeRoot,
-        marketplaceName: "mp",
-        pluginName: "acme",
-        pluginRoot: srcRoot,
-        pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
-        resolved,
-      });
-      assert.equal(prepared.kind, "staged");
-      assert.equal(prepared.result.degraded.length, 1);
-
-      await commitPreparedSkills(prepared);
-      const staged = await readFile(
-        path.join(locations.skillsTargetDir, "acme-bad", "SKILL.md"),
-        "utf8",
-      );
-
-      // The malformed frontmatter must NOT survive inside the synthesized body.
-      assert.ok(!staged.includes("[unterminated"), "malformed frontmatter must not leak into body");
-      assert.ok(!staged.includes("never reached"), "malformed frontmatter must not leak into body");
-      // The real body survives and the synthesized block re-parses cleanly.
-      assert.ok(staged.includes("This body must survive verbatim."));
-      const { frontmatter } = parseFrontmatter<{
-        name: string;
-        "disable-model-invocation": boolean;
-      }>(staged);
-      assert.equal(frontmatter.name, "acme-bad");
-      assert.equal(frontmatter["disable-model-invocation"], true);
-    } finally {
-      await cleanupStaging(srcRoot, "test-cleanup");
-    }
-  });
-});
-
-// SUB-01 / SUB-02: the skills surface consumes BOTH new substitution variables.
-// A source skill whose body carries all four ${CLAUDE_*} tokens proves the
-// end-to-end wiring: skillDir = <skillsTargetDir>/<generatedName>, and
-// projectDir gated on install scope.
-async function withFourTokenSkill<T>(
-  fn: (ctx: { srcRoot: string; skillsDir: string }) => Promise<T>,
-): Promise<T> {
-  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "skills-fourtoken-src-"));
-  try {
-    const skillsDir = path.join(srcRoot, "skills");
-    await mkdir(path.join(skillsDir, "vars"), { recursive: true });
     await writeFile(
-      path.join(skillsDir, "vars", "SKILL.md"),
-      "---\nname: vars\ndescription: static\n---\n" +
-        "Root: ${CLAUDE_PLUGIN_ROOT}\n" +
-        "Data: ${CLAUDE_PLUGIN_DATA}\n" +
-        "Skill: ${CLAUDE_SKILL_DIR}\n" +
-        "Project: ${CLAUDE_PROJECT_DIR}\n",
+      path.join(foldedDirectory, "SKILL.md"),
+      "---\nname: folded\ndescription: >-\n  " +
+        description +
+        "\nversion: 3\nwhen_to_use: " +
+        whenToUse +
+        "\n---\n\nBody.\n",
     );
-    return await fn({ srcRoot, skillsDir });
-  } finally {
-    await cleanupStaging(srcRoot, "test-cleanup");
-  }
-}
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedEmpty =
+      '---\nname: acme-empty\nversion: 1\ndescription: "No description provided."\n---\n';
+    const expectedProse =
+      '---\nname: acme-prose\nversion: 2\ndescription: "First prose line. Second prose line."\n' +
+      "---\n\n# Heading\n\nFirst prose line.\nSecond prose line.\n\nLater.\n";
+    const expectedFoldedDescription = description + " " + "b".repeat(535);
+    const expectedFolded =
+      "---\nname: acme-folded\n" +
+      'description: "' +
+      expectedFoldedDescription +
+      '"\nversion: 3\nwhen_to_use: ' +
+      whenToUse +
+      "\n---\n\nBody.\n";
 
-test("SUB-01/SUB-02 project-scope skill substitutes all four ${CLAUDE_*} tokens", async () => {
-  await withFourTokenSkill(async ({ srcRoot, skillsDir }) => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), "skills-proj-scope-"));
-    try {
-      const locations = locationsFor("project", tmp);
-      const pluginDataDir = path.join(locations.dataRoot, "mp", "acme");
-      const prepared = await prepareStageSkills({
-        locations,
-        marketplaceName: "mp",
-        pluginName: "acme",
-        pluginRoot: srcRoot,
-        pluginDataDir,
-        resolved: makeResolved("acme", srcRoot, skillsDir),
-        cwd: tmp,
-      });
-      await commitPreparedSkills(prepared);
+    // act
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const emptyBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-empty", "SKILL.md"),
+      "utf8",
+    );
+    const proseBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-prose", "SKILL.md"),
+      "utf8",
+    );
+    const foldedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-folded", "SKILL.md"),
+      "utf8",
+    );
 
-      const targetDir = path.join(locations.skillsTargetDir, "acme-vars");
-      const staged = await readFile(path.join(targetDir, "SKILL.md"), "utf8");
-      assert.ok(staged.includes(`Root: ${srcRoot}`), "pluginRoot substituted");
-      assert.ok(staged.includes(`Data: ${pluginDataDir}`), "pluginData substituted");
-      // SUB-01: skillDir resolves to the installed target dir.
-      assert.ok(staged.includes(`Skill: ${targetDir}`), "skillDir substituted");
-      // SUB-02: projectDir resolves to the install cwd for project scope.
-      assert.ok(staged.includes(`Project: ${tmp}`), "projectDir substituted");
-      assert.ok(!staged.includes("${CLAUDE_"), "no ${CLAUDE_*} token remains");
-    } finally {
-      await cleanupStaging(tmp, "test-cleanup");
-    }
+    // assert
+    assert.strictEqual(emptyBytes, expectedEmpty);
+    assert.strictEqual(proseBytes, expectedProse);
+    assert.strictEqual(foldedBytes, expectedFolded);
+    assert.deepStrictEqual(prepared.result.degraded, []);
   });
-});
 
-test("SUB-02 user-scope skill keeps ${CLAUDE_PROJECT_DIR} literal; other three substitute", async () => {
-  await withFourTokenSkill(async ({ srcRoot, skillsDir }) => {
-    // User scope ignores cwd and derives scopeRoot from PI_CODING_AGENT_DIR;
-    // relocate it to a tmpdir so the staged writes stay hermetic.
-    const tmp = await mkdtemp(path.join(os.tmpdir(), "skills-user-scope-"));
-    const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
-    process.env.PI_CODING_AGENT_DIR = tmp;
-    try {
-      const locations = locationsFor("user", tmp);
-      const pluginDataDir = path.join(locations.dataRoot, "mp", "acme");
-      const prepared = await prepareStageSkills({
-        locations,
-        marketplaceName: "mp",
-        pluginName: "acme",
-        pluginRoot: srcRoot,
-        pluginDataDir,
-        resolved: makeResolved("acme", srcRoot, skillsDir),
-        // A user-scope caller may still supply cwd; the scope gate must ignore it.
-        cwd: tmp,
-      });
-      await commitPreparedSkills(prepared);
+  test("escapes substituted backslashes in an authored description", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-backslashes-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "windows");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: windows\n---\nUses ${CLAUDE_PLUGIN_ROOT}.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const windowsRoot = "C:\\Users\\case\\plugin";
+    const expectedBytes =
+      '---\nname: acme-windows\ndescription: "Uses C:\\\\Users\\\\case\\\\plugin."\n' +
+      "---\nUses C:\\Users\\case\\plugin.\n";
 
-      const targetDir = path.join(locations.skillsTargetDir, "acme-vars");
-      const staged = await readFile(path.join(targetDir, "SKILL.md"), "utf8");
-      assert.ok(staged.includes(`Root: ${srcRoot}`), "pluginRoot substituted");
-      assert.ok(staged.includes(`Data: ${pluginDataDir}`), "pluginData substituted");
-      assert.ok(staged.includes(`Skill: ${targetDir}`), "skillDir substituted");
-      // SUB-02 divergence: user scope leaves the token literal.
-      assert.ok(
-        staged.includes("Project: ${CLAUDE_PROJECT_DIR}"),
-        "projectDir stays literal under user scope",
-      );
-    } finally {
-      if (prevAgentDir === undefined) {
+    // act
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: windowsRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-windows", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.strictEqual(stagedBytes, expectedBytes);
+    assert.deepStrictEqual(prepared.result.degraded, []);
+  });
+
+  test("keeps the project token literal for a user-scope install", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "skills-stage-user-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
+    const priorAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+    t.after(() => {
+      if (priorAgentDirectory === undefined) {
         delete process.env.PI_CODING_AGENT_DIR;
       } else {
-        process.env.PI_CODING_AGENT_DIR = prevAgentDir;
+        process.env.PI_CODING_AGENT_DIR = priorAgentDirectory;
       }
+    });
+    process.env.PI_CODING_AGENT_DIR = scopeRoot;
+    const locations = locationsFor("user", scopeRoot);
+    const pluginRoot = path.join(scopeRoot, "plugin");
+    const pluginDataDir = path.join(scopeRoot, "plugin-data");
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "vars");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: vars\ndescription: Variables\n---\n" +
+        "Root: ${CLAUDE_PLUGIN_ROOT}\nData: ${CLAUDE_PLUGIN_DATA}\n" +
+        "Skill: ${CLAUDE_SKILL_DIR}\nProject: ${CLAUDE_PROJECT_DIR}\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-vars");
+    const expectedBytes =
+      "---\nname: acme-vars\ndescription: Variables\n---\nRoot: " +
+      pluginRoot +
+      "\nData: " +
+      pluginDataDir +
+      "\nSkill: " +
+      targetDirectory +
+      "\nProject: ${CLAUDE_PROJECT_DIR}\n";
 
-      await cleanupStaging(tmp, "test-cleanup");
+    // act
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: path.join(scopeRoot, "ignored-project"),
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-vars", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.strictEqual(stagedBytes, expectedBytes);
+  });
+
+  test("cleans the partial staging tree when substituted frontmatter is invalid", async (t) => {
+    // arrange
+    const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-invalid-output-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "invalid");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: invalid\ndescription: static\nlicense: ${CLAUDE_PLUGIN_DATA}\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedPrepareError = {
+      name: "YAMLParseError",
+      message:
+        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 3, column 23:\n\n" +
+        "license: [unterminated\n                      ^\n",
+      cause: undefined,
+    };
+
+    // act
+    let prepareError: unknown;
+    try {
+      await prepareStageSkills({
+        locations,
+        cwd: scopeRoot,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot,
+        pluginDataDir: "[unterminated",
+        resolved,
+      });
+    } catch (error) {
+      prepareError = error;
     }
+
+    // assert
+    assert.ok(prepareError instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: prepareError.name,
+        message: prepareError.message,
+        cause: prepareError.cause,
+      },
+      expectedPrepareError,
+    );
+    assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
+  });
+
+  test("propagates a copy error and removes its partial staging tree", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-copy-error-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const copyError = Object.assign(new Error("skill copy denied"), { code: "EACCES" });
+    const copy = t.mock.method(filesystemPromises, "cp", (): Promise<never> =>
+      Promise.reject(copyError),
+    );
+    t.after(() => {
+      copy.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    let prepareError: unknown;
+    try {
+      await prepareStageSkills({
+        locations,
+        cwd: scopeRoot,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot,
+        pluginDataDir,
+        resolved,
+      });
+    } catch (error) {
+      prepareError = error;
+    }
+
+    // assert
+    assert.strictEqual(prepareError, copyError);
+    assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
+    assert.strictEqual(
+      await stat(path.join(locations.skillsTargetDir, "acme-alpha")).catch(() => undefined),
+      undefined,
+    );
+  });
+
+  test("rejects a symlinked target boundary and removes staged bytes", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-symlink-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "safe");
+    const outsideDirectory = path.join(scopeRoot, "outside");
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(locations.skillsTargetDir, { recursive: true });
+    await mkdir(outsideDirectory, { recursive: true });
+    const hostileTarget = path.join(locations.skillsTargetDir, "acme-safe");
+    await symlink(outsideDirectory, hostileTarget, "dir");
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: safe\ndescription: Safe skill\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    let prepareError: unknown;
+    try {
+      await prepareStageSkills({
+        locations,
+        cwd: scopeRoot,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot,
+        pluginDataDir,
+        resolved,
+      });
+    } catch (error) {
+      prepareError = error;
+    }
+
+    // assert
+    assert.ok(prepareError instanceof SymlinkRefusedError);
+    assert.strictEqual(prepareError.linkPath, hostileTarget);
+    assert.strictEqual(prepareError.linkTarget, outsideDirectory);
+    assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
+    assert.deepStrictEqual(await readdir(outsideDirectory), []);
+  });
+});
+
+describe("commitPreparedSkills", () => {
+  test("accepts a no-op handle without materializing a target", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-noop-",
+    );
+    await mkdir(pluginRoot, { recursive: true });
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+
+    // act
+    const leak = await commitPreparedSkills(prepared);
+    const targetDirectory = await stat(locations.skillsTargetDir).catch(() => undefined);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.strictEqual(targetDirectory, undefined);
+  });
+
+  test("replaces previous and stale directories with complete staged trees", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-replace-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    const previousDirectory = path.join(locations.skillsTargetDir, "previous");
+    const staleDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(path.join(skillDirectory, "resources"), { recursive: true });
+    await mkdir(previousDirectory, { recursive: true });
+    await mkdir(staleDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\nBody.\n",
+    );
+    await writeFile(path.join(skillDirectory, "resources", "a.txt"), "new resource\n");
+    await writeFile(path.join(previousDirectory, "SKILL.md"), "previous bytes\n");
+    await writeFile(path.join(staleDirectory, "leftover.txt"), "stale bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["previous"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const leak = await commitPreparedSkills(prepared);
+    const targetBytes = await readFile(
+      path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
+      "utf8",
+    );
+    const resourceBytes = await readFile(
+      path.join(locations.skillsTargetDir, "acme-alpha", "resources", "a.txt"),
+      "utf8",
+    );
+    const previousState = await stat(previousDirectory).catch(() => undefined);
+    const staleState = await stat(
+      path.join(locations.skillsTargetDir, "acme-alpha", "leftover.txt"),
+    ).catch(() => undefined);
+    const stagingState = await stat(prepared.stagingRoot).catch(() => undefined);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\nBody.\n");
+    assert.strictEqual(resourceBytes, "new resource\n");
+    assert.strictEqual(previousState, undefined);
+    assert.strictEqual(staleState, undefined);
+    assert.strictEqual(stagingState, undefined);
+  });
+
+  test("propagates a previous-directory removal error without renaming staged bytes", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-remove-error-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    const previousDirectory = path.join(locations.skillsTargetDir, "previous");
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(previousDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    await writeFile(path.join(previousDirectory, "SKILL.md"), "previous bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["previous"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    const removalError = Object.assign(new Error("previous removal denied"), { code: "EACCES" });
+    const removal = t.mock.method(
+      filesystemPromises,
+      "rm",
+      async (
+        target: Parameters<typeof originalRm>[0],
+        options?: Parameters<typeof originalRm>[1],
+      ) => {
+        if (String(target) === previousDirectory) {
+          throw removalError;
+        }
+
+        await originalRm(target, options);
+      },
+    );
+    t.after(() => {
+      removal.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    let commitError: unknown;
+    try {
+      await commitPreparedSkills(prepared);
+    } catch (error) {
+      commitError = error;
+    }
+
+    // assert
+    assert.strictEqual(commitError, removalError);
+    assert.strictEqual(
+      await readFile(path.join(previousDirectory, "SKILL.md"), "utf8"),
+      "previous bytes\n",
+    );
+    assert.strictEqual((await stat(prepared.stagingRoot)).isDirectory(), true);
+  });
+
+  test("propagates a target inspection error before the rename", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-stat-error-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    const originalStat = filesystemPromises.stat.bind(filesystemPromises);
+    const inspectionError = Object.assign(new Error("target inspection denied"), {
+      code: "EACCES",
+    });
+    const inspection = t.mock.method(
+      filesystemPromises,
+      "stat",
+      async (
+        target: Parameters<typeof originalStat>[0],
+        options?: Parameters<typeof originalStat>[1],
+      ) => {
+        if (String(target) === targetDirectory) {
+          throw inspectionError;
+        }
+
+        return originalStat(target, options);
+      },
+    );
+    t.after(() => {
+      inspection.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    let commitError: unknown;
+    try {
+      await commitPreparedSkills(prepared);
+    } catch (error) {
+      commitError = error;
+    }
+
+    // assert
+    assert.strictEqual(commitError, inspectionError);
+    assert.strictEqual((await stat(prepared.stagingRoot)).isDirectory(), true);
+    assert.strictEqual(await stat(targetDirectory).catch(() => undefined), undefined);
+  });
+
+  test("propagates a rename error and leaves the staged tree intact", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-rename-error-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const renameError = Object.assign(new Error("target rename denied"), { code: "EACCES" });
+    const rename = t.mock.method(filesystemPromises, "rename", (): Promise<never> =>
+      Promise.reject(renameError),
+    );
+    t.after(() => {
+      rename.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    let commitError: unknown;
+    try {
+      await commitPreparedSkills(prepared);
+    } catch (error) {
+      commitError = error;
+    }
+
+    // assert
+    assert.strictEqual(commitError, renameError);
+    assert.strictEqual(
+      await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"), "utf8"),
+      "---\nname: acme-alpha\ndescription: Alpha\n---\n",
+    );
+  });
+
+  test("returns the complete cleanup leak after a successful rename", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-cleanup-leak-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    const cleanupError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    const removal = t.mock.method(
+      filesystemPromises,
+      "rm",
+      async (
+        target: Parameters<typeof originalRm>[0],
+        options?: Parameters<typeof originalRm>[1],
+      ) => {
+        if (String(target) === prepared.stagingRoot) {
+          throw cleanupError;
+        }
+
+        await originalRm(target, options);
+      },
+    );
+    t.after(() => {
+      removal.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const expectedLeak =
+      "failed to clean up skills staging directory at " +
+      prepared.stagingRoot +
+      ": staging cleanup denied";
+
+    // act
+    const leak = await commitPreparedSkills(prepared);
+    const targetBytes = await readFile(
+      path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.strictEqual(leak, expectedLeak);
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\n");
+    assert.strictEqual((await stat(prepared.stagingRoot)).isDirectory(), true);
+  });
+});
+
+describe("abortPreparedSkills", () => {
+  test("accepts a no-op handle without materializing a directory", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-abort-noop-",
+    );
+    await mkdir(pluginRoot, { recursive: true });
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+
+    // act
+    const leak = await abortPreparedSkills(prepared);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.strictEqual(await stat(locations.skillsStagingDir).catch(() => undefined), undefined);
+  });
+
+  test("removes an uncommitted staged tree and is idempotent", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-abort-staged-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const firstLeak = await abortPreparedSkills(prepared);
+    const secondLeak = await abortPreparedSkills(prepared);
+    const stagingState = await stat(prepared.stagingRoot).catch(() => undefined);
+    const targetState = await stat(locations.skillsTargetDir).catch(() => undefined);
+
+    // assert
+    assert.strictEqual(firstLeak, undefined);
+    assert.strictEqual(secondLeak, undefined);
+    assert.strictEqual(stagingState, undefined);
+    assert.strictEqual(targetState, undefined);
+  });
+});
+
+describe("replacePreparedSkills", () => {
+  test("returns the complete no-op replacement handle", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-replace-noop-",
+    );
+    await mkdir(pluginRoot, { recursive: true });
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+
+    // act
+    const replacement = await replacePreparedSkills(prepared);
+
+    // assert
+    assert.deepStrictEqual(replacement, { kind: "noop", prepared });
+    assert.strictEqual(await stat(locations.skillsTargetDir).catch(() => undefined), undefined);
+    assert.strictEqual(await stat(locations.skillsStagingDir).catch(() => undefined), undefined);
+  });
+
+  test("backs up an owned tree, skips a missing previous tree, and installs exact new bytes", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-replace-owned-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(path.join(skillDirectory, "resources"), { recursive: true });
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\nNew body.\n",
+    );
+    await writeFile(path.join(skillDirectory, "resources", "new.txt"), "new resource\n");
+    await writeFile(path.join(targetDirectory, "SKILL.md"), "old skill bytes\n");
+    await writeFile(path.join(targetDirectory, "old.txt"), "old resource\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha", "missing"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const replacement = await replacePreparedSkills(prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    t.after(() => finalizeSkillsReplacement(replacement));
+    const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
+    const resourceBytes = await readFile(
+      path.join(targetDirectory, "resources", "new.txt"),
+      "utf8",
+    );
+    const oldResource = await stat(path.join(targetDirectory, "old.txt")).catch(() => undefined);
+    const stagingEntries = await readdir(locations.skillsStagingDir);
+
+    // assert
+    assert.deepStrictEqual(replacement, { kind: "replaced", prepared });
+    assert.strictEqual(
+      targetBytes,
+      "---\nname: acme-alpha\ndescription: New alpha\n---\nNew body.\n",
+    );
+    assert.strictEqual(resourceBytes, "new resource\n");
+    assert.strictEqual(oldResource, undefined);
+    assert.strictEqual(stagingEntries.length, 2);
+    assert.strictEqual(stagingEntries.includes(path.basename(prepared.stagingRoot)), true);
+    assert.strictEqual(
+      stagingEntries.some((name) => name.startsWith("backup-")),
+      true,
+    );
+  });
+
+  test("removes an owned orphan that appears after the previous tree is backed up", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-replace-owned-orphan-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\nNew body.\n",
+    );
+    await writeFile(path.join(targetDirectory, "SKILL.md"), "old skill bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const originalRename = filesystemPromises.rename.bind(filesystemPromises);
+    const move = t.mock.method(
+      filesystemPromises,
+      "rename",
+      async (
+        from: Parameters<typeof originalRename>[0],
+        to: Parameters<typeof originalRename>[1],
+      ) => {
+        await originalRename(from, to);
+        if (String(from) === targetDirectory) {
+          await mkdir(targetDirectory, { recursive: true });
+          await writeFile(path.join(targetDirectory, "leftover.txt"), "owned orphan\n");
+        }
+      },
+    );
+    t.after(() => {
+      move.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    const replacement = await replacePreparedSkills(prepared);
+    const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
+    const orphanState = await stat(path.join(targetDirectory, "leftover.txt")).catch(
+      () => undefined,
+    );
+    const leaks = await finalizeSkillsReplacement(replacement);
+
+    // assert
+    assert.strictEqual(
+      targetBytes,
+      "---\nname: acme-alpha\ndescription: New alpha\n---\nNew body.\n",
+    );
+    assert.strictEqual(orphanState, undefined);
+    assert.deepStrictEqual(leaks, []);
+  });
+
+  test("restores owned bytes and preserves foreign content when a new target is occupied", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-replace-foreign-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const betaDirectory = path.join(skillsDirectory, "beta");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
+    await mkdir(alphaDirectory, { recursive: true });
+    await mkdir(betaDirectory, { recursive: true });
+    await mkdir(alphaTarget, { recursive: true });
+    await mkdir(betaTarget, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(
+      path.join(betaDirectory, "SKILL.md"),
+      "---\nname: beta\ndescription: New beta\n---\n",
+    );
+    await writeFile(path.join(alphaTarget, "SKILL.md"), "owned alpha bytes\n");
+    await writeFile(path.join(betaTarget, "SKILL.md"), "foreign beta bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const expectedMessage =
+      "Cannot replace skill target with non-previous content at " + betaTarget;
+
+    // act
+    let replacementError: unknown;
+    try {
+      await replacePreparedSkills(prepared);
+    } catch (error) {
+      replacementError = error;
+    }
+
+    const alphaBytes = await readFile(path.join(alphaTarget, "SKILL.md"), "utf8");
+    const betaBytes = await readFile(path.join(betaTarget, "SKILL.md"), "utf8");
+    const stagingEntries = await readdir(locations.skillsStagingDir);
+
+    // assert
+    assert.ok(replacementError instanceof Error);
+    assert.deepStrictEqual(
+      { name: replacementError.name, message: replacementError.message },
+      { name: "Error", message: expectedMessage },
+    );
+    assert.strictEqual(alphaBytes, "owned alpha bytes\n");
+    assert.strictEqual(betaBytes, "foreign beta bytes\n");
+    assert.deepStrictEqual(stagingEntries, []);
+  });
+
+  test("returns manual-recovery leaks when automatic restoration also fails", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-replace-manual-recovery-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const betaDirectory = path.join(skillsDirectory, "beta");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
+    await mkdir(alphaDirectory, { recursive: true });
+    await mkdir(betaDirectory, { recursive: true });
+    await mkdir(alphaTarget, { recursive: true });
+    await mkdir(betaTarget, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(
+      path.join(betaDirectory, "SKILL.md"),
+      "---\nname: beta\ndescription: New beta\n---\n",
+    );
+    await writeFile(path.join(alphaTarget, "SKILL.md"), "old alpha bytes\n");
+    await writeFile(path.join(betaTarget, "SKILL.md"), "foreign beta bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    const originalRename = filesystemPromises.rename.bind(filesystemPromises);
+    const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+    const restoreError = Object.assign(new Error("previous restoration denied"), {
+      code: "EACCES",
+    });
+    let backupPath = "";
+    const removal = t.mock.method(
+      filesystemPromises,
+      "rm",
+      async (
+        target: Parameters<typeof originalRm>[0],
+        options?: Parameters<typeof originalRm>[1],
+      ) => {
+        if (String(target) === alphaTarget) {
+          throw removalError;
+        }
+
+        await originalRm(target, options);
+      },
+    );
+    const rename = t.mock.method(
+      filesystemPromises,
+      "rename",
+      async (
+        from: Parameters<typeof originalRename>[0],
+        to: Parameters<typeof originalRename>[1],
+      ) => {
+        if (String(from) === alphaTarget) {
+          backupPath = String(to);
+          await originalRename(from, to);
+          return;
+        }
+
+        if (String(from) === backupPath && String(to) === alphaTarget) {
+          throw restoreError;
+        }
+
+        await originalRename(from, to);
+      },
+    );
+    t.after(() => {
+      removal.mock.restore();
+      rename.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    let replacementError: unknown;
+    try {
+      await replacePreparedSkills(prepared);
+    } catch (error) {
+      replacementError = error;
+    }
+
+    // assert
+    assert.ok(replacementError instanceof ManualRecoveryError);
+    assert.strictEqual(
+      replacementError.message,
+      "Cannot replace skill target with non-previous content at " + betaTarget,
+    );
+    assert.deepStrictEqual(replacementError.leaks, [
+      "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
+      "failed to restore previous skill dir acme-alpha from " +
+        backupPath +
+        " to " +
+        alphaTarget +
+        ": previous restoration denied",
+    ]);
+  });
+});
+
+describe("rollbackSkillsReplacement", () => {
+  test("accepts a no-op handle without leaks", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-rollback-noop-",
+    );
+    await mkdir(pluginRoot, { recursive: true });
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    const replacement = await replacePreparedSkills(prepared);
+
+    // act
+    const leaks = await rollbackSkillsReplacement(replacement);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+  });
+
+  test("removes new trees and restores every previous byte", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-rollback-restore-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const betaDirectory = path.join(skillsDirectory, "beta");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
+    await mkdir(alphaDirectory, { recursive: true });
+    await mkdir(betaDirectory, { recursive: true });
+    await mkdir(path.join(alphaTarget, "nested"), { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(
+      path.join(betaDirectory, "SKILL.md"),
+      "---\nname: beta\ndescription: New beta\n---\n",
+    );
+    await writeFile(path.join(alphaTarget, "SKILL.md"), "old alpha bytes\n");
+    await writeFile(path.join(alphaTarget, "nested", "old.txt"), "old nested bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedSkills(prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+
+    // act
+    const leaks = await rollbackSkillsReplacement(replacement);
+    const alphaBytes = await readFile(path.join(alphaTarget, "SKILL.md"), "utf8");
+    const nestedBytes = await readFile(path.join(alphaTarget, "nested", "old.txt"), "utf8");
+    const betaState = await stat(betaTarget).catch(() => undefined);
+    const stagingEntries = await readdir(locations.skillsStagingDir);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(alphaBytes, "old alpha bytes\n");
+    assert.strictEqual(nestedBytes, "old nested bytes\n");
+    assert.strictEqual(betaState, undefined);
+    assert.deepStrictEqual(stagingEntries, []);
+  });
+
+  test("rejects a cloned replacement handle without internal identity", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-rollback-cloned-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    const replacement = await replacePreparedSkills(prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    t.after(() => finalizeSkillsReplacement(replacement));
+    const clonedReplacement = { ...replacement };
+
+    // act & assert
+    await assert.rejects(
+      () => rollbackSkillsReplacement(clonedReplacement),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message },
+          { name: "Error", message: "Unknown skills replacement handle." },
+        );
+        return true;
+      },
+    );
+  });
+});
+
+describe("finalizeSkillsReplacement", () => {
+  test("accepts a no-op handle without leaks", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-finalize-noop-",
+    );
+    await mkdir(pluginRoot, { recursive: true });
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    const replacement = await replacePreparedSkills(prepared);
+
+    // act
+    const leaks = await finalizeSkillsReplacement(replacement);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+  });
+
+  test("removes backup state, keeps new bytes, and is idempotent", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-finalize-replaced-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(path.join(targetDirectory, "SKILL.md"), "old alpha bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedSkills(prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+
+    // act
+    const firstLeaks = await finalizeSkillsReplacement(replacement);
+    const secondLeaks = await finalizeSkillsReplacement(replacement);
+    const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
+    const stagingEntries = await readdir(locations.skillsStagingDir);
+
+    // assert
+    assert.deepStrictEqual(firstLeaks, []);
+    assert.deepStrictEqual(secondLeaks, []);
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
+    assert.deepStrictEqual(stagingEntries, []);
+  });
+
+  test("returns both cleanup leaks and keeps the installed tree", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-finalize-leaks-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(path.join(targetDirectory, "SKILL.md"), "old alpha bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedSkills(prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    const backupDirectory = (await readdir(locations.skillsStagingDir)).find((name) =>
+      name.startsWith("backup-"),
+    );
+    assert.notStrictEqual(backupDirectory, undefined);
+    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory ?? "missing");
+    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    const backupError = Object.assign(new Error("backup cleanup denied"), { code: "EACCES" });
+    const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    const removal = t.mock.method(
+      filesystemPromises,
+      "rm",
+      async (
+        target: Parameters<typeof originalRm>[0],
+        options?: Parameters<typeof originalRm>[1],
+      ) => {
+        if (String(target) === backupRoot) {
+          throw backupError;
+        }
+
+        if (String(target) === prepared.stagingRoot) {
+          throw stagingError;
+        }
+
+        await originalRm(target, options);
+      },
+    );
+    t.after(() => {
+      removal.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const expectedLeaks = [
+      "failed to clean up skills replacement backup directory at " +
+        backupRoot +
+        ": backup cleanup denied",
+      "failed to clean up skills staging directory at " +
+        prepared.stagingRoot +
+        ": staging cleanup denied",
+    ];
+
+    // act
+    const leaks = await finalizeSkillsReplacement(replacement);
+    const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
+
+    // assert
+    assert.deepStrictEqual(leaks, expectedLeaks);
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
+    assert.strictEqual(Object.isFrozen(leaks), true);
   });
 });

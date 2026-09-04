@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
   RingBuffer,
@@ -7,110 +7,243 @@ import {
   STDOUT_CAP_BYTES,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
 
-// EXEC-05 / D-62-04: the ring-buffer is a pure-leaf circular Buffer that
-// preserves the TAIL on overflow (oldest bytes dropped) and latches a
-// `truncated` flag that the exit handler in the registry uses to prepend
-// the `[…truncated]` marker.
+describe("STDERR_CAP_BYTES", () => {
+  test("caps captured standard error at 65,536 bytes", () => {
+    // arrange
+    const expectedCapacity = 65_536;
 
-test("RingBuffer: STDERR_CAP_BYTES === 64 KiB and STDOUT_CAP_BYTES === 1 MiB", () => {
-  assert.equal(STDERR_CAP_BYTES, 64 * 1024);
-  assert.equal(STDOUT_CAP_BYTES, 1024 * 1024);
+    // act
+    const capacity = STDERR_CAP_BYTES;
+
+    // assert
+    assert.strictEqual(capacity, expectedCapacity);
+  });
 });
 
-test("RingBuffer: zero capacity reads empty + truncated false", () => {
-  const b = new RingBuffer(0);
-  assert.deepEqual(b.read(), { text: "", truncated: false });
+describe("STDOUT_CAP_BYTES", () => {
+  test("caps captured standard output at 1,048,576 bytes", () => {
+    // arrange
+    const expectedCapacity = 1_048_576;
+
+    // act
+    const capacity = STDOUT_CAP_BYTES;
+
+    // assert
+    assert.strictEqual(capacity, expectedCapacity);
+  });
 });
 
-test("RingBuffer: zero-capacity write of empty buffer keeps truncated false", () => {
-  const b = new RingBuffer(0);
-  b.write(Buffer.alloc(0));
-  assert.deepEqual(b.read(), { text: "", truncated: false });
-});
+describe("RingBuffer", () => {
+  test("reads an untouched buffer as empty and untruncated", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const expectedRead = { text: "", truncated: false };
 
-test("RingBuffer: zero-capacity write of non-empty buffer latches truncated", () => {
-  const b = new RingBuffer(0);
-  b.write(Buffer.from("X"));
-  assert.deepEqual(b.read(), { text: "", truncated: true });
-});
+    // act
+    const read = buffer.read();
 
-test("RingBuffer: empty-chunk write is a no-op on a non-zero-capacity buffer", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.alloc(0));
-  assert.deepEqual(b.read(), { text: "", truncated: false });
-});
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
 
-test("RingBuffer: simple write under capacity reads back unchanged", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("abc"));
-  assert.deepEqual(b.read(), { text: "abc", truncated: false });
-});
+  test("ignores an empty write without changing buffered bytes", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const initialInput = Buffer.from([0x41, 0x42]);
+    const emptyInput = Buffer.alloc(0);
+    const expectedRead = { text: "AB", truncated: false };
 
-test("RingBuffer: exact-fill no overflow", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("12345678"));
-  assert.deepEqual(b.read(), { text: "12345678", truncated: false });
-});
+    // act
+    buffer.write(initialInput);
+    buffer.write(emptyInput);
+    const read = buffer.read();
 
-test("RingBuffer: single-write one-byte overflow drops oldest byte", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("123456789"));
-  assert.deepEqual(b.read(), { text: "23456789", truncated: true });
-});
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
 
-test("RingBuffer: two-write overflow drops the very oldest byte", () => {
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("1234"));
-  b.write(Buffer.from("56789"));
-  assert.deepEqual(b.read(), { text: "23456789", truncated: true });
-});
+  test("keeps a zero-capacity buffer untruncated after an empty write", () => {
+    // arrange
+    const buffer = new RingBuffer(0);
+    const input = Buffer.alloc(0);
+    const expectedRead = { text: "", truncated: false };
 
-test("RingBuffer: chunk larger than capacity keeps only the tail of the chunk", () => {
-  const b = new RingBuffer(4);
-  b.write(Buffer.from("ABCDEFGHIJ"));
-  assert.deepEqual(b.read(), { text: "GHIJ", truncated: true });
-});
+    // act
+    buffer.write(input);
+    const read = buffer.read();
 
-test("RingBuffer: two-segment wrap-around reads chronological-order", () => {
-  // Write 6 then 4 into a capacity-8 buffer; the second write wraps and
-  // overwrites the oldest 2 bytes. The composed read MUST be the LAST
-  // 8 bytes in chronological order.
-  const b = new RingBuffer(8);
-  b.write(Buffer.from("ABCDEF"));
-  b.write(Buffer.from("GHIJ"));
-  assert.deepEqual(b.read(), { text: "CDEFGHIJ", truncated: true });
-});
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
 
-test("RingBuffer: truncated latch never resets across subsequent writes", () => {
-  const b = new RingBuffer(4);
-  b.write(Buffer.from("ABCDE")); // overflow trips latch
-  assert.equal(b.read().truncated, true);
-  b.write(Buffer.from("X")); // small follow-up
-  assert.equal(b.read().truncated, true);
-});
+  test("latches truncation when a zero-capacity buffer receives one byte", () => {
+    // arrange
+    const buffer = new RingBuffer(0);
+    const input = Buffer.from([0x41]);
+    const expectedRead = { text: "", truncated: true };
 
-test("RingBuffer: many small writes that eventually overflow drop oldest bytes", () => {
-  const b = new RingBuffer(4);
-  b.write(Buffer.from("a"));
-  b.write(Buffer.from("b"));
-  b.write(Buffer.from("c"));
-  b.write(Buffer.from("d"));
-  // exact fill; no overflow yet
-  assert.deepEqual(b.read(), { text: "abcd", truncated: false });
-  b.write(Buffer.from("e"));
-  assert.deepEqual(b.read(), { text: "bcde", truncated: true });
-  b.write(Buffer.from("fg"));
-  assert.deepEqual(b.read(), { text: "defg", truncated: true });
-});
+    // act
+    buffer.write(input);
+    const read = buffer.read();
 
-test("RingBuffer: write + read are total -- never throw on arbitrary inputs", () => {
-  const b = new RingBuffer(4);
-  assert.doesNotThrow(() => {
-    b.write(Buffer.alloc(0));
-    b.write(Buffer.from("xy"));
-    b.write(Buffer.from(""));
-    b.read();
-    b.write(Buffer.from("ABCDEFG"));
-    b.read();
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("returns multiple chunks in chronological order before capacity is reached", () => {
+    // arrange
+    const buffer = new RingBuffer(8);
+    const firstInput = Buffer.from([0x41, 0x42]);
+    const secondInput = Buffer.from([0x43, 0x44]);
+    const expectedRead = { text: "ABCD", truncated: false };
+
+    // act
+    buffer.write(firstInput);
+    buffer.write(secondInput);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("retains every byte when several chunks exactly fill the buffer", () => {
+    // arrange
+    const buffer = new RingBuffer(6);
+    const firstInput = Buffer.from([0x41, 0x42]);
+    const secondInput = Buffer.from([0x43, 0x44]);
+    const thirdInput = Buffer.from([0x45, 0x46]);
+    const expectedRead = { text: "ABCDEF", truncated: false };
+
+    // act
+    buffer.write(firstInput);
+    buffer.write(secondInput);
+    buffer.write(thirdInput);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("retains every byte when one chunk exactly fills the buffer", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const input = Buffer.from([0x31, 0x32, 0x33, 0x34]);
+    const expectedRead = { text: "1234", truncated: false };
+
+    // act
+    buffer.write(input);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("drops only the oldest byte when chronological input exceeds capacity by one", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const initialInput = Buffer.from([0x31, 0x32, 0x33, 0x34]);
+    const newestInput = Buffer.from([0x35]);
+    const expectedRead = { text: "2345", truncated: true };
+
+    // act
+    buffer.write(initialInput);
+    buffer.write(newestInput);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("keeps the chronological tail when a write crosses the physical wrap point", () => {
+    // arrange
+    const buffer = new RingBuffer(6);
+    const initialInput = Buffer.from([0x41, 0x42, 0x43, 0x44]);
+    const wrappingInput = Buffer.from([0x45, 0x46, 0x47, 0x48]);
+    const expectedRead = { text: "CDEFGH", truncated: true };
+
+    // act
+    buffer.write(initialInput);
+    buffer.write(wrappingInput);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("keeps only the tail when one chunk exceeds capacity by one byte", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const input = Buffer.from([0x41, 0x42, 0x43, 0x44, 0x45]);
+    const expectedRead = { text: "BCDE", truncated: true };
+
+    // act
+    buffer.write(input);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("keeps only the newest bytes when one chunk is much larger than capacity", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const input = Buffer.from([0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a]);
+    const expectedRead = { text: "GHIJ", truncated: true };
+
+    // act
+    buffer.write(input);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("keeps truncation latched through later reads and writes", () => {
+    // arrange
+    const buffer = new RingBuffer(4);
+    const overflowingInput = Buffer.from([0x41, 0x42, 0x43, 0x44, 0x45]);
+    const laterInput = Buffer.from([0x46]);
+    const expectedOverflowRead = { text: "BCDE", truncated: true };
+    const expectedLaterRead = { text: "CDEF", truncated: true };
+
+    // act
+    buffer.write(overflowingInput);
+    const overflowRead = buffer.read();
+    buffer.write(laterInput);
+    const laterRead = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(overflowRead, expectedOverflowRead);
+    assert.deepStrictEqual(laterRead, expectedLaterRead);
+  });
+
+  test("preserves arbitrary non-text bytes that form valid UTF-8", () => {
+    // arrange
+    const buffer = new RingBuffer(5);
+    const input = Buffer.from([0x00, 0x1f, 0x7f, 0xc2, 0xa0]);
+    const expectedRead = { text: "\u0000\u001f\u007f\u00a0", truncated: false };
+
+    // act
+    buffer.write(input);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
+  });
+
+  test("accepts a raw UTF-8 tail that begins inside a split multibyte sequence", () => {
+    // arrange
+    const buffer = new RingBuffer(2);
+    const firstInput = Buffer.from([0x41, 0xe2]);
+    const secondInput = Buffer.from([0x82, 0xac]);
+    const expectedRead = { text: "\ufffd\ufffd", truncated: true };
+
+    // act
+    buffer.write(firstInput);
+    buffer.write(secondInput);
+    const read = buffer.read();
+
+    // assert
+    assert.deepStrictEqual(read, expectedRead);
   });
 });

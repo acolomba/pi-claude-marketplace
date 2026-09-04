@@ -89,37 +89,28 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
   const basePlugins = base.plugins ?? {};
   const localPlugins = local.plugins ?? {};
 
-  const marketplaces: Record<string, MergedConfigEntry<MarketplaceConfigEntry>> = {};
-  for (const key of new Set([...Object.keys(baseMps), ...Object.keys(localMps)])) {
-    const localEntry = localMps[key];
-    if (localEntry !== undefined) {
-      marketplaces[key] = { entry: localEntry, source: "local" };
-      continue;
-    }
-
-    const baseEntry = baseMps[key];
-    if (baseEntry !== undefined) {
-      // Belt-and-suspenders: key came from one of the two maps and the local
-      // branch already handled local-present, so baseEntry is defined here.
-      marketplaces[key] = { entry: baseEntry, source: "base" };
-    }
+  const marketplaceEntries = new Map<string, MergedConfigEntry<MarketplaceConfigEntry>>();
+  for (const [key, entry] of Object.entries(baseMps)) {
+    marketplaceEntries.set(key, { entry, source: "base" });
   }
 
-  const plugins: Record<string, MergedConfigEntry<PluginConfigEntry>> = {};
-  for (const key of new Set([...Object.keys(basePlugins), ...Object.keys(localPlugins)])) {
-    const localEntry = localPlugins[key];
-    if (localEntry !== undefined) {
-      plugins[key] = { entry: localEntry, source: "local" };
-      continue;
-    }
-
-    const baseEntry = basePlugins[key];
-    if (baseEntry !== undefined) {
-      plugins[key] = { entry: baseEntry, source: "base" };
-    }
+  for (const [key, entry] of Object.entries(localMps)) {
+    marketplaceEntries.set(key, { entry, source: "local" });
   }
 
-  return { marketplaces, plugins };
+  const pluginEntries = new Map<string, MergedConfigEntry<PluginConfigEntry>>();
+  for (const [key, entry] of Object.entries(basePlugins)) {
+    pluginEntries.set(key, { entry, source: "base" });
+  }
+
+  for (const [key, entry] of Object.entries(localPlugins)) {
+    pluginEntries.set(key, { entry, source: "local" });
+  }
+
+  return {
+    marketplaces: Object.fromEntries(marketplaceEntries),
+    plugins: Object.fromEntries(pluginEntries),
+  };
 }
 
 /**

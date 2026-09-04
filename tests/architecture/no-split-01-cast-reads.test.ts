@@ -44,9 +44,10 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ORCHESTRATORS_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace/orchestrators");
 
-// All 7 cast-read sites rewired to MergedConfig.
-// The allow-list is now empty -- the cast-read hazard is closed. The sibling 'exactly 0'
-// assertion below catches any future regression that adds a new cast read.
+// No caller cast-reads `.autoupdate` off `Record<string, unknown>`; the
+// field is read through `MergedConfig` instead, so the allow-list below is
+// empty. The sibling 'exactly 0' assertion below catches any future
+// regression that adds a new cast read.
 const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set<string>();
 
 // Regex: matches the trailing `).autoupdate` form produced by the SPLIT-01

@@ -123,16 +123,19 @@ async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<
   }
 
   let result: T | undefined;
+  let hasPrimaryError = false;
   let primaryError: unknown;
   try {
     result = await body();
   } catch (err) {
+    hasPrimaryError = true;
     primaryError = err;
   } finally {
     try {
       await release();
     } catch (releaseErr) {
-      if (primaryError === undefined) {
+      if (!hasPrimaryError) {
+        hasPrimaryError = true;
         primaryError = releaseErr;
       } else {
         const base =
@@ -145,7 +148,7 @@ async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<
     }
   }
 
-  if (primaryError !== undefined) {
+  if (hasPrimaryError) {
     throw toError(primaryError);
   }
 

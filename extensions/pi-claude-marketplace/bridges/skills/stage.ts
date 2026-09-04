@@ -74,20 +74,11 @@ const skillsReplacementInternals = new WeakMap<
  * line or an indented `---` -- is therefore classified identically to Pi rather
  * than by a looser `line.trim() === "---"` match. Called ONLY on the gate-1
  * throw arm, where a closed `---` block is present by construction -- the body
- * is everything after the closing delimiter, trimmed. Falls back to the whole
- * normalized+trimmed content if no opening/closing delimiter is found.
+ * is everything after the closing delimiter, trimmed.
  */
 function extractBodyAfterFrontmatter(content: string): string {
   const normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-  if (!normalized.startsWith("---")) {
-    return normalized.trim();
-  }
-
   const closeIndex = normalized.indexOf("\n---", 3);
-  if (closeIndex === -1) {
-    return normalized.trim();
-  }
-
   return normalized.slice(closeIndex + 4).trim();
 }
 

@@ -1,9 +1,4 @@
-import {
-  assertNever,
-  causeChainTrailer,
-  errorMessage,
-  PluginShapeError,
-} from "../../shared/errors.ts";
+import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   ICON_DISABLED,
@@ -410,8 +405,6 @@ export function classifyEntityShapeError(
         // stamped on the throw so the composer conditions the `--partial` hint.
         partialable: err.shape.partialable,
       };
-    default:
-      return assertNever(err.shape);
   }
 }
 
@@ -424,14 +417,14 @@ export function classifyEntityShapeError(
 // it detects).
 // The carve-out: `startsWith("contains ")` strips the resolver's prefix,
 // then checks the remaining token against the set.
-// HOOK-04 / D-58-02: `lspServers` is now the SOLE manifest-field
-// carve-out. `hooks` was a supported component kind under v1.13 (the
-// `SUPPORTED_COMPONENT_KINDS` extension) so the resolver no longer
-// emits a `"contains hooks"` note; the dead carve-out entry was
-// dropped. The `{unsupported hooks}` reason is now a normal 2-word
-// REASON sourced through `shared/probe-classifiers.ts::narrowResolverNotes`
-// against the `parseHooksConfig` prefix tokens, not a manifest-field
-// carve-out emitted here.
+// HOOK-04 / D-58-02: `lspServers` is the SOLE manifest-field
+// carve-out. `hooks` is a supported component kind (the
+// `SUPPORTED_COMPONENT_KINDS` set), so the resolver never emits a
+// `"contains hooks"` note here. The `{unsupported hooks}` reason is a
+// normal 2-word REASON sourced through
+// `shared/probe-classifiers.ts::narrowResolverNotes` against the
+// `parseHooksConfig` prefix tokens, not a manifest-field carve-out
+// emitted here.
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
 // `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
@@ -452,7 +445,7 @@ const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
  * D-64-02 / RSTATE-05: the token -> Reason mapping is the single shared
  * render helper `narrowUnsupportedKinds`, so the install error surface emits
  * the same per-kind marker `list` and `info` do (SURF-01 cross-surface
- * parity); install no longer carries its own per-kind mapping table.
+ * parity); install carries no per-kind mapping table of its own.
  */
 function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
   if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {

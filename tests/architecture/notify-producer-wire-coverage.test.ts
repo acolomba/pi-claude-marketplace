@@ -1,47 +1,14 @@
 /**
- * tests/architecture/notify-producer-wire-coverage.test.ts -- WR-01 / D-05
- * producer -> reducer -> wire backstop for the render-map (standalone)
- * producers.
- *
- * The catalog-uat forward walk drives `notify()` / `notifyWithContext()` with
- * hand-written FIXTURE payloads whose `severity` / `needsReload` stamps are
- * authored independently of what the orchestrators actually stamp. It proves
- * the REDUCER renders byte-correctly given correctly-stamped input, and
- * `notify-stamp-coverage.test.ts` covers the two reconcile PROJECTIONS. But no
- * gate binds the per-arm RENDER-MAP producer stamps to the wire: a producer
- * that regressed a realized install row to `needsReload:false`, or a failed row
- * to `severity:"warning"`, would still type-check (the fields are present on the
- * broad union) and would NOT be caught by catalog-uat (which never invokes the
- * orchestrator).
- *
- * This is the WR-01 backstop, the render-map analogue of
- * `notify-stamp-coverage.test.ts`: it routes a representative stamped row for
- * each STANDALONE orchestrator arm through the REAL `notifyWithContext` wire
- * seam (`emitContextCascade` -> `emitWithSummary` -> `computeSeverity` /
- * `shouldEmitReloadHint` -> the single mock `ctx.ui.notify`) and asserts the
- * emitted 2nd-arg severity AND the presence/absence of the
- * `/reload to pick up changes` trailer. It asserts the producer -> reducer ->
- * wire path, not just the reducer:
- *
- *   - install / uninstall / update / reinstall / enable / disable SUCCESS rows
- *     stamp `severity:"info"`, `needsReload:true`  -> info wire (no 2nd arg),
- *     trailer PRESENT.
- *   - a benign idempotent skip (enable `already enabled`) stamps
- *     `severity:"info"`, `needsReload:false`       -> info wire, trailer ABSENT.
- *   - a failure row stamps `severity:"error"`, `needsReload:false`
- *                                                  -> error wire, trailer ABSENT.
- *
- * The stamped values mirror the producer sites EXACTLY (install.ts:1359,
- * uninstall.ts:625, update.ts:1525, reinstall.ts:288, enable-disable.ts:982,
- * enable-disable.ts:930, install.ts:1512). Regressing any of those stamps trips
- * this test with an arm-named diagnostic.
- *
- * This test changes NO rendered output: it asserts the wire severity + trailer,
- * never the byte body, so it is orthogonal to the catalog-uat byte contract.
+ * Cross-producer severity/reload parity for the standalone plugin command
+ * contexts. Each case names and drives both producers through the real
+ * notifyWithContext reducer/wire seam. Command-local labels, render arms, and
+ * exact row bytes belong to the corresponding mirrored presenter owners.
  */
 
 import assert from "node:assert/strict";
-import test, { mock } from "node:test";
+import test from "node:test";
+
+import { mock, verify, when } from "strong-mock";
 
 import {
   DISABLE_CONTEXT,
@@ -53,250 +20,358 @@ import { UNINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orches
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 import { notifyWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 
-import type { PluginNotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Severity } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
-// ---------------------------------------------------------------------------
-// Mock helpers -- mirror the notify-grammar-invariant / catalog-uat harness
-// (makeCtx + piWithBothLoaded). The probe reports both companion extensions
-// loaded so no soft-dep markers append (irrelevant to the severity/trailer
-// assertions, but keeps the wire input clean).
-// ---------------------------------------------------------------------------
-
-interface MockCtx {
-  ui: { notify: ReturnType<typeof mock.fn> };
+interface CapturedNotification {
+  readonly message: string;
+  readonly severity?: Severity;
 }
 
-function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
+interface WireFact {
+  readonly severity: Severity | undefined;
+  readonly reload: boolean;
 }
 
-function piWithBothLoaded(): { getAllTools: () => { name?: string }[] } {
-  return { getAllTools: () => [{ name: "subagent" }, { name: "mcp" }] };
+type WireUi = Omit<ExtensionContext["ui"], "notify"> & {
+  readonly notify: (message: string, severity?: Severity) => void;
+};
+
+interface WireHarness {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly ui: WireUi;
+  readonly notifications: CapturedNotification[];
 }
 
 const RELOAD_TRAILER = "/reload to pick up changes";
 
-// ---------------------------------------------------------------------------
-// Per-arm fixtures. Each carries the EXACT producer-stamped row plus its OWN
-// CommandContext, and the wire facts that row must reduce to. The row is the
-// minimal shape the producer emits for that arm (the byte body is the catalog's
-// job; here only the stamped severity/needsReload are load-bearing).
-// ---------------------------------------------------------------------------
-
-interface WireFixture {
-  readonly label: string;
-  // The producer's OWN exported context. Each context is generic over its own
-  // Status/Msg, so the field is held as `unknown` and upcast once at the
-  // `notifyWithContext` call site -- the dispatch arm is selected by
-  // `row.status`, exactly as the orchestrator's own emission does.
-  readonly context: unknown;
-  readonly row: PluginNotificationMessage;
-  // undefined = info wire (no 2nd ctx.ui.notify arg).
-  readonly expectedSeverity: "warning" | "error" | undefined;
-  readonly expectTrailer: boolean;
+function createWireHarness(name: string): WireHarness {
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: `${name} extension API` });
+  const ui = mock<WireUi>({ exactParams: true, name: `${name} UI` });
+  const notifications: CapturedNotification[] = [];
+  when(() => ctx.ui).thenReturn(ui);
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .twice();
+  when(() => ui.notify).thenReturn((message, severity) => {
+    notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
+  });
+  return { ctx, pi, ui, notifications };
 }
 
-// SUCCESS arms: every realized standalone transition stamps
-// severity:"info" + needsReload:true (install.ts:1359, uninstall.ts:625,
-// update.ts:1525, reinstall.ts:288, enable-disable.ts:982 enable + disable).
-const FIXTURES: readonly WireFixture[] = [
-  {
-    label: "install success (installed transition)",
-    context: INSTALL_CONTEXT,
-    row: {
-      status: "installed",
-      name: "new-plugin",
-      dependencies: [],
-      version: "1.0.0",
-      severity: "info",
-      needsReload: true,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: true,
-  },
-  {
-    label: "uninstall success (uninstalled transition)",
-    context: UNINSTALL_CONTEXT,
-    row: {
-      status: "uninstalled",
-      name: "gone-plugin",
-      version: "0.9.0",
-      severity: "info",
-      needsReload: true,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: true,
-  },
-  {
-    label: "update success (updated transition)",
-    context: UPDATE_CONTEXT,
-    row: {
-      status: "updated",
-      name: "delta-plugin",
-      from: "1.0.0",
-      to: "1.1.0",
-      dependencies: [],
-      severity: "info",
-      needsReload: true,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: true,
-  },
-  {
-    label: "reinstall success (reinstalled transition)",
-    context: REINSTALL_CONTEXT,
-    row: {
-      status: "reinstalled",
-      name: "redo-plugin",
-      dependencies: [],
-      version: "2.0.0",
-      severity: "info",
-      needsReload: true,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: true,
-  },
-  {
-    label: "enable success (fresh re-materialized installed transition)",
-    context: ENABLE_CONTEXT,
-    row: {
-      status: "installed",
-      name: "rewoken-plugin",
-      dependencies: [],
-      version: "2.1.0",
-      severity: "info",
-      needsReload: true,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: true,
-  },
-  {
-    label: "disable success (fresh disabled transition)",
-    context: DISABLE_CONTEXT,
-    row: {
-      status: "disabled",
-      name: "muted-plugin",
-      version: "3.0.0",
-      severity: "info",
-      needsReload: true,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: true,
-  },
-  // BENIGN SKIP: an idempotent `already enabled` skip is info, no reload
-  // (enable-disable.ts:930). Distinct from an actionable skip (warning).
-  {
-    label: "benign idempotent skip (enable already-enabled)",
-    context: ENABLE_CONTEXT,
-    row: {
-      status: "skipped",
-      name: "settled-plugin",
-      reasons: ["already enabled"],
-      severity: "info",
-      needsReload: false,
-    },
-    expectedSeverity: undefined,
-    expectTrailer: false,
-  },
-  // FAILURE: a failed install stamps error, no reload (install.ts:1512).
-  {
-    label: "failure row (failed install)",
-    context: INSTALL_CONTEXT,
-    row: {
-      status: "failed",
-      name: "broken-plugin",
-      reasons: [],
+function wireFacts(notifications: readonly CapturedNotification[]): WireFact[] {
+  return notifications.map(({ message, severity }) => ({
+    severity,
+    reload: message.endsWith(RELOAD_TRAILER),
+  }));
+}
+
+test("enable and disable realized transitions share info severity and a reload trailer", () => {
+  // arrange
+  const enable = createWireHarness("enable");
+  const disable = createWireHarness("disable");
+
+  // act
+  notifyWithContext(enable.ctx, enable.pi, ENABLE_CONTEXT, [
+    {
+      name: "official",
       scope: "user",
-      cause: new Error("network unreachable"),
-      severity: "error",
-      needsReload: false,
+      plugins: [
+        {
+          status: "installed",
+          name: "alpha",
+          dependencies: [],
+          version: "1.0.0",
+          severity: "info",
+          needsReload: true,
+        },
+      ],
     },
-    expectedSeverity: "error",
-    expectTrailer: false,
-  },
-  // D-01 absent-target: reinstall of a not-installed plugin stamps error
-  // directly (was `skipSeverity` -> warning) on a `skipped` row carrying
-  // `not installed`; no reload (nothing changed).
-  {
-    label: "absent-target skip (reinstall not-installed)",
-    context: REINSTALL_CONTEXT,
-    row: {
-      status: "skipped",
-      name: "missing-plugin",
-      reasons: ["not installed"],
-      severity: "error",
-      needsReload: false,
+  ]);
+  notifyWithContext(disable.ctx, disable.pi, DISABLE_CONTEXT, [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "disabled",
+          name: "alpha",
+          version: "1.0.0",
+          severity: "info",
+          needsReload: true,
+        },
+      ],
     },
-    expectedSeverity: "error",
-    expectTrailer: false,
-  },
-  // D-01 absent-target: update of a not-installed plugin stamps error directly
-  // (was `skipSeverity` -> warning); no reload.
-  {
-    label: "absent-target skip (update not-installed)",
-    context: UPDATE_CONTEXT,
-    row: {
-      status: "skipped",
-      name: "missing-plugin",
-      reasons: ["not installed"],
-      severity: "error",
-      needsReload: false,
+  ]);
+  const enableWire = wireFacts(enable.notifications);
+  const disableWire = wireFacts(disable.notifications);
+
+  // assert
+  assert.deepStrictEqual(enableWire, [{ severity: undefined, reload: true }]);
+  assert.deepStrictEqual(disableWire, [{ severity: undefined, reload: true }]);
+  verify(enable.ctx);
+  verify(enable.pi);
+  verify(enable.ui);
+  verify(disable.ctx);
+  verify(disable.pi);
+  verify(disable.ui);
+});
+
+test("install and uninstall realized transitions share info severity and a reload trailer", () => {
+  // arrange
+  const install = createWireHarness("install");
+  const uninstall = createWireHarness("uninstall");
+
+  // act
+  notifyWithContext(install.ctx, install.pi, INSTALL_CONTEXT, [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "installed",
+          name: "beta",
+          dependencies: [],
+          version: "2.0.0",
+          severity: "info",
+          needsReload: true,
+        },
+      ],
     },
-    expectedSeverity: "error",
-    expectTrailer: false,
-  },
-  // D-01 / PU-5: standalone uninstall of an already-gone (not-installed) plugin
-  // emits an error `failed` row (was literal silence); no reload. uninstall's
-  // render map renders `uninstalled` / `failed` only, so the absent target is a
-  // `failed` row. The orchestrated reconcile converge stays silent and is not
-  // exercised here.
-  {
-    label: "absent-target failure (uninstall PU-5 already-gone)",
-    context: UNINSTALL_CONTEXT,
-    row: {
-      status: "failed",
-      name: "helper",
-      reasons: ["not installed"],
-      severity: "error",
-      needsReload: false,
+  ]);
+  notifyWithContext(uninstall.ctx, uninstall.pi, UNINSTALL_CONTEXT, [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "uninstalled",
+          name: "beta",
+          version: "2.0.0",
+          severity: "info",
+          needsReload: true,
+        },
+      ],
     },
-    expectedSeverity: "error",
-    expectTrailer: false,
-  },
-];
+  ]);
+  const installWire = wireFacts(install.notifications);
+  const uninstallWire = wireFacts(uninstall.notifications);
 
-test("WR-01/D-05: every standalone render-map arm reduces its producer-stamped row to the correct wire severity + reload trailer", () => {
-  for (const fixture of FIXTURES) {
-    const ctx = makeCtx();
-    notifyWithContext(ctx as never, piWithBothLoaded() as never, fixture.context as never, [
-      { name: "official", scope: "user", plugins: [fixture.row] as never },
-    ]);
+  // assert
+  assert.deepStrictEqual(installWire, [{ severity: undefined, reload: true }]);
+  assert.deepStrictEqual(uninstallWire, [{ severity: undefined, reload: true }]);
+  verify(install.ctx);
+  verify(install.pi);
+  verify(install.ui);
+  verify(uninstall.ctx);
+  verify(uninstall.pi);
+  verify(uninstall.ui);
+});
 
-    // IL-2: exactly one ctx.ui.notify call per orchestration arm.
-    assert.equal(
-      ctx.ui.notify.mock.calls.length,
-      1,
-      `${fixture.label}: must call ctx.ui.notify exactly once (IL-2)`,
-    );
+test("reinstall and update realized transitions share info severity and a reload trailer", () => {
+  // arrange
+  const reinstall = createWireHarness("reinstall");
+  const update = createWireHarness("update");
 
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-    const emittedSeverity = args[1];
+  // act
+  notifyWithContext(reinstall.ctx, reinstall.pi, REINSTALL_CONTEXT, [
+    {
+      name: "official",
+      scope: "project",
+      plugins: [
+        {
+          status: "reinstalled",
+          name: "gamma",
+          dependencies: [],
+          version: "3.0.0",
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+    },
+  ]);
+  notifyWithContext(update.ctx, update.pi, UPDATE_CONTEXT, [
+    {
+      name: "official",
+      scope: "project",
+      plugins: [
+        {
+          status: "updated",
+          name: "gamma",
+          from: "2.0.0",
+          to: "3.0.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+    },
+  ]);
+  const reinstallWire = wireFacts(reinstall.notifications);
+  const updateWire = wireFacts(update.notifications);
 
-    // SEV-02: the wire severity is the MAX-reduce of the stamped row.severity.
-    // info reduces to the omitted 2nd arg; warning/error pass it through.
-    assert.equal(
-      emittedSeverity,
-      fixture.expectedSeverity,
-      `${fixture.label}: expected wire severity ${String(fixture.expectedSeverity)}, got ${String(emittedSeverity)}`,
-    );
+  // assert
+  assert.deepStrictEqual(reinstallWire, [{ severity: undefined, reload: true }]);
+  assert.deepStrictEqual(updateWire, [{ severity: undefined, reload: true }]);
+  verify(reinstall.ctx);
+  verify(reinstall.pi);
+  verify(reinstall.ui);
+  verify(update.ctx);
+  verify(update.pi);
+  verify(update.ui);
+});
 
-    // RLD-02: the trailer fires iff the OR-reduce of the stamped
-    // row.needsReload is true.
-    const hasTrailer = args[0].includes(RELOAD_TRAILER);
-    assert.equal(
-      hasTrailer,
-      fixture.expectTrailer,
-      `${fixture.label}: reload trailer presence must be ${String(fixture.expectTrailer)} (RLD-02 OR-reduce of needsReload)`,
-    );
-  }
+test("enable and disable idempotent skips share info severity without a reload trailer", () => {
+  // arrange
+  const enable = createWireHarness("enable");
+  const disable = createWireHarness("disable");
+
+  // act
+  notifyWithContext(enable.ctx, enable.pi, ENABLE_CONTEXT, [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "skipped",
+          name: "delta",
+          reasons: ["already enabled"],
+          severity: "info",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+  notifyWithContext(disable.ctx, disable.pi, DISABLE_CONTEXT, [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "skipped",
+          name: "delta",
+          reasons: ["already disabled"],
+          severity: "info",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+  const enableWire = wireFacts(enable.notifications);
+  const disableWire = wireFacts(disable.notifications);
+
+  // assert
+  assert.deepStrictEqual(enableWire, [{ severity: undefined, reload: false }]);
+  assert.deepStrictEqual(disableWire, [{ severity: undefined, reload: false }]);
+  verify(enable.ctx);
+  verify(enable.pi);
+  verify(enable.ui);
+  verify(disable.ctx);
+  verify(disable.pi);
+  verify(disable.ui);
+});
+
+test("install and uninstall failures share error severity without a reload trailer", () => {
+  // arrange
+  const install = createWireHarness("install");
+  const uninstall = createWireHarness("uninstall");
+
+  // act
+  notifyWithContext(install.ctx, install.pi, INSTALL_CONTEXT, [
+    {
+      name: "official",
+      scope: "project",
+      plugins: [
+        {
+          status: "failed",
+          name: "epsilon",
+          reasons: ["network unreachable"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+  notifyWithContext(uninstall.ctx, uninstall.pi, UNINSTALL_CONTEXT, [
+    {
+      name: "official",
+      scope: "project",
+      plugins: [
+        {
+          status: "failed",
+          name: "epsilon",
+          reasons: ["permission denied"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+  const installWire = wireFacts(install.notifications);
+  const uninstallWire = wireFacts(uninstall.notifications);
+
+  // assert
+  assert.deepStrictEqual(installWire, [{ severity: "error", reload: false }]);
+  assert.deepStrictEqual(uninstallWire, [{ severity: "error", reload: false }]);
+  verify(install.ctx);
+  verify(install.pi);
+  verify(install.ui);
+  verify(uninstall.ctx);
+  verify(uninstall.pi);
+  verify(uninstall.ui);
+});
+
+test("reinstall and update absent-target skips share error severity without a reload trailer", () => {
+  // arrange
+  const reinstall = createWireHarness("reinstall");
+  const update = createWireHarness("update");
+
+  // act
+  notifyWithContext(reinstall.ctx, reinstall.pi, REINSTALL_CONTEXT, [
+    {
+      name: "official",
+      scope: "project",
+      plugins: [
+        {
+          status: "skipped",
+          name: "zeta",
+          reasons: ["not installed"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+  notifyWithContext(update.ctx, update.pi, UPDATE_CONTEXT, [
+    {
+      name: "official",
+      scope: "project",
+      plugins: [
+        {
+          status: "skipped",
+          name: "zeta",
+          reasons: ["not installed"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+  const reinstallWire = wireFacts(reinstall.notifications);
+  const updateWire = wireFacts(update.notifications);
+
+  // assert
+  assert.deepStrictEqual(reinstallWire, [{ severity: "error", reload: false }]);
+  assert.deepStrictEqual(updateWire, [{ severity: "error", reload: false }]);
+  verify(reinstall.ctx);
+  verify(reinstall.pi);
+  verify(reinstall.ui);
+  verify(update.ctx);
+  verify(update.pi);
+  verify(update.ui);
 });

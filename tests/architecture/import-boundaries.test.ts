@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { stripComments } from "../helpers/source-scan.ts";
+import { stripComments } from "./source-scan.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -115,21 +115,19 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
 /**
  * D-11: whole-repo cycle detection must stay unfiltered.
  *
- * This used to pin `import-x/no-cycle`. That rule was removed after it was
- * measured reporting NOTHING on a deliberate two-file cycle -- including one
- * planted inside `orchestrators/`, its own scope -- while `fallow dead-code`
- * flagged the identical cycle and exited 1. Resolution was not the problem
- * (`import-x/no-unresolved` fired on a bogus path and stayed silent on the
- * real one in the same file), and neither the built-in node resolver nor
- * `eslint-import-resolver-typescript` changed the outcome. The old assertion
- * checked that the rule was CONFIGURED, which it always was, so it could not
- * tell a working gate from an inert one.
+ * Cycles are caught by `fallow dead-code` inside `npm run fallow`, not by
+ * ESLint. `import-x/no-cycle` reports NOTHING on a deliberate two-file
+ * cycle -- including one planted inside `orchestrators/`, its own scope --
+ * while `fallow dead-code` flags the identical cycle and exits 1; neither
+ * `import-x/no-unresolved`, the built-in node resolver, nor
+ * `eslint-import-resolver-typescript` changes that outcome, so the gap is
+ * not a resolution problem. Asserting that a rule is merely CONFIGURED
+ * cannot distinguish a working gate from an inert one.
  *
- * Cycles are now caught by `fallow dead-code` inside `npm run fallow`. What
- * needs pinning is that the invocation stays UNFILTERED: fallow's
- * `--circular-deps` / `--boundary-violations` flags are only-report filters,
- * not additions, so naming one silently drops every other class the
- * subcommand computes. The bare form reports them all.
+ * What needs pinning instead is that the `fallow dead-code` invocation stays
+ * UNFILTERED: fallow's `--circular-deps` / `--boundary-violations` flags are
+ * only-report filters, not additions, so naming one silently drops every
+ * other class the subcommand computes. The bare form reports them all.
  */
 test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", async () => {
   const pkgPath = path.join(REPO_ROOT, "package.json");
@@ -192,14 +190,14 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
  * D-11: the ledger modules of `orchestrators/plugin/` and
  * `orchestrators/marketplace/` must not statically import each other.
  *
- * Cycle detection cannot cover this -- not `fallow dead-code`'s, and not the
- * `import-x/no-cycle` rule retired above. A cycle is reported only once the
- * graph is ALREADY circular, so the first of the two edges lands green and the
- * gate fires on whoever adds the second. The edge that matters here is
- * preventive:
- * a marketplace ledger reaching a plugin ledger drags that ledger's whole graph
- * in, and `orchestrators/types.ts` plus the leaf row composers exist precisely
- * so it does not have to.
+ * Cycle detection cannot cover this -- not `fallow dead-code`'s, and not
+ * `import-x/no-cycle`, absent from ESLint for the reason given above. A
+ * cycle is reported only once the graph is ALREADY circular, so the first of
+ * the two edges lands green and the gate fires on whoever adds the second.
+ * The edge that matters here is preventive: a marketplace ledger reaching a
+ * plugin ledger drags that ledger's whole graph in, and
+ * `orchestrators/types.ts` plus the leaf row composers exist precisely so it
+ * does not have to.
  *
  * Type-only imports are forbidden too. A shared TYPE is what
  * `orchestrators/types.ts` is for; reaching into a ledger module for one

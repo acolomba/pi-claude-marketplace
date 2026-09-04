@@ -1,12 +1,65 @@
+// Owner suite for `edge/completions/data.ts`, the completion data layer: five
+// pure token helpers plus three cache-backed accessors that reach scoped state
+// and marketplace manifests through the injected `LocationsResolver` seam.
+//
+// The resolver is a declared parameter, so every case builds a typed fake and
+// seeds it per case. Nothing here simulates a filesystem with a graph of stub
+// functions -- the only real disk this module touches is the completion cache,
+// which writes under a temporary root owned by the case.
+//
+// This surface is read-only and must never reach the network (NFR-5), and the
+// cases that reach a collaborator -- the three cache-backed accessors -- own a
+// context-installed fail-fast replacement of `https.request`, the door the git
+// transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and the replacement
+// is NOT presented as an offline proof: `data.ts`'s import closure holds no HTTP
+// client at all, so a zero here could not rise whatever this module did. What
+// the replacement is, is a hermeticity device -- a dial-out this surface
+// acquires later fails the case where it happens. See `installNetworkTrap`.
+//
+// The five pure token helpers carry no such device. Each is synchronous, takes
+// no resolver and touches nothing outside its arguments.
+//
+// The status vocabulary seeded below is owned by
+// `tests/shared/completion-cache.test.ts` and by
+// `tests/orchestrators/plugin/plugin-state-classifier.test.ts`; every status
+// here is a written-out literal, never a value this suite derives by re-running
+// the classification it is checking. Likewise every expected candidate list is
+// hand-authored, compared unsorted, and compared whole.
+//
+// D-116-01a: this pair lands one branch short of complete. The right-hand side
+// of the nullish fallback at data.ts:188 -- the `?? ""` in
+// `allTokens.at(-1) ?? ""` -- cannot be entered at runtime.
+// `splitCompletionInput` has already returned for an empty input and for any
+// input whose last character is whitespace, so every input reaching line 188
+// ends in a non-whitespace character and the filtered token list is non-empty.
+// The fallback exists only because the standard library types
+// `Array.prototype.at()` as `T | undefined`; removing it needs a non-null
+// assertion or a type assertion, both barred throughout `extensions/`.
+//
+// The claim is measured, not inspected: a brute force over all 65,536 BMP code
+// points in five input shapes found zero inputs that reach the fallback, and a
+// plant that replaced its value left all 66 cases green. The shortfall is
+// pinned by its identity -- functions and lines complete, and exactly ONE
+// uncovered branch -- never by an absolute branch pair, because the branch
+// denominator tracks suite strength rather than the source. No coverage
+// exception is added and no production file is changed.
+//
+// No exhaustiveness claim rides on this pair: `edge/completions/data.ts`
+// contains no `switch` and no closed-union dispatch, so a deleted-arm plant has
+// no target here.
+
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
+import https from "node:https";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import {
   buildItem,
   extractPositionals,
+  extractScope,
+  getMarketplaceCompletions,
   getMarketplaceNamesAcrossScopes,
   getPluginRefCompletions,
   getPluginToMarketplacesMap,
@@ -14,321 +67,891 @@ import {
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type {
+  LocationsResolver,
+  MarketplaceStateRecord,
+  PluginMapOptions,
+  PluginRefCompletionMode,
+} from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-/**
- * Tests for edge/completions/data.ts.
- *
- * Each test builds a hermetic LocationsResolver mock with in-memory state +
- * manifest fixtures and a fresh tmpdir-rooted cache path. Tests call
- * `resetCompletionCache()` to clear the shared module-level memory maps
- * between cases.
- */
-
-interface ResolverFixture {
-  readonly resolver: LocationsResolver;
-  cleanup(): Promise<void>;
+/** Marketplace records and manifest rows a single case makes visible per scope. */
+interface ResolverSeed {
+  readonly marketplaces?: Partial<Record<Scope, Record<string, MarketplaceStateRecord>>>;
+  readonly manifests?: Partial<Record<Scope, Record<string, readonly PluginIndexRow[]>>>;
+  /** Scopes whose state read rejects, so a propagation case can seed one side. */
+  readonly stateFailures?: Partial<Record<Scope, Error>>;
 }
 
-async function makeResolver(spec: {
-  readonly state: Partial<
-    Record<Scope, Record<string, { manifestPath?: string; plugins?: Record<string, unknown> }>>
-  >;
-  readonly manifests: Partial<Record<Scope, Record<string, readonly PluginIndexRow[]>>>;
-}): Promise<ResolverFixture> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "data-test-"));
-  const resolver: LocationsResolver = {
-    marketplaceNamesCachePath(scope: Scope): string {
-      return path.join(dir, scope, "marketplace-names.json");
-    },
+interface SeededResolver {
+  readonly resolver: LocationsResolver;
+}
 
-    pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
-      return Promise.resolve(path.join(dir, scope, "plugins", `${marketplace}.json`));
-    },
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * This is a HERMETICITY DEVICE, not an offline proof, and no case asserts a
+ * call count against it. `data.ts`'s whole import closure -- `edge/router.ts`,
+ * `edge/flag-catalog.ts`, `platform/pi-api.ts`, `shared/atomic-json.ts`,
+ * `shared/completion-cache.ts`, `shared/concerns/{hooks,soft-dep}.ts`,
+ * `shared/errors.ts`, `shared/notify.ts`, `shared/types.ts` -- contains no HTTP
+ * client of any kind, so a count asserted here could not rise whatever this
+ * module did. What the replacement does buy is that a dial-out this surface
+ * acquires LATER fails the case where it happens instead of passing silently:
+ * measured, a live `https.request` call planted in
+ * `getMarketplaceNamesAcrossScopes` leaves the whole suite green while the door
+ * is `globalThis.fetch` and turns it red once the door is this one.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which is not in this module's closure at all.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the completion data layer must not open a network connection");
+  });
+}
 
-    loadStateForScope(scope: Scope): Promise<{
-      marketplaces: Record<string, { manifestPath?: string; plugins?: Record<string, unknown> }>;
-    }> {
-      const scopeState = spec.state[scope];
-      if (scopeState === undefined) {
-        return Promise.resolve({ marketplaces: {} });
+/**
+ * One temporary cache root per case. Removal and the process-global
+ * completion-cache reset are registered before the module under test runs, so an
+ * early throw still unwinds them.
+ *
+ * No environment is substituted here. Neither `data.ts`, `shared/completion-
+ * cache.ts` nor anything else in their import closure reads `process.env`,
+ * `homedir()` or `getAgentDir()` -- every path this module touches arrives
+ * through the injected resolver or through the cache path the resolver hands
+ * back. A `HOME` substitution would change nothing observable, so this helper
+ * does not carry one.
+ */
+async function seedResolver(
+  t: TestContext,
+  label: string,
+  seed: ResolverSeed,
+): Promise<SeededResolver> {
+  resetCompletionCache();
+  const cacheRoot = await mkdtemp(path.join(tmpdir(), `completions-data-${label}-cache-`));
+  t.after(async () => {
+    resetCompletionCache();
+    await rm(cacheRoot, { recursive: true, force: true });
+  });
+  installNetworkTrap(t);
+
+  const resolver = {
+    marketplaceNamesCachePath: (scope: Scope): string =>
+      path.join(cacheRoot, scope, "marketplace-names.json"),
+
+    pluginCachePath: (scope: Scope, marketplace: string): Promise<string> =>
+      Promise.resolve(path.join(cacheRoot, scope, "plugins", `${marketplace}.json`)),
+
+    loadStateForScope: (
+      scope: Scope,
+    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecord> }> => {
+      const failure = seed.stateFailures?.[scope];
+      if (failure !== undefined) {
+        return Promise.reject(failure);
       }
 
-      return Promise.resolve({ marketplaces: scopeState });
+      return Promise.resolve({ marketplaces: seed.marketplaces?.[scope] ?? {} });
     },
 
-    loadManifestForMarketplace(
+    loadManifestForMarketplace: (
       scope: Scope,
       marketplace: string,
-    ): Promise<readonly PluginIndexRow[]> {
-      const scopeManifests = spec.manifests[scope];
-      const rows = scopeManifests?.[marketplace];
+    ): Promise<readonly PluginIndexRow[]> => {
+      const rows = seed.manifests?.[scope]?.[marketplace];
       if (rows === undefined) {
-        return Promise.reject(new Error(`manifest missing for ${scope}/${marketplace}`));
+        return Promise.reject(new Error(`no manifest seeded for ${scope}/${marketplace}`));
       }
 
       return Promise.resolve(rows);
     },
-  };
+  } satisfies LocationsResolver;
 
-  return {
-    resolver,
-    async cleanup() {
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
+  return { resolver };
 }
 
-// ---------------------------------------------------------------------------
-// Pure helpers.
-// ---------------------------------------------------------------------------
+/** Every derived status the plugin-index cache can carry, in one marketplace. */
+function everyStatusManifest(): readonly PluginIndexRow[] {
+  return [
+    { name: "held", status: "installed" },
+    { name: "outdated", status: "upgradable" },
+    { name: "held-partly", status: "partially-installed" },
+    { name: "held-partly-outdated", status: "partially-installed-upgradable" },
+    { name: "outdated-partly", status: "partially-upgradable" },
+    { name: "fresh", status: "available" },
+    { name: "not-fetched", status: "remote" },
+    { name: "broken", status: "unavailable" },
+    { name: "degraded", status: "partially-available" },
+  ];
+}
 
-test("buildItem :: reconstructs argumentText prefix + chosen text + trailing space", () => {
-  resetCompletionCache();
-  const empty = buildItem("", "install", true);
-  assert.deepEqual(empty, { label: "install", value: "install " });
+/** The five modes `getPluginToMarketplacesMap` routes to the installed inventory. */
+const INSTALLED_INVENTORY_MODES: readonly PluginRefCompletionMode[] = [
+  "uninstall",
+  "update",
+  "reinstall",
+  "enable",
+  "disable",
+];
 
-  const nonEmpty = buildItem("install", "p@mp", true);
-  assert.deepEqual(nonEmpty, { label: "p@mp", value: "install p@mp " });
-
-  const nonTerminal = buildItem("install", "p@", false);
-  assert.deepEqual(nonTerminal, { label: "p@", value: "install p@" });
-});
-
-test("splitCompletionInput :: trailing space yields empty current and full tokens", () => {
-  resetCompletionCache();
-  const out = splitCompletionInput("install foo@bar ");
-  assert.deepEqual(out, { tokens: ["install", "foo@bar"], current: "" });
-});
-
-test("splitCompletionInput :: no trailing space yields last token as current", () => {
-  resetCompletionCache();
-  const out = splitCompletionInput("install fo");
-  assert.deepEqual(out, { tokens: ["install"], current: "fo" });
-
-  const empty = splitCompletionInput("");
-  assert.deepEqual(empty, { tokens: [], current: "" });
-});
-
-test("extractPositionals :: skips --scope <value> pairs", () => {
-  resetCompletionCache();
-  const out = extractPositionals(["install", "--scope", "user", "p@mp"]);
-  assert.deepEqual(out, ["install", "p@mp"]);
-
-  const middle = extractPositionals(["--scope", "project", "list", "mp"]);
-  assert.deepEqual(middle, ["list", "mp"]);
-});
-
-// ---------------------------------------------------------------------------
-// Cache-backed accessors.
-// ---------------------------------------------------------------------------
-
-test("getMarketplaceNamesAcrossScopes :: dedupes overlapping names from user and project", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: {
-      user: { mp1: {}, mp2: {} },
-      project: { mp2: {}, mp3: {} },
+describe("buildItem", () => {
+  for (const { argumentTextPrefix, itemText, appendSpace, expectedValue } of [
+    { argumentTextPrefix: "", itemText: "install", appendSpace: true, expectedValue: "install " },
+    { argumentTextPrefix: "", itemText: "install", appendSpace: false, expectedValue: "install" },
+    {
+      argumentTextPrefix: "install",
+      itemText: "alpha@official",
+      appendSpace: true,
+      expectedValue: "install alpha@official ",
     },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const names = await getMarketplaceNamesAcrossScopes(fixture.resolver);
-    assert.deepEqual([...names].sort(), ["mp1", "mp2", "mp3"]);
-  } finally {
-    await fixture.cleanup();
+    {
+      argumentTextPrefix: "install",
+      itemText: "alpha@",
+      appendSpace: false,
+      expectedValue: "install alpha@",
+    },
+  ]) {
+    test(`replaces the whole argument text with ${JSON.stringify(expectedValue)}`, () => {
+      // act
+      const item = buildItem(argumentTextPrefix, itemText, appendSpace);
+
+      // assert
+      assert.deepStrictEqual(item, { label: itemText, value: expectedValue });
+    });
   }
 });
 
-test("getPluginToMarketplacesMap :: install mode is available-only for target scope", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const map = await getPluginToMarketplacesMap("install", fixture.resolver);
-    assert.equal(map.has("p-installed"), false);
-    assert.deepEqual(map.get("p-avail"), ["mp"]);
-    assert.equal(map.has("p-unavail"), false);
-  } finally {
-    await fixture.cleanup();
+describe("splitCompletionInput", () => {
+  for (const { input, tokens, current } of [
+    { input: "", tokens: [], current: "" },
+    { input: "inst", tokens: [], current: "inst" },
+    { input: "install alph", tokens: ["install"], current: "alph" },
+    { input: "install alpha@official ", tokens: ["install", "alpha@official"], current: "" },
+    { input: "install   alpha@official", tokens: ["install"], current: "alpha@official" },
+    { input: "   ", tokens: [], current: "" },
+  ] satisfies readonly { input: string; tokens: string[]; current: string }[]) {
+    test(`splits ${JSON.stringify(input)} into ${String(tokens.length)} finished token(s) and ${JSON.stringify(current)}`, () => {
+      // act
+      const split = splitCompletionInput(input);
+
+      // assert
+      assert.deepStrictEqual(split, { tokens, current });
+    });
   }
 });
 
-test("getPluginToMarketplacesMap :: uninstall mode keeps only installed", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
+describe("extractPositionals", () => {
+  test("returns every token when no flag vocabulary is present", () => {
+    // arrange
+    const tokens = ["install", "alpha@official"];
+
+    // act
+    const positionals = extractPositionals(tokens);
+
+    // assert
+    assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
   });
-  try {
-    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver);
-    assert.deepEqual(map.get("p-installed"), ["mp"]);
-    assert.equal(map.has("p-avail"), false);
-    assert.equal(map.has("p-unavail"), false);
-  } finally {
-    await fixture.cleanup();
+
+  for (const { position, tokens } of [
+    { position: "leading", tokens: ["--scope", "project", "install", "alpha@official"] },
+    { position: "interior", tokens: ["install", "--scope", "project", "alpha@official"] },
+    { position: "trailing", tokens: ["install", "alpha@official", "--scope", "project"] },
+  ] satisfies readonly { position: string; tokens: string[] }[]) {
+    test(`recovers the same positionals with a ${position} scope flag pair`, () => {
+      // act
+      const positionals = extractPositionals(tokens);
+
+      // assert
+      assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
+    });
+  }
+
+  test("consumes the scope flag pair even when its value is missing", () => {
+    // arrange
+    const tokens = ["install", "--scope"];
+
+    // act
+    const positionals = extractPositionals(tokens);
+
+    // assert
+    assert.deepStrictEqual(positionals, ["install"]);
+  });
+
+  test("drops a declared boolean flag without consuming the token after it", () => {
+    // arrange
+    const tokens = ["install", "--partial", "alpha@official"];
+
+    // act
+    const positionals = extractPositionals(tokens, ["--partial"]);
+
+    // assert
+    assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
+  });
+
+  test("keeps an undeclared flag-shaped token as a positional", () => {
+    // arrange
+    const tokens = ["install", "--undeclared"];
+
+    // act
+    const positionals = extractPositionals(tokens, ["--partial"]);
+
+    // assert
+    assert.deepStrictEqual(positionals, ["install", "--undeclared"]);
+  });
+
+  test("skips a hole left by a sparse token list", () => {
+    // arrange
+    const tokens: string[] = ["install"];
+    tokens[2] = "alpha@official";
+
+    // act
+    const positionals = extractPositionals(tokens, ["--partial"]);
+
+    // assert
+    assert.deepStrictEqual(positionals, ["install", "alpha@official"]);
+  });
+});
+
+describe("extractScope", () => {
+  for (const { tokens, expectedScope } of [
+    { tokens: ["--scope", "user"], expectedScope: "user" },
+    { tokens: ["--scope", "project"], expectedScope: "project" },
+  ] satisfies readonly { tokens: string[]; expectedScope: Scope }[]) {
+    test(`reads the ${expectedScope} scope out of the token list`, () => {
+      // act
+      const scope = extractScope(tokens);
+
+      // assert
+      assert.strictEqual(scope, expectedScope);
+    });
+  }
+
+  for (const { situation, tokens } of [
+    { situation: "the flag is absent", tokens: ["install", "alpha@official"] },
+    { situation: "the flag carries an unrecognised value", tokens: ["--scope", "local"] },
+    { situation: "the flag has no value after it", tokens: ["install", "--scope"] },
+  ] satisfies readonly { situation: string; tokens: string[] }[]) {
+    test(`returns no scope when ${situation}`, () => {
+      // act
+      const scope = extractScope(tokens);
+
+      // assert
+      assert.strictEqual(scope, undefined);
+    });
+  }
+
+  test("keeps scanning past an unrecognised value and reads a later valid one", () => {
+    // arrange
+    const tokens = ["--scope", "local", "--scope", "project"];
+
+    // act
+    const scope = extractScope(tokens);
+
+    // assert
+    assert.strictEqual(scope, "project");
+  });
+});
+
+describe("getMarketplaceCompletions", () => {
+  test("keeps only the prefix matches and terminates each with a space", () => {
+    // arrange
+    const names = ["official", "other", "internal"];
+
+    // act
+    const items = getMarketplaceCompletions(names, "o", "marketplace info");
+
+    // assert
+    assert.deepStrictEqual(items, [
+      { label: "official", value: "marketplace info official " },
+      { label: "other", value: "marketplace info other " },
+    ]);
+  });
+
+  test("preserves the caller's order and repeats an equal name in place", () => {
+    // arrange
+    const names = ["zeta", "alpha", "zeta"];
+
+    // act
+    const items = getMarketplaceCompletions(names, "", "");
+
+    // assert
+    assert.deepStrictEqual(items, [
+      { label: "zeta", value: "zeta " },
+      { label: "alpha", value: "alpha " },
+      { label: "zeta", value: "zeta " },
+    ]);
+  });
+
+  test("matches the partial token case-sensitively, with no case folding", () => {
+    // arrange
+    const names = ["Official"];
+
+    // act
+    const lowerCaseMatches = getMarketplaceCompletions(names, "o", "");
+    const exactCaseMatches = getMarketplaceCompletions(names, "O", "");
+
+    // assert
+    assert.deepStrictEqual(lowerCaseMatches, []);
+    assert.deepStrictEqual(exactCaseMatches, [{ label: "Official", value: "Official " }]);
+  });
+});
+
+describe("getMarketplaceNamesAcrossScopes", () => {
+  test("unions both scopes in first-seen order and records a shared name once", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "names-union", {
+      marketplaces: {
+        user: { zeta: {}, shared: {} },
+        project: { shared: {}, beta: {} },
+      },
+    });
+
+    // act
+    const names = await getMarketplaceNamesAcrossScopes(resolver);
+
+    // assert
+    assert.deepStrictEqual([...names], ["zeta", "shared", "beta"]);
+  });
+
+  test("returns the names when only one scope holds a marketplace", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "names-one-scope", {
+      marketplaces: { project: { internal: {} } },
+    });
+
+    // act
+    const names = await getMarketplaceNamesAcrossScopes(resolver);
+
+    // assert
+    assert.deepStrictEqual([...names], ["internal"]);
+  });
+
+  test("returns an empty union when neither scope has a marketplace", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "names-empty", {});
+
+    // act
+    const names = await getMarketplaceNamesAcrossScopes(resolver);
+
+    // assert
+    assert.deepStrictEqual([...names], []);
+  });
+
+  for (const failingScope of ["user", "project"] satisfies readonly Scope[]) {
+    test(`propagates a ${failingScope} state read failure instead of a partial union`, async (t) => {
+      // arrange
+      const stateFailure = new Error(`state is unreadable for ${failingScope}`);
+      const { resolver } = await seedResolver(t, `names-fail-${failingScope}`, {
+        marketplaces: { user: { zeta: {} }, project: { beta: {} } },
+        stateFailures: { [failingScope]: stateFailure },
+      });
+
+      // act & assert
+      await assert.rejects(
+        () => getMarketplaceNamesAcrossScopes(resolver),
+        (error: unknown) => {
+          assert.strictEqual(error, stateFailure);
+          return true;
+        },
+      );
+    });
   }
 });
 
-test("getPluginToMarketplacesMap :: update mode keeps only installed", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const map = await getPluginToMarketplacesMap("update", fixture.resolver);
-    assert.deepEqual(map.get("p-installed"), ["mp"]);
-    assert.equal(map.has("p-avail"), false);
-  } finally {
-    await fixture.cleanup();
-  }
-});
+describe("getPluginToMarketplacesMap", () => {
+  test("install offers the not-yet-installed and not-yet-fetched rows of the default user scope", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-install", {
+      marketplaces: { user: { official: {} } },
+      manifests: { user: { official: everyStatusManifest() } },
+    });
 
-test("getPluginToMarketplacesMap :: cross-marketplace plugin appears with both marketplace names", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: {
-      user: { "mp-a": {}, "mp-b": {} },
-      project: {},
-    },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "shared", status: "installed" }],
-        "mp-b": [{ name: "shared", status: "installed" }],
-      },
-      project: {},
-    },
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+      ["fresh", ["official"]],
+      ["not-fetched", ["official"]],
+    ]);
   });
-  try {
-    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver, {
+
+  test("install with the partial option trades the not-fetched row for the degraded one", async (t) => {
+    // arrange
+    const options = { partial: true } satisfies PluginMapOptions;
+    const { resolver } = await seedResolver(t, "map-install-partial", {
+      marketplaces: { user: { official: {} } },
+      manifests: { user: { official: everyStatusManifest() } },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver, options);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+      ["fresh", ["official"]],
+      ["degraded", ["official"]],
+    ]);
+  });
+
+  test("install excludes a plugin already recorded in the target scope (CMP-7)", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-install-recorded", {
+      marketplaces: { user: { official: { plugins: { held: {} } } } },
+      manifests: {
+        user: {
+          official: [
+            { name: "held", status: "available" },
+            { name: "fresh", status: "available" },
+          ],
+        },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["fresh", ["official"]]]);
+  });
+
+  test("a project install reads project marketplaces first and falls back to unshadowed user ones (CMP-8)", async (t) => {
+    // arrange
+    const options = { targetScope: "project" } satisfies PluginMapOptions;
+    const { resolver } = await seedResolver(t, "map-install-project", {
+      marketplaces: {
+        user: { official: {}, "user-only-mp": {} },
+        project: { official: {} },
+      },
+      manifests: {
+        user: {
+          official: [{ name: "user-side", status: "available" }],
+          "user-only-mp": [{ name: "extra", status: "available" }],
+        },
+        project: { official: [{ name: "project-side", status: "available" }] },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver, options);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+      ["project-side", ["official"]],
+      ["extra", ["user-only-mp"]],
+    ]);
+  });
+
+  for (const mode of INSTALLED_INVENTORY_MODES) {
+    test(`${mode} offers the whole installed inventory and nothing outside it`, async (t) => {
+      // arrange
+      const { resolver } = await seedResolver(t, `map-inventory-${mode}`, {
+        marketplaces: { user: { official: {} } },
+        manifests: { user: { official: everyStatusManifest() } },
+      });
+
+      // act
+      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver);
+
+      // assert
+      assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+        ["held", ["official"]],
+        ["outdated", ["official"]],
+        ["held-partly", ["official"]],
+        ["held-partly-outdated", ["official"]],
+        ["outdated-partly", ["official"]],
+      ]);
+    });
+  }
+
+  for (const mode of INSTALLED_INVENTORY_MODES) {
+    test(`the partial option narrows ${mode} to the rows with a newer candidate`, async (t) => {
+      // arrange
+      const { resolver } = await seedResolver(t, `map-inventory-partial-${mode}`, {
+        marketplaces: { user: { official: {} } },
+        manifests: { user: { official: everyStatusManifest() } },
+      });
+
+      // act
+      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, {
+        partial: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+        ["outdated", ["official"]],
+        ["held-partly-outdated", ["official"]],
+        ["outdated-partly", ["official"]],
+      ]);
+    });
+  }
+
+  test("an installed-inventory mode without an explicit scope reads project before user", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-inventory-both", {
+      marketplaces: { user: { official: {} }, project: { internal: {} } },
+      manifests: {
+        user: { official: [{ name: "user-side", status: "installed" }] },
+        project: { internal: [{ name: "project-side", status: "installed" }] },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+      ["project-side", ["internal"]],
+      ["user-side", ["official"]],
+    ]);
+  });
+
+  test("an explicit target scope narrows an installed-inventory mode to that scope alone", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-inventory-scoped", {
+      marketplaces: { user: { official: {} }, project: { internal: {} } },
+      manifests: {
+        user: { official: [{ name: "user-side", status: "installed" }] },
+        project: { internal: [{ name: "project-side", status: "installed" }] },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver, {
       targetScope: "user",
     });
-    const mps = map.get("shared");
-    assert.ok(mps !== undefined);
-    assert.deepEqual([...mps].sort(), ["mp-a", "mp-b"]);
-  } finally {
-    await fixture.cleanup();
-  }
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["user-side", ["official"]]]);
+  });
+
+  test("fetch offers the warm and warmable rows and ignores the partial option", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-fetch", {
+      marketplaces: { user: { official: {} } },
+      manifests: { user: { official: everyStatusManifest() } },
+    });
+
+    // act
+    const withoutPartial = await getPluginToMarketplacesMap("fetch", resolver);
+    const withPartial = await getPluginToMarketplacesMap("fetch", resolver, { partial: true });
+
+    // assert
+    assert.deepStrictEqual(Array.from(withoutPartial), [
+      ["fresh", ["official"]],
+      ["not-fetched", ["official"]],
+      ["broken", ["official"]],
+      ["degraded", ["official"]],
+    ]);
+    assert.deepStrictEqual(Array.from(withPartial), Array.from(withoutPartial));
+  });
+
+  test("an explicit target scope narrows fetch to that scope alone", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-fetch-scoped", {
+      marketplaces: { user: { official: {} }, project: { internal: {} } },
+      manifests: {
+        user: { official: [{ name: "user-side", status: "remote" }] },
+        project: { internal: [{ name: "project-side", status: "remote" }] },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("fetch", resolver, {
+      targetScope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["project-side", ["internal"]]]);
+  });
+
+  test("info spans both scopes with no status filter and ignores the target scope", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-info", {
+      marketplaces: { user: { official: {} }, project: { internal: {} } },
+      manifests: {
+        user: {
+          official: [
+            { name: "held", status: "installed" },
+            { name: "broken", status: "unavailable" },
+          ],
+        },
+        project: { internal: [{ name: "fresh", status: "available" }] },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("info", resolver, {
+      targetScope: "project",
+      partial: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
+      ["held", ["official"]],
+      ["broken", ["official"]],
+      ["fresh", ["internal"]],
+    ]);
+  });
+
+  test("a plugin carried by two marketplaces records both in visit order", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-two-marketplaces", {
+      marketplaces: { user: { "mp-a": {}, "mp-b": {} } },
+      manifests: {
+        user: {
+          "mp-a": [{ name: "shared", status: "installed" }],
+          "mp-b": [{ name: "shared", status: "installed" }],
+        },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["shared", ["mp-a", "mp-b"]]]);
+  });
+
+  test("a marketplace named in both scopes is recorded once for the same plugin", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-same-name-both-scopes", {
+      marketplaces: { user: { official: {} }, project: { official: {} } },
+      manifests: {
+        user: { official: [{ name: "held", status: "installed" }] },
+        project: { official: [{ name: "held", status: "installed" }] },
+      },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
+  });
+
+  test("a marketplace whose manifest cannot be loaded contributes no candidates (TC-8)", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-manifest-soft-fail", {
+      marketplaces: { user: { official: {}, "unreadable-mp": {} } },
+      manifests: { user: { official: [{ name: "held", status: "installed" }] } },
+    });
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
+  });
+
+  test("a state read failure during the candidate sweep propagates (TC-9)", async (t) => {
+    // arrange
+    const stateFailure = new Error("state is unreadable for project");
+    const { resolver } = await seedResolver(t, "map-state-fail", {
+      marketplaces: { user: { official: {} } },
+      manifests: { user: { official: [{ name: "held", status: "installed" }] } },
+      stateFailures: { project: stateFailure },
+    });
+
+    // act & assert
+    await assert.rejects(
+      () => getPluginToMarketplacesMap("uninstall", resolver),
+      (error: unknown) => {
+        assert.strictEqual(error, stateFailure);
+        return true;
+      },
+    );
+  });
 });
 
-// ---------------------------------------------------------------------------
-// CMP-6..8 scope-aware install completion rules.
-// ---------------------------------------------------------------------------
-
-test("CMP-7 :: install completion excludes plugins already installed in the target scope", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { mp: { plugins: { already: {} } } }, project: {} },
+describe("getPluginRefCompletions", () => {
+  const twoMarketplaceSeed = (): ResolverSeed => ({
+    marketplaces: { user: { "mp-a": {}, "mp-b": {} } },
     manifests: {
       user: {
-        mp: [
-          { name: "already", status: "available" },
-          { name: "fresh", status: "available" },
+        "mp-a": [
+          { name: "solo", status: "installed" },
+          { name: "shared", status: "installed" },
         ],
+        "mp-b": [{ name: "shared", status: "installed" }],
       },
-      project: {},
     },
   });
-  try {
-    const map = await getPluginToMarketplacesMap("install", fixture.resolver);
-    assert.equal(map.has("already"), false);
-    assert.deepEqual(map.get("fresh"), ["mp"]);
-  } finally {
-    await fixture.cleanup();
-  }
-});
 
-test("CMP-8 :: project install completion falls back to user marketplace when project marketplace absent", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: { mp: [{ name: "fallback", status: "available" }] },
-      project: {},
-    },
-  });
-  try {
-    const map = await getPluginToMarketplacesMap("install", fixture.resolver, {
-      targetScope: "project",
-    });
-    assert.deepEqual(map.get("fallback"), ["mp"]);
-  } finally {
-    await fixture.cleanup();
-  }
-});
+  test("the plugin half offers a fully qualified value for a plugin unique to one marketplace", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
 
-test("CMP-8 :: project marketplace shadows same-named user marketplace for install completion", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { mp: {} }, project: { mp: {} } },
-    manifests: {
-      user: { mp: [{ name: "user-only", status: "available" }] },
-      project: { mp: [{ name: "project-only", status: "available" }] },
-    },
-  });
-  try {
-    const map = await getPluginToMarketplacesMap("install", fixture.resolver, {
-      targetScope: "project",
-    });
-    assert.deepEqual(map.get("project-only"), ["mp"]);
-    assert.equal(map.has("user-only"), false);
-  } finally {
-    await fixture.cleanup();
-  }
-});
-
-test("getPluginRefCompletions :: plugin@ prefix completes matching marketplace suffixes", async () => {
-  resetCompletionCache();
-  const fixture = await makeResolver({
-    state: { user: { "mp-a": {}, "mp-b": {}, other: {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "plug", status: "installed" }],
-        "mp-b": [{ name: "plug", status: "installed" }],
-        other: [{ name: "plug", status: "installed" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getPluginRefCompletions("update", "plug@mp-", "update", fixture.resolver, {
+    // act
+    const items = await getPluginRefCompletions("update", "so", "update", resolver, {
       allowMarketplaceOnly: true,
     });
 
-    assert.deepEqual(items.map((i) => i.label).sort(), ["plug@mp-a", "plug@mp-b"]);
-    assert.deepEqual(items.map((i) => i.value).sort(), ["update plug@mp-a ", "update plug@mp-b "]);
-  } finally {
-    await fixture.cleanup();
-  }
+    // assert
+    assert.deepStrictEqual(items, [{ label: "solo@mp-a", value: "update solo@mp-a " }]);
+  });
+
+  test("the plugin half stops at the separator for a plugin carried by two marketplaces", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "sh", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [{ label: "shared@", value: "update shared@" }]);
+  });
+
+  test("the plugin half keeps every candidate in map order when the partial token is empty", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "", "", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [
+      { label: "solo@mp-a", value: "solo@mp-a " },
+      { label: "shared@", value: "shared@" },
+    ]);
+  });
+
+  test("the plugin half matches the partial token case-sensitively, with no case folding", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
+
+    // act
+    const upperCaseMatches = await getPluginRefCompletions("update", "SO", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+    const exactCaseMatches = await getPluginRefCompletions("update", "so", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(upperCaseMatches, []);
+    assert.deepStrictEqual(exactCaseMatches, [{ label: "solo@mp-a", value: "update solo@mp-a " }]);
+  });
+
+  test("the marketplace half offers only the marketplaces that carry the named plugin", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "shared@mp-", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [
+      { label: "shared@mp-a", value: "update shared@mp-a " },
+      { label: "shared@mp-b", value: "update shared@mp-b " },
+    ]);
+  });
+
+  test("the marketplace half narrows to the typed marketplace prefix", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "shared@mp-b", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [{ label: "shared@mp-b", value: "update shared@mp-b " }]);
+  });
+
+  test("the marketplace half offers nothing for a plugin no marketplace carries", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "ghost@", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, []);
+  });
+
+  test("the bare marketplace form lists each marketplace once when the mode allows it", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [
+      { label: "@mp-a", value: "update @mp-a " },
+      { label: "@mp-b", value: "update @mp-b " },
+    ]);
+  });
+
+  test("the bare marketplace form narrows to the typed marketplace prefix", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "@mp-b", "update", resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [{ label: "@mp-b", value: "update @mp-b " }]);
+  });
+
+  // The mode is held at `update`, so this differs from the accepting case two
+  // above it in the flag alone. Under `install` the seed's three installed rows
+  // match no install-candidate status, the candidate map is empty, and the
+  // result would be `[]` with the flag either way -- nothing would be measured.
+  test("the bare marketplace form offers nothing when the mode does not allow it", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
+
+    // act
+    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
+      allowMarketplaceOnly: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, []);
+  });
+
+  test("the plugin half honours the target scope and the partial option it is given", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "ref-options", {
+      marketplaces: { user: { official: {} }, project: { internal: {} } },
+      manifests: {
+        user: { official: everyStatusManifest() },
+        project: { internal: [{ name: "project-side", status: "upgradable" }] },
+      },
+    });
+
+    // act
+    const items = await getPluginRefCompletions("update", "", "update", resolver, {
+      allowMarketplaceOnly: false,
+      targetScope: "user",
+      partial: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(items, [
+      { label: "outdated@official", value: "update outdated@official " },
+      { label: "held-partly-outdated@official", value: "update held-partly-outdated@official " },
+      { label: "outdated-partly@official", value: "update outdated-partly@official " },
+    ]);
+  });
 });

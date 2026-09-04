@@ -65,7 +65,7 @@ import path from "node:path";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -133,11 +133,10 @@ interface AutoupdateFlipRow {
   readonly scope: Scope;
   readonly alreadyMatching: boolean;
   /**
-   * I2 / PR #51: when true, the write-back was silently skipped because no
-   * `source` could be synthesized for a first-time config write. The row
-   * renders as a `(failed) {not found}` mp row instead of the success
-   * marker. Pre-fix these names rendered as silent fresh flips even though
-   * the config never landed.
+   * I2 / PR #51: when true, the write-back was skipped because no `source`
+   * could be synthesized for a first-time config write. The row renders as a
+   * `(failed) {not found}` mp row instead of the success marker, so a name
+   * whose config never landed is not reported as a fresh flip.
    */
   readonly writeBackSkipped?: boolean;
 }
@@ -149,7 +148,7 @@ function missingEverywhere(
     readonly errors: readonly unknown[];
     readonly scopes: readonly Scope[];
   },
-): boolean {
+): opts is AutoupdateOptions & { readonly name: string } {
   return (
     opts.name !== undefined &&
     result.rows.length === 0 &&
@@ -165,21 +164,22 @@ function missingEverywhere(
  * reason (its message carries the retry hint); anything else falls back to
  * the permissive `not found`.
  *
- * ATTR-05: this row no longer handles the missing-marketplace case -- an
- * explicit-scope `MarketplaceNotFoundError` is routed to the standalone
- * `MarketplaceNotAddedMessage` `{marketplace not added}` variant by `setMarketplaceAutoupdate`
- * BEFORE this helper is reached. This helper now only maps `StateLockHeldError`
- * (-> `lock held`, whose message carries the retry hint) and other non-not-found
- * flip errors (-> the permissive `not found` fallback).
+ * ATTR-05: this row does not carry the missing-marketplace case. An
+ * explicit-scope `MarketplaceNotFoundError` routes to the standalone
+ * `MarketplaceNotAddedMessage` `{marketplace not added}` variant in
+ * `setMarketplaceAutoupdate`, BEFORE this helper is reached, so this helper maps
+ * only `StateLockHeldError` (-> `lock held`, whose message carries the retry
+ * hint) and other non-not-found flip errors (-> the permissive `not found`
+ * fallback).
  */
-function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
+function autoupdateFailedRow(name: string, err: Error): PluginFailedMessage {
   const reasons: readonly ContentReason[] =
     err instanceof StateLockHeldError ? (["lock held"] as const) : (["not found"] as const);
   return {
     status: "failed",
     name,
     reasons,
-    cause: err instanceof Error ? err : new Error(errorMessage(err)),
+    cause: err,
     // D-03/D-06: a synthetic autoupdate-failure child -> error, no reload.
     severity: "error",
     needsReload: false,
@@ -198,34 +198,17 @@ function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOA
 /**
  * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
  *
- * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
- * missing-marketplace precondition, NOT a flip failure -- it routes to the
- * standalone MarketplaceNotAddedMessage `⊘ <name> [<scope>] (failed) {marketplace not added}`
- * variant carrying the explicit scope bracket (the former
- * synthetic-child `{not found}` reason lied about the blocker). Every OTHER
- * error -- notably `StateLockHeldError`, whose message carries an actionable
+ * Missing-marketplace errors are collected by the sole caller and routed
+ * through the aggregate `{marketplace not added}` path -- `classifyAutoupdateFlip`
+ * raises `MarketplaceNotFoundError` only for a NAMED flip, and every named
+ * not-found is taken by `shouldCollectNotFound`. Every error reaching this
+ * helper -- notably `StateLockHeldError`, whose message carries an actionable
  * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
-function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
+function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: Error): void {
   const failureName = opts.name ?? "(unknown)";
-
-  if (err instanceof MarketplaceNotFoundError) {
-    // CMP-4 / SCOPE-01: no `crossScopeFlag` probe. `shouldCollectNotFound`
-    // routes every NAMED `MarketplaceNotFoundError` into the collect path
-    // instead, so a `MarketplaceNotFoundError` reaching HERE implies
-    // `opts.name === undefined` and `failureName` is the `(unknown)`
-    // placeholder -- there is no marketplace name to look for in the sibling
-    // scope. The named single-flip miss keeps its probe at the
-    // `missingEverywhere` emission below.
-    notify(opts.ctx, opts.pi, {
-      kind: "marketplace-not-added",
-      name: failureName,
-      scope,
-    });
-    return;
-  }
 
   // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
   // row -> Single. The flip command is selected by the boolean `opts.enable`
@@ -355,11 +338,11 @@ async function writeAutoupdateBack(
     const patch = buildAutoupdatePatch(current, state, name, enable);
     const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
     if (!hasConfigSource && patch.source === undefined) {
-      // I2 / PR #51 / WR-06(b): unsynthesizable source. Pre-fix this entry
-      // was silently dropped from the batch -- but the name STAYED in
-      // `finalResult.changed`, so the final notify rendered success for a
-      // flip that was never persisted. We now return the skipped names so
-      // the orchestrator can demote them into an honest failed row.
+      // I2 / PR #51 / WR-06(b): unsynthesizable source. The entry is dropped
+      // from the batch while its name stays in `finalResult.changed`, so the
+      // skipped names are returned here and the orchestrator demotes them into
+      // an honest failed row rather than rendering success for a flip that was
+      // never persisted.
       skipped.push(name);
       continue;
     }
@@ -512,7 +495,10 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // the OTHER scope, so it is collected and surfaced only if BOTH scopes
       // failed AND no flip happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
-        notifyAutoupdateScopeFailure(opts, scope, err);
+        // `withLockedStateTransaction` normalizes every rejection through
+        // `toError` before `flipOneScope` rejects, so this caught value is an
+        // Error on every reachable path.
+        notifyAutoupdateScopeFailure(opts, scope, err as Error);
         return;
       }
 
@@ -528,12 +514,11 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     if (first !== undefined) {
       // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
       // iterated scope is a missing-marketplace precondition. Route it to the
-      // standalone MarketplaceNotAddedMessage `(failed) {marketplace not added}` variant
-      // instead of the former reason-LESS bare `(failed)` row.
-      // Scope bracket: an explicit `opts.scope` carries it; the bare form
+      // standalone MarketplaceNotAddedMessage `(failed) {marketplace not added}`
+      // variant. Scope bracket: an explicit `opts.scope` carries it; the bare form
       // carries `first.scope` (the scope where the first not-found was
       // observed), per the RESEARCH recommendation.
-      const failureName = opts.name ?? "(unknown)";
+      const failureName = opts.name;
       const missScope = opts.scope ?? first.scope;
       notify(opts.ctx, opts.pi, {
         kind: "marketplace-not-added",
@@ -593,12 +578,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     }
 
     if (row.writeBackSkipped === true) {
-      // I2 / PR #51: the config write-back was silently skipped because no
-      // `source` could be synthesized for a first-time write. Pre-fix this
-      // rendered as a `<autoupdate>` fresh-flip success even though nothing
-      // landed in claude-plugins.json. Demote to a failed row using the
-      // closed-set `not found` reason (matches the synthetic-child cascade
-      // form used elsewhere in this orchestrator -- no new tokens).
+      // I2 / PR #51: the config write-back was skipped because no `source`
+      // could be synthesized for a first-time write, so nothing landed in
+      // claude-plugins.json. Demote to a failed row using the closed-set
+      // `not found` reason (matches the synthetic-child cascade form used
+      // elsewhere in this orchestrator -- no new tokens) rather than rendering
+      // a `<autoupdate>` fresh-flip success.
       return {
         name: row.name,
         scope: row.scope,

@@ -1,213 +1,682 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import {
   parseMcpServers,
   resolvePluginMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
 
-// MC-1 / MC-2 / MC-3 -- precedence chain, wrapped vs unwrapped, shape validation.
-
-async function withTmpPluginRoot<T>(fn: (pluginRoot: string) => Promise<T>): Promise<T> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "mcp-parse-"));
-  try {
-    return await fn(dir);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
+  const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(pluginRoot, { recursive: true, force: true }));
+  return pluginRoot;
 }
 
-// MC-3 ------------------------------------------------------------------
+describe("parseMcpServers", () => {
+  test("returns a complete valid server map unchanged", () => {
+    // arrange
+    const servers = {
+      filesystem: {
+        command: "node",
+        args: ["filesystem-server.js", "/workspace"],
+        env: { LOG_LEVEL: "debug" },
+      },
+      remote: {
+        type: "http",
+        url: "https://mcp.example.test/server",
+        headers: { authorization: "Bearer token" },
+      },
+    };
+    const expectedServers = {
+      filesystem: {
+        command: "node",
+        args: ["filesystem-server.js", "/workspace"],
+        env: { LOG_LEVEL: "debug" },
+      },
+      remote: {
+        type: "http",
+        url: "https://mcp.example.test/server",
+        headers: { authorization: "Bearer token" },
+      },
+    };
 
-test("MC-3 parseMcpServers throws when value is not an object", () => {
-  assert.throws(() => {
-    parseMcpServers(null, "lbl");
-  }, /must be an object/);
-  assert.throws(() => {
-    parseMcpServers(42, "lbl");
-  }, /must be an object/);
+    // act
+    const parsedServers = parseMcpServers(servers, "plugin-manifest mcpServers");
+
+    // assert
+    assert.strictEqual(parsedServers, servers);
+    assert.deepStrictEqual(parsedServers, expectedServers);
+  });
+
+  test("rejects a string reference as an unresolved domain-resolver input", () => {
+    // arrange
+    const expectedError = {
+      constructorName: "TypeError",
+      name: "TypeError",
+      message:
+        'marketplace-entry mcpServers is a string reference ("./config/plugin.mcp.json"); string mcpServers references are resolved by the domain resolver before reaching the mcp bridge.',
+    };
+
+    // act
+    let thrownError: unknown;
+    try {
+      parseMcpServers("./config/plugin.mcp.json", "marketplace-entry mcpServers");
+    } catch (error) {
+      thrownError = error;
+    }
+
+    // assert
+    assert.ok(thrownError instanceof TypeError);
+    assert.deepStrictEqual(
+      {
+        constructorName: thrownError.constructor.name,
+        name: thrownError.name,
+        message: thrownError.message,
+      },
+      expectedError,
+    );
+  });
+
+  for (const { description, servers } of [
+    { description: "undefined", servers: undefined },
+    { description: "null", servers: null },
+    { description: "a number", servers: 42 },
+    { description: "a boolean", servers: false },
+    { description: "an array", servers: [{ command: "node" }] },
+  ]) {
+    test(`rejects ${description} as the server map`, () => {
+      // arrange
+      const expectedError = {
+        constructorName: "Error",
+        name: "Error",
+        message: "source mcpServers must be an object mapping server names to entries.",
+      };
+
+      // act
+      let thrownError: unknown;
+      try {
+        parseMcpServers(servers, "source mcpServers");
+      } catch (error) {
+        thrownError = error;
+      }
+
+      // assert
+      assert.ok(thrownError instanceof Error);
+      assert.deepStrictEqual(
+        {
+          constructorName: thrownError.constructor.name,
+          name: thrownError.name,
+          message: thrownError.message,
+        },
+        expectedError,
+      );
+    });
+  }
+
+  for (const { description, entry } of [
+    { description: "a string", entry: "stdio" },
+    { description: "a number", entry: 42 },
+    { description: "null", entry: null },
+    { description: "an array", entry: ["node", "server.js"] },
+  ]) {
+    test(`rejects ${description} as a server entry`, () => {
+      // arrange
+      const expectedError = {
+        constructorName: "Error",
+        name: "Error",
+        message: 'source mcpServers: server "invalidServer" must be an object.',
+      };
+
+      // act
+      let thrownError: unknown;
+      try {
+        parseMcpServers({ invalidServer: entry }, "source mcpServers");
+      } catch (error) {
+        thrownError = error;
+      }
+
+      // assert
+      assert.ok(thrownError instanceof Error);
+      assert.deepStrictEqual(
+        {
+          constructorName: thrownError.constructor.name,
+          name: thrownError.name,
+          message: thrownError.message,
+        },
+        expectedError,
+      );
+    });
+  }
+
+  for (const { description, serverName, expectedMessage } of [
+    {
+      description: "an empty server name",
+      serverName: " ",
+      expectedMessage: 'source mcpServers server name " " must be a non-empty string.',
+    },
+    {
+      description: "a dot server name",
+      serverName: ".",
+      expectedMessage: 'source mcpServers server name "." must not be "." or "..".',
+    },
+    {
+      description: "a path separator",
+      serverName: "../escape",
+      expectedMessage:
+        'source mcpServers server name "../escape" "../escape" must not contain path separators.',
+    },
+    {
+      description: "an ASCII control character",
+      serverName: "server\u0000name",
+      expectedMessage:
+        'source mcpServers server name "server\u0000name" "server\u0000name" must not contain ASCII control characters.',
+    },
+  ]) {
+    test(`rejects ${description}`, () => {
+      // arrange
+      const expectedError = {
+        constructorName: "Error",
+        name: "Error",
+        message: expectedMessage,
+      };
+
+      // act
+      let thrownError: unknown;
+      try {
+        parseMcpServers({ [serverName]: {} }, "source mcpServers");
+      } catch (error) {
+        thrownError = error;
+      }
+
+      // assert
+      assert.ok(thrownError instanceof Error);
+      assert.deepStrictEqual(
+        {
+          constructorName: thrownError.constructor.name,
+          name: thrownError.name,
+          message: thrownError.message,
+        },
+        expectedError,
+      );
+    });
+  }
 });
 
-test("MCPR-01 parseMcpServers rejects a string as an unresolved reference (not a malformed shape)", () => {
-  // A string mcpServers is a reference resolved upstream by the domain
-  // resolver; reaching the bridge with one is a wiring error, so the message
-  // must point at the resolver, not read as a generic "must be an object".
-  assert.throws(() => {
-    parseMcpServers("./config/x.mcp.json", "marketplace-entry mcpServers");
-  }, /string reference.*resolved by the domain resolver/);
-});
+describe("resolvePluginMcpServers", () => {
+  test("prefers the marketplace entry over the manifest and standalone document", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-entry-");
+    await writeFile(path.join(pluginRoot, ".mcp.json"), "not standalone json", "utf8");
+    const expectedResolution = {
+      source: "marketplace-entry",
+      servers: {
+        entryServer: {
+          command: "entry-command",
+          args: ["--entry"],
+          env: { SOURCE: "entry" },
+        },
+      },
+    };
 
-test("MC-3 parseMcpServers throws when value is array", () => {
-  assert.throws(() => {
-    parseMcpServers(["x"], "lbl");
-  }, /must be an object/);
-});
-
-test("MC-3 parseMcpServers throws when entry value is not an object", () => {
-  assert.throws(() => {
-    parseMcpServers({ a: "string" }, "lbl");
-  }, /server "a" must be an object/);
-  assert.throws(() => {
-    parseMcpServers({ a: 1 }, "lbl");
-  }, /server "a" must be an object/);
-  assert.throws(() => {
-    parseMcpServers({ a: null }, "lbl");
-  }, /server "a" must be an object/);
-  assert.throws(() => {
-    parseMcpServers({ a: ["x"] }, "lbl");
-  }, /server "a" must be an object/);
-});
-
-test("MC-3 parseMcpServers throws when name fails assertSafeName", () => {
-  // Path separator -> assertSafeName rejects.
-  assert.throws(() => {
-    parseMcpServers({ "../x": {} }, "lbl");
-  }, /must not contain path separators/);
-  // Empty after trim.
-  assert.throws(() => {
-    parseMcpServers({ " ": {} }, "lbl");
-  }, /must be a non-empty string/);
-  // ASCII control char.
-  assert.throws(() => {
-    parseMcpServers({ "a\x00b": {} }, "lbl");
-  }, /must not contain ASCII control characters/);
-});
-
-test("MC-3 parseMcpServers returns map when all entries valid", () => {
-  const out = parseMcpServers({ "a-b": { command: "x" }, c: {} }, "lbl");
-  assert.deepEqual(Object.keys(out).sort(), ["a-b", "c"]);
-});
-
-// MC-1 precedence ------------------------------------------------------
-
-test("MC-1 resolvePluginMcpServers picks marketplace-entry when present", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    const out = await resolvePluginMcpServers({
-      entry: { mcpServers: { a: { command: "x" } } },
-      manifest: { mcpServers: { b: { command: "y" } } },
+    // act
+    const resolution = await resolvePluginMcpServers({
+      entry: {
+        mcpServers: {
+          entryServer: {
+            command: "entry-command",
+            args: ["--entry"],
+            env: { SOURCE: "entry" },
+          },
+        },
+      },
+      manifest: {
+        mcpServers: {
+          manifestServer: { command: "manifest-command", args: ["--manifest"] },
+        },
+      },
       pluginRoot,
     });
-    assert.equal(out.source, "marketplace-entry");
-    assert.deepEqual(Object.keys(out.servers), ["a"]);
-  });
-});
 
-test("MC-1 resolvePluginMcpServers picks plugin-manifest when entry absent", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    const out = await resolvePluginMcpServers({
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  test("prefers the plugin manifest over the standalone document", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-manifest-");
+    await writeFile(path.join(pluginRoot, ".mcp.json"), "not standalone json", "utf8");
+    const expectedResolution = {
+      source: "plugin-manifest",
+      servers: {
+        manifestServer: {
+          command: "manifest-command",
+          args: ["--manifest"],
+          env: { SOURCE: "manifest" },
+        },
+      },
+    };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
       entry: {},
-      manifest: { mcpServers: { b: { command: "y" } } },
+      manifest: {
+        mcpServers: {
+          manifestServer: {
+            command: "manifest-command",
+            args: ["--manifest"],
+            env: { SOURCE: "manifest" },
+          },
+        },
+      },
       pluginRoot,
     });
-    assert.equal(out.source, "plugin-manifest");
-    assert.deepEqual(Object.keys(out.servers), ["b"]);
-  });
-});
 
-test("MC-1 resolvePluginMcpServers picks standalone .mcp.json when both absent", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  test("accepts a wrapped standalone document", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-wrapped-");
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ mcpServers: { c: { command: "z" } } }),
+      JSON.stringify({
+        mcpServers: {
+          wrappedServer: {
+            command: "wrapped-command",
+            args: ["--wrapped"],
+            env: { SOURCE: "wrapped" },
+          },
+        },
+      }),
       "utf8",
     );
-    const out = await resolvePluginMcpServers({
+    const expectedResolution = {
+      source: "standalone",
+      servers: {
+        wrappedServer: {
+          command: "wrapped-command",
+          args: ["--wrapped"],
+          env: { SOURCE: "wrapped" },
+        },
+      },
+    };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
       entry: {},
       manifest: {},
       pluginRoot,
     });
-    assert.equal(out.source, "standalone");
-    assert.deepEqual(Object.keys(out.servers), ["c"]);
-  });
-});
 
-test("MC-1 resolvePluginMcpServers returns source:'none' when all three absent", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    const out = await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
-    assert.equal(out.source, "none");
-    assert.deepEqual(out.servers, {});
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
   });
-});
 
-test("MC-1 resolvePluginMcpServers throws when entry.mcpServers is malformed (no fallthrough)", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    await assert.rejects(
-      resolvePluginMcpServers({
-        entry: { mcpServers: ["not-object"] },
-        manifest: { mcpServers: { b: {} } },
-        pluginRoot,
-      }),
-      /marketplace-entry mcpServers must be an object/,
-    );
-  });
-});
-
-test("MC-1 resolvePluginMcpServers throws when manifest.mcpServers is malformed (no fallthrough to standalone)", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    // Pre-seed a valid standalone -- if the precedence chain falls through
-    // (the bug), this would succeed instead of throwing.
+  test("accepts an unwrapped standalone document", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-unwrapped-");
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ mcpServers: { c: {} } }),
+      JSON.stringify({
+        unwrappedServer: {
+          command: "unwrapped-command",
+          args: ["--unwrapped"],
+          env: { SOURCE: "unwrapped" },
+        },
+      }),
       "utf8",
     );
-    await assert.rejects(
-      resolvePluginMcpServers({
+    const expectedResolution = {
+      source: "standalone",
+      servers: {
+        unwrappedServer: {
+          command: "unwrapped-command",
+          args: ["--unwrapped"],
+          env: { SOURCE: "unwrapped" },
+        },
+      },
+    };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
+      entry: {},
+      manifest: {},
+      pluginRoot,
+    });
+
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  test("returns none when no declaration exists", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-none-");
+    const expectedResolution = { source: "none", servers: {} };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
+      entry: {},
+      manifest: {},
+      pluginRoot,
+    });
+
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  test("treats an empty marketplace entry map as present", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-empty-entry-");
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ standaloneServer: { command: "standalone-command" } }),
+      "utf8",
+    );
+    const expectedResolution = { source: "marketplace-entry", servers: {} };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
+      entry: { mcpServers: {} },
+      manifest: { mcpServers: { manifestServer: { command: "manifest-command" } } },
+      pluginRoot,
+    });
+
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  test("treats an empty plugin manifest map as present", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-empty-manifest-");
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ standaloneServer: { command: "standalone-command" } }),
+      "utf8",
+    );
+    const expectedResolution = { source: "plugin-manifest", servers: {} };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
+      entry: {},
+      manifest: { mcpServers: {} },
+      pluginRoot,
+    });
+
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  for (const { description, document } of [
+    { description: "an empty wrapped document", document: { mcpServers: {} } },
+    { description: "an empty unwrapped document", document: {} },
+  ]) {
+    test(`returns none for ${description}`, async (t) => {
+      // arrange
+      const pluginRoot = await createPluginRoot(t, "mcp-parse-empty-standalone-");
+      await writeFile(path.join(pluginRoot, ".mcp.json"), JSON.stringify(document), "utf8");
+      const expectedResolution = { source: "none", servers: {} };
+
+      // act
+      const resolution = await resolvePluginMcpServers({
         entry: {},
-        manifest: { mcpServers: ["array-not-object"] },
+        manifest: {},
         pluginRoot,
-      }),
-      /plugin-manifest mcpServers must be an object/,
+      });
+
+      // assert
+      assert.deepStrictEqual(resolution, expectedResolution);
+    });
+  }
+
+  test("returns none when the standalone path has a non-directory parent", async (t) => {
+    // arrange
+    const directory = await createPluginRoot(t, "mcp-parse-not-directory-");
+    const pluginRoot = path.join(directory, "plugin-file");
+    await writeFile(pluginRoot, "not a directory", "utf8");
+    const expectedResolution = { source: "none", servers: {} };
+
+    // act
+    const resolution = await resolvePluginMcpServers({
+      entry: {},
+      manifest: {},
+      pluginRoot,
+    });
+
+    // assert
+    assert.deepStrictEqual(resolution, expectedResolution);
+  });
+
+  test("propagates an ordinary standalone read failure", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-read-failure-");
+    const standalonePath = path.join(pluginRoot, ".mcp.json");
+    await mkdir(standalonePath);
+
+    // act
+    let thrownError: unknown;
+    try {
+      await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
+    } catch (error) {
+      thrownError = error;
+    }
+
+    // assert
+    assert.ok(thrownError instanceof Error);
+    assert.deepStrictEqual(
+      {
+        constructorName: thrownError.constructor.name,
+        name: thrownError.name,
+        // The errno path is not projected: some runtime majors attach it to an fd-based read
+        // failure and earlier ones leave it undefined. Code and syscall are the contract.
+        code: (thrownError as NodeJS.ErrnoException).code,
+        syscall: (thrownError as NodeJS.ErrnoException).syscall,
+      },
+      {
+        constructorName: "Error",
+        name: "Error",
+        code: "EISDIR",
+        syscall: "read",
+      },
     );
   });
-});
 
-// MC-2 wrapped vs unwrapped -------------------------------------------
+  test("reports malformed standalone JSON with its syntax error cause", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-malformed-json-");
+    const standalonePath = path.join(pluginRoot, ".mcp.json");
+    await writeFile(standalonePath, "{", "utf8");
+    const expectedSyntaxMessage =
+      "Expected property name or '}' in JSON at position 1 (line 1 column 2)";
+    const expectedError = {
+      constructorName: "Error",
+      name: "Error",
+      message: `malformed JSON at ${standalonePath}: ${expectedSyntaxMessage}`,
+      cause: {
+        constructorName: "SyntaxError",
+        name: "SyntaxError",
+        message: expectedSyntaxMessage,
+      },
+    };
 
-test("MC-2 standalone parse accepts wrapped form {mcpServers: {...}}", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
+    // act
+    let thrownError: unknown;
+    try {
+      await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
+    } catch (error) {
+      thrownError = error;
+    }
+
+    // assert
+    assert.ok(thrownError instanceof Error);
+    assert.ok(thrownError.cause instanceof SyntaxError);
+    assert.deepStrictEqual(
+      {
+        constructorName: thrownError.constructor.name,
+        name: thrownError.name,
+        message: thrownError.message,
+        cause: {
+          constructorName: thrownError.cause.constructor.name,
+          name: thrownError.cause.name,
+          message: thrownError.cause.message,
+        },
+      },
+      expectedError,
+    );
+  });
+
+  for (const { description, document } of [
+    { description: "null", document: null },
+    { description: "an array", document: [{ command: "node" }] },
+    { description: "a string", document: "server" },
+    { description: "a number", document: 42 },
+  ]) {
+    test(`rejects ${description} as the standalone document`, async (t) => {
+      // arrange
+      const pluginRoot = await createPluginRoot(t, "mcp-parse-invalid-document-");
+      const standalonePath = path.join(pluginRoot, ".mcp.json");
+      await writeFile(standalonePath, JSON.stringify(document), "utf8");
+      const expectedError = {
+        constructorName: "Error",
+        name: "Error",
+        message: `${standalonePath} must be a JSON object.`,
+      };
+
+      // act
+      let thrownError: unknown;
+      try {
+        await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
+      } catch (error) {
+        thrownError = error;
+      }
+
+      // assert
+      assert.ok(thrownError instanceof Error);
+      assert.deepStrictEqual(
+        {
+          constructorName: thrownError.constructor.name,
+          name: thrownError.name,
+          message: thrownError.message,
+        },
+        expectedError,
+      );
+    });
+  }
+
+  for (const { description, wrapper } of [
+    { description: "null", wrapper: null },
+    { description: "an array", wrapper: [{ command: "node" }] },
+    { description: "a string", wrapper: "./servers.json" },
+  ]) {
+    test(`treats ${description} mcpServers wrapper as an invalid unwrapped entry`, async (t) => {
+      // arrange
+      const pluginRoot = await createPluginRoot(t, "mcp-parse-invalid-wrapper-");
+      const standalonePath = path.join(pluginRoot, ".mcp.json");
+      await writeFile(standalonePath, JSON.stringify({ mcpServers: wrapper }), "utf8");
+      const expectedError = {
+        constructorName: "Error",
+        name: "Error",
+        message: `standalone .mcp.json mcpServers at ${standalonePath}: server "mcpServers" must be an object.`,
+      };
+
+      // act
+      let thrownError: unknown;
+      try {
+        await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
+      } catch (error) {
+        thrownError = error;
+      }
+
+      // assert
+      assert.ok(thrownError instanceof Error);
+      assert.deepStrictEqual(
+        {
+          constructorName: thrownError.constructor.name,
+          name: thrownError.name,
+          message: thrownError.message,
+        },
+        expectedError,
+      );
+    });
+  }
+
+  test("rejects a malformed marketplace entry without falling through", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-malformed-entry-");
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ mcpServers: { wrapped: { command: "x" } } }),
+      JSON.stringify({ standaloneServer: { command: "standalone-command" } }),
       "utf8",
     );
-    const out = await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
-    assert.equal(out.source, "standalone");
-    assert.deepEqual(Object.keys(out.servers), ["wrapped"]);
-  });
-});
+    const expectedError = {
+      constructorName: "Error",
+      name: "Error",
+      message: "marketplace-entry mcpServers must be an object mapping server names to entries.",
+    };
 
-test("MC-2 standalone parse accepts unwrapped form {server-name: {...}}", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
+    // act
+    let thrownError: unknown;
+    try {
+      await resolvePluginMcpServers({
+        entry: { mcpServers: ["invalid-entry"] },
+        manifest: { mcpServers: { manifestServer: { command: "manifest-command" } } },
+        pluginRoot,
+      });
+    } catch (error) {
+      thrownError = error;
+    }
+
+    // assert
+    assert.ok(thrownError instanceof Error);
+    assert.deepStrictEqual(
+      {
+        constructorName: thrownError.constructor.name,
+        name: thrownError.name,
+        message: thrownError.message,
+      },
+      expectedError,
+    );
+  });
+
+  test("rejects a malformed plugin manifest without falling through", async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "mcp-parse-malformed-manifest-");
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ unwrapped: { command: "y" } }),
+      JSON.stringify({ standaloneServer: { command: "standalone-command" } }),
       "utf8",
     );
-    const out = await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
-    assert.equal(out.source, "standalone");
-    assert.deepEqual(Object.keys(out.servers), ["unwrapped"]);
-  });
-});
+    const expectedError = {
+      constructorName: "TypeError",
+      name: "TypeError",
+      message:
+        'plugin-manifest mcpServers is a string reference ("./manifest-servers.json"); string mcpServers references are resolved by the domain resolver before reaching the mcp bridge.',
+    };
 
-test("MC-1 resolvePluginMcpServers throws on standalone JSON parse failure", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    await writeFile(path.join(pluginRoot, ".mcp.json"), "not json {{", "utf8");
-    await assert.rejects(
-      resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot }),
-      /malformed JSON at .*\.mcp\.json/,
+    // act
+    let thrownError: unknown;
+    try {
+      await resolvePluginMcpServers({
+        entry: {},
+        manifest: { mcpServers: "./manifest-servers.json" },
+        pluginRoot,
+      });
+    } catch (error) {
+      thrownError = error;
+    }
+
+    // assert
+    assert.ok(thrownError instanceof TypeError);
+    assert.deepStrictEqual(
+      {
+        constructorName: thrownError.constructor.name,
+        name: thrownError.name,
+        message: thrownError.message,
+      },
+      expectedError,
     );
-  });
-});
-
-test("MC-1 resolvePluginMcpServers returns 'none' for empty wrapped doc", async () => {
-  await withTmpPluginRoot(async (pluginRoot) => {
-    await writeFile(path.join(pluginRoot, ".mcp.json"), JSON.stringify({ mcpServers: {} }), "utf8");
-    const out = await resolvePluginMcpServers({ entry: {}, manifest: {}, pluginRoot });
-    assert.equal(out.source, "none");
-    assert.deepEqual(out.servers, {});
   });
 });

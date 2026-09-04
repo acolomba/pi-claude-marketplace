@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import {
   installTimerLadder,
@@ -31,6 +31,64 @@ interface SpyChild extends ChildLike {
   readonly killCalls: NodeJS.Signals[];
 }
 
+interface TimerObservation {
+  readonly callbacks: Array<() => void>;
+  readonly clearHandles: Array<ReturnType<typeof setTimeout>>;
+  readonly delays: number[];
+  readonly handles: Array<ReturnType<typeof setTimeout>>;
+  readonly pendingHandles: Set<ReturnType<typeof setTimeout>>;
+  readonly unrefHandles: Array<ReturnType<typeof setTimeout>>;
+}
+
+function observeTimers(t: TestContext): TimerObservation {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fakeSetTimeout = globalThis.setTimeout;
+  const fakeClearTimeout = globalThis.clearTimeout;
+  const callbacks: Array<() => void> = [];
+  const clearHandles: Array<ReturnType<typeof setTimeout>> = [];
+  const delays: number[] = [];
+  const handles: Array<ReturnType<typeof setTimeout>> = [];
+  const pendingHandles = new Set<ReturnType<typeof setTimeout>>();
+  const unrefHandles: Array<ReturnType<typeof setTimeout>> = [];
+
+  function observedSetTimeout<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
+    delay = 0,
+    ...args: TArgs
+  ): ReturnType<typeof setTimeout> {
+    const observedCallback = (): void => {
+      pendingHandles.delete(handle);
+      callback(...args);
+    };
+
+    const handle = fakeSetTimeout(observedCallback, delay);
+    callbacks.push(observedCallback);
+    delays.push(delay);
+    handles.push(handle);
+    pendingHandles.add(handle);
+    const originalUnref = handle.unref.bind(handle);
+    t.mock.method(handle, "unref", () => {
+      unrefHandles.push(handle);
+      return originalUnref();
+    });
+    return handle;
+  }
+
+  function observedClearTimeout(handle: Parameters<typeof clearTimeout>[0]): void {
+    if (typeof handle === "object" && handle !== null) {
+      clearHandles.push(handle);
+      pendingHandles.delete(handle);
+    }
+
+    fakeClearTimeout(handle);
+  }
+
+  t.mock.method(globalThis, "setTimeout", observedSetTimeout);
+  t.mock.method(globalThis, "clearTimeout", observedClearTimeout);
+
+  return { callbacks, clearHandles, delays, handles, pendingHandles, unrefHandles };
+}
+
 /**
  * Faithful to `ChildProcess` in the field the ladder branches on: `kill()`
  * sets `killed = true` because Node does, and it does NOT set `exitCode` --
@@ -38,7 +96,7 @@ interface SpyChild extends ChildLike {
  * the SIGKILL assertions below pass against a branch production could never
  * reach, which is how the dead escalation survived.
  */
-function makeSpyChild(): SpyChild {
+function makeSpyChild(killReturn = true): SpyChild {
   const killCalls: NodeJS.Signals[] = [];
   const spy: SpyChild = {
     killed: false,
@@ -47,222 +105,337 @@ function makeSpyChild(): SpyChild {
     killCalls,
     kill(signal): boolean {
       killCalls.push(signal ?? "SIGTERM");
-      spy.killed = true;
-      return true;
+      if (killReturn) {
+        spy.killed = true;
+      }
+
+      return killReturn;
     },
   };
   return spy;
 }
 
-test("installTimerLadder: SIGTERM fires at timeoutSeconds (no kill before then)", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+function installObservedLadder(
+  t: TestContext,
+  child: ChildLike,
+  timeoutSeconds: number,
+  label = "acme/PreToolUse",
+) {
+  const timers = observeTimers(t);
+  const ladder = installTimerLadder(child, timeoutSeconds, label);
+  t.after(() => {
+    ladder.cancel();
+  });
+  return { ladder, timers };
+}
+
+function assertTimerLifecycle(timers: TimerObservation, expectedDelays: readonly number[]): void {
+  assert.deepStrictEqual(timers.delays, expectedDelays);
+  assert.equal(timers.callbacks.length, 2);
+  assert.equal(timers.handles.length, 2);
+  assert.deepStrictEqual(timers.unrefHandles, timers.handles);
+  assert.deepStrictEqual(timers.clearHandles, timers.handles);
+  assert.equal(timers.pendingHandles.size, 0);
+}
+
+function invokeTimerCallback(timers: TimerObservation, index: number): void {
+  const callback = timers.callbacks[index];
+  if (callback === undefined) {
+    throw new Error(`Missing timer callback ${index}`);
+  }
+
+  callback();
+}
+
+test("sends each escalation signal exactly at its deadline", (t) => {
+  // arrange
   const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1);
 
-  installTimerLadder(child, 1, "acme/PreToolUse");
-
-  // Just before SIGTERM -- no kill yet.
+  // act
   t.mock.timers.tick(999);
-  assert.deepEqual(child.killCalls, []);
-
-  // Exactly at SIGTERM -- one SIGTERM kill.
+  const callsBeforeSigterm = [...child.killCalls];
   t.mock.timers.tick(1);
-  assert.deepEqual(child.killCalls, ["SIGTERM"]);
-});
-
-test("installTimerLadder: SIGKILL fires 5s after SIGTERM", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const child = makeSpyChild();
-
-  installTimerLadder(child, 1, "acme/PreToolUse");
-
-  // Advance past SIGTERM.
-  t.mock.timers.tick(1_000);
-  assert.deepEqual(child.killCalls, ["SIGTERM"]);
-
-  // Advance the 5s grace. SIGKILL fires.
-  t.mock.timers.tick(5_000);
-  assert.deepEqual(child.killCalls, ["SIGTERM", "SIGKILL"]);
-});
-
-test("installTimerLadder: cancel() before any timer fires -> zero kill calls", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const child = makeSpyChild();
-
-  const ladder = installTimerLadder(child, 1, "acme/PreToolUse");
+  const callsAtSigterm = [...child.killCalls];
+  t.mock.timers.tick(4_999);
+  const callsBeforeSigkill = [...child.killCalls];
+  t.mock.timers.tick(1);
+  const callsAtSigkill = [...child.killCalls];
   ladder.cancel();
 
-  // Advance well past both timers.
-  t.mock.timers.tick(10_000);
-  assert.deepEqual(child.killCalls, []);
+  // assert
+  assert.deepStrictEqual(callsBeforeSigterm, []);
+  assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+  assert.deepStrictEqual(callsBeforeSigkill, ["SIGTERM"]);
+  assert.deepStrictEqual(callsAtSigkill, ["SIGTERM", "SIGKILL"]);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
 });
 
-test("installTimerLadder: TOCTOU defense -- a child that already exited gets no kill", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+test("keeps the five-second grace after a zero-second timeout", (t) => {
+  // arrange
   const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 0);
 
-  installTimerLadder(child, 1, "acme/PreToolUse");
-
-  // Natural exit just before the timer fires. Expressed as exit state, not as
-  // `killed`: `killed` means "we sent a signal", so it is true of a child that
-  // trapped SIGTERM and is still running -- the case the SIGKILL leg exists for.
-  child.exitCode = 0;
-
-  t.mock.timers.tick(1_000);
-  assert.deepEqual(
-    child.killCalls,
-    [],
-    "TOCTOU guard prevents phantom SIGTERM against a child that already exited",
-  );
-
-  t.mock.timers.tick(5_000);
-  assert.deepEqual(
-    child.killCalls,
-    [],
-    "TOCTOU guard also prevents phantom SIGKILL on the same already-exited child",
-  );
-});
-
-test("installTimerLadder: a timeout past setTimeout's int32 ceiling is clamped, not truncated", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const child = makeSpyChild();
-
-  // 3_600_000 is "1 hour" written in MILLISECONDS -- the shape an author
-  // wrote to suit the bridge before it read the field as seconds. Reading
-  // it as seconds is what puts the value out of range; the clamp is what
-  // keeps it usable. Unclamped, seconds * 1000 exceeds what setTimeout can
-  // represent, so Node replaces the delay with 1 ms (emitting a
-  // TimeoutOverflowWarning) and the child is SIGTERM'd at spawn.
-  installTimerLadder(child, 3_600_000, "acme/PreToolUse");
-
-  // The clamp is (2^31-1 ms) floored to whole seconds, less the 5 s grace,
-  // so the SIGKILL leg stays representable too.
-  t.mock.timers.tick(2_147_477_999);
-  assert.deepEqual(child.killCalls, [], "clamped SIGTERM must not fire early");
-
-  t.mock.timers.tick(1);
-  assert.deepEqual(child.killCalls, ["SIGTERM"], "SIGTERM fires at the clamped ceiling");
-
-  t.mock.timers.tick(5_000);
-  assert.deepEqual(
-    child.killCalls,
-    ["SIGTERM", "SIGKILL"],
-    "the 5 s grace survives the clamp -- SIGKILL is not co-scheduled with SIGTERM",
-  );
-});
-
-test("installTimerLadder: 0 seconds keeps the 5 s SIGKILL leg (the overflow re-arm)", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const child = makeSpyChild();
-
-  // `dispatch-exec.ts` re-arms with 0 after sending SIGTERM itself on a stdout
-  // overflow, so the ladder exists only for the escalation. Treating 0 as
-  // degenerate would push that SIGKILL out to the ceiling and let a child that
-  // ignores SIGTERM survive indefinitely.
-  installTimerLadder(child, 0, "acme/PreToolUse");
-
+  // act
   t.mock.timers.tick(0);
-  assert.deepEqual(child.killCalls, ["SIGTERM"], "0 s means fire now, not never");
+  const callsAtSigterm = [...child.killCalls];
+  t.mock.timers.tick(4_999);
+  const callsBeforeSigkill = [...child.killCalls];
+  t.mock.timers.tick(1);
+  const callsAtSigkill = [...child.killCalls];
+  ladder.cancel();
 
-  t.mock.timers.tick(5_000);
-  assert.deepEqual(child.killCalls, ["SIGTERM", "SIGKILL"], "the 5 s grace still follows");
+  // assert
+  assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+  assert.deepStrictEqual(callsBeforeSigkill, ["SIGTERM"]);
+  assert.deepStrictEqual(callsAtSigkill, ["SIGTERM", "SIGKILL"]);
+  assertTimerLifecycle(timers, [0, 5_000]);
 });
 
-test("installTimerLadder: non-finite and negative inputs degrade to the ceiling, not to 1 ms", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+test("preserves a positive fractional timeout", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1.25);
 
-  // setTimeout coerces NaN and negatives to 1 ms, which would SIGTERM at spawn
-  // -- the exact failure this module exists to prevent. The guard is here
-  // rather than only in the caller because this function is exported.
-  // Number.POSITIVE_INFINITY is deliberately absent: mock timers store an
-  // expiry no tick can reach for it, so including it would assert nothing.
-  for (const degenerate of [Number.NaN, -1]) {
+  // act
+  t.mock.timers.tick(1_249);
+  const callsBeforeSigterm = [...child.killCalls];
+  t.mock.timers.tick(1);
+  const callsAtSigterm = [...child.killCalls];
+  t.mock.timers.tick(4_999);
+  const callsBeforeSigkill = [...child.killCalls];
+  t.mock.timers.tick(1);
+  const callsAtSigkill = [...child.killCalls];
+  ladder.cancel();
+
+  // assert
+  assert.deepStrictEqual(callsBeforeSigterm, []);
+  assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+  assert.deepStrictEqual(callsBeforeSigkill, ["SIGTERM"]);
+  assert.deepStrictEqual(callsAtSigkill, ["SIGTERM", "SIGKILL"]);
+  assertTimerLifecycle(timers, [1_250, 6_250]);
+});
+
+for (const { name, timeoutSeconds } of [
+  { name: "maximum timeout", timeoutSeconds: 2_147_478 },
+  { name: "above-maximum timeout", timeoutSeconds: 2_147_479 },
+] as const) {
+  test(`keeps both timer legs representable for the ${name}`, (t) => {
+    // arrange
     const child = makeSpyChild();
-    installTimerLadder(child, degenerate, "acme/PreToolUse");
+    const { ladder, timers } = installObservedLadder(t, child, timeoutSeconds);
 
+    // act
+    t.mock.timers.tick(2_147_477_999);
+    const callsBeforeSigterm = [...child.killCalls];
     t.mock.timers.tick(1);
-    assert.deepEqual(child.killCalls, [], `${String(degenerate)} must not kill at spawn`);
+    const callsAtSigterm = [...child.killCalls];
+    t.mock.timers.tick(4_999);
+    const callsBeforeSigkill = [...child.killCalls];
+    t.mock.timers.tick(1);
+    const callsAtSigkill = [...child.killCalls];
+    ladder.cancel();
 
-    // Pin WHERE it degrades to, not merely that it is not immediate. A future
-    // edit degrading to a short budget would otherwise pass, and short is the
-    // dangerous direction.
-    // The tick(1) above already counted toward the ceiling.
+    // assert
+    assert.deepStrictEqual(callsBeforeSigterm, []);
+    assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+    assert.deepStrictEqual(callsBeforeSigkill, ["SIGTERM"]);
+    assert.deepStrictEqual(callsAtSigkill, ["SIGTERM", "SIGKILL"]);
+    assertTimerLifecycle(timers, [2_147_478_000, 2_147_483_000]);
+  });
+}
+
+for (const { name, timeoutSeconds } of [
+  { name: "negative", timeoutSeconds: -1 },
+  { name: "NaN", timeoutSeconds: Number.NaN },
+  { name: "positive infinity", timeoutSeconds: Number.POSITIVE_INFINITY },
+  { name: "negative infinity", timeoutSeconds: Number.NEGATIVE_INFINITY },
+] as const) {
+  test(`fails open at the ceiling for a ${name} timeout`, (t) => {
+    // arrange
+    const child = makeSpyChild();
+    const { ladder, timers } = installObservedLadder(t, child, timeoutSeconds);
+
+    // act
+    t.mock.timers.tick(1);
+    const callsAfterOneMillisecond = [...child.killCalls];
     t.mock.timers.tick(2_147_477_998);
-    assert.deepEqual(child.killCalls, [], `${String(degenerate)} must reach the ceiling`);
+    const callsBeforeSigterm = [...child.killCalls];
     t.mock.timers.tick(1);
-    assert.deepEqual(child.killCalls, ["SIGTERM"], `${String(degenerate)} fires at the ceiling`);
-  }
+    const callsAtSigterm = [...child.killCalls];
+    t.mock.timers.tick(4_999);
+    const callsBeforeSigkill = [...child.killCalls];
+    t.mock.timers.tick(1);
+    const callsAtSigkill = [...child.killCalls];
+    ladder.cancel();
+
+    // assert
+    assert.deepStrictEqual(callsAfterOneMillisecond, []);
+    assert.deepStrictEqual(callsBeforeSigterm, []);
+    assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+    assert.deepStrictEqual(callsBeforeSigkill, ["SIGTERM"]);
+    assert.deepStrictEqual(callsAtSigkill, ["SIGTERM", "SIGKILL"]);
+    assertTimerLifecycle(timers, [2_147_478_000, 2_147_483_000]);
+  });
+}
+
+for (const { name, exit } of [
+  {
+    name: "exit code",
+    exit: (child: SpyChild): void => {
+      child.exitCode = 0;
+    },
+  },
+  {
+    name: "exit signal",
+    exit: (child: SpyChild): void => {
+      child.signalCode = "SIGTERM";
+    },
+  },
+] as const) {
+  test(`suppresses both signals when the child has an ${name}`, (t) => {
+    // arrange
+    const child = makeSpyChild();
+    const { ladder, timers } = installObservedLadder(t, child, 1);
+
+    // act
+    exit(child);
+    t.mock.timers.tick(1_000);
+    const callsAtSigterm = [...child.killCalls];
+    t.mock.timers.tick(5_000);
+    const callsAtSigkill = [...child.killCalls];
+    ladder.cancel();
+
+    // assert
+    assert.deepStrictEqual(callsAtSigterm, []);
+    assert.deepStrictEqual(callsAtSigkill, []);
+    assertTimerLifecycle(timers, [1_000, 6_000]);
+  });
+}
+
+test("suppresses SIGKILL when the child exits after SIGTERM", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  t.mock.timers.tick(1_000);
+  const callsAtSigterm = [...child.killCalls];
+  child.exitCode = 0;
+  t.mock.timers.tick(5_000);
+  const callsAtSigkill = [...child.killCalls];
+  ladder.cancel();
+
+  // assert
+  assert.deepStrictEqual(callsAtSigterm, ["SIGTERM"]);
+  assert.deepStrictEqual(callsAtSigkill, ["SIGTERM"]);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
 });
 
-test("installTimerLadder: a fired leg names the plugin, event and budget on the debug channel", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const prev = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-  const original = console.error;
+test("cancels both signals before either deadline", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  ladder.cancel();
+  t.mock.timers.tick(6_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, []);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
+});
+
+test("cancels SIGKILL after SIGTERM fires", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  t.mock.timers.tick(1_000);
+  ladder.cancel();
+  t.mock.timers.tick(5_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, ["SIGTERM"]);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
+});
+
+test("keeps repeated cancellation idempotent", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  ladder.cancel();
+  ladder.cancel();
+  ladder.cancel();
+  t.mock.timers.tick(6_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, []);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
+});
+
+test("ignores late timer callbacks for a finished child", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  ladder.cancel();
+  child.exitCode = 0;
+  invokeTimerCallback(timers, 0);
+  invokeTimerCallback(timers, 1);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, []);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
+});
+
+test("continues escalation when both kill calls report false", (t) => {
+  // arrange
+  const child = makeSpyChild(false);
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  t.mock.timers.tick(1_000);
+  t.mock.timers.tick(5_000);
+  ladder.cancel();
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, ["SIGTERM", "SIGKILL"]);
+  assert.equal(child.killed, false);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
+});
+
+test("reports the label and elapsed budget for each escalation", (t) => {
+  // arrange
+  const debugWasPresent = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
   const lines: string[] = [];
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  console.error = (...args: unknown[]): void => {
-    lines.push(args.join(" "));
-  };
-
-  try {
-    const child = makeSpyChild();
-    installTimerLadder(child, 2, "acme/SessionEnd");
-    t.mock.timers.tick(2_000);
-    t.mock.timers.tick(5_000);
-  } finally {
-    console.error = original;
-    if (prev === undefined) {
-      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (debugWasPresent) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
     } else {
-      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prev;
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
     }
-  }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    lines.push(args.join(" "));
+  });
+  const child = makeSpyChild();
+  const { ladder, timers } = installObservedLadder(t, child, 2, "acme/SessionEnd");
 
-  // These two lines are the ONLY signal that a hook died of its timeout: the
-  // wire protocol maps a signal-kill to a bare noop, and EXEC-03 forbids
-  // ctx.ui.notify in this lane.
-  assert.equal(lines.length, 2, "both legs report");
+  // act
+  t.mock.timers.tick(2_000);
+  t.mock.timers.tick(5_000);
+  ladder.cancel();
+
+  // assert
+  assert.equal(lines.length, 2);
   assert.match(lines[0] ?? "", /SIGTERM after 2s \(acme\/SessionEnd\)/);
   assert.match(lines[1] ?? "", /SIGKILL after 7s \(acme\/SessionEnd\)/);
-});
-
-test("installTimerLadder: a child terminated by a signal is also seen as exited", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const child = makeSpyChild();
-
-  installTimerLadder(child, 1, "acme/PreToolUse");
-
-  // A signalled child reports `exitCode === null` and `signalCode` set, so an
-  // exitCode-only predicate would read it as still running -- and the SIGKILL
-  // leg would then log "the child ignored SIGTERM" about a child that obeyed.
-  child.signalCode = "SIGTERM";
-
-  t.mock.timers.tick(1_000);
-  t.mock.timers.tick(5_000);
-  assert.deepEqual(child.killCalls, [], "signalCode alone must suppress both legs");
-});
-
-test("installTimerLadder: the label reaches the emitted lines verbatim", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const prev = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-  const original = console.error;
-  const lines: string[] = [];
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  console.error = (...args: unknown[]): void => {
-    lines.push(args.join(" "));
-  };
-
-  try {
-    const child = makeSpyChild();
-    installTimerLadder(child, 1, "labelled/PostToolUse");
-    t.mock.timers.tick(1_000);
-  } finally {
-    console.error = original;
-    if (prev === undefined) {
-      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-    } else {
-      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prev;
-    }
-  }
-
-  assert.match(lines[0] ?? "", /\(labelled\/PostToolUse\)/);
+  assertTimerLifecycle(timers, [2_000, 7_000]);
 });

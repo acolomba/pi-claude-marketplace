@@ -132,7 +132,7 @@ export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, M
  * tally on plural cascades.
  *
  * RLD-05 / D-07: `kind` defaults to the plain `"cascade"` arm. The
- * `/claude:plugin disable` command no longer threads a distinguishing kind --
+ * `/claude:plugin disable` command does not thread a distinguishing kind --
  * its fresh `(disabled)` row stamps `needsReload: true` directly, so the
  * `/reload to pick up changes` trailer fires via the RLD-02 OR-reduce of the
  * per-row stamps, not via a cascade-kind straddle.

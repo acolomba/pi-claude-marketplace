@@ -168,10 +168,9 @@ export interface UninstallPluginOptions {
 function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {
     // ATTR-09 / D-47-B: foreign content owned by another process is a
-    // content/ownership mismatch, not a manifest absence. The former
-    // `"not in manifest"` lied that the plugin was gone from the manifest;
-    // `"source mismatch"` is the truthful existing member (no new REASONS
-    // member -- the closed set already covers it).
+    // content/ownership mismatch, not a manifest absence, so the truthful
+    // member is `"source mismatch"` and not `"not in manifest"` (no new
+    // REASONS member -- the closed set already covers it).
     return "source mismatch";
   }
 
@@ -188,9 +187,8 @@ function narrowCascadeFailure(cause: Error): ContentReason {
   }
 
   // ATTR-09 / D-47-B: the unclassified cascade-failure default is genuinely
-  // "we could not read/remove on-disk state", not a manifest claim. The
-  // former `"not in manifest"` was a false assertion; `"unreadable"` is the
-  // truthful existing member.
+  // "we could not read/remove on-disk state", not a manifest claim, so the
+  // truthful member is `"unreadable"` and not `"not in manifest"`.
   return "unreadable";
 }
 
@@ -399,7 +397,7 @@ async function sweepPluginFromConfigLayers(
  *
  * PU-2 / D-08: the per-plugin data dir is removed AFTER the state save, so an
  * EACCES on `rm` cannot strand state in installed=true. This is where the
- * PU-4 leaked-path warning used to surface.
+ * PU-4 leaked-path warning would surface, and D-19-01 swallows it here.
  *
  * PURL-05 / D-78-01: the git clone cache is reclaimed once no surviving
  * record references it. The GC derives live keys from the just-committed
@@ -488,7 +486,35 @@ function emitAlreadyGone(args: {
 /**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
+ *
+ * D-115-10: the overload pair narrows the orchestrated-mode return to
+ * `Promise<UninstallPluginOutcome>` (no `| undefined`), mirroring
+ * `setPluginEnabled`. An absent-outcome guard (`if (result === undefined)
+ * continue`) in a reconcile cascade would silently drop the row -- the
+ * overload makes that a compile error, so every driven uninstall always
+ * materialises a row (or the deliberate PU-5 `converged` drop). The wide
+ * overload stays last so a caller holding the entrypoint in a
+ * single-signature variable keeps its `undefined` arm.
+ *
+ * WR-01: what the overload proves and what it does not. It removes the
+ * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
+ * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * TypeScript checks an overload signature against the implementation only
+ * loosely, and a narrower overload return is accepted with no diagnostic even
+ * when the implementation demonstrably returns the excluded value on that path.
+ * The narrowing is therefore an ASSERTION about this module, relocated from the
+ * consumer to the producer's signature -- not a proof. Every orchestrated arm
+ * below does return a defined outcome today, and the reconcile owner suite
+ * drives this entrypoint in orchestrated mode across its whole outcome matrix
+ * and asserts the complete cascade, so a regression on an exercised path fails
+ * there. An arm the matrix does not reach is not covered by either.
  */
+export function uninstallPlugin(
+  opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
+): Promise<UninstallPluginOutcome>;
+export function uninstallPlugin(
+  opts: UninstallPluginOptions,
+): Promise<UninstallPluginOutcome | undefined>;
 export async function uninstallPlugin(
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
@@ -647,7 +673,7 @@ export async function uninstallPlugin(
   } catch (err) {
     // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
     // saved (guard contract); the plugin record stays intact for retry.
-    const cause = err instanceof Error ? err : new Error(String(err));
+    const cause = err as Error;
     return emitCascadeFailure({
       ctx,
       pi,

@@ -1,173 +1,440 @@
-// marketplace autoupdate dual-form handler shim tests.
+// Owner for edge/handlers/marketplace/autoupdate.ts (MOD-09).
 //
-// Dual-form factory: makeAutoupdateHandler(true) maps to enable=true;
-// makeAutoupdateHandler(false) maps to enable=false. The orchestrator
-// setMarketplaceAutoupdate handles bare-form (flip every mp in scope)
-// and named-form (single-name flip).
+// One factory serves both slash subcommands: `makeAutoupdateHandler(pi, true)`
+// backs `marketplace autoupdate` and `makeAutoupdateHandler(pi, false)` backs
+// `marketplace noautoupdate`. The two forms differ only in the usage block that
+// boolean selects and in the flip the workflow records, so both arms are driven
+// wherever nothing else separates them.
 //
-// On empty state, the bare form lands in the CMC-10 `(no marketplaces)`
-// EmptyToken path; named form lands in the "name absent in every
-// scope" error path.
+// D-116-05 (O3) places this handler in Group C: `setMarketplaceAutoupdate` is
+// reached by direct import with no injection point, so a delegating case cannot
+// state an exact argument list against it. Delegation is observed instead as one
+// minimal effect -- the declarative config each scope root carries after the
+// command, which SPLIT-01 makes the real record of a flip, state.json being
+// classify-only. That exact-argument gap is this owner's recorded scope.
+//
+// The negative half of D-116-06 is proven in full, and the mechanism that fires
+// is the boundary's UNSTATED working directory, not the emission count. A
+// rejecting case sizes the boundary at one emission, zero probes, and no stated
+// `cwd`. `setMarketplaceAutoupdate` reaches `locationsFor(scope, opts.cwd)`
+// before it can emit anything, so a workflow that ran would carry strong-mock's
+// pending-call proxy into `path.join` and die there. The emission count is only
+// the fallback, for a workflow that reads no working directory. Every rejecting
+// case also reads back an empty config footprint, so "the workflow never ran" is
+// asserted as an absence of recorded state too.
+//
+// Both scopes are seeded in every case, rejecting ones included, so a workflow
+// that did run would have marketplaces to flip and files to write.
+//
+// The two scope roots are hand-authored -- `<cwd>/.pi` for the project scope and
+// the directory PI_CODING_AGENT_DIR pins for the user scope (SC-1). Reading the
+// footprint back from those paths keeps "which scope the record landed in" a
+// measurement rather than a re-derivation of the path the workflow computed.
+//
+// No exhaustiveness claim: marketplace/autoupdate.ts holds no switch and no
+// closed-union dispatch, so a missing-arm plant has no target here. No case
+// asserts the absence of direct process output (ESLint and fallow own that),
+// none re-proves the scope-target scan owned by
+// tests/edge/handlers/shared.test.ts or the positional schema owned by
+// tests/edge/args-schema.test.ts, and none re-derives the flip workflow's own row
+// grammar, which tests/orchestrators/marketplace/autoupdate.test.ts owns.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
 import { makeAutoupdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+/** The config entry a fresh flip to autoupdate leaves for the project marketplace. */
+const PROJECT_ALPHA_ON = {
+  schemaVersion: 1,
+  marketplaces: { alpha: { autoupdate: true, source: "./alpha-src" } },
+  plugins: {},
+};
+
+/** The config entry a fresh flip to autoupdate leaves for the user marketplace. */
+const USER_BETA_ON = {
+  schemaVersion: 1,
+  marketplaces: { beta: { autoupdate: true, source: "./beta-src" } },
+  plugins: {},
+};
+
+/** Nothing was written anywhere: the shape a rejected command must leave behind. */
+const NOTHING_RECORDED = {
+  projectBase: undefined,
+  projectLocal: undefined,
+  userBase: undefined,
+  userLocal: undefined,
+};
+
+/** The base config alone carries the project flip; the override layer stays absent. */
+const PROJECT_BASE_ONLY = {
+  projectBase: PROJECT_ALPHA_ON,
+  projectLocal: undefined,
+  userBase: undefined,
+  userLocal: undefined,
+};
+
+/** The override layer alone carries the project flip; the base file stays absent. */
+const PROJECT_OVERRIDE_ONLY = {
+  projectBase: undefined,
+  projectLocal: PROJECT_ALPHA_ON,
+  userBase: undefined,
+  userLocal: undefined,
+};
+
+interface HermeticWorkspace {
+  /** The project working directory the handler forwards as `ctx.cwd`. */
+  readonly cwd: string;
+  /** `<cwd>/.pi` -- the project scope root (SC-1). */
+  readonly projectRoot: string;
+  /** The user scope root, pinned through PI_CODING_AGENT_DIR (SC-1). */
+  readonly userRoot: string;
 }
 
-function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  const ctx = {
-    cwd,
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionCommandContext;
-  return { ctx, notifications };
+interface ConfigFootprint {
+  readonly projectBase: unknown;
+  readonly projectLocal: unknown;
+  readonly userBase: unknown;
+  readonly userLocal: unknown;
 }
 
-// `makeAutoupdateHandler(pi, enable)` requires `pi`
-// as first positional arg. Edge shim tests mirror the production wiring shape.
-function makePi(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
-}
-
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-auto-shim-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-auto-shim-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
+/**
+ * One temporary working directory and one temporary home per case. The user
+ * scope root is pinned through PI_CODING_AGENT_DIR rather than left to the
+ * `homedir()` default, so both scope roots are values this file chose. Removal
+ * and both environment restores are registered before the handler runs.
+ */
+async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
+  const cwd = await mkdtemp(path.join(tmpdir(), `mp-autoupdate-${label}-cwd-`));
+  const home = await mkdtemp(path.join(tmpdir(), `mp-autoupdate-${label}-home-`));
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  const previousHome = process.env.HOME;
+  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
     } else {
-      process.env.HOME = originalHome;
+      delete process.env.HOME;
     }
 
-    await rm(home, { recursive: true, force: true });
+    if (agentDirExisted) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+
     await rm(cwd, { recursive: true, force: true });
-  }
+    await rm(home, { recursive: true, force: true });
+  });
+  const userRoot = path.join(home, "agent");
+  process.env.HOME = home;
+  process.env.PI_CODING_AGENT_DIR = userRoot;
+  return { cwd, projectRoot: path.join(cwd, ".pi"), userRoot };
 }
 
-test("dual-form :: makeAutoupdateHandler(true) calls setMarketplaceAutoupdate with enabled: true", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), true);
-    await handler("", ctx);
-    // Bare form, empty state both scopes -> "No marketplaces configured."
-    assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken.
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
+async function seedMarketplace(
+  workspace: HermeticWorkspace,
+  scope: Scope,
+  scopeRoot: string,
+  name: string,
+): Promise<void> {
+  await mergeMarketplaceIntoState(path.join(scopeRoot, "pi-claude-marketplace"), name, {
+    name,
+    scope,
+    source: { kind: "path", raw: `./${name}-src`, logical: `./${name}-src` },
+    addedFromCwd: workspace.cwd,
+    manifestPath: path.join(workspace.cwd, `${name}-src`, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot: path.join(workspace.cwd, `${name}-src`),
+    plugins: {},
   });
+}
+
+/** `alpha` in the project scope and `beta` in the user scope, neither declared in a config. */
+async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
+  await seedMarketplace(workspace, "project", workspace.projectRoot, "alpha");
+  await seedMarketplace(workspace, "user", workspace.userRoot, "beta");
+}
+
+async function readConfigFile(filePath: string): Promise<unknown> {
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  return JSON.parse(raw) as unknown;
+}
+
+/** Both scopes' base and override config layers, as their consumers read them. */
+async function readConfigFootprint(workspace: HermeticWorkspace): Promise<ConfigFootprint> {
+  return {
+    projectBase: await readConfigFile(path.join(workspace.projectRoot, "claude-plugins.json")),
+    projectLocal: await readConfigFile(
+      path.join(workspace.projectRoot, "claude-plugins.local.json"),
+    ),
+    userBase: await readConfigFile(path.join(workspace.userRoot, "claude-plugins.json")),
+    userLocal: await readConfigFile(path.join(workspace.userRoot, "claude-plugins.local.json")),
+  };
+}
+
+for (const { enable, expectedMessage, subcommand } of [
+  {
+    enable: true,
+    subcommand: "autoupdate",
+    expectedMessage:
+      'Unknown flag: "--frobnicate".\n\nUsage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]',
+  },
+  {
+    enable: false,
+    subcommand: "noautoupdate",
+    expectedMessage:
+      'Unknown flag: "--frobnicate".\n\nUsage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project] [--local]',
+  },
+]) {
+  test(`reports an unknown flag with the ${subcommand} usage block and never flips (D-116-06)`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, `unknown-flag-${subcommand}`);
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const autoupdateHandler = makeAutoupdateHandler(pi, enable);
+
+    // act
+    await autoupdateHandler("--frobnicate", ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), NOTHING_RECORDED);
+    verifyBoundary();
+  });
+}
+
+for (const { rejectedToken, shape } of [
+  { rejectedToken: "bogus", shape: "an ordinary token" },
+  { rejectedToken: "--frobnicate", shape: "a token shaped like a long flag" },
+]) {
+  test(`reports ${shape} in the scope-value position as an invalid scope and never flips (D-116-06)`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "invalid-scope");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const autoupdateHandler = makeAutoupdateHandler(pi, true);
+
+    // act
+    await autoupdateHandler(`--scope ${rejectedToken}`, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Invalid --scope value: "${rejectedToken}". Must be "user" or "project".\n\nUsage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), NOTHING_RECORDED);
+    verifyBoundary();
+  });
+}
+
+test("flips every marketplace in both scopes when no scope flag narrows the command", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "bare-form");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+
+  // act
+  await autoupdateHandler("", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "● alpha [project] <autoupdate>\n\n● beta [user] <autoupdate>" },
+  ]);
+  assert.deepStrictEqual(await readConfigFootprint(workspace), {
+    projectBase: PROJECT_ALPHA_ON,
+    projectLocal: undefined,
+    userBase: USER_BETA_ON,
+    userLocal: undefined,
+  });
+  verifyBoundary();
 });
 
-test("dual-form :: makeAutoupdateHandler(false) calls setMarketplaceAutoupdate with enabled: false", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), false);
-    await handler("", ctx);
-    assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken.
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
+test("flips only the marketplace the name positional selects", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "named-form");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
   });
+  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+
+  // act
+  await autoupdateHandler("alpha", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
+  assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_BASE_ONLY);
+  verifyBoundary();
 });
 
-test("shim :: bare form (no name) propagates name: undefined", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), true);
-    await handler("", ctx);
-    assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken.
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
+test("drops a surplus positional token and flips only the first name", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "surplus-positional");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
   });
+  const autoupdateHandler = makeAutoupdateHandler(pi, true);
+
+  // act
+  await autoupdateHandler("alpha beta", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
+  assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_BASE_ONLY);
+  verifyBoundary();
 });
 
-test("shim :: named form propagates name", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), true);
-    await handler("mymkt", ctx);
-    // Name absent in BOTH scopes -> orchestrator emits a single error.
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    // ATTR-05: name-absent routes to the standalone {marketplace not added} variant
-    // (byte-regression sentinel at the edge-handler boundary). Bare form
-    // carries first.scope == "project" (SC-6 project-first iteration).
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {marketplace not added}",
+for (const { enable, expectedMessage, expectedProjectBase, subcommand } of [
+  {
+    enable: true,
+    subcommand: "autoupdate",
+    expectedMessage: "● alpha [project] <autoupdate> {already autoupdate}",
+    expectedProjectBase: {
+      schemaVersion: 1,
+      marketplaces: { alpha: { source: "./alpha-src", autoupdate: true } },
+    },
+  },
+  {
+    enable: false,
+    subcommand: "noautoupdate",
+    expectedMessage: "● alpha [project] <no autoupdate>",
+    expectedProjectBase: {
+      schemaVersion: 1,
+      marketplaces: { alpha: { source: "./alpha-src", autoupdate: false } },
+      plugins: {},
+    },
+  },
+]) {
+  test(`records the ${subcommand} outcome for a marketplace already declared with autoupdate on`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, `declared-on-${subcommand}`);
+    await seedBothScopes(workspace);
+    await mkdir(workspace.projectRoot, { recursive: true });
+    await writeFile(
+      path.join(workspace.projectRoot, "claude-plugins.json"),
+      '{"schemaVersion":1,"marketplaces":{"alpha":{"source":"./alpha-src","autoupdate":true}}}\n',
+      "utf8",
     );
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const autoupdateHandler = makeAutoupdateHandler(pi, enable);
+
+    // act
+    await autoupdateHandler("alpha --scope project", ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), {
+      projectBase: expectedProjectBase,
+      projectLocal: undefined,
+      userBase: undefined,
+      userLocal: undefined,
+    });
+    verifyBoundary();
   });
-});
+}
 
-test("shim :: --scope user/project propagated", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), true);
-    await handler("--scope project", ctx);
-    // Project-scope empty -> "No marketplaces configured."
-    assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken.
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
+for (const { expectedFootprint, expectedMessage, scopeValue } of [
+  {
+    scopeValue: "project",
+    expectedMessage: "● alpha [project] <autoupdate>",
+    expectedFootprint: PROJECT_BASE_ONLY,
+  },
+  {
+    scopeValue: "user",
+    expectedMessage: "● beta [user] <autoupdate>",
+    expectedFootprint: {
+      projectBase: undefined,
+      projectLocal: undefined,
+      userBase: USER_BETA_ON,
+      userLocal: undefined,
+    },
+  },
+]) {
+  test(`flips the ${scopeValue} scope alone when --scope ${scopeValue} is supplied`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const autoupdateHandler = makeAutoupdateHandler(pi, true);
+
+    // act
+    await autoupdateHandler(`--scope ${scopeValue}`, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), expectedFootprint);
+    verifyBoundary();
   });
-});
+}
 
-// ──────────────────────────────────────────────────────────────────────────
-// --local flag scanning at the edge boundary
-// ──────────────────────────────────────────────────────────────────────────
+for (const { args, placement } of [
+  { args: "--local alpha", placement: "before the name positional" },
+  { args: "alpha --local", placement: "after the name positional" },
+]) {
+  test(`records the flip in the override layer when the scope-target flag appears ${placement}`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "scope-target-position");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const autoupdateHandler = makeAutoupdateHandler(pi, true);
 
-test("USAGE strings contain [--local] (both verbs)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    // The handler does not surface USAGE through notification when no error
-    // occurs. Force an unknown-flag error to capture the USAGE block.
-    const handlerEnable = makeAutoupdateHandler(makePi(), true);
-    await handlerEnable("--frobnicate", ctx);
-    assert.match(notifications.at(-1)!.message, /\[--local\]/);
-    assert.match(notifications.at(-1)!.message, /autoupdate/);
+    // act
+    await autoupdateHandler(args, ctx);
 
-    const handlerDisable = makeAutoupdateHandler(makePi(), false);
-    await handlerDisable("--frobnicate", ctx);
-    assert.match(notifications.at(-1)!.message, /\[--local\]/);
-    assert.match(notifications.at(-1)!.message, /noautoupdate/);
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_OVERRIDE_ONLY);
+    verifyBoundary();
   });
-});
+}
 
-test("Flag: --local parses at trailing position (project scope, no name)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), true);
-    // Empty scope + --local at trailing position. Scanner removes --local;
-    // residual is `--scope project`. Bare form with empty scope -> sentinel.
-    await handler("--scope project --local", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
+test("accepts a scope flag beside the scope-target flag and honors both selectors", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "both-selectors");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
   });
-});
+  const autoupdateHandler = makeAutoupdateHandler(pi, true);
 
-test("Unknown long flag -> USAGE error (autoupdate handler)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeAutoupdateHandler(makePi(), true);
-    await handler("--frobnicate", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
-  });
+  // act
+  await autoupdateHandler("--scope project --local", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
+  assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_OVERRIDE_ONLY);
+  verifyBoundary();
 });
