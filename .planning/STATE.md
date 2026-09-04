@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-17-PLAN.md
-last_updated: "2026-09-04T22:52:39.607Z"
+stopped_at: Completed 01-18-PLAN.md
+last_updated: "2026-09-04T22:58:20.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 4a6960f7de6ad71506cac7328b9a678b42c6387e
+state_head: 1cbe26bd531b2e37ac43c7fc18865b990eefe669
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 17
+  completed_plans: 18
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 18 of 69
+Plan: 19 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -41,9 +41,9 @@ Last activity: 2026-09-04 — Phase 01 execution started
 
 **Velocity:**
 
-- Total plans completed: 152
-- Average recorded duration: 11.9 min
-- Total recorded execution time: 30 hr 1 min
+- Total plans completed: 153
+- Average recorded duration: 11.8 min
+- Total recorded execution time: 30 hr 6 min
 
 **By Phase:**
 
@@ -201,6 +201,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P15 | 8min | 1 tasks | 1 files |
 | Phase 01 P16 | 15min | 2 tasks | 2 files |
 | Phase 01 P17 | 10min | 2 tasks | 1 files |
+| Phase 01 P18 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -444,6 +445,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route reproduced domain correctness and security gaps before structural test cleanup.
 - [Phase 01]: [Phase 01-17]: Route inconsistent resolver I/O taxonomy and module splitting through operator decisions.
 - [Phase 01]: [Phase 01-17]: Close the partial-gate over-narrowing claim as stale because current typecheck rejects the mutation.
+- [Phase 01]: [Phase 01-18]: Keep dormant completion-cache removal and required-description narrowing routed through operator decisions because both cross ownership boundaries.
+- [Phase 01]: [Phase 01-18]: Treat marketplace unknown-long-flag behavior as an operator policy decision while routing missing-await and duplicated handler ownership findings to Phase 2.
 
 ### Pending Todos
 
@@ -496,7 +499,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-17-PLAN.md
+**Stopped at:** Completed 01-18-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -505,7 +508,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T22:52:39.492Z
+Last session: 2026-09-04T22:58:20.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
