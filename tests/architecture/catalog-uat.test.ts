@@ -901,10 +901,10 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // WDET-04: a workflow-bearing plugin uses the existing partial inventory
-    // grammar. The typed reason has info severity and adds no hint or reload
-    // trailer before installation.
-    "workflow-partially-available-inventory": {
+    // WINV-04: a workflow-bearing plugin renders as an ordinary not-installed
+    // inventory row -- `(available)` with no reason brace, info severity, and
+    // no hint or reload trailer before installation.
+    "workflow-available-inventory": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -1206,9 +1206,10 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // WDET-04: explicit partial consent installs the supported components and
-    // reports the dropped workflow kind through the existing success grammar.
-    "workflow-partial-install-success": {
+    // WINV-04: a plain install of a workflow-bearing plugin -- no flag opt-in --
+    // materializes the supported components and reports them through the clean
+    // `(installed)` success grammar.
+    "workflow-install-success": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -1311,9 +1312,11 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // WDET-04: a normal install rejects a workflow-bearing plugin through the
-    // existing partially-available error row and partial-install hint.
-    "workflow-install-rejection": {
+    // WINV-04: a plugin carrying workflows AND a second component kind Pi does
+    // not support is rejected on that second kind, through the existing
+    // partially-available error row and partial-install hint. The brace names
+    // the second kind alone.
+    "workflow-plus-unsupported-rejection": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
