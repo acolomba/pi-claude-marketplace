@@ -434,7 +434,7 @@ async function readHookSummaryEntries(
   // context -- but it is the one remaining site that would need the real cwd if
   // `skipIfMap` were ever dropped. The state-only reader below passes the
   // command's own `cwd`.
-  const parsed = Object.assign({ value: {}, dropped: [] }, parseHooksForInfo(raw, process.cwd()));
+  const parsed = { value: {}, dropped: [], ...parseHooksForInfo(raw, process.cwd()) };
 
   const supported = projectHookSummaryEntries(parsed.value);
   const dropped = projectDroppedHookEntries(parsed.dropped);

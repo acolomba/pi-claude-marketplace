@@ -42,7 +42,10 @@ export function assertSafeName(name: string, label?: string): void {
   }
 
   for (let i = 0; i < name.length; i++) {
-    const code = name.charCodeAt(i);
+    // `codePointAt` types `number | undefined`; `Number()` folds the
+    // out-of-range `undefined` (impossible here: i < name.length) to NaN,
+    // which fails both comparisons, without adding an unreachable branch.
+    const code = Number(name.codePointAt(i));
 
     if (code < 0x20 || code === 0x7f) {
       throw new Error(`${prefix}"${name}" must not contain ASCII control characters.`);
