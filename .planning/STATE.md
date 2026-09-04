@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-09-04T21:58:43.428Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-09-04T22:06:13.064Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 9de0bf311d96c2feff9094424c113bfe88cec6c1
+state_head: b839ca76a2630238fcc32706eb25539f3535d332
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 11 of 69
+Plan: 12 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -194,6 +194,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P08 | 12min | 2 tasks | 1 files |
 | Phase 01 P09 | 15min | 2 tasks | 2 files |
 | Phase 01 P10 | 6min | 2 tasks | 1 files |
+| Phase 01 P11 | 8min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -423,6 +424,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Classify artificial coverage as dead defensive code, compiler-forced narrowing, or reachable behavior with an unsuitable seam.
 - [Phase 01]: Route the pid-table pre-await snapshot defect to Phase 2 because current control flow contradicts its defensive-copy contract.
 - [Phase 01]: Keep unreachable async-rewake fallback and CR-01 element-validation policy claims as operator decisions.
+- [Phase 01]: Preserve hooks-dispatch corpus overlaps as explicit duplicate findings rather than deleting historical claim identities.
+- [Phase 01]: Close the hooks event-router duplicate-import claim as stale only after current replacement inspection and focused rerun.
 
 ### Pending Todos
 
@@ -475,7 +478,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-10-PLAN.md
+**Stopped at:** Completed 01-11-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -484,7 +487,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T21:58:43.328Z
+Last session: 2026-09-04T22:06:12.974Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
