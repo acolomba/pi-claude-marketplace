@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Live Evidence Revalidation",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "2",
@@ -54,5 +54,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 1 of 9 · 0% · executing"
   },
-  "updated_at": "2026-09-04T20:53:43.634Z"
+  "updated_at": "2026-09-04T21:04:29.553Z"
 }

@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-09-04T20:53:46.004Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-09-04T21:04:32.292Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 1338ea52489b6702fdb67cc338450e98d7e523fa
+state_head: ccdbedb13ddc8921174d17a9d76697e54f9055e5
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 2 of 69
+Plan: 3 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -185,6 +185,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 117 P11 | 50 min | 1 tasks | 4 files |
 | Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
 | Phase 01 P01 | 28 min | 3 tasks | 7 files |
+| Phase 01 P02 | 10 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -396,6 +397,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: An errno path and errno message text are runtime-owned, not contractual; assertions pin name, code and syscall, and read the runtime's wording back where production composes around it — A package upgrade changed the EISDIR wording mid-phase and reddened 11 assertions with no behaviour change; the ten hardened suites are now identical on v22.22.2 and v26.8.1
 - [Phase 01]: Keep canonical revalidation state in normalized JSON and render Markdown deterministically from it.
 - [Phase 01]: Seed every corpus file and operator decision unresolved so shards cannot inherit false completion.
+- [Phase 01]: [Phase 01-02]: Preserve meta-report rows as namespaced source claims linked to canonical cross-cutting findings.
+- [Phase 01]: [Phase 01-02]: Treat the missing historical coverage report as an explicit evidence gap rather than current proof.
 
 ### Pending Todos
 
@@ -448,7 +451,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-01-PLAN.md
+**Stopped at:** Completed 01-02-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -457,7 +460,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T20:53:45.904Z
+Last session: 2026-09-04T21:04:32.198Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
