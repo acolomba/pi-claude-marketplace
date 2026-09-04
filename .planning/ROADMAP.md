@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** TBD
+**Plans:** 17 plans
 
 **Success Criteria**:
 
@@ -78,6 +78,25 @@ be narrowed or moved out of scope with evidence.
    their premises have been checked against the live tree.
 4. Stale, struck, and superseded claims are removed from active scope, and the
    requirements and remaining roadmap are revised before Phase 2 planning.
+
+Plans:
+- [ ] 01-01-PLAN.md — Build the validator, schema, planted tracer, and exact live inventory
+- [ ] 01-02-PLAN.md — Review corpus paths 001-010 into an exclusive shard
+- [ ] 01-03-PLAN.md — Review corpus paths 011-020 into an exclusive shard
+- [ ] 01-04-PLAN.md — Review corpus paths 021-030 into an exclusive shard
+- [ ] 01-05-PLAN.md — Review corpus paths 031-040 into an exclusive shard
+- [ ] 01-06-PLAN.md — Review corpus paths 041-050 into an exclusive shard
+- [ ] 01-07-PLAN.md — Review corpus paths 051-060 into an exclusive shard
+- [ ] 01-08-PLAN.md — Review corpus paths 061-070 into an exclusive shard
+- [ ] 01-09-PLAN.md — Review corpus paths 071-080 into an exclusive shard
+- [ ] 01-10-PLAN.md — Review corpus paths 081-090 into an exclusive shard
+- [ ] 01-11-PLAN.md — Review corpus paths 091-100 into an exclusive shard
+- [ ] 01-12-PLAN.md — Review corpus paths 101-110 into an exclusive shard
+- [ ] 01-13-PLAN.md — Merge all evidence and clear inconclusive gaps
+- [ ] 01-14-PLAN.md — Resolve operator decisions 1-3 one dossier at a time
+- [ ] 01-15-PLAN.md — Resolve operator decisions 4-6 one dossier at a time
+- [ ] 01-16-PLAN.md — Resolve operator decisions 7-9 one dossier at a time
+- [ ] 01-17-PLAN.md — Rewrite requirements and roadmap, then seal the hard gate
 
 ### Phase 2: Containment and Input Safety
 
@@ -219,7 +238,7 @@ be narrowed or moved out of scope with evidence.
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 0/0 | Not started | — |
+| 1. Live Evidence Revalidation | 0/17 | Planned | — |
 | 2. Containment and Input Safety | 0/0 | Not started | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
