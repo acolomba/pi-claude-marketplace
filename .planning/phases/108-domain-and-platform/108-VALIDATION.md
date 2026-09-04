@@ -1,130 +1,166 @@
 ---
 phase: 108
 slug: domain-and-platform
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-28
+validated: 2026-09-04
+requirement: MOD-01, RES-01, PRES-03, PRES-04
+coverage_score: 100
 ---
 
 # Phase 108 — Validation Strategy
 
-> Per-phase validation contract for feedback sampling during execution.
+> Reconciled audit of the 23 domain-and-platform pairs. Phase 108 was executed and verified
+> (`108-VERIFICATION.md`, `status: passed`, re-verified 2026-08-29 after Plan 108-24 closed two
+> gap groups) but its VALIDATION.md was seeded by plan-phase and never reconciled by
+> validate-phase — it stayed `status: draft`, `nyquist_compliant: false`. Per #2117 that made the
+> `false` verdict an artifact of an unreconciled file, not a measured compliance failure. This
+> reconciliation re-measures against the current tree and the retained all-pair artifact
+> (`117-ALL-PAIR-RESULT.ndjson`). **It changed no production file, no test file, and generated
+> no tests.**
 
----
+## Status Lifecycle
+
+1. **Draft seeded (2026-08-28):** plan-phase wrote the 58-row task/sampling map before execution;
+   every row read "pending" and the frontmatter defaulted to `status: draft`,
+   `nyquist_compliant: false`.
+2. **Executed and verified (2026-08-29):** `108-VERIFICATION.md` scored 68/69 must-haves, closed
+   the two re-verification gap groups via Plan 108-24, and recorded `status: passed`. The
+   VALIDATION.md draft was never touched to match.
+3. **Reconciled (2026-09-04):** all 23 owner suites re-run together, all 23 paired sources
+   re-checked against the 204-row artifact, and the correspondence gate re-run — all green.
+   Promoted to `status: validated`, `nyquist_compliant: true`, `wave_0_complete: true`.
+
+**Why no gaps were filled.** Gap analysis found no MISSING and no PARTIAL requirement, so no
+test was generated. This milestone's deliverable is a 204/204 one-to-one pair invariant enforced
+by `scripts/check-corresponding-tests.mjs`; a generated test with no paired production module
+would itself be an `unexpected-test` violation. The gate was measured at exit 0 with zero
+violations after this audit.
 
 ## Test Infrastructure
 
 | Property | Value |
-|----------|-------|
-| **Framework** | Node built-in test runner, `node:assert/strict`, test-context mocks/timers, and `strong-mock` 9.2.2 |
-| **Config file** | `package.json`, `tsconfig.json` |
-| **Quick run command** | `node --test <owner-test-path> && npm run test:coverage:direct -- <source-or-owner-path>` |
-| **Full suite command** | `npm run test:coverage:direct:all && npm run check` |
-| **Estimated runtime** | Focused pair under 30 seconds; measure and record the completed all-pair/full-suite runtime |
+| --- | --- |
+| **Framework** | Node.js built-in `node:test`, `node:assert/strict`, test-context mocks/timers, `strong-mock` 9.2.2 |
+| **Pair gate** | 204-row artifact `117-ALL-PAIR-RESULT.ndjson`, produced by `scripts/test-coverage-direct.mjs` |
+| **Owner suite run** | `node --test <owner-test-path>` |
+| **Phase suite** | 23 direct pairs, 742 owner cases (measured together in one run) |
+| **Correspondence gate** | `node scripts/check-corresponding-tests.mjs` |
+| **Repository suite** | `npm test`, `npm run test:integration`, `npm run check` |
+
+## Coverage Scorecard
+
+| Dimension | Covered | Total | Score | Evidence |
+| --- | ---: | ---: | ---: | --- |
+| Planned plans with an executable owner | 23 | 23 | 100% | One exact owner/source pair per plan (108-01..108-23) |
+| Exact source-owner direct gates | 23 | 23 | 100% | All 23 rows read `complete` in the 204-row artifact |
+| Focused owner cases | 742 | 742 | 100% | 23 owner suites run together, 0 failures, `node --test` |
+| Phase success criteria | 4 | 4 | 100% | See the table below |
+| Requirement coverage | 4 | 4 | 100% | MOD-01, RES-01, PRES-03, PRES-04 all exercised |
+
+**Nyquist verdict:** PASS — every planned direct boundary in phase 108 has automated evidence,
+and the two deferred items (resolver-consumer lexical migration; correspondence-gate
+brownfield backlog) are explicitly assigned elsewhere, not hidden gaps of this phase.
+
+## Requirement and Success-Criterion Coverage
+
+| Contract | Status | Automated evidence |
+| --- | --- | --- |
+| **MOD-01:** all 23 domain-and-platform pairs complete the pair contract | COVERED | 23/23 owners pass together (742 cases, 0 fail); all 23 sources read `complete` in the 204-row artifact |
+| **RES-01:** resolver results expose literal materializability and preserve three `state` distinctions | COVERED | `domain/resolver.test.ts` (module-scope type evidence: true-arm `pluginRoot` compiles, false-arm requires `@ts-expect-error`, three `state` literals stay distinct) plus 19 migrated fixture spreads verified by `npm run typecheck` |
+| **PRES-03:** production and fake Git, credential, and device-flow adapters pass the same public contract cases | COVERED | Three shared registrars (Git 12 cases, credential 31 cases, device-flow 10 cases) run against both production and fake participants |
+| **PRES-04:** each adapter contract has an independent negative (broken-implementation) control | COVERED | Each of the three registrars' single named broken-control test fails exactly its target case and no other, verified in `108-VERIFICATION.md`'s Shared Adapter Contracts table |
+| **Criterion 4:** domain and platform tests run without live network access, developer credentials, or test-only production exports | COVERED | `git.ts` replaces HTTP transport, `github-auth.ts` device flow replaces `globalThis.fetch`, credential tests inject `CredentialSpawn`; no coverage-ignore or test-only export found in the three modified sources |
+
+Criterion 2 (resolver consumers narrow on `installable`) is **partially covered by phase 108
+itself and explicitly deferred for the remaining ten lexical call sites** — see Deferred Item
+below. This is not a phase-108 gap: the union, constructors, and resolver-owned narrowing gates
+are all covered by `resolver.test.ts`; only external-consumer call-site migration is deferred.
+
+## Exact Pair Map
+
+Source of truth: `117-ALL-PAIR-RESULT.ndjson`, filtered to `domain/` and `platform/`.
+
+| # | Source | Owner test | Verdict |
+| ---: | --- | --- | --- |
+| 108-01 | `domain/auth-registry.ts` | `tests/domain/auth-registry.test.ts` | complete |
+| 108-02 | `domain/clone-key.ts` | `tests/domain/clone-key.test.ts` | complete |
+| 108-03 | `domain/components/hook-events.ts` | `tests/domain/components/hook-events.test.ts` | complete |
+| 108-04 | `domain/components/hook-if-targets.ts` | `tests/domain/components/hook-if-targets.test.ts` | complete |
+| 108-05 | `domain/components/hook-tool-names.ts` | `tests/domain/components/hook-tool-names.test.ts` | complete |
+| 108-06 | `domain/components/hooks.ts` | `tests/domain/components/hooks.test.ts` | complete |
+| 108-07 | `domain/components/hooks/matcher.ts` | `tests/domain/components/hooks/matcher.test.ts` | complete |
+| 108-08 | `domain/components/hooks/partition.ts` | `tests/domain/components/hooks/partition.test.ts` | complete |
+| 108-09 | `domain/components/hooks/schema.ts` | `tests/domain/components/hooks/schema.test.ts` | complete |
+| 108-10 | `domain/components/mcp.ts` | `tests/domain/components/mcp.test.ts` | complete |
+| 108-11 | `domain/components/plugin.ts` | `tests/domain/components/plugin.test.ts` | complete |
+| 108-12 | `domain/github-auth.ts` | `tests/domain/github-auth.test.ts` | complete |
+| 108-13 | `domain/manifest-cache.ts` | `tests/domain/manifest-cache.test.ts` | complete |
+| 108-14 | `domain/manifest-lookup.ts` | `tests/domain/manifest-lookup.test.ts` | complete |
+| 108-15 | `domain/manifest.ts` | `tests/domain/manifest.test.ts` | complete |
+| 108-16 | `domain/name.ts` | `tests/domain/name.test.ts` | complete |
+| 108-17 | `domain/plugin-root.ts` | `tests/domain/plugin-root.test.ts` | complete |
+| 108-18 | `domain/resolver.ts` | `tests/domain/resolver.test.ts` | complete |
+| 108-19 | `domain/source.ts` | `tests/domain/source.test.ts` | complete |
+| 108-20 | `domain/version.ts` | `tests/domain/version.test.ts` | complete |
+| 108-21 | `platform/git-credential.ts` | `tests/platform/git-credential.test.ts` | complete |
+| 108-22 | `platform/git.ts` | `tests/platform/git.test.ts` | complete |
+| 108-23 | `platform/pi-api.ts` | `tests/platform/pi-api.test.ts` | complete |
+| | **Total** | | **23 complete, 0 short** |
+
+Per-pair branch/function/line counts are recorded in `108-VERIFICATION.md`'s Direct Owner
+Coverage table (measured 2026-08-29) and are not restated here since they were not re-measured
+individually in this reconciliation — the 204-row artifact's `complete` verdict for all 23 rows
+was used instead, per the method note preferring the retained artifact over restating a phase's
+own summary numbers.
+
+## Manual-Only
+
+None. All phase-108 behaviors have automated verification, per `108-VERIFICATION.md`'s Human
+Verification Required section ("N/A. This is an infrastructure and test-foundation phase.").
+
+## Verification Evidence
+
+Measured on the current tree during this reconciliation, each command run separately:
+
+- 23 owner suites run together (`node --test` over all 23 files): 742 pass, 0 fail, 48 suites,
+  exit 0.
+- 23 direct pair gates via the 204-row artifact: all `complete`.
+- `node scripts/check-corresponding-tests.mjs` → exit 0, `Corresponding-test gate passed.`
+
+## Deferred Item
+
+`108-VERIFICATION.md` records an explicit, named ledger for the ten external resolver-consumer
+call sites that still need lexical migration onto the `installable` discriminant:
+
+- `plugin-state-classifier.ts` → Phase 113 (P113-24).
+- Lifecycle consumers → Phase 114 (P114-07/08/09/10/11/12/14).
+- Reconcile backfill/notifications → Phase 115 (P115-06/07).
+
+Phase 115's own (reconciled) VALIDATION.md confirms its two assigned items (backfill, notify)
+landed as `108-06`/`108-07` pairs, both `complete`. This deferred item does not hide a phase-108
+implementation gap: the `ResolvedPlugin` public union and resolver-owned narrowing gates are
+fully covered by `resolver.test.ts` and its module-scope type evidence; only downstream
+call-site migration was deferred by design.
+
+## Gaps Summary
+
+| Metric | Count |
+| --- | ---: |
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Tests generated | 0 |
+| Manual-only items | 0 |
+
+No actionable gap remains. The draft's `nyquist_compliant: false` was an artifact of plan-phase
+seeding never being reconciled after execution — not a measured shortfall. `108-VERIFICATION.md`
+already closed both real gap groups it found (data-row phase syntax, stale helper-path comments)
+via Plan 108-24 before this reconciliation began.
 
 ---
 
-## Sampling Rate
-
-- **After every task commit:** Run the owner test alone and its focused direct-coverage command. Also run `npm run typecheck` when a production type or exported result changes.
-- **After each resolver fixture-preflight task:** Run the exact supporting suites plus `npm run typecheck` against the pre-change union; 108-18 repeats typecheck after making the boolean required.
-- **After every adapter task:** Run both contract participants, the fake's exact negative control, correspondence positive/negative gates, affected relocated-support consumers, and `npm run test:coverage:direct:all`.
-- **After every plan wave:** Run `npm run test:coverage:direct:all && npm run check`.
-- **Before `$gsd-verify-work`:** All 23 focused records, three shared contracts, three exact negative controls, correspondence gates, and `npm run check` must be green.
-- **Max feedback latency:** 30 seconds for a focused owner; full gates run at adapter and wave boundaries.
-
----
-
-## Per-Task Verification Map
-
-| Task ID | Plan | Wave | Requirement | Automated Command | File / Wave 0 State | Sampling Status |
-|---------|------|------|-------------|-------------------|---------------------|-----------------|
-| 108-01-01 | 01 | 1 | MOD-01 | `node --test tests/domain/auth-registry.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/auth-registry.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-01-02 | 01 | 1 | MOD-01 | `node --test tests/domain/auth-registry.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/auth-registry.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-02-01 | 02 | 7 | MOD-01 | `node --test tests/domain/clone-key.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-02-02 | 02 | 7 | MOD-01 | `node --test tests/domain/clone-key.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/clone-key.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-02-03 | 02 | 7 | MOD-01 | `node --test tests/architecture/config-state-consistency.test.ts tests/architecture/cross-op-convergence.test.ts tests/edge/handlers/marketplace/add.test.ts tests/edge/handlers/marketplace/update.test.ts tests/edge/handlers/plugin/bootstrap.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/clone-key.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-03-01 | 03 | 7 | MOD-01 | `node --test tests/domain/components/hook-events.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-03-02 | 03 | 7 | MOD-01 | `node --test tests/domain/components/hook-events.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hook-events.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-03-03 | 03 | 7 | MOD-01 | `node --test tests/integration/auth-e2e.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/add-seed-mirrors.test.ts tests/orchestrators/marketplace/add.test.ts tests/orchestrators/marketplace/shared.test.ts tests/orchestrators/marketplace/update-transport.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hook-events.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-04-01 | 04 | 7 | MOD-01 | `node --test tests/domain/components/hook-if-targets.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-04-02 | 04 | 7 | MOD-01 | `node --test tests/domain/components/hook-if-targets.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-04-03 | 04 | 7 | MOD-01 | `node --test tests/orchestrators/marketplace/remove.test.ts tests/orchestrators/marketplace/update.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-05-01 | 05 | 7 | MOD-01 | `node --test tests/domain/components/hook-tool-names.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-05-02 | 05 | 7 | MOD-01 | `node --test tests/domain/components/hook-tool-names.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-05-03 | 05 | 7 | MOD-01 | `node --test tests/orchestrators/plugin/bootstrap.test.ts tests/orchestrators/plugin/clone-cache-seed.test.ts tests/orchestrators/plugin/clone-cache.test.ts tests/orchestrators/plugin/fetch.test.ts tests/orchestrators/plugin/info-manifest-absent.test.ts tests/orchestrators/plugin/info.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-06-01 | 06 | 2 | MOD-01 | `node --test tests/domain/components/hooks.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-06-02 | 06 | 2 | MOD-01 | `node --test tests/domain/components/hooks.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hooks.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-06-03 | 06 | 2 | MOD-01, RES-01 | `npm run typecheck && node --test tests/bridges/agents/stage.test.ts tests/bridges/commands/discover.test.ts tests/bridges/commands/stage.test.ts tests/bridges/integration-foreign-content.test.ts tests/bridges/integration-materialization-gate.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hooks.ts` | ✅ seven construction sites exist; task adds exact true-literal field-bag spreads | ⬜ pending — sample after task commit |
-| 108-07-01 | 07 | 7 | MOD-01 | `node --test tests/domain/components/hooks/matcher.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-07-02 | 07 | 7 | MOD-01 | `node --test tests/domain/components/hooks/matcher.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-07-03 | 07 | 7 | MOD-01 | `node --test tests/orchestrators/plugin/install-auth.test.ts tests/orchestrators/plugin/install.test.ts tests/orchestrators/plugin/reinstall.test.ts tests/orchestrators/plugin/update-reinstall-auth.test.ts tests/orchestrators/plugin/update.test.ts tests/orchestrators/reconcile/apply.test.ts tests/shared/device-flow-prompt.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-08-01 | 08 | 2 | MOD-01 | `node --test tests/domain/components/hooks/partition.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-08-02 | 08 | 2 | MOD-01 | `node --test tests/domain/components/hooks/partition.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hooks/partition.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-09-01 | 09 | 2 | MOD-01 | `node --test tests/domain/components/hooks/schema.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-09-02 | 09 | 2 | MOD-01 | `npm run typecheck && node --test tests/domain/components/hooks/schema.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/hooks/schema.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-10-01 | 10 | 2 | MOD-01 | `node --test tests/domain/components/mcp.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-10-02 | 10 | 2 | MOD-01 | `node --test tests/domain/components/mcp.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/mcp.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-11-01 | 11 | 2 | MOD-01 | `node --test tests/domain/components/plugin.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-11-02 | 11 | 2 | MOD-01 | `npm run typecheck && node --test tests/domain/components/plugin.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/components/plugin.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-12-01 | 12 | 5 | MOD-01, PRES-03, PRES-04 | `node --test tests/domain/github-auth.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-12-02 | 12 | 5 | MOD-01, PRES-03, PRES-04 | `node --test tests/domain/github-auth.test.ts tests/domain/device-flow-fake.test.ts` | ❌ Wave 0 creates: `tests/domain/device-flow-contract.ts`, `tests/domain/device-flow-fake.ts`, `tests/domain/device-flow-fake.test.ts` | ⬜ pending — sample after task commit |
-| 108-12-03 | 12 | 5 | MOD-01, PRES-03, PRES-04 | `node --test tests/domain/github-auth.test.ts tests/domain/device-flow-fake.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/github-auth.ts && npm run test:corresponding && npm run test:corresponding:negative` | ❌ Wave 0 creates: `tests/domain/device-flow-contract.ts`, `tests/domain/device-flow-fake.ts`, `tests/domain/device-flow-fake.test.ts` | ⬜ pending — sample after task commit |
-| 108-13-01 | 13 | 2 | MOD-01 | `node --test tests/domain/manifest-cache.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-13-02 | 13 | 2 | MOD-01 | `node --test tests/domain/manifest-cache.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/manifest-cache.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-14-01 | 14 | 2 | MOD-01 | `node --test tests/domain/manifest-lookup.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-14-02 | 14 | 2 | MOD-01 | `node --test tests/domain/manifest-lookup.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/manifest-lookup.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-15-01 | 15 | 2 | MOD-01 | `node --test tests/domain/manifest.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-15-02 | 15 | 2 | MOD-01 | `node --test tests/domain/manifest.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/manifest.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-16-01 | 16 | 2 | MOD-01 | `node --test tests/domain/name.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-16-02 | 16 | 2 | MOD-01 | `node --test tests/domain/name.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/name.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-17-01 | 17 | 2 | MOD-01 | `node --test tests/domain/plugin-root.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-17-02 | 17 | 2 | MOD-01 | `node --test tests/domain/plugin-root.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/plugin-root.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-18-01 | 18 | 3 | MOD-01, RES-01 | `npm run typecheck && node --test tests/domain/resolver.test.ts` | 🛠 108-06/108-19 first migrate all 19 fixtures; Task 108-18-01 creates `tests/domain/resolver.test.ts` | ⬜ pending — sample after task commit |
-| 108-18-02 | 18 | 3 | MOD-01, RES-01 | `node --test tests/domain/resolver.test.ts && npm run typecheck && npm run test:corresponding` | ⏩ owner exists from Task 108-18-01; this task extends it | ⬜ pending — sample after task commit |
-| 108-18-03 | 18 | 3 | MOD-01, RES-01 | `node --test tests/domain/resolver.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/resolver.ts && npm run typecheck` | ⏩ owner exists from Task 108-18-01 | ⬜ pending — sample after task commit |
-| 108-19-01 | 19 | 2 | MOD-01 | `node --test tests/domain/source.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-19-02 | 19 | 2 | MOD-01 | `node --test tests/domain/source.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/source.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-19-03 | 19 | 2 | MOD-01, RES-01 | `npm run typecheck && node --test tests/bridges/integration.test.ts tests/bridges/skills/discover.test.ts tests/bridges/skills/stage.test.ts tests/orchestrators/plugin/plugin-state-classifier.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/source.ts` | ✅ twelve construction sites exist; task adds exact true/false field-bag spreads | ⬜ pending — sample after task commit |
-| 108-20-01 | 20 | 2 | MOD-01 | `node --test tests/domain/version.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-20-02 | 20 | 2 | MOD-01 | `node --test tests/domain/version.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/version.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-21-01 | 21 | 4 | MOD-01, PRES-03, PRES-04 | `node --test tests/platform/git-credential.test.ts` | ❌ Wave 0 creates: `tests/platform/credential-process-fake.ts` | ⬜ pending — sample after task commit |
-| 108-21-02 | 21 | 4 | MOD-01, PRES-03, PRES-04 | `node --test tests/platform/git-credential.test.ts tests/platform/credential-ops-fake.test.ts` | ❌ Wave 0 creates: `tests/platform/credential-ops-contract.ts`, `tests/platform/credential-ops-fake.ts`, `tests/platform/credential-ops-fake.test.ts` | ⬜ pending — sample after task commit |
-| 108-21-03 | 21 | 4 | MOD-01, PRES-03, PRES-04 | `npm run test:corresponding && npm run test:corresponding:negative && node --test tests/platform/git-credential.test.ts tests/platform/credential-ops-fake.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/platform/git-credential.ts` | ❌ Wave 0 creates: `tests/platform/credential-ops-contract.ts`, `tests/platform/credential-ops-fake.ts`, `tests/platform/credential-ops-fake.test.ts` | ⬜ pending — sample after task commit |
-| 108-22-01 | 22 | 6 | MOD-01, PRES-03, PRES-04 | `node --test tests/platform/git.test.ts` | ❌ Wave 0 creates: `tests/platform/git.test.ts`, `tests/platform/git-test-repository.ts` | ⬜ pending — sample after task commit |
-| 108-22-02 | 22 | 6 | MOD-01, PRES-03, PRES-04 | `node --test tests/platform/git.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/platform/git.ts` | ❌ Wave 0 creates: `tests/platform/git.test.ts`, `tests/platform/git-ops-contract.ts`, `tests/platform/git-test-repository.ts` | ⬜ pending — sample after task commit |
-| 108-22-03 | 22 | 6 | MOD-01, PRES-03, PRES-04 | `node --test tests/platform/git.test.ts tests/platform/git-ops-fake.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/platform/git.ts && npm run test:corresponding && npm run test:corresponding:negative` | ❌ Wave 0 creates: `tests/platform/git-ops-contract.ts`, `tests/platform/git-ops-fake.ts`, `tests/platform/git-ops-fake.test.ts` | ⬜ pending — sample after task commit |
-| 108-23-01 | 23 | 8 | MOD-01 | `node --test tests/platform/pi-api.test.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-23-02 | 23 | 8 | MOD-01 | `npm run typecheck && node --test tests/platform/pi-api.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/platform/pi-api.ts` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-| 108-23-03 | 23 | 8 | MOD-01 | `! rg -n 'helpers/(git-mock|credential-mock|device-flow-mock)' tests --glob '!helpers/git-mock.ts' --glob '!helpers/credential-mock.ts' --glob '!helpers/device-flow-mock.ts' && npm run test:corresponding && npm run test:corresponding:negative && npm run test:coverage:direct:all && npm run check` | ✅ inputs exist at planning time | ⬜ pending — sample after task commit |
-
-All 58 executable task IDs are mapped. Wave values match plan frontmatter; every row carries its exact task-level automated command, current/Wave-0 file state, and per-commit sampling status.
-## Wave 0 Requirements
-
-- No resolver Wave 0 scaffold is required: Tasks 108-06-03 and 108-19-03 first stage all 19 external construction fixtures with exact field-bag spreads that pass pre-change typecheck; Task 108-18-01 then creates `tests/domain/resolver.test.ts`, and Tasks 108-18-02/03 extend that owner.
-- [ ] `tests/platform/git.test.ts` — canonical owner for the Git production adapter.
-- [ ] Concern-local Git contract, fake, fake participant, guarded local-repository/HTTP support, and exact negative control under `tests/platform/`.
-- [ ] Concern-local credential contract, relocated fake, fake participant, deterministic process support, and exact negative control under `tests/platform/`.
-- [ ] Concern-local device-flow contract, relocated fake, fake participant, fetch/wait support, and exact negative control under `tests/domain/`.
-- [ ] Structural supplemental-evidence classification in `scripts/check-corresponding-tests.mjs` plus a negative fixture proving arbitrary unexpected tests still fail.
-- [ ] Replace the loopback Git remote-ref fixture with explicit injected HTTP behavior; no socket listener is permitted.
-
----
-
-## Manual-Only Verifications
-
-All phase behaviors have automated verification.
-
----
-
-## Validation Sign-Off
-
-- [ ] All tasks have `<automated>` verification or Wave 0 dependencies.
-- [ ] Sampling continuity: no three consecutive tasks without automated verification.
-- [ ] Wave 0 covers all missing owner and support files.
-- [ ] No watch-mode flags.
-- [ ] Focused feedback latency stays below 30 seconds.
-- [ ] `nyquist_compliant: true` is set after execution evidence is recorded.
-
-**Approval:** pending
+_Reconciled and validated: 2026-09-04. Closes the draft-status Nyquist file flagged by the
+v1.19 milestone audit._
