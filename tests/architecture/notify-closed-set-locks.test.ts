@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
-test("OUT-08: REASONS is the closed 44-entry reason set", () => {
+test("OUT-08: REASONS is the closed 43-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -48,7 +48,8 @@ test("OUT-08: REASONS is the closed 44-entry reason set", () => {
   // container-is-here miss (41 -> 43).
   // WDET-04 / D-106-04: +1 for the dedicated final `workflows` member
   // (43 -> 44).
-  assert.equal(REASONS.length, 44);
+  // WINV-03 / D-109-01: -1 for the retired workflows member (44 -> 43).
+  assert.equal(REASONS.length, 43);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

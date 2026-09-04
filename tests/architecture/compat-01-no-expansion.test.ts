@@ -170,7 +170,6 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "installs disabled",
     "marketplace in user scope",
     "marketplace in project scope",
-    "workflows",
   ];
 
   // act
@@ -180,7 +179,7 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
   assert.deepEqual(
     actual,
     expected,
-    "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
+    "COMPAT-01: no reason token may be renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change. A token may be removed ONLY when its component kind moves from the unsupported set to the supported set, and only when the removal arrives with its catalog rows in the same change.",
   );
 });
 
