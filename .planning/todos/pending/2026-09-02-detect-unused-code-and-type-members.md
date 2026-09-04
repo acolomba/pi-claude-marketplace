@@ -1,6 +1,6 @@
 ---
 created: 2026-09-02
-resolves_phase: 117
+resolves_phase: 7
 source: 116-CONTEXT discussion
 audit_acknowledged:
   milestone: v1.19
@@ -71,9 +71,10 @@ The only existing instrument that answers "is this member read anywhere" is a
 call-graph query such as `codegraph explore`, which is a manual tool rather than
 a gate.
 
-## Why deferred
+## Why bundled into refine-unit-tests
 
-Phase 116 is the edge command surface; this is a repository-wide gate. Phase 117
-owns repository-wide gates and already inherits seven correspondence-gate
-violations, so the work belongs there. An unused optional member is dead weight
-rather than a correctness defect, so it does not block any phase.
+Phase 117 closed without implementing this repository-wide gate. Phase 1 of
+`refine-unit-tests` must revalidate the premise against the post-refactor tree.
+If it remains live, Phase 7 owns the gate and its required offender and benign
+controls. An unused optional member is dead weight rather than a correctness
+defect, so it does not bypass that evidence gate.
