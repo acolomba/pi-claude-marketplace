@@ -16,8 +16,8 @@
       "category": "control",
       "assignedPlan": "01-03",
       "claimIds": [],
-      "reviewStatus": "pending",
-      "outcome": "unreviewed"
+      "reviewStatus": "complete",
+      "outcome": "control document"
     },
     {
       "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
