@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-21-PLAN.md
-last_updated: "2026-09-04T23:23:20.000Z"
+stopped_at: Completed 01-22-PLAN.md
+last_updated: "2026-09-04T23:28:07.810Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: ce802e13bcd452739b51e744ccdc7fce6ba405bd
+state_head: 45e9952d6c37d5ebde4eb8e1e78aa3ca1ad40d17
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 21
+  completed_plans: 22
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 22 of 69
+Plan: 23 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -205,6 +205,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P19 | 12min | 1 tasks | 1 files |
 | Phase 01 P20 | 6min | 2 tasks | 1 files |
 | Phase 01 P21 | 8min | 2 tasks | 1 files |
+| Phase 01 P22 | 7min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -456,6 +457,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Keep callback-recorder policy and speculative flag visibility as operator decisions rather than mechanical edits.
 - [Phase 01]: Preserve all 55 import and marketplace-add claims individually while routing 52 live findings to Phase 2.
 - [Phase 01]: Close three overstated historical claims as stale evidence rather than scheduling their original remedies.
+- [Phase 01]: Route the write-only MarketplaceUpdateError.retryHint contract to an operator decision because its producer mutation survives and no current consumer observes the field.
+- [Phase 01]: Retain the fs.watch TOCTOU case as a deferred determinism concern rather than treating its race as a lying test.
 
 ### Pending Todos
 
@@ -508,7 +511,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-21-PLAN.md
+**Stopped at:** Completed 01-22-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -517,7 +520,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T23:23:20.000Z
+Last session: 2026-09-04T23:28:07.707Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
