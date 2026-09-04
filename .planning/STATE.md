@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-12-PLAN.md
-last_updated: "2026-09-04T22:12:00.469Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-09-04T22:18:18.839Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: d8c5988ecb52580ee888a8a559a6e50ba8f05c0c
+state_head: 4459550270041c5e3e12e3c5872d143e9cd545b3
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 12
+  completed_plans: 13
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 13 of 69
+Plan: 14 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -196,6 +196,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P10 | 6min | 2 tasks | 1 files |
 | Phase 01 P11 | 8min | 1 tasks | 1 files |
 | Phase 01 P12 | 12min | 2 tasks | 1 files |
+| Phase 01 P13 | 12min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -429,6 +430,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Close the hooks event-router duplicate-import claim as stale only after current replacement inspection and focused rerun.
 - [Phase 01]: Keep unquoted compound command-substitution semantics as an operator decision because upstream parity is not established by repository evidence.
 - [Phase 01]: Treat dead defensive compiler catches as an operator choice between deletion and explicitly accepted uncovered lines.
+- [Phase 01]: Route the surviving compaction reason-to-trigger contract through an operator decision before implementation.
+- [Phase 01]: Preserve refuted hooks-payload prescriptions as stale evidence-only closures.
 
 ### Pending Todos
 
@@ -481,7 +484,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-12-PLAN.md
+**Stopped at:** Completed 01-13-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -490,7 +493,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T22:12:00.374Z
+Last session: 2026-09-04T22:18:18.743Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
