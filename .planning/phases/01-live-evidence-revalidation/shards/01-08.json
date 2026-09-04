@@ -73,7 +73,80 @@
       "category": "adversarial",
       "assignedPlan": "01-08",
       "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-001"
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-035",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-036",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-037",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-038",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-039",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-040",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-041",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-042",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-043",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-044",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-045",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-046",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-047",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-048",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-049",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-050",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-051",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-052",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-053",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-054",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-055",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-056",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-057",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-058",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-059",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-060",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-061",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-062",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-063",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-064",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-065",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-066",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-067",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-068",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-069",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-070",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-071",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-072",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-073",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-074"
       ],
       "reviewStatus": "complete",
       "outcome": "live findings"
@@ -421,6 +494,444 @@
       "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
       "label": "ASD-001",
       "findingId": "ASD-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-002",
+      "findingId": "ASD-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-003",
+      "findingId": "ASD-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-004",
+      "findingId": "ASD-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-005",
+      "findingId": "ASD-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-006",
+      "findingId": "ASD-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-007",
+      "findingId": "ASD-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-008",
+      "findingId": "ASD-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-009",
+      "findingId": "ASD-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-010",
+      "findingId": "ASD-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-011",
+      "findingId": "ASD-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-012",
+      "findingId": "ASD-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-013",
+      "findingId": "ASD-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-014",
+      "findingId": "ASD-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-015",
+      "findingId": "ASD-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-016",
+      "findingId": "ASD-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-017",
+      "findingId": "ASD-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-018",
+      "findingId": "ASD-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-019",
+      "findingId": "ASD-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-020",
+      "findingId": "ASD-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-021",
+      "findingId": "ASD-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-022",
+      "findingId": "ASD-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-023",
+      "findingId": "ASD-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-024",
+      "findingId": "ASD-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-025",
+      "findingId": "ASD-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-026",
+      "findingId": "ASD-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-027",
+      "findingId": "ASD-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-028",
+      "findingId": "ASD-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-029",
+      "findingId": "ASD-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-030",
+      "findingId": "ASD-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-031",
+      "findingId": "ASD-031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-032",
+      "findingId": "ASD-032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-033",
+      "findingId": "ASD-033"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-034",
+      "findingId": "ASD-034"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-035",
+      "findingId": "ASD-035"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-036",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-036",
+      "findingId": "ASD-036"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-037",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-037",
+      "findingId": "ASD-037"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-038",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-038",
+      "findingId": "ASD-038"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-039",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-039",
+      "findingId": "ASD-039"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-040",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-040",
+      "findingId": "ASD-040"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-041",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-041",
+      "findingId": "ASD-041"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-042",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-042",
+      "findingId": "ASD-042"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-043",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-043",
+      "findingId": "ASD-043"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-044",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-044",
+      "findingId": "ASD-044"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-045",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-045",
+      "findingId": "ASD-045"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-046",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-046",
+      "findingId": "ASD-046"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-047",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-047",
+      "findingId": "ASD-047"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-048",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-048",
+      "findingId": "ASD-048"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-049",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-049",
+      "findingId": "ASD-049"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-050",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-050",
+      "findingId": "ASD-050"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-051",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-051",
+      "findingId": "ASD-051"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-052",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-052",
+      "findingId": "ASD-052"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-053",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-053",
+      "findingId": "ASD-053"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-054",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-054",
+      "findingId": "ASD-054"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-055",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-055",
+      "findingId": "ASD-055"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-056",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-056",
+      "findingId": "ASD-056"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-057",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-057",
+      "findingId": "ASD-057"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-058",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-058",
+      "findingId": "ASD-058"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-059",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-059",
+      "findingId": "ASD-059"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-060",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-060",
+      "findingId": "ASD-060"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-061",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-061",
+      "findingId": "ASD-061"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-062",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-062",
+      "findingId": "ASD-062"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-063",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-063",
+      "findingId": "ASD-063"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-064",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-064",
+      "findingId": "ASD-064"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-065",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-065",
+      "findingId": "ASD-065"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-066",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-066",
+      "findingId": "ASD-066"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-067",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-067",
+      "findingId": "ASD-067"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-068",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-068",
+      "findingId": "ASD-068"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-069",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-069",
+      "findingId": "ASD-069"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-070",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-070",
+      "findingId": "ASD-070"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-071",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-071",
+      "findingId": "ASD-071"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-072",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-072",
+      "findingId": "ASD-072"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-073",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-073",
+      "findingId": "ASD-073"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-074",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-074",
+      "findingId": "ASD-074"
     }
   ],
   "findings": [
@@ -1968,6 +2479,1977 @@
       },
       "rationale": "[BLOCKER] The NFR-8 read-seam regex is directionally backwards and cannot match the repo's own read — `line 32`",
       "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-order-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The scope-rank clause cannot see the comparator spelling the codebase actually uses — `line 58`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-order-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The allowlist comment states the opposite of what the regex does — `lines 50-53`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-order-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Line-by-line scanning misses a wrapped array literal — `lines 109-121, 143-153`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-write-seams.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The SPLIT-02 seam-ownership lock only sees one write API — `lines 102-104`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-write-seams.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] This gate is the only sibling in the family that does not strip comments — `line 114`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-fences-63.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] SURF-04 greens over zero inspected directories when its targets move — `lines 120-131`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-fences-63.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] HOOK-04's presence clause is a raw substring check on unstripped source — `lines 166-172`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/cross-op-convergence.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The injected git fake's recorded calls are never asserted, and a comment claims they are — `lines 201-215, 205-215`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/compat-01-no-expansion.test.ts` (first pass: \"No findings — a model for the rest of the area\") claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The file's own header contradicts its pin — `lines 30-31` vs `lines 394-404`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/compat-01-no-expansion.test.ts` (first pass: \"No findings — a model for the rest of the area\") claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The glyph-count clause scans one file and one declaration form — `lines 110-112, 345-368`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/compat-01-no-expansion.test.ts` (first pass: \"No findings — a model for the rest of the area\") claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The network-delegation clause is a bare substring check on the whole gate file — `lines 512-535`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/compat-01-no-expansion.test.ts` (first pass: \"No findings — a model for the rest of the area\") claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `const actual` × 8 — `lines 177, 217, 252, 275, 300, 407, 487, 502`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `extensions/pi-claude-marketplace/persistence/config-write-back.ts` (first pass: \"the one `as MarketplaceConfigEntry` cast … carries an inline comment. No findings.\") claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] A second, uncommented `as MarketplaceConfigEntry` — `line 189`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `extensions/pi-claude-marketplace/persistence/config-write-back.ts` (first pass: \"the one `as MarketplaceConfigEntry` cast … carries an inline comment. No findings.\") claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Three helpers collapse the documented absent-vs-empty distinction — `lines 102-107, 150-154, 201-206`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] A standalone negative assertion on the CR-02 regression's own subject — `line 570`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Seven dead early returns — `lines 129-131, 196-198, 276-278, 352-354, 405-407, 469-471, 563-565`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] A vacuous \"sanity check\" — `line 153`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `as never` applied to *data* literals, not just context doubles — `lines 456, 544`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The temp-dir cleanup polls with a retry loop — `lines 89-103`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Existence-only check where the record is the promise — `line 202`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/cross-op-convergence.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] A tautology over two local constants — `lines 321-325`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/cross-op-convergence.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The third test is fully subsumed by the first and uses fragment assertions — `lines 328-347`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/cross-op-convergence.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `INVOKERS` is keyed by `string`, forcing a runtime existence guard — `lines 133, 221-222`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Six behavioral cases test another module's export from this file — `lines 104-166`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `const result` × 6 — `lines 119, 141, 162, 216, 258, 275`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `// act` labels object construction, not the action — `lines 202-216, 255-261, 272-280`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `FORMER_DEFINITION_SITES` and \"every former definition site\" narrate code that no longer exists — `line 19, line 289`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/manifest-lookup-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Three plausible copier spellings are absent from `PLANTED_TWINS` — `lines 93-117, 136-171`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/flag-catalog-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The case mutates a value returned by production code — `line 107`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New findings — `tests/architecture/flag-catalog-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Uses the test-only production reset hook — `line 49, 87`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Area-wide new findings claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Eight of ten files carry zero `// arrange` / `// act` / `// assert` phase comments",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-033",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Area-wide new findings claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The hermetic-HOME harness never neutralizes `PI_CODING_AGENT_DIR` — `cross-op-convergence.test.ts:89-106`, `config-state-consistency.test.ts:502-504`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-034",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/no-orchestrator-network.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Hand-off (a defect in a file this area delegates to) claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`tests/architecture/no-orchestrator-network.test.ts:38-41` — the \"Skip-path rationale\" docstring lies.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-035",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/source-scan.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`source-scan.ts:80-86` — the ENOENT/`allowMissing` arm. `tests/architecture/source-scan.test.ts`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-036",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-036"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`config-state-consistency.test.ts:95-98` — the `ENOTEMPTY` retry arm of",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-037",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-037"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`scope-fences-63.test.ts:78-81` and `93-96` — the non-ENOENT rethrow arms of",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-038",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-038"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "UNDERSTATED — *Incomplete object assertion hides an untested field* (BLOCKER).",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-039",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-039"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Dead statement with an inaccurate comment* (`void saveConfig`,",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-040",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-040"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Narrative numbered comments instead of arrange/act/assert*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-041",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-041"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Dynamic `await import(...)` for statically-imported modules*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-042",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-042"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-consistency.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "UNDERSTATED — *`as never` casts hide the ctx/pi doubles' shape*. Correct for",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-043",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-043"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/cross-op-convergence.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Data-driven rows looped inside one `test()`*. Also correct that",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-044",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-044"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/cross-op-convergence.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Double assertion through `unknown` hides the doubles' shape*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-045",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-045"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/manifest-lookup-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *`extensionSourceFiles` duplicate walker*. The \"otherwise the file",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-046",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-046"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *`describe()` groups two unrelated concerns*. Note the better fix",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-047",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-047"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Mock records carry a mis-shaped `resources` field*. Verified:",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-048",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-048"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/disabled-state-classification.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Duplicated `stripComments`/`REPO_ROOT`*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-049",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-049"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/config-state-write-seams.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *`walkTsFiles` duplicate walker*. The gate verdict \"proven against",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-050",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-050"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-fences-63.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *File name doesn't describe its contents*. The proposed rename is",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-051",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-051"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-order-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Planning-artifact-style tag `260525-cjr B3:` in both titles*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-052",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-052"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/scope-order-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *`walkTsFiles` duplicate walker*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-053",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-053"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/flag-catalog-drift.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Data-driven rows looped inside one `test()`* (13 rows at 86-100,",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-054",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-054"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/manifest-read-seam.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "UNDERSTATED — *No planted-violation self-test for the regex* (WARNING → BLOCKER).",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-055",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-055"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/manifest-read-seam.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Duplicated `stripComments`/`collectTypeScriptFiles` walker*.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-056",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-056"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection positively establishes that this historical Production \"Clean files\" list assertion is superseded, compiler-closed, already owned, or explicitly clean; the replacement evidence is preserved in the report's current grading and the live referenced owner."
+      },
+      "rationale": "REFUTED in part for `persistence/config-write-back.ts` — the claim \"the one",
+      "destination": "Retain as positive stale/clean evidence; no implementation route.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-057",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-057"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Production \"Clean files\" list claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED for the other nine. I additionally checked one thing the first pass",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-058",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-058"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`compat-01-no-expansion.test.ts`, the closed-set and persistence clauses.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-059",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-059"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`manifest-lookup-drift.test.ts`, the pattern-wiring proofs. I tried: deleting",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-060",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-060"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`disabled-state-classification.test.ts`, the twin-detection half. I tried:",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-061",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-061"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`config-state-write-seams.test.ts`, within its chosen API. I tried: narrowing",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-062",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-062"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`config-state-consistency.test.ts`, the plan-side half. I tried: making",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-063",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-063"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`cross-op-convergence.test.ts`, the byte matrices. I tried: giving one",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-064",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-064"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`edge/flag-catalog.ts`. `parseFlagNames` returns a fresh `Set` per call",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-065",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-065"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`domain/manifest.ts`, `domain/manifest-lookup.ts`, `persistence/config-merge.ts`,",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-066",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-066"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "1. The \"gates that do not gate\" list should grow from five instances to nine, and",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-067",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-067"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "2. Hermeticity: `PI_CODING_AGENT_DIR` is never neutralized, in any of 13",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-068",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-068"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "3. A test that silently `return`s is a case that stopped testing.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-069",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-069"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "\"The repo's own rule — *a gate wants a test that plants the violation, not one",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-070",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-070"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/source-scan.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "\"`tests/architecture/source-scan.ts` — 5 architecture files hand-roll their own",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-071",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-071"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`_ADVERSARIAL-BRIEF` framing that \"the untrustworthy output is the `### Clean",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-072",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-072"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "META-FINDINGS item 2 (test-only reset hooks over module-global state) —",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-073",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-073"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "META-FINDINGS item 3 (fragment assertions where the whole string is computable) —",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-074",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-074"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "META-FINDINGS §\"Real defects found outside the test layer\" — the method is",
+      "destination": "Address the preserved claim through Phase 3.",
       "duplicateOf": null
     }
   ],
