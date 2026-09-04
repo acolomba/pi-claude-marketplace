@@ -20,3 +20,4 @@ Both assert against `@earendil-works/pi-coding-agent` / pi-subagents runtime
 resolution and write their own `SKILL.md` fixtures inline (they do not call
 `prepareStageSkills`). Likely tied to the peer-dep migration to
 `@earendil-works/pi-coding-agent ^0.79.x`. Left for a dedicated fix.
+  status: acknowledged

@@ -237,9 +237,9 @@ function nameCommandInDir(pluginName: string, sourceName: string, base: string):
  *     is readable but not searchable, so `readdir` lists its children and
  *     every `lstat` on one of them returns EACCES.
  *   - The relative path does not produce a valid generated name. D-141-02
- *     retired the common case (a head the elision empties); what remains is
- *     a segment that fails RN-2 on its own -- an ASCII control character or
- *     a literal backslash in a path component.
+ *     keeps the head verbatim when elision would empty it, so what remains
+ *     is a segment that fails RN-2 on its own -- an ASCII control character
+ *     or a literal backslash in a path component.
  *
  * Both skip the one file and report it on `warnings`.
  */

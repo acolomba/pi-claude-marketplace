@@ -1,119 +1,167 @@
-// tests/orchestrators/reconcile/backfill.test.ts
+// Owner suite for orchestrators/reconcile/backfill.ts.
 //
-// BFILL-01 / BFILL-02 behavior proofs for the load-time backfill scan wired
-// into `applyReconcile` (`applyBackfillForScope`).
+// D-115-03: backfill's contract is the state it leaves on disk, so every case
+// drives the real gated re-materialize against a case-owned temporary tree and
+// fakes only the git remote. `createOfflineGitOps` allows no remote at all, so
+// an unexpected clone fails immediately; that refusal, not the absence of a
+// call, is the NFR-5 offline proof.
 //
-// Coverage:
-//   - BFILL-02 gate: a changed/absent `lastReconciledExtensionVersion` stamp
-//     opens the scan and stamps the running EXTENSION_VERSION; an unchanged
-//     stamp skips the scan entirely and leaves state.json mtime untouched
-//     (RECON-05). The stamp closes the gate even with ZERO force-installed
-//     plugins to promote (D-68-03), and a no-promotion load stays silent.
-//   - BFILL-01 re-materialize: a force-installed plugin whose supported set
-//     grew is re-materialized in place via the reinstall primitive (cache-only,
-//     NFR-5). A full promotion records `compatibility.installable: true` with an
-//     empty unsupported set and carries an `(installed)` cascade row; a partial
-//     re-materialize stays force-installed with the real non-empty unsupported
-//     set and carries a `force-installed` row. A non-grown force-installed
-//     plugin is skipped (no reinstall, no row). Promotion rows fold into the
-//     single applyReconcile cascade (RECON-04).
+// Backfill never renders. `reinstallPlugin` runs with `render: "none"` and the
+// promotion rows fold into the caller's outcome array for the reconcile
+// cascade to project (RECON-04), so every case states a notification boundary
+// with no promised call: an unpromised `notify` or `getAllTools` call throws.
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test, { mock } from "node:test";
+import { describe, test } from "node:test";
 
 import lockfile from "proper-lockfile";
+import { mock, verify } from "strong-mock";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import {
   applyBackfillForScopeIsolated,
+  runScopeIsolated,
   scanForceInstalledBackfills,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
-  type ExtensionState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ApplyReconcileOptions,
+  ScopeReadResult,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TestContext } from "node:test";
 
-interface MockCtx {
-  ui: { notify: ReturnType<typeof mock.fn> };
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type PluginRecord = MarketplaceRecord["plugins"][string];
+
+/** The stamp every seeded scope carries: older than the running version, so the gate opens. */
+const STALE_STAMP = "0.0.0";
+const RECORDED_AT = "2026-01-01T00:00:00.000Z";
+const REMATERIALIZED_AT = "2026-02-03T04:05:06.000Z";
+
+/**
+ * The single network edge. `allowedRemoteUrls` is empty, so the fake refuses
+ * every remote: backfill re-resolves from the cached manifest and reinstalls
+ * from the local clone, and any git reach at all fails the case (NFR-5).
+ */
+function createOfflineGitOps(): {
+  readonly gitOps: GitOps;
+  readonly clonedUrls: () => readonly string[];
+} {
+  const git = createGitOpsFake({ boundary: "memory", allowedRemoteUrls: [] });
+  return { gitOps: git.gitOps, clonedUrls: () => git.state.calls.clone.map((call) => call.url) };
 }
 
-function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
+/**
+ * Strict boundary for the Pi surfaces backfill hands to the composed
+ * reinstall. No call is promised on either mock, which is the silence proof:
+ * a `notify` emission or a `getAllTools` soft-dependency probe throws where it
+ * is made rather than being recorded and counted afterwards.
+ */
+function createSilentBoundary(): {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly verifyBoundary: () => void;
+} {
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  return {
+    ctx,
+    pi,
+    verifyBoundary: (): void => {
+      verify(ctx);
+      verify(pi);
+    },
+  };
 }
 
-const STUB_PI = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "backfill-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "backfill-cwd-"));
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
-  resetCompletionCache();
-  try {
-    return await fn({ cwd });
-  } finally {
-    resetCompletionCache();
-    if (originalHome === undefined) {
+async function createHermeticProjectScope(
+  t: TestContext,
+  label: string,
+): Promise<{ readonly cwd: string; readonly locations: ScopedLocations }> {
+  const cwd = await mkdtemp(path.join(tmpdir(), `backfill-${label}-cwd-`));
+  const home = await mkdtemp(path.join(tmpdir(), `backfill-${label}-home-`));
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  const previousHome = process.env.HOME;
+  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
+    } else {
       delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
     }
 
-    if (originalAgentDir === undefined) {
+    if (agentDirExisted) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
       delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  }
+    await rm(cwd, { force: true, recursive: true });
+    await rm(home, { force: true, recursive: true });
+  });
+  process.env.HOME = home;
+  // SC-1: getAgentDir() reads PI_CODING_AGENT_DIR before homedir(), so an
+  // environment that sets it would defeat the hermetic HOME above.
+  delete process.env.PI_CODING_AGENT_DIR;
+  return { cwd, locations: locationsFor("project", cwd) };
 }
 
 interface PluginTree {
-  readonly skill?: boolean;
+  /** `malformed` leaves the SKILL.md frontmatter unparseable, which degrades the staged skill. */
+  readonly skill?: "clean" | "malformed";
   readonly command?: boolean;
-  /** lspServers convention file -- an unsupported component kind. */
+  /** `.lsp.json` convention file -- a component kind the resolver cannot support. */
   readonly lsp?: boolean;
+  /** hooks.json whose kept handler carries a rewake field without `asyncRewake: true`. */
+  readonly orphanRewakeHooks?: boolean;
 }
 
-/** Lay down the on-disk plugin source tree under `<marketplaceRoot>/plugins/<name>`. */
 async function writePluginTree(
   marketplaceRoot: string,
-  pluginName: string,
+  plugin: string,
   tree: PluginTree,
-): Promise<void> {
-  const pluginRoot = path.join(marketplaceRoot, "plugins", pluginName);
+): Promise<string> {
+  const pluginRoot = path.join(marketplaceRoot, "plugins", plugin);
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: pluginName }),
+    JSON.stringify({ name: plugin }),
   );
-
-  if (tree.skill === true) {
+  if (tree.skill !== undefined) {
     const skillDir = path.join(pluginRoot, "skills", "tool");
     await mkdir(skillDir, { recursive: true });
-    await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: tool\n---\n\nbody\n`);
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      tree.skill === "malformed"
+        ? "---\nname: [unterminated\n---\n\nbody\n"
+        : "---\nname: tool\n---\n\nbody\n",
+    );
   }
 
   if (tree.command === true) {
     const commandDir = path.join(pluginRoot, "commands");
     await mkdir(commandDir, { recursive: true });
-    await writeFile(path.join(commandDir, "deploy.md"), `# deploy\n\nbody\n`);
+    await writeFile(path.join(commandDir, "deploy.md"), "# deploy\n\nbody\n");
   }
 
   if (tree.lsp === true) {
@@ -122,904 +170,1692 @@ async function writePluginTree(
       JSON.stringify({ servers: { ts: { command: "tsserver" } } }),
     );
   }
+
+  if (tree.orphanRewakeHooks === true) {
+    const hooksDir = path.join(pluginRoot, "hooks");
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(
+      path.join(hooksDir, "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "",
+            hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "wake me" }],
+          },
+        ],
+      }),
+    );
+  }
+
+  return pluginRoot;
 }
 
-/** Write the marketplace manifest declaring the given plugins. */
-async function writeManifest(
-  marketplaceRoot: string,
-  marketplaceName: string,
-  pluginNames: readonly string[],
-): Promise<string> {
+/** Lay down the plugin trees and the cached marketplace manifest that declares them. */
+async function writeMarketplaceSource(
+  cwd: string,
+  directory: string,
+  marketplace: string,
+  trees: Readonly<Record<string, PluginTree>>,
+): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
+  const marketplaceRoot = path.join(cwd, directory);
+  for (const [plugin, tree] of Object.entries(trees)) {
+    await writePluginTree(marketplaceRoot, plugin, tree);
+  }
+
   const manifestDir = path.join(marketplaceRoot, ".claude-plugin");
   await mkdir(manifestDir, { recursive: true });
   const manifestPath = path.join(manifestDir, "marketplace.json");
   await writeFile(
     manifestPath,
     JSON.stringify({
-      name: marketplaceName,
-      plugins: pluginNames.map((name) => ({
-        name,
+      name: marketplace,
+      plugins: Object.keys(trees).map((plugin) => ({
+        name: plugin,
         version: "1.0.0",
-        source: `./plugins/${name}`,
+        source: `./plugins/${plugin}`,
       })),
     }),
   );
-  return manifestPath;
+  return { marketplaceRoot, manifestPath };
 }
 
-type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
-
-/**
- * Build a plugin install record with a caller-controlled compatibility set so a
- * test can simulate a force-installed plugin whose recorded supported set is
- * smaller than what the on-disk plugin now resolves to (the boundary moved).
- */
-function pluginRecord(opts: {
+interface RecordSeed {
   readonly pluginRoot: string;
   readonly installable: boolean;
   readonly supported: readonly string[];
   readonly unsupported: readonly string[];
   /** ENBL-08 axis: omit for the enabled default; `false` seeds a disabled record. */
   readonly enabled?: boolean;
-}): PluginRecord {
+  /** Generated skill names the record already owns, for the cross-plugin conflict arm. */
+  readonly skills?: readonly string[];
+}
+
+function pluginRecord(seed: RecordSeed): PluginRecord {
   return {
     version: "1.0.0",
-    resolvedSource: opts.pluginRoot,
+    resolvedSource: seed.pluginRoot,
     compatibility: {
-      installable: opts.installable,
+      installable: seed.installable,
       notes: [],
-      supported: [...opts.supported],
-      unsupported: [...opts.unsupported],
+      supported: [...seed.supported],
+      unsupported: [...seed.unsupported],
     },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: opts.enabled ?? true,
-    installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
+    resources: {
+      skills: [...(seed.skills ?? [])],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [],
+    },
+    enabled: seed.enabled ?? true,
+    installedAt: RECORDED_AT,
+    updatedAt: RECORDED_AT,
   };
 }
 
-interface SeedOptions {
-  readonly cwd: string;
-  readonly marketplaceName?: string;
-  /** Plugins to materialize on disk + declare in the manifest. */
-  readonly trees?: Readonly<Record<string, PluginTree>>;
-  /** Plugin install records to write into state.json. */
-  readonly records?: Readonly<Record<string, PluginRecord>>;
-  /** Stamp written to state.json; omit for an absent stamp. */
-  readonly stamp?: string;
-  /** When set, write claude-plugins.json declaring these plugin keys (`name@mp`). */
-  readonly configPluginKeys?: readonly string[];
-}
-
-/**
- * Seed a project-scope marketplace: write the on-disk plugin trees + manifest,
- * then write state.json with the supplied records + stamp. Returns the
- * marketplaceRoot and the extensionRoot.
- */
-async function seedScope(
-  opts: SeedOptions,
-): Promise<{ marketplaceRoot: string; extensionRoot: string }> {
-  const marketplaceName = opts.marketplaceName ?? "mp";
-  const marketplaceRoot = path.join(opts.cwd, "mp-src");
-  const trees = opts.trees ?? {};
-  for (const [name, tree] of Object.entries(trees)) {
-    await writePluginTree(marketplaceRoot, name, tree);
-  }
-
-  const manifestPath = await writeManifest(marketplaceRoot, marketplaceName, Object.keys(trees));
-
-  const loc = locationsFor("project", opts.cwd);
-  await mkdir(loc.extensionRoot, { recursive: true });
-
-  const state: ExtensionState = {
-    schemaVersion: 2,
-    ...(opts.stamp !== undefined && { lastReconciledExtensionVersion: opts.stamp }),
-    marketplaces: {
-      [marketplaceName]: {
-        name: marketplaceName,
-        scope: "project",
-        source: pathSource(`./${path.basename(marketplaceRoot)}`),
-        addedFromCwd: opts.cwd,
-        manifestPath,
-        marketplaceRoot,
-        plugins: { ...(opts.records ?? {}) },
-      },
-    },
-  };
-  await saveState(loc.extensionRoot, state);
-
-  if (opts.configPluginKeys !== undefined) {
-    const config = {
-      schemaVersion: 1,
-      marketplaces: { [marketplaceName]: { source: `./${path.basename(marketplaceRoot)}` } },
-      plugins: Object.fromEntries(opts.configPluginKeys.map((k) => [k, {}])),
-    };
-    await writeFile(loc.configJsonPath, JSON.stringify(config, null, 2), "utf8");
-  }
-
-  return { marketplaceRoot, extensionRoot: loc.extensionRoot };
-}
-
-async function runReconcile(cwd: string, ctx: MockCtx): Promise<void> {
-  await applyReconcile({
-    ctx: ctx as unknown as ExtensionContext,
-    pi: STUB_PI,
-    cwd,
+function marketplaceRecord(
+  cwd: string,
+  marketplace: string,
+  directory: string,
+  manifestPath: string,
+  marketplaceRoot: string,
+  plugins: Readonly<Record<string, PluginRecord>>,
+): MarketplaceRecord {
+  return {
+    name: marketplace,
     scope: "project",
-  });
+    source: pathSource(`./${directory}`),
+    addedFromCwd: cwd,
+    manifestPath,
+    marketplaceRoot,
+    plugins: { ...plugins },
+  };
 }
 
-test("BFILL-02: a changed extension-version stamp opens the gate and stamps the running version", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { extensionRoot } = await seedScope({ cwd, stamp: "0.0.0" });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
-  });
-});
-
-test("BFILL-02: an absent stamp opens the gate (scan-once) and stamps the running version", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { extensionRoot } = await seedScope({ cwd });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
-  });
-});
-
-test("BFILL-02 / RECON-05: an unchanged stamp skips the scan and leaves state.json untouched and silent", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: EXTENSION_VERSION,
-      configPluginKeys: [],
-    });
-    const ctx = makeCtx();
-    const statePath = locationsFor("project", cwd).stateJsonPath;
-    const before = await stat(statePath);
-
-    await runReconcile(cwd, ctx);
-
-    const after = await stat(statePath);
-    // RECON-05: gate closed -> no scan, no stamp write, mtime preserved.
-    assert.equal(after.mtimeMs, before.mtimeMs);
-    // Zero outcomes -> silent (NFR-2 / A4).
-    assert.equal(ctx.ui.notify.mock.calls.length, 0);
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
-  });
-});
-
-test("BFILL-02 / D-68-03: a gate-open load with zero force-installed plugins still stamps and emits no notification", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // One CLEAN plugin (installable: true) -> the scan finds no force-installed
-    // candidate, so nothing is re-materialized, yet the gate still stamps.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: true,
-          supported: ["skills"],
-          unsupported: [],
-        }),
-      },
-    });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    // Pitfall 4 / D-68-03: stamp closes the gate even with nothing backfilled.
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
-    // Zero promotion rows -> silent.
-    assert.equal(ctx.ui.notify.mock.calls.length, 0);
-  });
-});
-
-function pluginRecordOf(state: ExtensionState, marketplace: string, plugin: string): PluginRecord {
-  const record = state.marketplaces[marketplace]?.plugins[plugin];
-  assert.ok(record !== undefined, `expected ${plugin}@${marketplace} recorded`);
-  return record;
+/** Write state.json under the scope's extension root, creating the root first. */
+async function seedState(locations: ScopedLocations, state: ExtensionState): Promise<void> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, state);
 }
 
-test("BFILL-01: a full promotion re-materializes the plugin to (installed) with an empty unsupported set", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // On-disk plugin advertises skills + commands (both supported now). The
-    // record was stored when only `skills` was supported (force-installed with
-    // `commands` recorded unsupported), so the supported set grew.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["commands"],
-        }),
-      },
-    });
-    const ctx = makeCtx();
+function backfillOptions(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  cwd: string,
+  gitOps: GitOps,
+): ApplyReconcileOptions {
+  return { ctx, pi, cwd, scope: "project", gitOps };
+}
 
-    await runReconcile(cwd, ctx);
+function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadResult {
+  return { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted };
+}
 
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    // Full promotion: re-resolved installable, empty unsupported.
-    assert.equal(record.compatibility.installable, true);
-    assert.deepEqual(record.compatibility.unsupported, []);
-    assert.ok(record.compatibility.supported.includes("commands"));
-    // SAME recorded version -- a promotion is not an upgrade (D-68-02).
-    assert.equal(record.version, "1.0.0");
+/** A seeded scope that has been read but not re-materialized. */
+function seededScopeTree(): readonly string[] {
+  return ["pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
+}
 
-    // RECON-04: exactly one cascade carrying one (installed) row for hello.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("hello") && body.includes("(installed)"), `got:\n${body}`);
-    assert.ok(!body.includes("/reload to pick up changes"), `RECON-04 trailer leaked:\n${body}`);
-  });
-});
+/** The paths a promotion of both `skills` and `commands` leaves behind. */
+function fullyPromotedScopeTree(): readonly string[] {
+  return [
+    "claude-plugins.json",
+    "pi-claude-marketplace/",
+    "pi-claude-marketplace/commands-staging/",
+    "pi-claude-marketplace/resources/",
+    "pi-claude-marketplace/resources/prompts/",
+    "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+    "pi-claude-marketplace/resources/skills/",
+    "pi-claude-marketplace/resources/skills/hello-tool/",
+    "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+    "pi-claude-marketplace/skills-staging/",
+    "pi-claude-marketplace/state.json",
+  ];
+}
 
-test("BFILL-01: a partial re-materialize stays force-installed and records the real unsupported set", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // On-disk plugin advertises skills + an lspServers convention file (an
-    // unsupported kind). The record was stored with an EMPTY supported set, so
-    // the re-resolved `skills` makes the supported set grow -- but lspServers
-    // keeps it `unsupported`, so it stays force-installed.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, lsp: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: [],
-          unsupported: ["lspServers", "skills"],
-        }),
-      },
-    });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    // Partial: still force-installed with the REAL non-empty unsupported set.
-    assert.equal(record.compatibility.installable, false);
-    assert.deepEqual(record.compatibility.unsupported, ["lspServers"]);
-    assert.ok(record.compatibility.supported.includes("skills"));
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("hello") && body.includes("(partially-installed)"), `got:\n${body}`);
-  });
-});
-
-test("BFILL-01: a force-installed plugin whose supported set did not grow is skipped (no row, no churn)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // On-disk plugin advertises only skills; the record already lists skills as
-    // its supported set, so the boundary did not move for THIS plugin.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["themes"],
-        }),
-      },
-    });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    // No re-materialize: the record is untouched (still force-installed,
-    // themes still recorded unsupported, empty resources).
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    assert.equal(record.compatibility.installable, false);
-    assert.deepEqual(record.compatibility.unsupported, ["themes"]);
-    assert.deepEqual(record.resources.skills, []);
-    // Zero promotion rows -> silent. The gate still stamped (gate-open).
-    assert.equal(ctx.ui.notify.mock.calls.length, 0);
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
-  });
-});
-
-test("RECON-04: a load that backfills one plugin AND installs another emits exactly one cascade with both rows", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello is recorded force-installed with a grown supported set (backfill);
-    // world is declared in config but NOT recorded -> the apply pass installs
-    // it. Both rows must fold into the single cascade.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true }, world: { skill: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["commands"],
-        }),
-      },
-      configPluginKeys: ["hello@mp", "world@mp"],
-    });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    // world was installed by the apply pass.
-    const state = await loadState(extensionRoot);
-    assert.ok(state.marketplaces["mp"]?.plugins["world"] !== undefined);
-    // hello was promoted.
-    assert.equal(pluginRecordOf(state, "mp", "hello").compatibility.installable, true);
-
-    // RECON-04: exactly one notify carrying BOTH rows.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("hello"), `expected hello row:\n${body}`);
-    assert.ok(body.includes("world"), `expected world row:\n${body}`);
-  });
-});
-
-test("NFR-5: the backfill scan and re-materialize perform no network call", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["commands"],
-        }),
-      },
-    });
-    const ctx = makeCtx();
-    let cloneCalls = 0;
-    const failingGitOps = {
-      clone: (): Promise<never> => {
-        cloneCalls += 1;
-        return Promise.reject(new Error("network access is forbidden on the load path (NFR-5)"));
-      },
-    } as unknown as NonNullable<Parameters<typeof applyReconcile>[0]["gitOps"]>;
-
-    await applyReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
+describe("applyBackfillForScopeIsolated", () => {
+  test("WR-05: skips a pristine scope whose read pass carried no state", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "pristine");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const readResult: ScopeReadResult = {
       scope: "project",
-      gitOps: failingGitOps,
+      plan: undefined,
+      invalidOutcomes: [],
+      stateExisted: false,
+    };
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResult,
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("BFILL-02: stamps the running version when the recorded stamp is older", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "stale-stamp");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
     });
-
-    // The backfill path is cache-only resolveStrict + reinstall -- it never
-    // touches gitOps.
-    assert.equal(cloneCalls, 0);
-    // And it still promoted the plugin offline.
-    assert.equal(
-      pluginRecordOf(await loadState(extensionRoot), "mp", "hello").compatibility.installable,
-      true,
-    );
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
-});
 
-test("WR-01 / WR-05: a config-present, state.json-absent scope with no force-installed plugins creates no state.json and stays silent", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const loc = locationsFor("project", cwd);
-    // The scope has a config file but NO state.json on disk. The read pass loads
-    // DEFAULT_STATE inside the lock (so `state` is defined), the empty config
-    // yields an empty plan, and there is nothing to backfill.
-    await mkdir(loc.extensionRoot, { recursive: true });
-    await writeFile(
-      loc.configJsonPath,
-      JSON.stringify({ schemaVersion: 1, marketplaces: {}, plugins: {} }, null, 2),
-      "utf8",
+  test("D-68-01: stamps the running version when no stamp is recorded at all", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "absent-stamp");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
     );
-    const ctx = makeCtx();
 
-    await runReconcile(cwd, ctx);
-
-    // WR-05: the gate must NOT bring an unsolicited state.json into existence
-    // purely to record the version stamp when there is nothing to promote.
-    assert.equal(existsSync(loc.stateJsonPath), false);
-    // Empty-and-clean reconcile -> silent (NFR-2 / A4).
-    assert.equal(ctx.ui.notify.mock.calls.length, 0);
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
-});
 
-test("WR-02: a held scope lock on the stamp write is coerced to a structured row and does not abort the cascade", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Gate open (stamp 0.0.0), state.json exists, zero force-installed plugins
-    // -> the scan is a no-op and the only state.json write is the stamp.
-    const { extensionRoot } = await seedScope({ cwd, stamp: "0.0.0" });
-    const loc = locationsFor("project", cwd);
-    const state = await loadState(extensionRoot);
-    const ctx = makeCtx();
+  test("RECON-05: leaves state.json byte-identical when the recorded stamp already matches", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "gate-closed");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const seededBytes = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
 
-    // Hold the per-scope state lock so the stamp's withStateGuard acquisition
-    // fails with StateLockHeldError (a concurrent process owns the scope lock).
-    const release = await lockfile.lock(loc.extensionRoot, {
-      lockfilePath: loc.stateLockFile,
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededBytes);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-68-03: stamps a gate-open scope that records no partially-installed plugin", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "nothing-to-promote");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WR-01: brings no state.json into existence for a state-file-absent scope with nothing to promote", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "no-state-file");
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    // Every recorded plugin is already fully installed, so the scan has
+    // nothing to promote and the stamp is not worth a new state.json.
+    const snapshot: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills", "commands"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(snapshot, false),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WR-01: scans and stamps a state-file-absent scope whose snapshot records a partially-installed plugin", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "absent-but-recorded");
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    // The snapshot carries promotable work while state.json is gone from disk,
+    // so the scan runs, the self-locking re-materialize finds no record to
+    // replace, and the stamp is what brings state.json back.
+    const snapshot: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(snapshot, false),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {},
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-02: leaves the version gate open when a scanned plugin's re-materialize fails", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "gate-stays-open");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    // A regular file where the skills target directory belongs makes the
+    // staging write fail with ENOTDIR, which reinstall reports as a failed
+    // partition rather than a throw.
+    await mkdir(path.dirname(locations.skillsTargetDir), { recursive: true });
+    await writeFile(locations.skillsTargetDir, "not a directory\n");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "source missing",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WR-02: coerces a held scope lock on the stamp write into a structured state.json row", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "lock-held");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
+      },
+    };
+    await seedState(locations, seeded);
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
       realpath: false,
       retries: 0,
       stale: 10_000,
       update: 2_000,
     });
-
-    // A sibling outcome already accumulated by the apply pass -- it MUST survive.
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [
-      { kind: "mp-added", scope: "project", marketplace: "sib" },
+      { kind: "mp-added", scope: "project", marketplace: "sibling" },
     ];
 
-    try {
-      // Must NOT throw: the lock-held throw is coerced into a structured row.
-      await applyBackfillForScopeIsolated(
-        { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
-        "project",
-        { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted: true },
-        outcomes,
-      );
-    } finally {
-      await release();
-    }
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+    // The lock is released here rather than in an `after` hook, so it can
+    // never race the hook that removes the scope root it lives under.
+    await release();
 
-    // The sibling outcome survived (cascade not aborted) ...
-    assert.ok(outcomes.some((o) => o.kind === "mp-added"));
-    // ... and the stamp throw surfaced as a structured lock-held row.
-    const failed = outcomes.find((o) => o.kind === "invalid-block");
-    assert.ok(failed !== undefined, "expected an invalid-block row for the stamp throw");
-    assert.equal(failed.basename, "state.json");
-    assert.equal(failed.reason, "lock held");
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      { kind: "mp-added", scope: "project", marketplace: "sibling" },
+      {
+        kind: "invalid-block",
+        scope: "project",
+        basename: "state.json",
+        reason: "lock held",
+        cause: new Error(
+          "Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.",
+        ),
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
 });
 
-test("WR-03: a plugin already touched by applyPlan this load is not double-emitted by the backfill scan", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello is force-installed with a grown on-disk supported set (skills +
-    // commands; recorded supported only skills) -- a backfill candidate.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["commands"],
+// `runScopeIsolated` is a pure wrapper over a caller-supplied operation: it
+// reads no file, no environment variable and no scope root, so these two cases
+// own no temporary tree.
+describe("runScopeIsolated", () => {
+  test("leaves the accumulated outcomes untouched when the operation completes", async () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "mp-added", scope: "project", marketplace: "sibling" },
+    ];
+
+    // act
+    await runScopeIsolated("project", outcomes, () => Promise.resolve());
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      { kind: "mp-added", scope: "project", marketplace: "sibling" },
+    ]);
+  });
+
+  test("WR-02: appends a state.json row carrying the redacted cause when the operation throws", async () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await runScopeIsolated("user", outcomes, () =>
+      Promise.reject(new Error("cannot write /home/someone/.pi/pi-claude-marketplace/state.json")),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "invalid-block",
+        scope: "user",
+        basename: "state.json",
+        reason: "unreadable",
+        cause: new Error("cannot write state.json"),
+      },
+    ]);
+  });
+});
+
+describe("scanForceInstalledBackfills", () => {
+  test("BFILL-01: promotes a plugin whose supported set grew into a fully installed record", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "full-promotion");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills", "commands"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: ["hello:deploy"],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
         }),
       },
     });
-    const state = await loadState(extensionRoot);
-    const ctx = makeCtx();
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
 
-    // Simulate applyPlan having ALREADY emitted a transition row for hello this
-    // load (an enable re-installs the plugin and emits an (installed) row).
+  test("BFILL-01: keeps a partial re-materialize partially installed with the re-resolved unsupported kinds", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "partial-promotion");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", lsp: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: [],
+            unsupported: ["lspServers", "skills"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: false,
+        unsupported: ["lspServers"],
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: false,
+              notes: ["contains lspServers"],
+              supported: ["skills"],
+              unsupported: ["lspServers"],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
+        }),
+      },
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/resources/",
+      "pi-claude-marketplace/resources/skills/",
+      "pi-claude-marketplace/resources/skills/hello-tool/",
+      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+      "pi-claude-marketplace/skills-staging/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SURF-05: records an orphan rewake on a promotion whose re-resolve reports one", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "orphan-rewake");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, orphanRewakeHooks: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+        orphanRewake: true,
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills", "commands", "hooks"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: ["hello:deploy"],
+              agents: [],
+              mcpServers: [],
+              hooks: ["hello"],
+            },
+            hookEntries: [{ event: "PreToolUse", matcher: "" }],
+            enabled: true,
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
+        }),
+      },
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/commands-staging/",
+      "pi-claude-marketplace/hooks/",
+      "pi-claude-marketplace/hooks/hello/",
+      "pi-claude-marketplace/hooks/hello/hooks.json",
+      "pi-claude-marketplace/resources/",
+      "pi-claude-marketplace/resources/prompts/",
+      "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+      "pi-claude-marketplace/resources/skills/",
+      "pi-claude-marketplace/resources/skills/hello-tool/",
+      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+      "pi-claude-marketplace/skills-staging/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WARN-01: records the degraded component kinds a promotion's re-materialize produced", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "degraded-kinds");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "malformed", command: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+        degradedKinds: ["skill"],
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills", "commands"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: ["hello:deploy"],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
+        }),
+      },
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-68-03: skips a partially-installed plugin whose supported set did not grow", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "no-growth");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-68-03: skips a resolved set that is longer than the recorded set but not a superset", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "not-superset");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { command: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    // An agents directory with no skills directory resolves to two supported
+    // kinds that drop the one recorded kind: longer, but not a superset.
+    await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RECON-04: appends the promotion after the rows the caller already accumulated", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "folds-into-cascade");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "world",
+        dependencies: [],
+      },
+    ];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "world",
+        dependencies: [],
+      },
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+      },
+    ]);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RECON-04: skips a plugin already represented in this scope's accumulated outcomes", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "already-touched");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    // The apply pass already emitted a transition row for this plugin on this
+    // load, so the scan must neither re-materialize over it nor add a row.
     const outcomes: PerEntryOutcome[] = [
       { kind: "plugin-enabled", scope: "project", marketplace: "mp", plugin: "hello" },
     ];
 
-    await scanForceInstalledBackfills(
-      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      state,
+      seeded,
       outcomes,
     );
 
-    // The scan deduped against the prior row: no second row for hello, and no
-    // redundant plugin-backfilled overwrite.
-    assert.equal(outcomes.length, 1);
-    assert.equal(outcomes.filter((o) => "plugin" in o && o.plugin === "hello").length, 1);
-    assert.ok(!outcomes.some((o) => o.kind === "plugin-backfilled"));
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      { kind: "plugin-enabled", scope: "project", marketplace: "mp", plugin: "hello" },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
-});
 
-test("ENBL-08: the backfill scan skips a DISABLED partial whose supported set grew -- no re-materialize, no re-enable", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello IS declared in the manifest (a manifest-ABSENT fixture would prove
-    // nothing -- the offline resolve returns early and the scan skips either
-    // way) and its on-disk tree advertises skills + commands while the record
-    // recorded only `skills`, so the supported set grew: the exact shape the
-    // ENABLED control below backfills on. The record is DISABLED, and the
-    // re-materialize runs through reinstall, whose record write sets
-    // `enabled: true` unconditionally -- scanning it would revert an explicit
-    // user disable at load time, with no prompt and no command.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true, lsp: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["lspServers"],
-          enabled: false,
+  test("ENBL-08: skips a disabled record whose supported set grew", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "disabled-partial");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+            enabled: false,
+          }),
         }),
       },
-    });
-    const state = await loadState(extensionRoot);
-    const ctx = makeCtx();
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
-    await scanForceInstalledBackfills(
-      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      state,
+      seeded,
       outcomes,
     );
 
-    // Skipped before the resolve: no promotion row, no failure row.
-    assert.equal(outcomes.length, 0);
-    // The user's disable survived the load: still disabled, still unmaterialized.
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    assert.equal(record.enabled, false);
-    assert.deepEqual(record.resources, {
-      skills: [],
-      prompts: [],
-      agents: [],
-      mcpServers: [],
-      hooks: [],
-    });
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
-});
 
-test("ENBL-08 control: the SAME grown-set fixture with an ENABLED record still backfills", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Identical tree + recorded supported set as the guard test above; the only
-    // difference is `enabled`. This is what proves the guard test's fixture
-    // really is a backfill candidate -- and that the guard narrowed the scan to
-    // disabled records rather than switching BFILL-01 off.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true, lsp: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["lspServers"],
+  test("ENBL-08: skips a record the snapshot reports disabled even when the stored record is enabled", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "snapshot-disabled");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    // The scan reads its own snapshot, so a record the snapshot reports
+    // disabled is never handed to the re-materialize -- even though the
+    // re-materialize's own fresh read would find it enabled and promotable.
+    const snapshot: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+            enabled: false,
+          }),
         }),
       },
-    });
-    const state = await loadState(extensionRoot);
-    const ctx = makeCtx();
+    };
+    const stored: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, stored);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
 
-    await scanForceInstalledBackfills(
-      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
-      "project",
-      state,
-      outcomes,
-    );
-
-    assert.equal(outcomes.length, 1);
-    assert.equal(outcomes[0]?.kind, "plugin-backfilled");
-    // The re-materialize ran: the recorded supported set grew to match the tree
-    // and the skill artifact is back on the record.
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    assert.ok(record.compatibility.supported.includes("commands"));
-    assert.ok(record.resources.skills.length > 0);
-  });
-});
-
-test("SF-01: a grown force-installed plugin whose re-materialize FAILS surfaces a (failed) row and stays force-installed", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello is force-installed with a grown on-disk supported set (skills +
-    // commands; recorded supported only skills) -> a backfill candidate that
-    // re-resolves installable. But a SIBLING recorded plugin already owns the
-    // generated skill name `hello-tool`, so the re-materialize's
-    // assertNoCrossPluginConflicts trips -> reinstallPlugin (render: "none")
-    // CATCHES its own throw and RETURNS a `failed` partition. SF-01: maybeBackfill
-    // surfaces that as a plugin-scoped (failed) row on the same cascade instead
-    // of silently dropping it, and the record stays force-installed.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["commands"],
-        }),
-        // A clean installed plugin whose recorded resources already own the
-        // `hello-tool` generated skill name -> cross-plugin conflict on backfill.
-        conflictor: {
-          version: "1.0.0",
-          resolvedSource: path.join(cwd, "mp-src", "plugins", "conflictor"),
-          compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
-          resources: {
-            skills: ["hello-tool"],
-            prompts: [],
-            agents: [],
-            mcpServers: [],
-            hooks: [],
-          },
-          enabled: true,
-          installedAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
-      },
-    });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    // SF-01: the failure surfaced as a single cascade carrying a (failed) row.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("hello") && body.includes("(failed)"), `got:\n${body}`);
-
-    // The record was NOT promoted -- it stays force-installed.
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    assert.equal(record.compatibility.installable, false);
-
-    // SF-02: a genuine re-materialize failure leaves the version gate OPEN so the
-    // scan retries next load -- the stamp is NOT advanced.
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
-  });
-});
-
-test("BFILL-01: a concurrent uninstall (skipped partition) emits no promotion row", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello is force-installed with a grown on-disk supported set -> a backfill
-    // candidate. The read-pass snapshot still carries hello, but by the time the
-    // re-materialize acquires its own lock the record is GONE (a concurrent
-    // process uninstalled it), so reinstallPlugin returns `skipped`. That benign
-    // skip must NOT emit an (installed)/(partially-installed) promotion row.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true, command: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["commands"],
-        }),
-      },
-    });
-    // Snapshot (still carries hello) drives the scan; the on-disk state.json is
-    // then rewritten to drop hello (marketplace kept), simulating the race.
-    const snapshot = await loadState(extensionRoot);
-    const concurrent = structuredClone(snapshot);
-    delete concurrent.marketplaces["mp"]!.plugins["hello"];
-    await saveState(extensionRoot, concurrent);
-
-    const ctx = makeCtx();
-    const outcomes: PerEntryOutcome[] = [];
-    await scanForceInstalledBackfills(
-      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
       "project",
       snapshot,
       outcomes,
     );
 
-    // Concurrent uninstall -> skipped -> no promotion row of any kind.
-    assert.equal(outcomes.length, 0);
-    assert.ok(!outcomes.some((o) => o.kind === "plugin-backfilled"));
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), stored);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
-});
 
-test("SF-02: an offline-unresolvable force-installed plugin (manifest omits the entry) is a silent skip and still stamps", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello is recorded force-installed but is NOT declared in the marketplace
-    // manifest (empty trees -> `plugins: []`). The offline re-resolve finds no
-    // entry -> resolveRecordedPluginOffline returns undefined -> a benign silent
-    // skip (NOT a failure). Zero notifications, record untouched, and -- because
-    // this is a benign skip, not a genuine failure -- the version gate still
-    // closes (SF-02: only an unreadable-manifest I/O throw keeps it open).
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["themes"],
-        }),
-      },
+  test("ENBL-08: promotes the same grown fixture when the record is enabled", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "enabled-control");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
     });
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    // Silent skip -> zero notifications.
-    assert.equal(ctx.ui.notify.mock.calls.length, 0);
-    // Record untouched -- still force-installed with its recorded unsupported set.
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    assert.equal(record.compatibility.installable, false);
-    assert.deepEqual(record.compatibility.unsupported, ["themes"]);
-    // The gate closed: an absent/invalid ENTRY is benign, so the stamp still writes.
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
-  });
-});
-
-test("SF-02: an UNREADABLE manifest I/O throw surfaces a plugin-scoped (failed) row and leaves the version gate OPEN", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // hello is recorded force-installed AND declared in the manifest, but the
-    // manifest file is then corrupted. resolveRecordedPluginOffline's
-    // loadMarketplaceManifest THROWS (unparseable JSON); SF-02 lets it propagate
-    // to the per-plugin catch in scanForceInstalledBackfills, which surfaces a
-    // plugin-scoped (failed) row naming hello (NOT a generic state.json row) and
-    // keeps the version gate OPEN (stamp NOT advanced) so the scan retries.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { skill: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["themes"],
-        }),
-      },
-    });
-    // Corrupt the cached marketplace manifest so the offline re-resolve throws.
-    const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
-    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
-    const ctx = makeCtx();
-
-    await runReconcile(cwd, ctx);
-
-    // Per-plugin isolation: the throw is surfaced as a single plugin-scoped
-    // (failed) row for hello (never aborts the cascade), not a state.json row.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("hello") && body.includes("(failed)"), `got:\n${body}`);
-    assert.ok(!body.includes("state.json"), `expected no generic state.json row:\n${body}`);
-    // SF-02: the gate stays OPEN so the scan self-heals next load -- stamp untouched.
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
-  });
-});
-
-test("per-plugin isolation: a corrupt-manifest plugin surfaces its own (failed) row while a healthy sibling under another marketplace is still promoted", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Two force-installed plugins under two marketplaces. `bad`'s cached manifest
-    // is corrupt, so alpha's offline re-resolve THROWS. `good`'s bravo has grown
-    // (skills + commands on disk; recorded supported only skills), so it is a
-    // promotable backfill candidate. Per-plugin isolation: alpha's throw must
-    // surface its OWN plugin-scoped (failed) row and keep the gate OPEN, while
-    // bravo is still promoted to (installed) on the SAME cascade -- proving one
-    // corrupt manifest does not block a healthy sibling under another marketplace.
-    const badRoot = path.join(cwd, "bad-src");
-    const goodRoot = path.join(cwd, "good-src");
-    await writePluginTree(badRoot, "alpha", { skill: true });
-    await writePluginTree(goodRoot, "bravo", { skill: true, command: true });
-    const badManifest = await writeManifest(badRoot, "bad", ["alpha"]);
-    const goodManifest = await writeManifest(goodRoot, "good", ["bravo"]);
-    // Corrupt the `bad` marketplace manifest so alpha's offline re-resolve throws.
-    await writeFile(badManifest, "{ this is not valid json at all", "utf8");
-
-    const loc = locationsFor("project", cwd);
-    await mkdir(loc.extensionRoot, { recursive: true });
-    // `bad` is inserted BEFORE `good` so the corrupt marketplace is scanned first
-    // -- proving the throw does not unwind the loop before `good` is reached.
-    const state: ExtensionState = {
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
       schemaVersion: 2,
-      lastReconciledExtensionVersion: "0.0.0",
+      lastReconciledExtensionVersion: STALE_STAMP,
       marketplaces: {
-        bad: {
-          name: "bad",
-          scope: "project",
-          source: pathSource("./bad-src"),
-          addedFromCwd: cwd,
-          manifestPath: badManifest,
-          marketplaceRoot: badRoot,
-          plugins: {
-            alpha: pluginRecord({
-              pluginRoot: path.join(badRoot, "plugins", "alpha"),
-              installable: false,
-              supported: ["skills"],
-              unsupported: ["themes"],
-            }),
-          },
-        },
-        good: {
-          name: "good",
-          scope: "project",
-          source: pathSource("./good-src"),
-          addedFromCwd: cwd,
-          manifestPath: goodManifest,
-          marketplaceRoot: goodRoot,
-          plugins: {
-            bravo: pluginRecord({
-              pluginRoot: path.join(goodRoot, "plugins", "bravo"),
-              installable: false,
-              supported: ["skills"],
-              unsupported: ["commands"],
-            }),
-          },
-        },
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+          }),
+        }),
       },
     };
-    await saveState(loc.extensionRoot, state);
-    const ctx = makeCtx();
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
 
-    await runReconcile(cwd, ctx);
-
-    const persisted = await loadState(loc.extensionRoot);
-    // The healthy sibling was promoted despite the corrupt-manifest sibling being
-    // scanned first: bravo flips installable -> true.
-    assert.equal(pluginRecordOf(persisted, "good", "bravo").compatibility.installable, true);
-    // The corrupt-manifest plugin was NOT promoted -- still force-installed.
-    assert.equal(pluginRecordOf(persisted, "bad", "alpha").compatibility.installable, false);
-
-    // Exactly one cascade carrying BOTH the promotion row for bravo and a
-    // plugin-scoped (failed) row for alpha.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(
-      body.includes("bravo") && body.includes("(installed)"),
-      `expected bravo promotion:\n${body}`,
-    );
-    assert.ok(
-      body.includes("alpha") && body.includes("(failed)"),
-      `expected alpha failure:\n${body}`,
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
     );
 
-    // A per-plugin failure keeps the version gate OPEN -- stamp NOT advanced.
-    assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
-  });
-});
-
-test("D-68-03: a length-grown-but-not-superset resolved set does NOT backfill (strict superset only)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Recorded supported is ["skills"], but the on-disk plugin now advertises
-    // commands + agents and NO skills dir -> resolved supported ["commands",
-    // "agents"]. That is LONGER (2 > 1) but NOT a superset (it drops "skills"),
-    // so supportedSetGrew must reject it: no re-materialize, no promotion row.
-    const { extensionRoot } = await seedScope({
-      cwd,
-      stamp: "0.0.0",
-      trees: { hello: { command: true } },
-      records: {
-        hello: pluginRecord({
-          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
-          installable: false,
-          supported: ["skills"],
-          unsupported: ["themes"],
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: false,
+        unsupported: ["lspServers"],
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: false,
+              notes: ["contains lspServers"],
+              supported: ["skills", "commands"],
+              unsupported: ["lspServers"],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: ["hello:deploy"],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
         }),
       },
     });
-    // Add an agents dir so the on-disk resolve grows to ["commands", "agents"].
-    await mkdir(path.join(cwd, "mp-src", "plugins", "hello", "agents"), { recursive: true });
-    const ctx = makeCtx();
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
 
-    await runReconcile(cwd, ctx);
+  test("SF-01: surfaces the pre-narrowed reason when the re-materialize reports one", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "narrowed-failure");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    // A regular file where the skills target directory belongs makes the
+    // staging write fail with ENOTDIR, which reinstall pre-narrows to a typed
+    // reason on the outcome rather than leaving it to the notes.
+    await mkdir(path.dirname(locations.skillsTargetDir), { recursive: true });
+    await writeFile(locations.skillsTargetDir, "not a directory\n");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
 
-    // Not a strict superset -> no re-materialize: the record is untouched.
-    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
-    assert.equal(record.compatibility.installable, false);
-    assert.deepEqual(record.compatibility.supported, ["skills"]);
-    assert.deepEqual(record.resources.skills, []);
-    // No promotion row -> silent (the gate still stamped: gate-open, no failure).
-    assert.equal(ctx.ui.notify.mock.calls.length, 0);
-    const persisted = await loadState(extensionRoot);
-    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, true);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "source missing",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-01: classifies the composed notes when the re-materialize reports no reason", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "unnarrowed-failure");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    // A sibling record already owns the generated skill name this promotion
+    // would write, so the cross-plugin conflict fails the re-materialize with
+    // an error the reinstall primitive cannot pre-narrow.
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          conflictor: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "conflictor"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+            skills: ["hello-tool"],
+          }),
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, true);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unreadable",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("BFILL-01: emits no promotion row when the record is removed between the snapshot and the re-materialize", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "concurrent-uninstall");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true },
+    });
+    const snapshot: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    // The snapshot still carries the record; the on-disk state the
+    // self-locking re-materialize re-reads no longer does.
+    const afterConcurrentUninstall: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {}),
+      },
+    };
+    await seedState(locations, afterConcurrentUninstall);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      snapshot,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), afterConcurrentUninstall);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-02: skips a recorded plugin the cached manifest no longer declares", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "entry-absent");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-02: surfaces a plugin-scoped failure row when the cached manifest cannot be parsed", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "manifest-unreadable");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, true);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unparseable",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-02: promotes a healthy plugin under one marketplace while a corrupt manifest fails its own", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "per-plugin-isolation");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const bad = await writeMarketplaceSource(cwd, "bad-src", "bad", { alpha: { skill: "clean" } });
+    const good = await writeMarketplaceSource(cwd, "good-src", "good", {
+      bravo: { skill: "clean", command: true },
+    });
+    await writeFile(bad.manifestPath, "{ this is not valid json at all", "utf8");
+    const alphaRoot = path.join(bad.marketplaceRoot, "plugins", "alpha");
+    const bravoRoot = path.join(good.marketplaceRoot, "plugins", "bravo");
+    // `bad` is inserted first so the corrupt manifest is scanned before the
+    // healthy sibling under the other marketplace.
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        bad: marketplaceRecord(cwd, "bad", "bad-src", bad.manifestPath, bad.marketplaceRoot, {
+          alpha: pluginRecord({
+            pluginRoot: alphaRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+        good: marketplaceRecord(cwd, "good", "good-src", good.manifestPath, good.marketplaceRoot, {
+          bravo: pluginRecord({
+            pluginRoot: bravoRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["commands"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert
+    assert.strictEqual(anyFailure, true);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "bad",
+        plugin: "alpha",
+        reason: "unparseable",
+      },
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "good",
+        plugin: "bravo",
+        version: "1.0.0",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        bad: marketplaceRecord(cwd, "bad", "bad-src", bad.manifestPath, bad.marketplaceRoot, {
+          alpha: pluginRecord({
+            pluginRoot: alphaRoot,
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+        good: marketplaceRecord(cwd, "good", "good-src", good.manifestPath, good.marketplaceRoot, {
+          bravo: {
+            version: "1.0.0",
+            resolvedSource: bravoRoot,
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills", "commands"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["bravo-tool"],
+              prompts: ["bravo:deploy"],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
+        }),
+      },
+    });
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/commands-staging/",
+      "pi-claude-marketplace/resources/",
+      "pi-claude-marketplace/resources/prompts/",
+      "pi-claude-marketplace/resources/prompts/bravo:deploy.md",
+      "pi-claude-marketplace/resources/skills/",
+      "pi-claude-marketplace/resources/skills/bravo-tool/",
+      "pi-claude-marketplace/resources/skills/bravo-tool/SKILL.md",
+      "pi-claude-marketplace/skills-staging/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
   });
 });

@@ -2,7 +2,7 @@ import {
   importClaudeSettings,
   type ClaudeImportExecutionResult,
   type ImportClaudeSettingsOptions,
-} from "../../../orchestrators/import/execute.ts";
+} from "../../../orchestrators/import/index.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 

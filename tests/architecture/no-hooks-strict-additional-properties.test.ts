@@ -41,21 +41,23 @@ function stripComments(src: string): string {
 }
 
 test("HOOK-03: hooks.ts source never carries 'additionalProperties: false' (defense-in-depth)", async () => {
+  // arrange
   const src = await readFile(HOOKS_TS_PATH, "utf8");
-  const stripped = stripComments(src);
 
-  // The schema's lenient stance must hold textually. An `as unknown as
-  // never` cast or any other smuggled strictness would show as a literal
-  // `additionalProperties: false` in the source after comments are
-  // stripped.
+  // act
+  const stripped = stripComments(src);
+  const carriesStrictAdditionalProperties = /additionalProperties\s*:\s*false/.test(stripped);
+
+  // assert
   assert.equal(
-    /additionalProperties\s*:\s*false/.test(stripped),
+    carriesStrictAdditionalProperties,
     false,
     "domain/components/hooks.ts must NOT carry `additionalProperties: false` anywhere",
   );
 });
 
 test("D-57-01: migrateLegacyMarketplaceRecords is idempotent over the hooks default-fill", () => {
+  // arrange
   // A v1.12-shaped record: resources missing the `hooks` field entirely.
   // The migrator's `ensurePluginResources` arm is responsible for filling
   // `hooks: []` before validation runs (HOOK-02 / D-57-01).
@@ -89,31 +91,26 @@ test("D-57-01: migrateLegacyMarketplaceRecords is idempotent over the hooks defa
     },
   };
 
+  // act
   // First pass: the migrator must default-fill `hooks: []` and report mutation.
   const first = migrateLegacyMarketplaceRecords(v1_12Parsed, "/ext-root", false);
-  assert.equal(first.mutated, true, "first pass must report mutation (hooks default-fill ran)");
-
-  const firstMp = first.marketplaces.mp as Record<string, unknown>;
+  const firstMp = first.marketplaces.mp!;
   const firstPlugins = firstMp.plugins as Record<string, Record<string, unknown>>;
   const firstResources = firstPlugins.pl?.resources as Record<string, unknown>;
-  assert.deepEqual(firstResources.hooks, [], "first pass must default-fill resources.hooks to []");
-
-  // Second pass over the already-normalized record. The hooks arm must
-  // report no further mutation. This pins the D-57-01 no-op-after-
-  // normalization invariant: the helper MUST be a no-op on idempotent
-  // input.
   const reparsed = {
     schemaVersion: 1,
     marketplaces: first.marketplaces,
   };
   const second = migrateLegacyMarketplaceRecords(reparsed, "/ext-root", false);
+
+  // assert
+  assert.equal(first.mutated, true, "first pass must report mutation (hooks default-fill ran)");
+  assert.deepEqual(firstResources.hooks, [], "first pass must default-fill resources.hooks to []");
   assert.equal(
     second.mutated,
     false,
     "second pass must report no mutation -- D-57-01 idempotency invariant",
   );
-
-  // And the shape must be deep-equal to the post-first-pass state.
   assert.deepEqual(
     second.marketplaces,
     first.marketplaces,

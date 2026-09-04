@@ -38,6 +38,7 @@ import Type from "typebox";
 import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { isScopeBearingListRow } from "../../shared/notify.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
@@ -146,16 +147,30 @@ interface PluginRow {
 
 /**
  * Project the PluginNotificationMessage status set onto the tool's
- * three-bucket projection. The list-surface variants are
- * `installed | upgradable | available | unavailable`; only this subset
- * appears inside the `loadPluginListPayload` return shape (the orchestrator
- * builds list-only variants on the success path; the failure path emits a
- * `failed` row in a synthetic `(list)` marketplace which never traverses
- * this projection -- the tool's try/catch short-circuits to its error
- * branch before reaching here). The other plugin-status variants
- * (`updated` / `reinstalled` / `uninstalled` / `failed` / `skipped` /
- * `manual recovery`) are unreachable on this surface and an exhaustive
- * `assertNever`-style throw guards the invariant.
+ * three-bucket projection.
+ *
+ * NINE list-surface variants are reachable here: the five installed-inventory
+ * ones (`installed` / `upgradable` / `partially-installed` /
+ * `partially-upgradable` / `disabled`) and the four not-installed candidate
+ * ones (`available` / `remote` / `partially-available` / `unavailable`). The
+ * last two of those are reachable only because `loadToolPluginPayload` carries
+ * `remote` with `available` and `partial` with `unavailable` -- the tool
+ * exposes no parameter of its own for either, and the list orchestrator gates
+ * both behind one (`orchestrators/plugin/list.ts::shouldShow`). Fold a
+ * fine-grained bucket into a coarse one here without carrying its filter over
+ * there and the arm goes dead on the execute path.
+ *
+ * `failed` is the tenth member of the row union and is NOT reachable: the
+ * synthetic `(list)` failure row is built in `listPlugins`'s own catch, never
+ * inside `loadPluginListPayload`, so no payload this tool loads carries one.
+ * `ToolPluginRow` admits it because that alias is derived from the producer's
+ * declared type, not because the producer emits it on this path.
+ *
+ * The throw is the `assertNever`-style guard for `failed` and for every
+ * non-list variant (`updated` / `reinstalled` / `uninstalled` / `skipped` /
+ * `manual recovery` and the four pending rows). `execute` calls the render
+ * loop INSIDE its try, so the throw lands on the tool's `isError: true`
+ * surface rather than escaping as an unhandled rejection.
  */
 export function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
   switch (status) {
@@ -231,21 +246,40 @@ function renderPluginRow(row: PluginRow): string {
   return parts.join("  ");
 }
 
-function applyFilter(params: { installed?: boolean; available?: boolean; unavailable?: boolean }): {
-  i: boolean;
-  a: boolean;
-  u: boolean;
-} {
+/**
+ * The tool-side view of the PL-1 filter union: one flag per tool bucket, plus
+ * whether the caller narrowed at all.
+ *
+ * `narrowed` is not a convenience. `orchestrators/plugin/list.ts::filtersPassive`
+ * shows every bucket only when NO filter reaches it, so an all-true bag is a
+ * different request from an empty one: it takes the union arms instead, and
+ * those admit `remote` and `partially-available` only behind filters this tool
+ * has no parameter for. The flag is what lets `loadToolPluginPayload` forward
+ * nothing at all on the passive path.
+ */
+interface ToolFilterBuckets {
+  readonly i: boolean;
+  readonly a: boolean;
+  readonly u: boolean;
+  readonly narrowed: boolean;
+}
+
+function applyFilter(params: {
+  installed?: boolean;
+  available?: boolean;
+  unavailable?: boolean;
+}): ToolFilterBuckets {
   const anyFilter =
     params.installed === true || params.available === true || params.unavailable === true;
   if (!anyFilter) {
-    return { i: true, a: true, u: true };
+    return { i: true, a: true, u: true, narrowed: false };
   }
 
   return {
     i: params.installed === true,
     a: params.available === true,
     u: params.unavailable === true,
+    narrowed: true,
   };
 }
 
@@ -291,7 +325,7 @@ async function loadToolPluginPayload(
     unavailable?: boolean;
   },
   ctx: ExtensionContext,
-  buckets: { i: boolean; a: boolean; u: boolean },
+  buckets: ToolFilterBuckets,
 ): Promise<Awaited<ReturnType<typeof loadPluginListPayload>>> {
   return loadPluginListPayload({
     ctx,
@@ -299,9 +333,19 @@ async function loadToolPluginPayload(
     cwd: ctx.cwd,
     ...(params.scope !== undefined && { scope: params.scope }),
     ...(params.marketplace !== undefined && { marketplace: params.marketplace }),
-    ...(buckets.i && { installed: true }),
-    ...(buckets.a && { available: true }),
-    ...(buckets.u && { unavailable: true }),
+    // PL-1: narrow only when the caller narrowed, and carry each tool bucket's
+    // fine-grained members with it. `available` is the tool's coarse name for
+    // `available` PLUS the cold git-source `remote` bucket (RSTA-01 /
+    // D-80-05), and `unavailable` for structural `unavailable` PLUS
+    // `partially-available` (USTAT-02 / D-64-01) -- the same folds
+    // `projectRowStatus` performs on the way back. Sending an all-true bag
+    // instead of nothing would make `filtersPassive` false and strand both
+    // fine-grained buckets, which have no tool parameter to turn them on.
+    ...(buckets.narrowed && {
+      ...(buckets.i && { installed: true }),
+      ...(buckets.a && { available: true, remote: true }),
+      ...(buckets.u && { unavailable: true, partial: true }),
+    }),
   });
 }
 
@@ -329,76 +373,85 @@ function pluginScopeOrFallback(
 
 /**
  * Read `p.reasons` defensively. Only a subset of plugin variants carry the
- * field (D-15-01). INV-05 / D-95-06: every list-surface variant that carries
- * typed reasons forwards them here, and the field is omitted when the array is
- * absent or empty -- an agent reading the tool payload sees the same facts a
- * human reading the rendered row sees.
+ * field (D-15-01). INV-05 / D-95-06: every one of the nine list-surface
+ * variants `projectRowStatus` admits forwards its typed reasons here, and the
+ * field is omitted when the array is absent or empty -- an agent reading the
+ * tool payload sees the same facts a human reading the rendered row sees.
+ *
+ * The two arm groups differ only in whether `reasons` is declared optional on
+ * the variant, not in whether the row may carry one. Every optional arm has a
+ * producer: `disabled` takes `{not in manifest}` from `disabledReasonsField`
+ * (ENBL-16 / D-100-07), and `available` and `remote` take `{installs disabled}`
+ * from `installsDisabledField` (OUT-02 / OUT-05).
+ *
+ * D-116-14: a value-returning switch over the derived row union, for the same
+ * reason `pluginVersion` carries one. The groups are total over that union, so
+ * there is no trailing fall-through -- a status added to the producer's union
+ * is a compile error here rather than a row that silently loses its reasons.
+ * `failed` is named for the gate's sake and never arrives: the render loop runs
+ * `projectRowStatus` first, and that refuses it.
  */
-function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefined {
-  if (p.status === "installed") {
-    // INV-05: the steady-state inventory row's `reasons` is OPTIONAL, so it
-    // needs an undefined guard the required-`reasons` arms below do not.
-    // Returning `[]` here would put an empty array on a clean row's payload.
-    return p.reasons !== undefined && p.reasons.length > 0 ? p.reasons : undefined;
+function pluginReasons(p: ToolPluginRow): readonly string[] | undefined {
+  switch (p.status) {
+    case "installed":
+    case "disabled":
+    case "available":
+    case "remote":
+      // INV-05: these four declare `reasons` OPTIONAL, so they need an
+      // undefined guard the required arms below do not. Returning `[]` here
+      // would put an empty array on a clean row's payload.
+      return p.reasons !== undefined && p.reasons.length > 0 ? p.reasons : undefined;
+    case "unavailable":
+    case "partially-available":
+    case "upgradable":
+    case "partially-installed":
+    case "partially-upgradable":
+    case "failed":
+      // USTAT-01: the `partially-available` row carries the same per-kind reason
+      // braces as the `unavailable` row, so surface them on the tool details too.
+      return p.reasons.length > 0 ? p.reasons : undefined;
   }
-
-  if (
-    p.status === "unavailable" ||
-    p.status === "partially-available" ||
-    p.status === "upgradable" ||
-    p.status === "partially-installed" ||
-    p.status === "partially-upgradable"
-  ) {
-    // USTAT-01: the `partially-available` row carries the same per-kind reason braces as
-    // the `unavailable` row, so surface them on the tool details too.
-    return p.reasons.length > 0 ? p.reasons : undefined;
-  }
-
-  return undefined;
 }
 
 /**
- * Read `p.version` defensively. The `updated` variant has REQUIRED
- * `from`/`to` instead of `version`; every other variant carries an
- * OPTIONAL `version` (D-15-04). On the list surface only the
- * installed / upgradable / available / unavailable subset is reachable.
+ * One plugin row of the payload `loadPluginListPayload` returns: its awaited
+ * result, that array's element, the element's `plugins` slot, and that slot's
+ * element. Deriving the row union from the producer rather than naming it means
+ * a change to what the list surface can emit arrives here as a compile error
+ * instead of silent drift.
  */
-function pluginVersion(p: PluginNotificationMessage): string | undefined {
+type ToolPluginRow = Awaited<ReturnType<typeof loadPluginListPayload>>[number]["plugins"][number];
+
+/**
+ * Read `p.version` off a list-surface row. D-15-04: every list-surface variant
+ * carries the same optional `version?` slot, so every arm returns the same field
+ * and the switch computes nothing.
+ *
+ * D-116-14: the switch stays anyway, and must not be collapsed into a single
+ * expression. Its job is the missing-arm gate -- `noImplicitReturns` makes the
+ * end of this function reachable the moment a list-surface status goes unnamed,
+ * so a status added to the row union is a compile error here rather than a row
+ * that silently loses its version.
+ *
+ * `failed` is named here and refused by `projectRowStatus`, which is one answer
+ * rather than two: the arm exists because `ToolPluginRow` declares the status
+ * and the gate must stay total over that union, while the payload this tool
+ * loads never carries such a row (see `projectRowStatus`). The render loop
+ * calls the projection first, so no `failed` row reaches this function.
+ */
+function pluginVersion(p: ToolPluginRow): string | undefined {
   switch (p.status) {
-    // D-15-04: the `installed` inventory row carries `version?: string` like
-    // every other optional-version variant; only `updated` differs, with its
-    // required `from` / `to` pair.
     case "installed":
     case "upgradable":
     case "available":
     case "remote":
     case "unavailable":
     case "partially-available":
-    case "reinstalled":
-    case "uninstalled":
     case "failed":
-    case "skipped":
-    case "manual recovery":
     case "disabled":
     case "partially-installed":
     case "partially-upgradable":
-      // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
-      // recorded state record preserves the pinned version (ENBL-02). FSTAT-02 /
-      // FSTAT-04 / D-66-03: the derived partial states carry the same optional
-      // `version?` slot as the other list-surface inventory variants. USTAT-01:
-      // the `partially-available` row carries the same optional `version?` slot.
       return p.version;
-    case "updated":
-      // The updated variant has `from`/`to` instead of a single `version`;
-      // synthesize the post-update version for downstream callers.
-      return p.to;
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      // DIFF-02 pending-list rows carry no version slot (the variant has no
-      // `version` field). Unreachable on the list surface.
-      return undefined;
   }
 }
 
@@ -483,16 +536,25 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // PluginListPayload carries enough structure to support both this
       // line format AND `details.plugins`.
       let payload;
+      let rendered;
       try {
         payload = await loadToolPluginPayload(pi, params, ctx, buckets);
+        // The projection runs INSIDE the guard. `projectRowStatus` throws on a
+        // status the list payload must never carry, and that diagnostic belongs
+        // on the `isError: true` surface below rather than escaping `execute`
+        // as an unhandled rejection.
+        rendered = renderPluginPayload(payload, buckets);
       } catch (err) {
         // TC-9: state.json error propagates as a tool error surface (the
-        // agent should see a clear failure rather than an empty list).
+        // agent should see a clear failure rather than an empty list). The
+        // non-Error narrowing is `shared/errors.ts`'s, not a second copy here:
+        // no seeded payload load can throw a non-Error, so a local copy would
+        // be a branch this module's own surface cannot reach.
         return {
           content: [
             {
               type: "text",
-              text: `Failed to load plugin list: ${err instanceof Error ? err.message : String(err)}`,
+              text: `Failed to load plugin list: ${errorMessage(err)}`,
             },
           ],
           isError: true,
@@ -500,9 +562,12 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         };
       }
 
-      const { lines, rows } = renderPluginPayload(payload, buckets);
+      const { lines, rows } = rendered;
 
-      if (rows.length === 0 && payload.length === 0) {
+      // `rows` is populated only from inside `renderPluginPayload`'s loop over
+      // `payload`, so an empty payload already implies no rows; testing both
+      // would be one condition asked twice.
+      if (payload.length === 0) {
         return {
           content: [{ type: "text", text: "No marketplaces configured." }],
           details: { plugins: [] },

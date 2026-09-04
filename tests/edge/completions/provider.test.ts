@@ -1,1692 +1,852 @@
+// Owner suite for `edge/completions/provider.ts::getArgumentCompletions`, the
+// single entry point Pi calls for every keystroke of `/claude:plugin`.
+//
+// The provider composes three settled surfaces: the subcommand vocabularies
+// exported by `edge/router.ts`, the per-verb flag entries exported by
+// `edge/flag-catalog.ts`, and the candidate maps built by
+// `edge/completions/data.ts`. What this suite owns is the COMPOSITION -- which
+// vocabulary appears at which cursor position, which head maps to which
+// completion mode, and how each emitted item rebuilds the whole argument text.
+// The contents of each source stay with that source's own owner:
+//
+//   - the tokenizer, the status filtering behind every candidate map, and the
+//     `<plugin>@<marketplace>` split belong to
+//     `tests/edge/completions/data.test.ts`;
+//   - the per-verb completable flag SET is pinned exactly, per verb and for the
+//     `ls` alias, by `tests/architecture/flag-catalog-drift.test.ts`, which
+//     excludes the global scope flag. What stays here is that the provider
+//     PREPENDS that global entry, where it lands, and what each item's value
+//     and description are;
+//   - the retired partial vocabulary is forbidden by
+//     `tests/architecture/partial-vocabulary-guard.test.ts`.
+//
+// Every expected candidate list below is hand-authored, compared unsorted and
+// whole, and never derived from the module under test or from a constant the
+// module itself reads. That includes the scope value pair: the drift guard in
+// `tests/architecture/scope-order-drift.test.ts` walks `extensions/` only, so
+// it never reaches a test file, and re-reading `SCOPES` here would make the
+// order claim circular.
+//
+// This surface is read-only and must never reach the network (NFR-5). Every
+// case installs a context-owned fail-fast replacement of `https.request`, the
+// door the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and
+// the replacement is NOT presented as an offline proof: the import closure of
+// `provider.ts` and `data.ts` holds no HTTP client, so a zero here could not
+// rise whatever these modules did. What it is, is a hermeticity device -- a
+// dial-out this surface acquires later fails the case where it happens. See
+// `installNetworkTrap`.
+//
+// Five heads -- uninstall, update, reinstall, enable and disable -- map to
+// modes that share ONE candidate map in the data layer, so their lists are
+// identical by construction. Each row's claim is the head-to-mode mapping, and
+// it discriminates because install, fetch and info reach different maps: a head
+// rerouted to any of those three changes its list. Each head is driven twice
+// more, at an `@` cursor and with an explicit scope, because the rest of its
+// branch configuration -- whether the bare `@<marketplace>` form is accepted,
+// and whether an explicit scope reaches the candidate map -- is invisible at a
+// plain plugin cursor.
+//
+// `pluginRefBranchConfig` switches on an open `string` peeled from raw user
+// input and ends with a `default` arm, so this pair carries NO exhaustiveness
+// claim. A deleted arm is a behavior change, not a compiler diagnostic, and a
+// missing-arm plant has no target here.
+//
+// D-116-01a: this pair lands one branch short of complete. The empty-object
+// side of the conditional at provider.ts:125 -- the `description === undefined`
+// arm of `optionalDescription` -- cannot be entered at runtime. The only two
+// producers of the entry list in `flagCompletions` are a written-out literal
+// that carries a description and `completionFlagEntries`, whose every element
+// is built from a `FlagEntry` whose `description` field is REQUIRED. The
+// declared element type keeps `description` optional, so the guard must exist;
+// nothing reachable through the module's single export can supply an entry
+// without one. The reason is structural, not a compiler setting.
+//
+// The claim is measured, not inspected: a plant replacing the empty-object arm
+// with a distinguishable description left every case green, and an independent
+// route drove every top-level head, every marketplace subcommand and two
+// unknown heads at a long-flag cursor and found every emitted item carrying a
+// description. The shortfall is pinned by its identity -- functions and lines
+// complete, exactly ONE uncovered branch -- never by an absolute branch pair,
+// because the branch denominator tracks suite strength rather than the source.
+// No coverage exception is added and no production file is changed.
+
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
 import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type {
+  LocationsResolver,
+  MarketplaceStateRecord,
+} from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-/**
- * Tests for edge/completions/provider.ts (TC-1..TC-9 integration + null
- * sentinel + branching dispatch).
- *
- * The provider is a pure function of (prefix, resolver); resolver is a
- * test-built mock that captures call counts + throws to exercise TC-8/TC-9.
- */
-
-interface FixtureSpec {
-  readonly state: Partial<Record<Scope, Record<string, { manifestPath?: string }>>>;
-  readonly manifests: Partial<Record<Scope, Record<string, readonly PluginIndexRow[]>>>;
-  /** When set, loadStateForScope(scope) rejects with this error for the named scope. */
-  readonly stateThrows?: Partial<Record<Scope, Error>>;
-  /** When set, loadManifestForMarketplace rejects with this error for the named marketplace. */
-  readonly manifestThrows?: Partial<Record<Scope, Record<string, Error>>>;
+/** The shape of one emitted suggestion, written out rather than imported. */
+interface Suggestion {
+  readonly label: string;
+  readonly value: string;
+  readonly description?: string;
 }
 
-interface Fixture {
+interface SeededResolver {
   readonly resolver: LocationsResolver;
-  cleanup(): Promise<void>;
 }
 
-async function makeFixture(spec: FixtureSpec): Promise<Fixture> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "provider-test-"));
-  const resolver: LocationsResolver = {
-    marketplaceNamesCachePath(scope: Scope): string {
-      return path.join(dir, scope, "marketplace-names.json");
-    },
+/**
+ * The user-scope marketplace. Its rows span the installed inventory, the two
+ * not-yet-installed buckets install accepts, the degraded bucket only the
+ * partial install accepts, and the broken bucket only fetch accepts.
+ */
+function hubManifest(): readonly PluginIndexRow[] {
+  return [
+    { name: "held", status: "installed" },
+    { name: "outdated", status: "upgradable" },
+    { name: "fresh", status: "available" },
+    { name: "not-fetched", status: "remote" },
+    { name: "degraded", status: "partially-available" },
+    { name: "broken", status: "unavailable" },
+  ];
+}
 
-    pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
-      return Promise.resolve(path.join(dir, scope, "plugins", `${marketplace}.json`));
-    },
+/** The project-scope marketplace, so an explicit scope flag changes the list. */
+function labManifest(): readonly PluginIndexRow[] {
+  return [
+    { name: "lab-held", status: "installed" },
+    { name: "lab-fresh", status: "available" },
+  ];
+}
 
-    loadStateForScope(scope: Scope): Promise<{
-      marketplaces: Record<string, { manifestPath?: string }>;
-    }> {
-      const throwErr = spec.stateThrows?.[scope];
-      if (throwErr !== undefined) {
-        return Promise.reject(throwErr);
-      }
+function marketplacesForScope(scope: Scope): Record<string, MarketplaceStateRecord> {
+  return scope === "user" ? { hub: { plugins: {} } } : { lab: { plugins: {} } };
+}
 
-      const scopeState = spec.state[scope];
-      if (scopeState === undefined) {
-        return Promise.resolve({ marketplaces: {} });
-      }
+function manifestFor(scope: Scope, marketplace: string): readonly PluginIndexRow[] | undefined {
+  if (scope === "user" && marketplace === "hub") {
+    return hubManifest();
+  }
 
-      return Promise.resolve({ marketplaces: scopeState });
-    },
+  if (scope === "project" && marketplace === "lab") {
+    return labManifest();
+  }
 
-    loadManifestForMarketplace(
+  return undefined;
+}
+
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * This is a HERMETICITY DEVICE, not an offline proof, and no case asserts a
+ * call count against it. The import closure of `provider.ts` and `data.ts`
+ * holds no HTTP client of any kind, so a zero asserted here could not rise
+ * whatever these modules did. What the replacement buys is that a dial-out this
+ * surface acquires LATER fails the case where it happens instead of passing
+ * silently -- measured on the sibling pair, where a live `https.request` call
+ * planted in `getMarketplaceNamesAcrossScopes` left the whole suite green while
+ * the watched door was `globalThis.fetch` and turned five cases red once the
+ * door was this one.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which is not in this module's closure at all.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the completion provider must not open a network connection");
+  });
+}
+
+/**
+ * One temporary cache root per case. Removal and the process-global
+ * completion-cache reset are registered before the act, so an early throw still
+ * unwinds them.
+ *
+ * No environment is substituted here. Neither `provider.ts`, `data.ts` nor
+ * `shared/completion-cache.ts` -- nor anything else in their import closure --
+ * reads `process.env`, `homedir()` or `getAgentDir()`; every path arrives
+ * through the injected resolver. A `HOME` substitution would change nothing
+ * observable, so this helper does not carry one.
+ */
+async function seedResolver(t: TestContext, label: string): Promise<SeededResolver> {
+  resetCompletionCache();
+  const cacheRoot = await mkdtemp(path.join(tmpdir(), `provider-${label}-cache-`));
+  t.after(async () => {
+    resetCompletionCache();
+    await rm(cacheRoot, { recursive: true, force: true });
+  });
+  installNetworkTrap(t);
+
+  const resolver = {
+    marketplaceNamesCachePath: (scope: Scope): string =>
+      path.join(cacheRoot, scope, "marketplace-names.json"),
+
+    pluginCachePath: (scope: Scope, marketplace: string): Promise<string> =>
+      Promise.resolve(path.join(cacheRoot, scope, "plugins", `${marketplace}.json`)),
+
+    loadStateForScope: (
+      scope: Scope,
+    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecord> }> =>
+      Promise.resolve({ marketplaces: marketplacesForScope(scope) }),
+
+    loadManifestForMarketplace: (
       scope: Scope,
       marketplace: string,
-    ): Promise<readonly PluginIndexRow[]> {
-      const throwErr = spec.manifestThrows?.[scope]?.[marketplace];
-      if (throwErr !== undefined) {
-        return Promise.reject(throwErr);
-      }
-
-      const rows = spec.manifests[scope]?.[marketplace];
+    ): Promise<readonly PluginIndexRow[]> => {
+      const rows = manifestFor(scope, marketplace);
       if (rows === undefined) {
-        return Promise.reject(new Error(`manifest missing for ${scope}/${marketplace}`));
+        return Promise.reject(new Error(`no manifest seeded for ${scope}/${marketplace}`));
       }
 
       return Promise.resolve(rows);
     },
-  };
+  } satisfies LocationsResolver;
 
-  return {
-    resolver,
-    async cleanup() {
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
-}
-
-async function emptyFixture(): Promise<Fixture> {
-  return makeFixture({ state: {}, manifests: {} });
+  return { resolver };
 }
 
 // ---------------------------------------------------------------------------
-// TC-1 -- top-level subcommand keywords.
+// TC-1: the top-level subcommand vocabulary.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/pending/enable/disable/import/marketplace)", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    // INFO-02: `info` added to TOP_LEVEL_SUBCOMMANDS for the
-    // `info <plugin>@<marketplace>` top-level verb. DIFF-01 SC #2:
-    // `pending` added for the `/claude:plugin pending` read-only diff
-    // command. D-54-01: `enable` / `disable` added for the enable/disable
-    // surface (ENBL-01..04).
-    assert.deepEqual([...labels].sort(), [
-      "bootstrap",
-      "disable",
-      "enable",
-      "fetch",
-      "import",
-      "info",
-      "install",
-      "list",
-      "ls",
-      "marketplace",
-      "pending",
-      "reinstall",
-      "uninstall",
-      "update",
-    ]);
-    // All terminal completions get a trailing space (TC-7 cross-check).
-    for (const item of items) {
-      assert.match(item.value, / $/, `expected trailing space in value: ${item.value}`);
-    }
-  } finally {
-    await f.cleanup();
-  }
+test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declaration order", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "top-level-empty");
+
+  // act
+  const suggestions = await getArgumentCompletions("", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "bootstrap", value: "bootstrap " },
+    { label: "install", value: "install " },
+    { label: "uninstall", value: "uninstall " },
+    { label: "update", value: "update " },
+    { label: "fetch", value: "fetch " },
+    { label: "reinstall", value: "reinstall " },
+    { label: "list", value: "list " },
+    { label: "ls", value: "ls " },
+    { label: "info", value: "info " },
+    { label: "pending", value: "pending " },
+    { label: "enable", value: "enable " },
+    { label: "disable", value: "disable " },
+    { label: "import", value: "import " },
+    { label: "marketplace", value: "marketplace " },
+  ]);
 });
 
-test('TC-1 :: top-level keyword filtering by prefix ("ins" -> install only)', async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("ins", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["install"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
+for (const { prefix, expected } of [
+  { prefix: "ins", expected: [{ label: "install", value: "install " }] },
+  {
+    prefix: "l",
+    expected: [
+      { label: "list", value: "list " },
+      { label: "ls", value: "ls " },
+    ],
+  },
+  { prefix: "INS", expected: [] },
+  { prefix: "frob", expected: [] },
+] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-1 narrows the top-level vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, `top-level-${prefix}`);
 
-test('TC-1 :: top-level keyword filtering by prefix ("l" -> list and ls)', async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("l", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["list", "ls"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
 
-test("PRL-16 :: top-level rei completes to reinstall with trailing space", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("rei", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(items, [{ label: "reinstall", value: "reinstall " }]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// TC-2 -- nested marketplace subcommand keywords.
-// ---------------------------------------------------------------------------
-
-test("TC-2 :: after marketplace surfaces nested keywords and aliases", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("marketplace ", f.resolver);
-    assert.ok(items !== null);
-    // INFO-06: `info` added to MARKETPLACE_SUBCOMMANDS for
-    // `marketplace info <name>` argument completion (TC-5 via the
-    // MARKETPLACE_VERBS_WITH_NAME_ARG set).
-    assert.deepEqual([...items.map((i) => i.label)].sort(), [
-      "add",
-      "autoupdate",
-      "info",
-      "list",
-      "ls",
-      "noautoupdate",
-      "remove",
-      "rm",
-      "update",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-2 :: nested keyword prefix surfaces rm and ls aliases", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const rmItems = await getArgumentCompletions("marketplace r", f.resolver);
-    assert.ok(rmItems !== null);
-    assert.deepEqual(
-      rmItems.map((i) => i.label),
-      ["remove", "rm"],
-    );
-
-    const lsItems = await getArgumentCompletions("marketplace l", f.resolver);
-    assert.ok(lsItems !== null);
-    assert.deepEqual(
-      lsItems.map((i) => i.label),
-      ["list", "ls"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// TC-3 -- flag-name completion.
-// ---------------------------------------------------------------------------
-
-test("TC-3 :: - prefix surfaces --scope", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("install -", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(labels.includes("--scope"));
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-3 / RSTA-07 :: list head flag completion is EXACTLY scope + the filter family incl. --remote", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("list -", f.resolver);
-    assert.ok(items !== null);
-    // Exact-set: adding a list flag to the catalog must add it here in the same
-    // change. RSTA-07 adds `--remote` to the filter family.
-    assert.deepEqual([...items.map((i) => i.label)].sort(), [
-      "--available",
-      "--installed",
-      "--partial",
-      "--remote",
-      "--scope",
-      "--unavailable",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-3 / RSTA-07 :: ls alias flag completion is EXACTLY scope + the filter family incl. --remote", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("ls -", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), [
-      "--available",
-      "--installed",
-      "--partial",
-      "--remote",
-      "--scope",
-      "--unavailable",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + local + map-model + partial", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("install -", f.resolver);
-    assert.ok(items !== null);
-    // Exact-set: `--map-model` (AG-7), `--partial` (LIST-02) and `--local`
-    // (WB-02, the per-machine write target) are the only install extras;
-    // list-only filter flags MUST NOT leak in.
-    assert.deepEqual([...items.map((i) => i.label)].sort(), [
-      "--local",
-      "--map-model",
-      "--partial",
-      "--scope",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + local + map-model + partial", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("update -", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), [
-      "--local",
-      "--map-model",
-      "--partial",
-      "--scope",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// WB-02: the four verbs whose ONLY per-verb extra is `--local`. Each is an
-// exact-set assertion rather than a `some()` probe so a future catalog entry
-// leaking onto one of them fails here. All four carry `[--local]` in their
-// handler USAGE string, so completion offering it is the surface agreeing with
-// the documentation rather than a new capability.
-for (const verb of ["uninstall", "reinstall", "enable", "disable"] as const) {
-  test(`TC-3 / WB-02 :: ${verb} head flag completion is EXACTLY scope + local`, async () => {
-    resetCompletionCache();
-    const f = await emptyFixture();
-    try {
-      const items = await getArgumentCompletions(`${verb} -`, f.resolver);
-      assert.ok(items !== null);
-      assert.deepEqual([...items.map((i) => i.label)].sort(), ["--local", "--scope"]);
-    } finally {
-      await f.cleanup();
-    }
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
   });
 }
 
-test("TC-3 / FTCH-03 :: info head flag completion is EXACTLY scope + fetch", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("info -", f.resolver);
-    assert.ok(items !== null);
-    // FTCH-03: `info` gains `--fetch`; previously it fell through to `--scope` only.
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["--fetch", "--scope"]);
-  } finally {
-    await f.cleanup();
-  }
+// ---------------------------------------------------------------------------
+// Exact-token promotion: an exact subcommand token advances the cursor to the
+// next argument instead of re-offering the subcommand. The one-character-short
+// partner is what makes the promotion observable.
+// ---------------------------------------------------------------------------
+
+test("a top-level token one character short still offers the subcommand vocabulary", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "promote-short");
+
+  // act
+  const suggestions = await getArgumentCompletions("marketplac", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [{ label: "marketplace", value: "marketplace " }]);
 });
 
-test("TC-3 :: --map-model does NOT appear under list head (260516-08j)", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("list -", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(!labels.includes("--map-model"), `unexpected --map-model in: ${labels.join(", ")}`);
-  } finally {
-    await f.cleanup();
-  }
+test("TC-2 promotes an exact top-level token with no trailing space to the next argument", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "promote-exact");
+
+  // act
+  const suggestions = await getArgumentCompletions("marketplace", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "add", value: "marketplace add " },
+    { label: "remove", value: "marketplace remove " },
+    { label: "rm", value: "marketplace rm " },
+    { label: "list", value: "marketplace list " },
+    { label: "ls", value: "marketplace ls " },
+    { label: "info", value: "marketplace info " },
+    { label: "update", value: "marketplace update " },
+    { label: "autoupdate", value: "marketplace autoupdate " },
+    { label: "noautoupdate", value: "marketplace noautoupdate " },
+  ]);
 });
 
-test("TC-3 :: -- and - prefixes behave identically", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const single = await getArgumentCompletions("install -", f.resolver);
-    const double = await getArgumentCompletions("install --", f.resolver);
-    assert.ok(single !== null);
-    assert.ok(double !== null);
-    assert.deepEqual(
-      single.map((i) => i.label),
-      double.map((i) => i.label),
-    );
-  } finally {
-    await f.cleanup();
-  }
+test("TC-2 offers the marketplace vocabulary after the marketplace token and a space", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "marketplace-space");
+
+  // act
+  const suggestions = await getArgumentCompletions("marketplace ", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "add", value: "marketplace add " },
+    { label: "remove", value: "marketplace remove " },
+    { label: "rm", value: "marketplace rm " },
+    { label: "list", value: "marketplace list " },
+    { label: "ls", value: "marketplace ls " },
+    { label: "info", value: "marketplace info " },
+    { label: "update", value: "marketplace update " },
+    { label: "autoupdate", value: "marketplace autoupdate " },
+    { label: "noautoupdate", value: "marketplace noautoupdate " },
+  ]);
 });
 
-test("PRL-16 / RINST-01 :: reinstall flag completion excludes --partial; --scope still offered", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const reinstallItems = await getArgumentCompletions("reinstall -", f.resolver);
-    assert.ok(reinstallItems !== null);
-    // D-67-03: `--partial` is not offered on the reinstall completion surface.
-    assert.equal(
-      reinstallItems.some((i) => i.label === "--partial"),
-      false,
-    );
-    assert.ok(reinstallItems.some((i) => i.label === "--scope"));
+for (const { prefix, expected } of [
+  {
+    prefix: "marketplace r",
+    expected: [
+      { label: "remove", value: "marketplace remove " },
+      { label: "rm", value: "marketplace rm " },
+    ],
+  },
+  { prefix: "marketplace remov", expected: [{ label: "remove", value: "marketplace remove " }] },
+  { prefix: "marketplace zz", expected: [] },
+] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-2 narrows the marketplace vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "marketplace-narrow");
 
-    // LIST-02 / D-67-02: `--partial` is now a completion flag for install/update
-    // (the partial-gated candidate sets), so those heads are NOT in this
-    // exclusion list. uninstall/marketplace never carry `--partial` (list/ls
-    // carry it as the list filter).
-    for (const head of ["uninstall", "marketplace"]) {
-      const items = await getArgumentCompletions(`${head} -`, f.resolver);
-      assert.ok(items !== null, head);
-      assert.equal(
-        items.some((i) => i.label === "--partial"),
-        false,
-        head,
-      );
-    }
-  } finally {
-    await f.cleanup();
-  }
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
+  });
+}
+
+test("TC-2 promotes an exact marketplace subcommand token to the name argument", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "promote-nested");
+
+  // act
+  const suggestions = await getArgumentCompletions("marketplace remove", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "hub", value: "marketplace remove hub " },
+    { label: "lab", value: "marketplace remove lab " },
+  ]);
 });
 
 // ---------------------------------------------------------------------------
-// TC-4 -- after `--scope`.
+// TC-5: the marketplace-name argument.
 // ---------------------------------------------------------------------------
 
-test("TC-4 :: token after --scope surfaces user and project only", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("install --scope ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["project", "user"]);
-  } finally {
-    await f.cleanup();
-  }
+for (const { prefix, expected } of [
+  {
+    prefix: "list ",
+    expected: [
+      { label: "hub", value: "list hub " },
+      { label: "lab", value: "list lab " },
+    ],
+  },
+  {
+    prefix: "ls ",
+    expected: [
+      { label: "hub", value: "ls hub " },
+      { label: "lab", value: "ls lab " },
+    ],
+  },
+  {
+    prefix: "marketplace remove ",
+    expected: [
+      { label: "hub", value: "marketplace remove hub " },
+      { label: "lab", value: "marketplace remove lab " },
+    ],
+  },
+  {
+    prefix: "marketplace remove h",
+    expected: [{ label: "hub", value: "marketplace remove hub " }],
+  },
+] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-5 offers marketplace names from both scopes for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "marketplace-names");
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
+  });
+}
+
+test("TC-5 offers no name argument for a marketplace verb that takes none", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "marketplace-add");
+
+  // act
+  const suggestions = await getArgumentCompletions("marketplace add ", resolver);
+
+  // assert
+  assert.strictEqual(suggestions, null);
 });
 
-// ---------------------------------------------------------------------------
-// TC-5 -- marketplace-name positional for list / marketplace <verb>.
-// ---------------------------------------------------------------------------
+test("TC-5 offers nothing past the single marketplace name a list head accepts", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "list-surplus");
 
-test("TC-5 :: list <here> completes with union of marketplace names from both scopes", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: {
-      user: { "mp-u": {} },
-      project: { "mp-p": {}, "mp-u": {} },
-    },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("list ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["mp-p", "mp-u"]);
-  } finally {
-    await f.cleanup();
-  }
-});
+  // act
+  const suggestions = await getArgumentCompletions("list hub ", resolver);
 
-test("TC-5 :: ls <here> completes with union of marketplace names from both scopes", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: {
-      user: { "mp-u": {} },
-      project: { "mp-p": {}, "mp-u": {} },
-    },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("ls ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["mp-p", "mp-u"]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace remove <here> completes with marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace remove ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: exact marketplace remove token without trailing space completes marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace remove", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["marketplace remove mp-a "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace remove --scope project <here> completes with marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: {}, project: { "superpowers-marketplace": {} } },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions(
-      "marketplace remove --scope project superpowers",
-      f.resolver,
-    );
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["superpowers-marketplace"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["marketplace remove --scope project superpowers-marketplace "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace rm --scope project <here> completes with marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: {}, project: { "superpowers-marketplace": {} } },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions(
-      "marketplace rm --scope project superpowers",
-      f.resolver,
-    );
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["superpowers-marketplace"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["marketplace rm --scope project superpowers-marketplace "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace ls does not take a marketplace-name positional", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace ls ", f.resolver);
-    assert.equal(items, null);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-6 :: install --scope project <here> still completes plugin refs", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: {}, project: { mp: {} } },
-    manifests: { user: {}, project: { mp: [{ name: "solo", status: "available" }] } },
-  });
-  try {
-    const items = await getArgumentCompletions("install --scope project so", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["solo@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace update <here> completes with marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace update ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace autoupdate <here> completes with marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace autoupdate ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace noautoupdate <here> completes with marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace noautoupdate ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// INFO-06: `marketplace info <name>` argument completion. The TC-5
-// union surface is reused: candidates are the union
-// of marketplace names across BOTH scopes; the `--scope` filter does NOT
-// narrow the completion candidate set (the orchestrator handles scope-
-// mismatch at execution time via the INFO-04 `{marketplace not added}` row).
-
-test("TC-5 :: marketplace info <here> completes with union of marketplace names from both scopes", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: {
-      user: { "mp-u": {} },
-      project: { "mp-p": {} },
-    },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace info ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["mp-p", "mp-u"]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: exact `marketplace info` token without trailing space completes marketplace names", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace info", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["marketplace info mp-a "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-5 :: marketplace info --scope project <here> still completes union of marketplace names (scope filter does NOT narrow set)", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    // Marketplace lives in USER scope only; with `--scope project` the
-    // completion still surfaces the name. The orchestrator handles the
-    // mismatch at execution time via the INFO-04 `{marketplace not added}` row.
-    state: { user: { "mp-a": {} }, project: {} },
-    manifests: { user: {}, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("marketplace info --scope project mp", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["mp-a"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["marketplace info --scope project mp-a "],
-    );
-  } finally {
-    await f.cleanup();
-  }
+  // assert
+  assert.strictEqual(suggestions, null);
 });
 
 // ---------------------------------------------------------------------------
-// TC-6 -- <plugin>@<marketplace> token completion (status-aware).
+// TC-4: the scope flag value list, offered after the scope flag and nowhere
+// else. Every other position above and below compares its whole list, so the
+// two scope values are asserted absent there by that comparison.
 // ---------------------------------------------------------------------------
 
-test("TC-6 :: install <here> -- status filter excludes installed plugins", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("install ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.equal(
-      labels.some((l) => l.startsWith("p-installed")),
-      false,
-    );
-    assert.ok(labels.some((l) => l.startsWith("p-avail")));
-  } finally {
-    await f.cleanup();
-  }
-});
+for (const { prefix, expected } of [
+  {
+    prefix: "install --scope ",
+    expected: [
+      { label: "user", value: "install --scope user " },
+      { label: "project", value: "install --scope project " },
+    ],
+  },
+  { prefix: "install --scope u", expected: [{ label: "user", value: "install --scope user " }] },
+  {
+    prefix: "--scope ",
+    expected: [
+      { label: "user", value: "--scope user " },
+      { label: "project", value: "--scope project " },
+    ],
+  },
+] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-4 offers the scope values after the scope flag for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "scope-values");
 
-test("TC-6 / CMP-7 :: install <here> excludes unavailable plugins", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-avail", status: "available" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
   });
-  try {
-    const items = await getArgumentCompletions("install ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(labels.some((l) => l.startsWith("p-avail")));
-    assert.equal(
-      labels.some((l) => l.startsWith("p-unavail")),
-      false,
-    );
-  } finally {
-    await f.cleanup();
-  }
+}
+
+test("TC-4 offers nothing for a scope flag pair that carries no subcommand", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "scope-only");
+
+  // act
+  const suggestions = await getArgumentCompletions("--scope user ", resolver);
+
+  // assert
+  assert.strictEqual(suggestions, null);
 });
 
 // ---------------------------------------------------------------------------
-// CMP-6..8 -- scope-aware install completion.
+// TC-3: long-flag names. The per-verb SET is pinned by the flag-catalog drift
+// guard; what these cases carry is the prepended global scope entry, its
+// position, each item's rebuilt value, and the `ls` alias resolving to `list`.
 // ---------------------------------------------------------------------------
 
-test("CMP-8 :: install --scope project completes from user marketplace fallback", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: { user: { mp: [{ name: "fallback", status: "available" }] }, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("install --scope project fall", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["fallback@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
+test("TC-3 prepends the global scope flag before a verb's own completable flags", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "flags-install");
+
+  // act
+  const suggestions = await getArgumentCompletions("install -", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "--scope", value: "install --scope ", description: "Scope: user or project" },
+    {
+      label: "--map-model",
+      value: "install --map-model ",
+      description: "Enable model field mapping in generated agents (default: omit)",
+    },
+    {
+      label: "--partial",
+      value: "install --partial ",
+      description: "Install over collisions and unsupported components (not unavailable)",
+    },
+    {
+      label: "--local",
+      value: "install --local ",
+      description:
+        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    },
+  ]);
 });
 
-test("CMP-8 :: project marketplace shadows same-named user marketplace in install completion", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: { mp: {} } },
-    manifests: {
-      user: { mp: [{ name: "user-only", status: "available" }] },
-      project: { mp: [{ name: "project-only", status: "available" }] },
+test("TC-3 resolves the ls alias to the list flag entries", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "flags-ls");
+
+  // act
+  const suggestions = await getArgumentCompletions("ls -", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "--scope", value: "ls --scope ", description: "Scope: user or project" },
+    { label: "--installed", value: "ls --installed ", description: "Show installed plugins" },
+    { label: "--available", value: "ls --available ", description: "Show available plugins" },
+    { label: "--unavailable", value: "ls --unavailable ", description: "Show unavailable plugins" },
+    {
+      label: "--partial",
+      value: "ls --partial ",
+      description: "Show partially available plugins",
     },
-  });
-  try {
-    const items = await getArgumentCompletions("install --scope project ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual(labels, ["project-only@mp"]);
-  } finally {
-    await f.cleanup();
-  }
+    { label: "--remote", value: "ls --remote ", description: "Show remote plugins" },
+  ]);
 });
 
-test("TC-6 :: uninstall <here> -- status filter shows only installed plugins", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("uninstall ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(labels.some((l) => l.startsWith("p-installed")));
-    assert.equal(
-      labels.some((l) => l.startsWith("p-avail")),
-      false,
-    );
-  } finally {
-    await f.cleanup();
-  }
+test("TC-3 offers the global scope flag alone for a head the catalog does not carry", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "flags-marketplace");
+
+  // act
+  const suggestions = await getArgumentCompletions("marketplace -", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "--scope", value: "marketplace --scope ", description: "Scope: user or project" },
+  ]);
 });
 
-test("TC-6 :: exact uninstall token without trailing space completes installed plugin refs", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-        ],
-      },
-      project: {},
+test("TC-3 narrows the flag entries by the typed long-flag prefix", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "flags-narrow");
+
+  // act
+  const suggestions = await getArgumentCompletions("install --m", resolver);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    {
+      label: "--map-model",
+      value: "install --map-model ",
+      description: "Enable model field mapping in generated agents (default: omit)",
     },
-  });
-  try {
-    const items = await getArgumentCompletions("uninstall", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["p-installed@mp"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["uninstall p-installed@mp "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-6 :: uninstall --scope user limits installed plugin refs to user scope", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: { mp: {} } },
-    manifests: {
-      user: { mp: [{ name: "user-installed", status: "installed" }] },
-      project: { mp: [{ name: "project-installed", status: "installed" }] },
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("uninstall --scope user ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["user-installed@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-6 :: update <here> -- status filter shows only installed plugins", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("update ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(labels.some((l) => l.startsWith("p-installed")));
-    assert.equal(
-      labels.some((l) => l.startsWith("p-avail")),
-      false,
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// FINDING (SNM-39 / G-MIL-07, D-25-10 -- DEFER-WITH-FINDING, host-external):
-// This test proves OUR provider is CORRECT for the bare `update @` form --
-// `getArgumentCompletions("update @")` returns `["@mp-a","@mp-b"]`. Yet the
-// live runtime shows NOTHING (or file paths) for `/claude:plugin update @<TAB>`.
-// The gap is NOT in our code; it is the host's `@`-precedence in
-// `@earendil-works/pi-tui` (root-caused against the GLOBAL pi-tui 0.76.0 that
-// `scripts/pi.sh` actually execs, NOT the local node_modules 0.74.2 -- the
-// `@`-logic is byte-identical across both versions):
-//
-//   pi-tui dist/autocomplete.js (0.76.0):
-//     - CombinedAutocompleteProvider.getSuggestions  (:188)
-//       checks `const atPrefix = this.extractAtPrefix(textBeforeCursor)` (:191)
-//       and, when truthy, routes to `getFuzzyFileSuggestions` and returns
-//       early (:192-204) -- BEFORE the slash-command branch
-//       `if (!options.force && textBeforeCursor.startsWith("/"))` (:205).
-//     - extractAtPrefix (:331) splits on `findLastDelimiter` against
-//       `PATH_DELIMITERS = new Set([" ","\t",'"',"'","="])` (:6) -- which has
-//       NO `@`. So for `/claude:plugin update @` the trailing `@` token is
-//       treated as a file-mention prefix; if no cwd files match, the user sees
-//       nothing (matching the original G-MIL-07 report); if files match, file
-//       paths appear. Either way our slash-command `getArgumentCompletions`
-//       is NEVER reached for the bare-`@<mp>` token.
-//
-// Causes ruled out: (a) provider code-path divergence -- ELIMINATED, the
-// runtime source-loads the provider this test covers via SNM-37. (c)
-// `getInstalledPluginToMarketplacesMap` empty via scope-root mismatch -- not
-// the cause: pi-tui intercepts before our resolver map (`data.ts:313`) is ever
-// consulted for a bare `@` token.
-//
-// Per D-25-10 this is `@earendil-works/pi-tui`-external -- DEFER, do NOT contort
-// our provider to dodge the host's `@`-precedence (that would degrade the
-// documented bare-`@<mp>` UX without fixing the interception). The
-// `<plugin>@<mp>` and bare-`<TAB>` plugin-half forms are unaffected (their
-// token does not START with `@`).
-test("TC-6 :: update accepts bare @<marketplace> form", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "p", status: "installed" }],
-        "mp-b": [{ name: "p", status: "installed" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("update @", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    // Each marketplace surfaces as `@<name>`.
-    assert.deepEqual([...labels].sort(), ["@mp-a", "@mp-b"]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("PRL-16 :: reinstall completion mode shows only installed plugins", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-installed", status: "installed" },
-          { name: "p-avail", status: "available" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("reinstall ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual(labels, ["p-installed@mp"]);
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["reinstall p-installed@mp "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// RINST-01 / D-67-03: removed the former `reinstall --force completion still
-// reaches installed refs` test -- `--force` is no longer a reinstall token, so
-// the completion provider no longer special-cases it during positional
-// extraction. The bare `reinstall ` installed-plugin completion above is the
-// surviving coverage for the reinstall ref surface.
-
-test("PRL-16 :: reinstall @ completes marketplace-only targets", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "p", status: "installed" }],
-        "mp-b": [{ name: "p", status: "installed" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("reinstall @", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["@mp-a", "@mp-b"]);
-    for (const item of items) {
-      assert.match(
-        item.value,
-        / $/,
-        `marketplace-only completion needs trailing space: ${item.value}`,
-      );
-    }
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("PRL-16 :: reinstall @m ignores stale marketplace-name cache", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, market: {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "p", status: "installed" }],
-        market: [{ name: "p", status: "installed" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const staleUserCache = f.resolver.marketplaceNamesCachePath("user");
-    await mkdir(path.dirname(staleUserCache), { recursive: true });
-    await writeFile(staleUserCache, JSON.stringify({ schemaVersion: 2, names: [] }));
-
-    const items = await getArgumentCompletions("reinstall @m", f.resolver);
-
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["@market", "@mp-a"]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("PRL-16 :: reinstall plugin half preserves multi-marketplace no trailing space", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "shared", status: "installed" }],
-        "mp-b": [{ name: "shared", status: "installed" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("reinstall shared", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(items, [{ label: "shared@", value: "reinstall shared@" }]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-6 :: update --scope user limits installed plugin refs to user scope", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: { mp: {} } },
-    manifests: {
-      user: { mp: [{ name: "user-installed", status: "installed" }] },
-      project: { mp: [{ name: "project-installed", status: "installed" }] },
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("update --scope user ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["user-installed@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-6 :: unique plugin yields name@mp with trailing space", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: { mp: [{ name: "solo", status: "installed" }] },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("uninstall ", f.resolver);
-    assert.ok(items !== null);
-    const solo = items.find((i) => i.label === "solo@mp");
-    assert.ok(solo !== undefined, `expected solo@mp in: ${items.map((i) => i.label).join(", ")}`);
-    assert.match(solo.value, / $/, "unique plugin must include trailing space");
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-6 :: multi-marketplace plugin yields name@ without trailing space", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "shared", status: "installed" }],
-        "mp-b": [{ name: "shared", status: "installed" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("uninstall ", f.resolver);
-    assert.ok(items !== null);
-    const shared = items.find((i) => i.label === "shared@");
-    assert.ok(shared !== undefined, `expected shared@ in: ${items.map((i) => i.label).join(", ")}`);
-    assert.equal(
-      shared.value.endsWith(" "),
-      false,
-      "multi-mp plugin must NOT include trailing space",
-    );
-  } finally {
-    await f.cleanup();
-  }
+  ]);
 });
 
 // ---------------------------------------------------------------------------
-// INFO-02 + INFO-06: TC-6 `info` mode --
-// `<plugin>@<marketplace>` token completion across the union of
-// installed + available + unavailable rows from BOTH scopes (no
-// install-state exclusion; scope filter does NOT narrow the candidate
-// set -- the orchestrator handles scope mismatches via the INFO-04
-// `{marketplace not added}` row).
+// TC-6: the plugin-reference argument. Each row names the completion mode its
+// head maps to by hand. The seeded manifests carry rows eligible for one mode
+// and not another, so a head rerouted to a different mode changes its list.
 // ---------------------------------------------------------------------------
 
-test("TC-6 / INFO-02 :: info <here> returns union of installed + available + unavailable refs across both scopes", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: {
-      user: { mp: {} },
-      project: { mp2: {} },
-    },
-    manifests: {
-      user: {
-        mp: [
-          { name: "foo", status: "installed" },
-          { name: "bar", status: "available" },
-          { name: "qux", status: "unavailable" },
-        ],
-      },
-      project: { mp2: [{ name: "baz", status: "installed" }] },
-    },
+for (const { prefix, mode, expected } of [
+  {
+    prefix: "install ",
+    mode: "install",
+    expected: [
+      { label: "fresh@hub", value: "install fresh@hub " },
+      { label: "not-fetched@hub", value: "install not-fetched@hub " },
+    ],
+  },
+  {
+    prefix: "uninstall ",
+    mode: "uninstall",
+    expected: [
+      { label: "lab-held@lab", value: "uninstall lab-held@lab " },
+      { label: "held@hub", value: "uninstall held@hub " },
+      { label: "outdated@hub", value: "uninstall outdated@hub " },
+    ],
+  },
+  {
+    prefix: "update ",
+    mode: "update",
+    expected: [
+      { label: "lab-held@lab", value: "update lab-held@lab " },
+      { label: "held@hub", value: "update held@hub " },
+      { label: "outdated@hub", value: "update outdated@hub " },
+    ],
+  },
+  {
+    prefix: "fetch ",
+    mode: "fetch",
+    expected: [
+      { label: "lab-fresh@lab", value: "fetch lab-fresh@lab " },
+      { label: "fresh@hub", value: "fetch fresh@hub " },
+      { label: "not-fetched@hub", value: "fetch not-fetched@hub " },
+      { label: "degraded@hub", value: "fetch degraded@hub " },
+      { label: "broken@hub", value: "fetch broken@hub " },
+    ],
+  },
+  {
+    prefix: "reinstall ",
+    mode: "reinstall",
+    expected: [
+      { label: "lab-held@lab", value: "reinstall lab-held@lab " },
+      { label: "held@hub", value: "reinstall held@hub " },
+      { label: "outdated@hub", value: "reinstall outdated@hub " },
+    ],
+  },
+  {
+    prefix: "info ",
+    mode: "info",
+    expected: [
+      { label: "held@hub", value: "info held@hub " },
+      { label: "outdated@hub", value: "info outdated@hub " },
+      { label: "fresh@hub", value: "info fresh@hub " },
+      { label: "not-fetched@hub", value: "info not-fetched@hub " },
+      { label: "degraded@hub", value: "info degraded@hub " },
+      { label: "broken@hub", value: "info broken@hub " },
+      { label: "lab-held@lab", value: "info lab-held@lab " },
+      { label: "lab-fresh@lab", value: "info lab-fresh@lab " },
+    ],
+  },
+  {
+    prefix: "enable ",
+    mode: "enable",
+    expected: [
+      { label: "lab-held@lab", value: "enable lab-held@lab " },
+      { label: "held@hub", value: "enable held@hub " },
+      { label: "outdated@hub", value: "enable outdated@hub " },
+    ],
+  },
+  {
+    prefix: "disable ",
+    mode: "disable",
+    expected: [
+      { label: "lab-held@lab", value: "disable lab-held@lab " },
+      { label: "held@hub", value: "disable held@hub " },
+      { label: "outdated@hub", value: "disable outdated@hub " },
+    ],
+  },
+] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-6 completes plugin references for ${JSON.stringify(prefix)} through the ${mode} mode`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, `ref-${mode}`);
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
   });
-  try {
-    const items = await getArgumentCompletions("info ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["bar@mp", "baz@mp2", "foo@mp", "qux@mp"]);
-  } finally {
-    await f.cleanup();
-  }
-});
+}
 
-test("TC-6 / INFO-02 :: info foo@<here> narrows to marketplaces carrying foo", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "foo", status: "available" }],
-        "mp-b": [{ name: "other", status: "available" }],
-      },
-      project: {},
-    },
+// The other half of each head's branch configuration: whether the bare
+// `@<marketplace>` form is accepted. It is invisible at a plain plugin cursor
+// and is observable only at an `@` cursor, so each head is driven there too.
+for (const { prefix, mode, expected } of [
+  { prefix: "install @", mode: "install", expected: [] },
+  { prefix: "uninstall @", mode: "uninstall", expected: [] },
+  {
+    prefix: "update @",
+    mode: "update",
+    expected: [
+      { label: "@lab", value: "update @lab " },
+      { label: "@hub", value: "update @hub " },
+    ],
+  },
+  {
+    prefix: "fetch @",
+    mode: "fetch",
+    expected: [
+      { label: "@lab", value: "fetch @lab " },
+      { label: "@hub", value: "fetch @hub " },
+    ],
+  },
+  {
+    prefix: "reinstall @",
+    mode: "reinstall",
+    expected: [
+      { label: "@lab", value: "reinstall @lab " },
+      { label: "@hub", value: "reinstall @hub " },
+    ],
+  },
+  { prefix: "info @", mode: "info", expected: [] },
+  { prefix: "enable @", mode: "enable", expected: [] },
+  { prefix: "disable @", mode: "disable", expected: [] },
+] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-6 offers ${String(expected.length)} bare marketplace target(s) for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, `bare-${mode}`);
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
   });
-  try {
-    const items = await getArgumentCompletions("info foo@", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["foo@mp-a"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
+}
 
-test("TC-6 / INFO-02 :: info --scope project <here> returns the SAME union (scope filter does NOT narrow set)", async () => {
-  resetCompletionCache();
-  // Marketplace lives in USER scope only; with `--scope project` the
-  // completion still surfaces every known plugin. The orchestrator
-  // handles the mismatch at execution time via the INFO-04
-  // `{marketplace not added}` row.
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "foo", status: "installed" },
-          { name: "bar", status: "available" },
-        ],
-      },
-      project: {},
-    },
+// D-54-01 / ENBL-01 / ENBL-02: enable and disable carry an explicit scope into
+// the same installed-inventory candidate map their siblings use. The info head
+// is the one exception -- it forwards the scope and the data layer ignores it,
+// which is the promise the info row below states.
+for (const { prefix, mode, expected } of [
+  {
+    prefix: "install --scope project ",
+    mode: "install",
+    expected: [
+      { label: "lab-fresh@lab", value: "install --scope project lab-fresh@lab " },
+      { label: "fresh@hub", value: "install --scope project fresh@hub " },
+      { label: "not-fetched@hub", value: "install --scope project not-fetched@hub " },
+    ],
+  },
+  {
+    prefix: "uninstall --scope user ",
+    mode: "uninstall",
+    expected: [
+      { label: "held@hub", value: "uninstall --scope user held@hub " },
+      { label: "outdated@hub", value: "uninstall --scope user outdated@hub " },
+    ],
+  },
+  {
+    prefix: "update --scope user ",
+    mode: "update",
+    expected: [
+      { label: "held@hub", value: "update --scope user held@hub " },
+      { label: "outdated@hub", value: "update --scope user outdated@hub " },
+    ],
+  },
+  {
+    prefix: "fetch --scope user ",
+    mode: "fetch",
+    expected: [
+      { label: "fresh@hub", value: "fetch --scope user fresh@hub " },
+      { label: "not-fetched@hub", value: "fetch --scope user not-fetched@hub " },
+      { label: "degraded@hub", value: "fetch --scope user degraded@hub " },
+      { label: "broken@hub", value: "fetch --scope user broken@hub " },
+    ],
+  },
+  {
+    prefix: "reinstall --scope user ",
+    mode: "reinstall",
+    expected: [
+      { label: "held@hub", value: "reinstall --scope user held@hub " },
+      { label: "outdated@hub", value: "reinstall --scope user outdated@hub " },
+    ],
+  },
+  {
+    prefix: "info --scope project ",
+    mode: "info",
+    expected: [
+      { label: "held@hub", value: "info --scope project held@hub " },
+      { label: "outdated@hub", value: "info --scope project outdated@hub " },
+      { label: "fresh@hub", value: "info --scope project fresh@hub " },
+      { label: "not-fetched@hub", value: "info --scope project not-fetched@hub " },
+      { label: "degraded@hub", value: "info --scope project degraded@hub " },
+      { label: "broken@hub", value: "info --scope project broken@hub " },
+      { label: "lab-held@lab", value: "info --scope project lab-held@lab " },
+      { label: "lab-fresh@lab", value: "info --scope project lab-fresh@lab " },
+    ],
+  },
+  {
+    prefix: "enable --scope user ",
+    mode: "enable",
+    expected: [
+      { label: "held@hub", value: "enable --scope user held@hub " },
+      { label: "outdated@hub", value: "enable --scope user outdated@hub " },
+    ],
+  },
+  {
+    prefix: "disable --scope user ",
+    mode: "disable",
+    expected: [
+      { label: "held@hub", value: "disable --scope user held@hub " },
+      { label: "outdated@hub", value: "disable --scope user outdated@hub " },
+    ],
+  },
+] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-6 carries an explicit scope into the ${mode} mode for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, `ref-scoped-${mode}`);
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
   });
-  try {
-    const items = await getArgumentCompletions("info --scope project ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["bar@mp", "foo@mp"]);
-  } finally {
-    await f.cleanup();
-  }
-});
+}
 
-// ---------------------------------------------------------------------------
-// FTCH-07 / D-81-03: `fetch` completion. `fetch <tab>` offers the fetchable
-// git-source buckets ({remote, available, partially-available, unavailable});
-// installed-family and path-source rows are excluded. `fetch @<tab>` offers
-// marketplace names (allowMarketplaceOnly). Per D-81-03 option (a), pinned-warm
-// cannot be distinguished from unpinned-warm in the completion cache, so warm
-// buckets are offered and a pinned-warm target simply no-ops if typed.
-// ---------------------------------------------------------------------------
+for (const { prefix, mode, expected } of [
+  {
+    prefix: "install --partial ",
+    mode: "install",
+    expected: [
+      { label: "fresh@hub", value: "install --partial fresh@hub " },
+      { label: "degraded@hub", value: "install --partial degraded@hub " },
+    ],
+  },
+  {
+    prefix: "update --partial ",
+    mode: "update",
+    expected: [{ label: "outdated@hub", value: "update --partial outdated@hub " }],
+  },
+] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
+  test(`TC-6 shifts the ${mode} candidate set when the partial flag precedes the reference`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, `ref-partial-${mode}`);
 
-test("FTCH-07 :: fetch <here> offers the fetchable buckets, excludes installed and installed-family", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-remote", status: "remote" },
-          { name: "p-avail", status: "available" },
-          { name: "p-unsup", status: "partially-available" },
-          { name: "p-unavail", status: "unavailable" },
-          { name: "p-inst", status: "installed" },
-          { name: "p-upg", status: "upgradable" },
-        ],
-      },
-      project: {},
-    },
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
   });
-  try {
-    const items = await getArgumentCompletions("fetch ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), [
-      "p-avail@mp",
-      "p-remote@mp",
-      "p-unavail@mp",
-      "p-unsup@mp",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
+}
 
-test("FTCH-07 :: fetch <here> surfaces fetchable plugins already present in state (no install-state exclusion)", async () => {
-  resetCompletionCache();
-  // A plugin whose marketplace is added AND whose row derives a fetchable
-  // status is offered regardless of install state -- fetch enumerates the
-  // manifest, not the installed inventory.
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: { mp: [{ name: "warmable", status: "available" }] },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("fetch war", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["warmable@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
+test("TC-6 treats the partial flag as a positional for a head that does not accept it", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "ref-partial-reinstall");
 
-test("FTCH-07 :: fetch @<here> offers marketplace names (allowMarketplaceOnly)", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
-    manifests: {
-      user: {
-        "mp-a": [{ name: "p", status: "available" }],
-        "mp-b": [{ name: "q", status: "remote" }],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("fetch @", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual([...items.map((i) => i.label)].sort(), ["@mp-a", "@mp-b"]);
-    for (const item of items) {
-      assert.match(
-        item.value,
-        / $/,
-        `marketplace-only completion needs trailing space: ${item.value}`,
-      );
-    }
-  } finally {
-    await f.cleanup();
-  }
-});
+  // act
+  const suggestions = await getArgumentCompletions("reinstall --partial ", resolver);
 
-test("FTCH-07 :: fetch --scope user <here> limits fetchable refs to user scope", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: { mp: {} } },
-    manifests: {
-      user: { mp: [{ name: "user-avail", status: "available" }] },
-      project: { mp: [{ name: "project-avail", status: "available" }] },
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("fetch --scope user ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["user-avail@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// LIST-02 / D-67-02 -- `--partial`-gated install/update completion candidate
-// sets sourced from the finer cache statuses. With `--partial` preceding the
-// plugin positional, install offers `available` + `unsupported` and update
-// offers `upgradable` + `force-upgradable` (`unavailable` excluded in both).
-// Without `--partial`, the candidate sets are byte-identical to today.
-// ---------------------------------------------------------------------------
-
-test("LIST-02 / D-67-02 :: install --partial offers available + unsupported, excludes unavailable", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-avail", status: "available" },
-          { name: "p-unsup", status: "partially-available" },
-          { name: "p-unavail", status: "unavailable" },
-          { name: "p-inst", status: "installed" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("install --partial ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["p-avail@mp", "p-unsup@mp"]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("LIST-02 / D-67-02 / WR-02 :: update --partial offers upgradable + force-upgradable + force-installed-upgradable, excludes installed/force-installed/unavailable", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-upg", status: "upgradable" },
-          { name: "p-fupg", status: "partially-upgradable" },
-          // WR-02: a force-installed row with a meaningful (newer,
-          // non-unavailable) candidate IS a real `update --partial` target.
-          { name: "p-finst-upg", status: "partially-installed-upgradable" },
-          { name: "p-inst", status: "installed" },
-          // Plain force-installed (no newer candidate) stays excluded.
-          { name: "p-finst", status: "partially-installed" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("update --partial ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["p-finst-upg@mp", "p-fupg@mp", "p-upg@mp"]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("LIST-02 / D-67-02 :: install (no --partial) offers ONLY available -- byte-identical regression", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-avail", status: "available" },
-          { name: "p-unsup", status: "partially-available" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("install ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["p-avail@mp"],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("LIST-02 / D-67-02 :: update (no --partial) offers ALL installed-family statuses -- byte-identical regression", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: {
-      user: {
-        mp: [
-          { name: "p-inst", status: "installed" },
-          { name: "p-upg", status: "upgradable" },
-          { name: "p-finst", status: "partially-installed" },
-          { name: "p-finst-upg", status: "partially-installed-upgradable" },
-          { name: "p-fupg", status: "partially-upgradable" },
-          { name: "p-avail", status: "available" },
-          { name: "p-unavail", status: "unavailable" },
-        ],
-      },
-      project: {},
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("update ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    // WR-02: `force-installed-upgradable` is part of the installed inventory, so
-    // the no-`--partial` set still spans the full family (byte-identical contract).
-    assert.deepEqual([...labels].sort(), [
-      "p-finst-upg@mp",
-      "p-finst@mp",
-      "p-fupg@mp",
-      "p-inst@mp",
-      "p-upg@mp",
-    ]);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("LIST-02 / D-67-02 :: --partial is a flag completion for install/update and NOT for reinstall", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    for (const head of ["install", "update"]) {
-      const items = await getArgumentCompletions(`${head} -`, f.resolver);
-      assert.ok(items !== null, head);
-      assert.ok(
-        items.some((i) => i.label === "--partial"),
-        `expected --partial under ${head}`,
-      );
-    }
-
-    const reinstallItems = await getArgumentCompletions("reinstall -", f.resolver);
-    assert.ok(reinstallItems !== null);
-    assert.equal(
-      reinstallItems.some((i) => i.label === "--partial"),
-      false,
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("LIST-02 / D-67-02 :: install --partial <here> does not return null (positional-ref branch fires)", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: { user: { mp: [{ name: "p-avail", status: "available" }] }, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("install --partial ", f.resolver);
-    assert.notEqual(items, null);
-  } finally {
-    await f.cleanup();
-  }
+  // assert
+  assert.strictEqual(suggestions, null);
 });
 
 // ---------------------------------------------------------------------------
-// TC-7 -- trailing space invariant (sampled).
+// The null sentinel: the Pi-tui contract requires null, not an empty list, so
+// other providers still get a turn.
 // ---------------------------------------------------------------------------
 
-test("TC-7 :: all terminal completions include trailing space (TC-1 case)", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("", f.resolver);
-    assert.ok(items !== null);
-    for (const item of items) {
-      assert.match(item.value, / $/, `expected trailing space in TC-1 item: ${item.value}`);
-    }
-  } finally {
-    await f.cleanup();
-  }
-});
+for (const prefix of ["pending ", "import ", "bootstrap ", "frobnicate ", "install alpha extra "]) {
+  test(`offers nothing at the argument after ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "no-completion");
 
-// ---------------------------------------------------------------------------
-// TC-8 / TC-9 -- soft-fail vs. propagation through the dispatcher.
-// ---------------------------------------------------------------------------
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver);
 
-test("TC-8 :: per-marketplace manifest load failure soft-fails to empty list (no throw)", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { broken: {}, healthy: {} }, project: {} },
-    manifests: {
-      user: { healthy: [{ name: "h", status: "installed" }] },
-      project: {},
-    },
-    manifestThrows: {
-      user: { broken: new Error("manifest read EACCES") },
-    },
+    // assert
+    assert.strictEqual(suggestions, null);
   });
-  try {
-    // uninstall mode reads only installed; broken's plugin set soft-fails
-    // to [], so the result must contain h@healthy only (no throw).
-    const items = await getArgumentCompletions("uninstall ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(labels.includes("h@healthy"));
-    // Nothing from the broken marketplace surfaces.
-    for (const l of labels) {
-      assert.equal(l.includes("broken"), false, `unexpected broken-mp label: ${l}`);
-    }
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("PRL-16 :: reinstall per-marketplace manifest soft-fail preserves other marketplace completions", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { broken: {}, healthy: {} }, project: {} },
-    manifests: {
-      user: { healthy: [{ name: "ok", status: "installed" }] },
-      project: {},
-    },
-    manifestThrows: {
-      user: { broken: new Error("manifest read EACCES") },
-    },
-  });
-  try {
-    const items = await getArgumentCompletions("reinstall ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.ok(labels.includes("ok@healthy"));
-    assert.deepEqual(items.find((i) => i.label === "ok@healthy")?.value, "reinstall ok@healthy ");
-    for (const l of labels) {
-      assert.equal(l.includes("broken"), false, `unexpected broken-mp label: ${l}`);
-    }
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-9 :: state.json error propagates (throw escapes getArgumentCompletions)", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: { user: { mp: [] }, project: {} },
-    stateThrows: { user: new Error("ENOENT: state.json corrupt") },
-  });
-  try {
-    await assert.rejects(
-      () => getArgumentCompletions("uninstall ", f.resolver),
-      /state\.json corrupt/,
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("PRL-16 :: reinstall state load errors propagate", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: { user: { mp: [] }, project: {} },
-    stateThrows: { user: new Error("state boom") },
-  });
-  try {
-    await assert.rejects(() => getArgumentCompletions("reinstall ", f.resolver), /state boom/);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// no-match -> null sentinel.
-// ---------------------------------------------------------------------------
-
-test("no-match position returns null (Pi-tui sentinel; not [])", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    // `install foo@bar ` -- past the only positional, no flag prefix, no
-    // marketplace subcommand context; the dispatcher must return null
-    // (not []) so Pi-tui can fall through to other providers.
-    const items = await getArgumentCompletions("install foo@bar ", f.resolver);
-    assert.equal(items, null);
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("TC-1 :: first positional completion includes import", async () => {
-  resetCompletionCache();
-  const f = await emptyFixture();
-  try {
-    const items = await getArgumentCompletions("", f.resolver);
-    assert.ok(items !== null);
-    assert.ok(items.some((item) => item.label === "import" && item.value === "import "));
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("import completions offer scope values and no plugin refs", async () => {
-  resetCompletionCache();
-  const f = await makeFixture({
-    state: { user: { mp: { manifestPath: "/tmp/manifest" } } },
-    manifests: {
-      user: {
-        mp: [{ name: "plugin", status: "available", version: "1.0.0" }],
-      },
-    },
-  });
-  try {
-    const scopeItems = await getArgumentCompletions("import --scope ", f.resolver);
-    assert.ok(scopeItems !== null);
-    assert.deepEqual(scopeItems.map((item) => item.label).sort(), ["project", "user"]);
-
-    const flagItems = await getArgumentCompletions("import -", f.resolver);
-    assert.ok(flagItems !== null);
-    assert.ok(flagItems.some((item) => item.label === "--scope"));
-
-    const positionalItems = await getArgumentCompletions("import foo", f.resolver);
-    assert.equal(positionalItems, null);
-  } finally {
-    await f.cleanup();
-  }
-});
+}

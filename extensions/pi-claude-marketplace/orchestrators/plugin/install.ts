@@ -125,7 +125,12 @@ import {
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
+import {
+  runPhases,
+  type Phase,
+  type RollbackPartial,
+  type RunPhasesResult,
+} from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
@@ -773,8 +778,7 @@ async function preflightInstallResolve(
 /**
  * CR-01: the guard-FREE install ledger body -- the
  * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
- * sequence that previously lived inline in `installPlugin`'s
- * `withStateGuard` closure.
+ * sequence.
  *
  * Locking contract: the CALLER owns the per-scope state lock and the
  * load/save lifecycle. This function performs NO `withStateGuard` /
@@ -1025,8 +1029,8 @@ async function runInstallLedgerBody(
       // corruptions, per-agent frontmatter conversion notes, and D-07
       // duplicate-name skips. Only the last is a discovery truncation, and
       // the three are not separable here, so the whole array rides the
-      // hygiene channel (D-19-01) rather than the D-141-03 one. Folding it
-      // at all is the fix: it used to be dropped outright.
+      // hygiene channel (D-19-01) rather than the D-141-03 one, keeping
+      // every kind surfaced instead of any getting silently dropped.
       c.bridgeWarnings.push(...prep.result.warnings);
       const leak = await commitPreparedAgents(prep);
       if (leak !== undefined) {
@@ -1246,7 +1250,7 @@ async function runInstallLedgerBody(
   ];
 
   const result = await runPhases(phases, ctxLocal);
-  if (!result.ok) {
+  if (isFailedRunPhasesResult(result)) {
     // Capture the rollbackPartials + best-known-version BEFORE
     // re-throwing. The caller's catch block threads
     // `capture.rollbackPartials` into `PluginFailedMessage.rollbackPartial`
@@ -1261,11 +1265,26 @@ async function runInstallLedgerBody(
       capture.version = ctxLocal.version;
     }
 
-    // result.error is non-undefined on !ok per phase-ledger.ts contract.
-    throw result.error ?? new Error("phase ledger failed");
+    // `runPhases` normalizes every failed phase throw to Error before it
+    // returns the `ok: false` arm, so this narrowed result always carries it.
+    throw result.error;
   }
 
   return { kind: "installed", installCtx: ctxLocal };
+}
+
+type FailedRunPhasesResult = RunPhasesResult & {
+  readonly ok: false;
+  readonly error: Error;
+};
+
+/**
+ * The ledger's sole `ok: false` producer normalizes and supplies `error`.
+ * Keep that producer invariant private while the shared legacy result type
+ * still models `ok` and `error` independently.
+ */
+function isFailedRunPhasesResult(result: RunPhasesResult): result is FailedRunPhasesResult {
+  return !result.ok;
 }
 
 /**
@@ -1363,13 +1382,23 @@ async function disableFreshlyInstalledPlugin(args: {
   }
 
   const cascade = await cascadeUnstagePlugin(plugin, marketplace, locations, target.installed);
-  if (!cascade.ok) {
+  if (isFailedUnstageOutcome(cascade)) {
     return foldFailedDisableCascade({ ...args, installed: target.installed, cascade });
   }
 
   target.mp.plugins[plugin] = toDisabledRecord(target.installed, new Date().toISOString());
   dropInstallDisabledHooks(scope, marketplace, plugin);
   return { ok: true };
+}
+
+type FailedUnstageOutcome = UnstageOutcome & {
+  readonly ok: false;
+  readonly cause: Error;
+};
+
+/** `cascadeUnstagePlugin` normalizes every `ok: false` result to an Error cause. */
+function isFailedUnstageOutcome(outcome: UnstageOutcome): outcome is FailedUnstageOutcome {
+  return !outcome.ok;
 }
 
 /**
@@ -1401,7 +1430,7 @@ function foldFailedDisableCascade(args: {
   readonly marketplace: string;
   readonly plugin: string;
   readonly installed: InstalledPluginRecord;
-  readonly cascade: UnstageOutcome;
+  readonly cascade: FailedUnstageOutcome;
 }): { readonly ok: false; readonly cause: Error } {
   const { scope, marketplace, plugin, installed, cascade } = args;
   applyPartialCascadeFold(installed, cascade.dropped);
@@ -1412,7 +1441,7 @@ function foldFailedDisableCascade(args: {
 
   return {
     ok: false,
-    cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`),
+    cause: cascade.cause,
   };
 }
 
@@ -1894,9 +1923,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
 
-  // Post-guard composition data. The guard closure populates this on
-  // success; the catch block leaves it undefined and returns early.
-  let installCtx: InstallCtx | undefined;
+  // Post-guard composition data. The guard closure populates this on its sole
+  // installed result; marketplace/config misses and every throw return before
+  // post-guard composition, so there is no clean path that can read it first.
+  let installCtx!: InstallCtx;
   // Captured-on-throw context for the catch block (populated by
   // `runInstallLedger` BEFORE its rethrow). `capture.rollbackPartials`
   // mirrors the ledger's RollbackPartial[] and populates
@@ -2302,8 +2332,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // where a default-scope (user) install misses a project-only container. One
     // read-only probe of that scope decides which structural token the brace
     // carries. The probe never throws and never blocks the row (see
-    // `marketplaceInOtherScope`); a `false` answer renders the plain
-    // `{marketplace not added}` row byte-identically to before.
+    // `marketplaceInOtherScope`); a `false` answer adds no field, so the row
+    // renders the plain `{marketplace not added}` brace.
     notify(ctx, pi, {
       kind: "marketplace-not-added",
       name: marketplace,
@@ -2345,26 +2375,6 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       },
     ]);
     return { status: "failed", error: cascadeError, cause };
-  }
-
-  // Defensive: the success path always populates installCtx; if it did not,
-  // surface the inconsistency rather than silently emit a missing message.
-  if (installCtx === undefined) {
-    // Defensive arm: `reasons: []` because no closed-set Reason classifies
-    // an internal invariant violation. The renderer suppresses the empty
-    // brace per D-15-01 and surfaces the cause via the indent trailer.
-    return failedRowOutcome({
-      ctx,
-      pi,
-      marketplace,
-      scope,
-      plugin,
-      error: new Error(
-        `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`,
-      ),
-      reasons: [],
-      orchestrated,
-    });
   }
 
   const postCommitWarnings = await collectPostCommitWarnings(installCtx, scope, orchestrated);

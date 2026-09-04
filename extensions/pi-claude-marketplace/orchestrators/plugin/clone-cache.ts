@@ -27,7 +27,7 @@ import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { appendLeakToError } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 import {
   DEFAULT_GIT_OPS,
@@ -90,7 +90,7 @@ async function promoteStagingToClone(
     }
 
     const wrapped = appendLeakToError(err, leak);
-    throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
+    throw wrapped;
   }
 }
 
@@ -535,14 +535,14 @@ export async function resolvePluginPin(args: {
   return source.ref === undefined ? { cloneUrl, pin } : { cloneUrl, pin, ref: source.ref };
 }
 
-// PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` now lives in shared/fs-utils.ts
+// PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` lives in shared/fs-utils.ts
 // so the network-free presence probe can share it without pulling this seam's git
-// surface. Re-exported here under the same name to keep the update / reinstall
-// import sites unbroken. `install.ts` no longer imports it -- it calls this
-// file's `resolveGitPluginRootWithSubdir`, which wraps it.
+// surface. Re-exported here under the same name so the update / reinstall
+// import sites need no change. `install.ts` calls this file's
+// `resolveGitPluginRootWithSubdir`, which wraps it, rather than importing it directly.
 export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 
-// D-77-06 / PURL-07: `canonicalCloneUrl` now lives in domain/clone-key.ts (the
+// D-77-06 / PURL-07: `canonicalCloneUrl` lives in domain/clone-key.ts (the
 // module that owns both key halves and the clone-key identity invariant) so
 // the git seam and the fs-only presence probe share ONE url reconstruction.
 // Re-exported here under the same name to keep install / update / reinstall /
@@ -559,7 +559,7 @@ export { canonicalCloneUrl } from "../../domain/clone-key.ts";
  * materializes at the clone root itself.
  *
  * Shared by the pinned and unpinned probe arms of BOTH the install path and
- * the `info --fetch` path, which previously carried byte-identical copies.
+ * the `info --fetch` path.
  */
 export async function resolveGitPluginRootWithSubdir(
   gitSource: GitBackedSource,

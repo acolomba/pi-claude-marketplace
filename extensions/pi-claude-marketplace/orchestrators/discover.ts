@@ -76,27 +76,20 @@ async function readSkillPaths(skillsDir: string): Promise<readonly string[]> {
   const paths: string[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || !entry.isDirectory()) {
+    if (entry.name.startsWith(".")) {
       continue;
     }
 
     const skillDir = path.join(skillsDir, entry.name);
     const stat = await lstat(skillDir);
-    if (stat.isSymbolicLink()) {
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
       continue;
     }
 
-    const skillFile = path.join(skillDir, "SKILL.md");
-    const skillStat = await lstat(skillFile).catch((err: unknown) => {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        return null;
-      }
-
-      throw err;
+    const skillFile = (await readSortedDir(skillDir)).find((skillEntry) => {
+      return skillEntry.name === "SKILL.md";
     });
-
-    if (skillStat?.isFile() && !skillStat.isSymbolicLink()) {
+    if (skillFile !== undefined && !skillFile.isSymbolicLink() && skillFile.isFile()) {
       paths.push(skillDir);
     }
   }
@@ -109,7 +102,7 @@ async function readPromptPaths(promptsDir: string): Promise<readonly string[]> {
   const paths: string[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {
+    if (entry.name.startsWith(".") || !entry.name.endsWith(".md")) {
       continue;
     }
 

@@ -205,8 +205,8 @@ test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", 
   // construction form directly.
   //
   // Two checks combine here. The first is the original bounded-prefix scan,
-  // kept unchanged so no case it used to catch (a concatenation leak, or a
-  // leak as the FIRST interpolation) stops being caught. The second closes
+  // kept unchanged so it still catches every case it already covers (a
+  // concatenation leak, or a leak as the FIRST interpolation). The second closes
   // a proven bypass: `[^,}]*` cannot cross the `}` that closes a preceding
   // `${...}`, so it only ever inspects the FIRST interpolation in a
   // multi-interpolation template literal (e.g.
@@ -244,8 +244,8 @@ test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential
   // outside every other gate in this file; this test closes that gap.
   //
   // Two checks combine here (mirroring the twin `reason:` gate above). The
-  // first is the original bounded-prefix scan, kept unchanged so no case it
-  // used to catch stops being caught. The second closes a proven bypass:
+  // first is the original bounded-prefix scan, kept unchanged so it still
+  // catches every case it already covers. The second closes a proven bypass:
   // `[^)]*` does not allow a literal `)` before the interpolation it is
   // scanning for, and onAuthFailure's own message text contains one
   // (`` `onAuthFailure: reject() threw for ${opts.host}: ...` `` -- the

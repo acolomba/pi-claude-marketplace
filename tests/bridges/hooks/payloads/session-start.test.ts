@@ -8,44 +8,155 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionStartEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const ctx: TranslationContext = {
-  sessionId: "sess-1",
-  transcriptPath: "/tmp/t.jsonl",
-  cwd: "/proj",
-};
-
-test("session-start: emits the SessionStart envelope with reason -> source propagation", () => {
+test("emits the complete SessionStart envelope with the startup source", () => {
+  // arrange
+  const context = {
+    sessionId: "session-start-startup",
+    transcriptPath: "/sessions/session-start-startup.jsonl",
+    cwd: "/workspaces/session-start-startup",
+  } satisfies TranslationContext;
   const event: SessionStartEvent = {
     type: "session_start",
     reason: "startup",
   };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(
-    JSON.stringify(actual),
-    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"SessionStart","source":"startup"}',
-  );
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-start-startup",
+    transcript_path: "/sessions/session-start-startup.jsonl",
+    cwd: "/workspaces/session-start-startup",
+    hook_event_name: "SessionStart",
+    source: "startup",
+  });
+  assert.strictEqual(payload.session_id, context.sessionId);
+  assert.strictEqual(payload.transcript_path, context.transcriptPath);
+  assert.strictEqual(payload.cwd, context.cwd);
 });
 
-test("session-start: propagates non-startup reasons (resume) verbatim into source", () => {
+test("propagates the resume source in the complete SessionStart envelope", () => {
+  // arrange
+  const context = {
+    sessionId: "session-start-resume",
+    transcriptPath: "/sessions/session-start-resume.jsonl",
+    cwd: "/workspaces/session-start-resume",
+  } satisfies TranslationContext;
   const event: SessionStartEvent = {
     type: "session_start",
     reason: "resume",
   };
 
-  const actual = translate(event, ctx);
+  // act
+  const payload = translate(event, context);
 
-  assert.equal(actual.hook_event_name, "SessionStart");
-  assert.equal(actual.source, "resume");
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-start-resume",
+    transcript_path: "/sessions/session-start-resume.jsonl",
+    cwd: "/workspaces/session-start-resume",
+    hook_event_name: "SessionStart",
+    source: "resume",
+  });
 });
 
-test("session-start: propagates Pi-only reasons (reload / new / fork) verbatim", () => {
-  // Pi exposes reasons that have no Claude equivalent; the translator
-  // does not synthesize a fake `clear`/`compact` -- it passes the Pi
-  // value through as-is (D-60-04 hand-authored expressivity).
-  for (const reason of ["reload", "new", "fork"] as const) {
-    const actual = translate({ type: "session_start", reason }, ctx);
-    assert.equal(actual.source, reason);
-  }
+test("propagates the reload source in the complete SessionStart envelope", () => {
+  // arrange
+  const context = {
+    sessionId: "session-start-reload",
+    transcriptPath: "/sessions/session-start-reload.jsonl",
+    cwd: "/workspaces/session-start-reload",
+  } satisfies TranslationContext;
+  const event: SessionStartEvent = {
+    type: "session_start",
+    reason: "reload",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-start-reload",
+    transcript_path: "/sessions/session-start-reload.jsonl",
+    cwd: "/workspaces/session-start-reload",
+    hook_event_name: "SessionStart",
+    source: "reload",
+  });
+});
+
+test("propagates the new source in the complete SessionStart envelope", () => {
+  // arrange
+  const context = {
+    sessionId: "session-start-new",
+    transcriptPath: "/sessions/session-start-new.jsonl",
+    cwd: "/workspaces/session-start-new",
+  } satisfies TranslationContext;
+  const event: SessionStartEvent = {
+    type: "session_start",
+    reason: "new",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-start-new",
+    transcript_path: "/sessions/session-start-new.jsonl",
+    cwd: "/workspaces/session-start-new",
+    hook_event_name: "SessionStart",
+    source: "new",
+  });
+});
+
+test("propagates the fork source in the complete SessionStart envelope", () => {
+  // arrange
+  const context = {
+    sessionId: "session-start-fork",
+    transcriptPath: "/sessions/session-start-fork.jsonl",
+    cwd: "/workspaces/session-start-fork",
+  } satisfies TranslationContext;
+  const event: SessionStartEvent = {
+    type: "session_start",
+    reason: "fork",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-start-fork",
+    transcript_path: "/sessions/session-start-fork.jsonl",
+    cwd: "/workspaces/session-start-fork",
+    hook_event_name: "SessionStart",
+    source: "fork",
+  });
+});
+
+test("accepts empty session, transcript, and working-directory values", () => {
+  // arrange
+  const context = {
+    sessionId: "",
+    transcriptPath: "",
+    cwd: "",
+  } satisfies TranslationContext;
+  const event: SessionStartEvent = {
+    type: "session_start",
+    reason: "startup",
+  };
+
+  // act
+  const payload = translate(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "",
+    transcript_path: "",
+    cwd: "",
+    hook_event_name: "SessionStart",
+    source: "startup",
+  });
 });

@@ -20,147 +20,356 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { resolveTimeoutSeconds } from "../../../extensions/pi-claude-marketplace/bridges/hooks/timeout.ts";
-import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
-import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+test("preserves a positive integer timeout", () => {
+  // arrange
+  const options = {
+    raw: 75,
+    event: "PreToolUse",
+    pluginId: "integer-plugin",
+    lane: "blocking",
+  } as const;
 
-/** The events Claude Code lowers the `command` default on. */
-const LOWERED: readonly BucketAEvent[] = ["UserPromptSubmit", "SessionEnd"];
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
 
-/**
- * Everything else. Derived rather than listed: `satisfies` only checks that
- * each element IS a BucketAEvent, so a hand-written list silently stops
- * covering a newly-admitted event while still compiling.
- */
-const UNLOWERED: readonly BucketAEvent[] = BUCKET_A_EVENTS.filter((e) => !LOWERED.includes(e));
-
-test("the derived UNLOWERED set is non-empty and complements LOWERED", () => {
-  // Without this, widening LOWERED to every event would leave the two
-  // loop-driven tests below iterating nothing and passing having asserted
-  // nothing at all.
-  assert.equal(UNLOWERED.length, BUCKET_A_EVENTS.length - LOWERED.length);
-  assert.ok(UNLOWERED.length > 0);
+  // assert
+  assert.strictEqual(timeoutSeconds, 75);
 });
 
-function blocking(raw: unknown, event: BucketAEvent): number {
-  return resolveTimeoutSeconds({ raw, event, pluginId: "p", lane: "blocking" });
-}
+test("preserves a positive fractional timeout", () => {
+  // arrange
+  const options = {
+    raw: 0.25,
+    event: "SessionEnd",
+    pluginId: "fractional-plugin",
+    lane: "blocking",
+  } as const;
 
-function background(raw: unknown, event: BucketAEvent): number {
-  return resolveTimeoutSeconds({ raw, event, pluginId: "p", lane: "background" });
-}
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
 
-test("a positive number is the handler's own value, in seconds, unconverted", () => {
-  assert.equal(blocking(2, "PreToolUse"), 2);
-  assert.equal(blocking(600, "PreToolUse"), 600);
-  assert.equal(blocking(7200, "PreToolUse"), 7200);
+  // assert
+  assert.strictEqual(timeoutSeconds, 0.25);
 });
 
-test("decimal second values are accepted", () => {
-  assert.equal(blocking(1.5, "PreToolUse"), 1.5);
-  assert.equal(blocking(0.25, "PreToolUse"), 0.25);
+test("defaults a blocking UserPromptSubmit timeout to 30 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "UserPromptSubmit",
+    pluginId: "prompt-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 30);
 });
 
-test("a declared value wins over the event default, including where it is lower", () => {
-  assert.equal(blocking(120, "UserPromptSubmit"), 120);
-  assert.equal(blocking(45, "SessionEnd"), 45);
+test("defaults a blocking SessionEnd timeout to 1.5 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "SessionEnd",
+    pluginId: "session-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 1.5);
 });
 
-test("blocking lane: 600 s on every event Claude Code does not lower", () => {
-  for (const event of UNLOWERED) {
-    assert.equal(blocking(undefined, event), 600, `${event} default`);
-  }
+test("defaults another blocking event timeout to 600 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "PostToolUse",
+    pluginId: "tool-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
 });
 
-test("blocking lane: UserPromptSubmit lowers to 30 s, as Claude Code does", () => {
-  assert.equal(blocking(undefined, "UserPromptSubmit"), 30);
+test("defaults a background event timeout to 600 seconds", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "SessionEnd",
+    pluginId: "background-plugin",
+    lane: "background",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
 });
 
-test("blocking lane: SessionEnd lowers to upstream's 1.5 s budget figure", () => {
-  // Upstream describes 1.5 s as a budget shared across every SessionEnd hook,
-  // and caps a longer declared timeout at 60 s. Applied per hook here and
-  // uncapped; both deviations are recorded as HKTO-01.
-  assert.equal(blocking(undefined, "SessionEnd"), 1.5);
-});
-
-test("background lane keeps 600 s on the events the blocking lane lowers", () => {
-  // Upstream lowers those budgets because the handler holds up the turn. An
-  // asyncRewake handler is registered and left to run while dispatch returns,
-  // so the rationale does not transfer -- and applying it would silently
-  // truncate long-running background work that declared no timeout at all.
-  assert.equal(background(undefined, "UserPromptSubmit"), 600);
-  assert.equal(background(undefined, "SessionEnd"), 600);
-  for (const event of UNLOWERED) {
-    assert.equal(background(undefined, event), 600, `${event} background default`);
-  }
-});
-
-test("background lane still honors a declared value", () => {
-  assert.equal(background(90, "UserPromptSubmit"), 90);
-});
-
-test("absent, null, and undefined fall back to the lane+event default", () => {
-  assert.equal(blocking(undefined, "PreToolUse"), 600);
-  assert.equal(blocking(null, "UserPromptSubmit"), 30);
-});
-
-test("zero and negative values fall back to the default (no instant-kill)", () => {
-  assert.equal(blocking(0, "PreToolUse"), 600);
-  assert.equal(blocking(-5, "UserPromptSubmit"), 30);
-});
-
-test("non-finite numbers fall back to the default", () => {
-  assert.equal(blocking(Number.NaN, "PreToolUse"), 600);
-  assert.equal(blocking(Number.POSITIVE_INFINITY, "PreToolUse"), 600);
-});
-
-test("non-number input falls back to the default, and never disqualifies the plugin", () => {
-  // Reachable from real config: the schema admits `timeout` at any type
-  // (HOOK-03), so this module -- not schema validation -- is what stands
-  // between a quoted number and the timer ladder.
-  assert.equal(blocking("2", "PreToolUse"), 600);
-  assert.equal(blocking("1500ms", "PreToolUse"), 600);
-  assert.equal(blocking(true, "PreToolUse"), 600);
-  assert.equal(blocking({ value: 2 }, "PreToolUse"), 600);
-});
-
-test("no upper bound here -- the ceiling belongs to the timer, not the field", () => {
-  assert.equal(blocking(3_600_000, "PreToolUse"), 3_600_000);
-});
-
-test("a declared-but-unusable timeout is reported on the debug channel", () => {
-  const prev = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-  const original = console.error;
-  const lines: string[] = [];
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  console.error = (...args: unknown[]): void => {
-    lines.push(args.join(" "));
-  };
-
-  try {
-    resolveTimeoutSeconds({
-      raw: "30",
-      event: "UserPromptSubmit",
-      pluginId: "acme",
-      lane: "blocking",
-    });
-    // Absence is not a degrade: most handlers declare no timeout at all.
-    resolveTimeoutSeconds({
-      raw: undefined,
-      event: "PreToolUse",
-      pluginId: "acme",
-      lane: "blocking",
-    });
-  } finally {
-    console.error = original;
-    if (prev === undefined) {
-      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+test("defaults a declared zero timeout and reports the unusable value", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
     } else {
-      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prev;
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
     }
-  }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: 0,
+    event: "PreToolUse",
+    pluginId: "zero-plugin",
+    lane: "blocking",
+  } as const;
 
-  assert.equal(lines.length, 1, "declared-but-unusable values log; absence does not");
-  assert.match(lines[0] ?? "", /unusable timeout "30" on acme\/UserPromptSubmit \(blocking\)/);
-  assert.match(lines[0] ?? "", /using the 30s default/);
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
+  assert.strictEqual(diagnosticLines.length, 1);
+  assert.match(diagnosticLines[0] ?? "", /^\[hooks\]/);
+  assert.match(diagnosticLines[0] ?? "", /unusable timeout 0/);
+  assert.match(diagnosticLines[0] ?? "", /zero-plugin\/PreToolUse \(blocking\)/);
+  assert.match(diagnosticLines[0] ?? "", /600s default/);
+});
+
+test("defaults a declared negative timeout and reports the unusable value", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: -5,
+    event: "UserPromptSubmit",
+    pluginId: "negative-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 30);
+  assert.strictEqual(diagnosticLines.length, 1);
+  assert.match(diagnosticLines[0] ?? "", /^\[hooks\]/);
+  assert.match(diagnosticLines[0] ?? "", /unusable timeout -5/);
+  assert.match(diagnosticLines[0] ?? "", /negative-plugin\/UserPromptSubmit \(blocking\)/);
+  assert.match(diagnosticLines[0] ?? "", /30s default/);
+});
+
+test("defaults a declared string timeout and reports the unusable value", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: "2",
+    event: "SessionEnd",
+    pluginId: "string-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 1.5);
+  assert.strictEqual(diagnosticLines.length, 1);
+  assert.match(diagnosticLines[0] ?? "", /^\[hooks\]/);
+  assert.match(diagnosticLines[0] ?? "", /unusable timeout "2"/);
+  assert.match(diagnosticLines[0] ?? "", /string-plugin\/SessionEnd \(blocking\)/);
+  assert.match(diagnosticLines[0] ?? "", /1\.5s default/);
+});
+
+test("defaults a declared NaN timeout and reports the serialized unusable value", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: Number.NaN,
+    event: "PostToolUse",
+    pluginId: "nan-plugin",
+    lane: "background",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
+  assert.strictEqual(diagnosticLines.length, 1);
+  assert.match(diagnosticLines[0] ?? "", /^\[hooks\]/);
+  assert.match(diagnosticLines[0] ?? "", /unusable timeout null/);
+  assert.match(diagnosticLines[0] ?? "", /nan-plugin\/PostToolUse \(background\)/);
+  assert.match(diagnosticLines[0] ?? "", /600s default/);
+});
+
+test("defaults a declared positive-infinity timeout and reports the serialized value", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: Number.POSITIVE_INFINITY,
+    event: "UserPromptSubmit",
+    pluginId: "positive-infinity-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 30);
+  assert.strictEqual(diagnosticLines.length, 1);
+  assert.match(diagnosticLines[0] ?? "", /^\[hooks\]/);
+  assert.match(diagnosticLines[0] ?? "", /unusable timeout null/);
+  assert.match(diagnosticLines[0] ?? "", /positive-infinity-plugin\/UserPromptSubmit \(blocking\)/);
+  assert.match(diagnosticLines[0] ?? "", /30s default/);
+});
+
+test("defaults a declared negative-infinity timeout and reports the serialized value", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: Number.NEGATIVE_INFINITY,
+    event: "SessionEnd",
+    pluginId: "negative-infinity-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 1.5);
+  assert.strictEqual(diagnosticLines.length, 1);
+  assert.match(diagnosticLines[0] ?? "", /^\[hooks\]/);
+  assert.match(diagnosticLines[0] ?? "", /unusable timeout null/);
+  assert.match(diagnosticLines[0] ?? "", /negative-infinity-plugin\/SessionEnd \(blocking\)/);
+  assert.match(diagnosticLines[0] ?? "", /1\.5s default/);
+});
+
+test("keeps an absent timeout quiet while applying its event default", (t) => {
+  // arrange
+  const hadDebug = Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (hadDebug) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnosticLines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    diagnosticLines.push(args.join(" "));
+  });
+  const options = {
+    raw: undefined,
+    event: "PreToolUse",
+    pluginId: "absent-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
+  assert.deepStrictEqual(diagnosticLines, []);
+});
+
+test("preserves a large valid positive timeout without an upper clamp", () => {
+  // arrange
+  const options = {
+    raw: 3_600_000,
+    event: "PreToolUse",
+    pluginId: "large-timeout-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 3_600_000);
 });

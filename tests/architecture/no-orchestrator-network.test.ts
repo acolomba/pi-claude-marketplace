@@ -1,6 +1,6 @@
 import test from "node:test";
 
-import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
+import { assertNoForbiddenSurface } from "./source-scan.ts";
 
 /**
  * NFR-5 / PI-2 / PL-3 / PRL-07 architectural surface guard.
@@ -120,7 +120,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 
 test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps surface", async () => {
   // The read / stripComments / offender-accumulate mechanic lives in
-  // tests/helpers/source-scan.ts so this gate and the COMPAT-01 no-expansion
+  // tests/architecture/source-scan.ts so this gate and the COMPAT-01 no-expansion
   // gate share one implementation (D-98-09). The target list, the pattern list,
   // and this failure message stay owned here.
   await assertNoForbiddenSurface(

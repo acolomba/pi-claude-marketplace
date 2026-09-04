@@ -2377,6 +2377,73 @@ second justification that makes the move cheap to argue. [FMBOM-01]
 deliberately does NOT count toward it -- its recommended fix avoids the floor
 precisely so the bump stays optional.
 
+## TESTQ-01: act on the two-pass unit-test review corpus -- IMPORTANT
+
+Filed 2026-09-04 at the close of the unit-test-refactor review sweep. Deferred
+by operator decision until the branch merges to main. This is ONE umbrella item
+by design: the archived corpus carries the per-finding detail, and its findings
+must NOT be re-filed here individually.
+
+**Evidence:** `.planning/reviews/unit-test-adversarial/` -- 45 first-pass area
+reports, 58 adversarial second-pass reports, briefs, and two synthesis
+documents. See its README for provenance; all line references anchor to commit
+`c8417fbc` on `features/unit-test-refactor`. Reading order: `META-FINDINGS.md`
+(the plan-from document -- production-bug table, 13 ranked leverage items,
+36-row inert-gate table, patterns to propagate, struck findings, 9 operator
+decisions, sequencing), then `_AUDIT.md` (corrected tallies and the
+per-reviewer calibration table saying whose clean verdicts to trust).
+
+**Scale:** first pass 78 BLOCKER / 378 WARNING; adversarial pass added 231 /
+708 and re-graded the first pass (~70% of recorded findings held; clean
+verdicts held ~1 in 3). Numbers are the audit's marker counts, not the
+reports' self-declared headers (27 of 58 headers disagree with their own body).
+
+**What must be done, in severity order** (each expanded in META-FINDINGS.md):
+
+1. **Production bugs -- 14 confirmed, several user-visible.** The NFR-10
+   containment cluster leads: `assertPathInside`'s symlink+`..` bypass (latent,
+   held only by unenforced caller convention), `info.ts` re-admitting
+   resolver-refused paths, all eight commands-staging guards untested. Then the
+   uncontained NFR-2 throw route in `index.ts`, the lock-held uninstall
+   `{unreadable}` mislabel, substring-based reason classification flippable by
+   user-controlled names, `update.ts` discarding leak descriptors,
+   `writePidTable` copy-after-first-await, `mapPiToClaudeToolName` returning
+   `Object.prototype` members, `compileIfPredicate`'s empty-inner inversion,
+   agents multi-directory discovery silently dropped, `import/execute.ts`
+   void-switch that can vanish a marketplace, the CR-01 reconcile dead-end
+   (P-1; confirm with a fixture before fixing), the stale compact-trigger
+   peer-dep belief pinned five layers deep, and `transaction/rollback.ts`
+   having zero production callers.
+2. **The 9 operator decisions** in META-FINDINGS' Decisions section -- several
+   gate the mechanical work (catalog-UAT re-target must ride the same change
+   as the planned file split; the coverage gate will go red broadly when
+   enabled). Decide these before cutting tickets.
+3. **The 13 ranked leverage items** -- top of the list: hermeticity
+   (`getAgentDir()` env read + `homedir()`-derived reads; one
+   parameter-narrowing dissolves ~14 hand-rolled helpers), the
+   `git-ops-fake.ts` auth-strip (22 workaround sites across 12 files), the
+   cast clusters (test-only fix unblocked today via the existing strong-mock
+   boundary factories), the injection seams (one 17-module ticket), and the
+   fragment-assertion sweep (only with the three recorded caveats --
+   same-payload-sibling check, input widening, catalog-gate ownership).
+4. **Re-arm the inert gates** (36 rows) under the recorded acceptance
+   criterion: every scanning gate proves it visited its targets and carries
+   synthetic offender/benign rows in the spelling the guarded code actually
+   uses.
+5. **Wire `test:coverage:direct` into the check chain.** The script exists and
+   enforces; `npm run check` runs only its negative control. It exits 1 today
+   on 7 one-branch shortfalls, all in `edge/` (the D-116-01a ledger; entries
+   21-22 were found removable via `for...of`).
+
+Measured baseline to re-verify against: 204 test/source pairs = 190 complete /
+7 type-only / 7 accepted-shortfall (`coverage/all-pairs-report.ndjson`,
+regenerated 2026-09-04, reproducible). Calibration warning that frames the
+whole item: 93% pair completeness coexists with ~231 surviving-mutation
+BLOCKERs -- per-pair coverage is not evidence of assertion strength.
+
+Code seams: named per-finding throughout the corpus; the two synthesis
+documents carry `file:line` for every claim.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10

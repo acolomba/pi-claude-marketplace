@@ -18,3 +18,4 @@ mcpServers string-reference changes:
 These touch skill staging / pi-subagents `resolveSkillsWithFallback`, with no
 connection to `domain/resolver.ts` or `domain/components/plugin.ts`. Left
 untouched.
+  status: acknowledged

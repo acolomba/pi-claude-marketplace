@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, watch, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import test, { type TestContext } from "node:test";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -14,883 +13,135 @@ import {
   type ExtensionState,
   type PluginInstallRecord,
   clonePluginRecord,
+  isRecordedButDisabled,
   loadState,
   saveState,
   toDisabledRecord,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-/**
- * ST-1, ST-6 -- state.json load/save behavior.
- *
- * Each test creates an isolated tmpdir representing the extensionRoot and
- * cleans up afterwards. Round-trip uses saveState followed by loadState.
- * The missing-file / empty-`{}` cases verify ENOENT and structurally-empty
- * states return the canonical DEFAULT_STATE shape.
- */
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.join(HERE, "fixtures/legacy");
-
-async function tmpExtensionRoot(): Promise<{ root: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-state-test-"));
-  const root = path.join(dir, "pi-claude-marketplace");
-  await mkdir(root, { recursive: true });
-  // Cleanup retries with a short sleep -- ST-4 fire-and-forget persists
-  // can land between our `rm`'s readdir and rmdir, raising ENOTEMPTY.
-  const cleanup = async (): Promise<void> => {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        await rm(dir, { recursive: true, force: true });
-        return;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOTEMPTY" && attempt < 9) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 25));
-          continue;
-        }
-
-        throw err;
-      }
-    }
-  };
-
-  return { root, cleanup };
+interface HooksOnlyResources {
+  readonly skills: [];
+  readonly prompts: [];
+  readonly agents: [];
+  readonly mcpServers: [];
+  readonly hooks: [string];
 }
 
-test("loadState on missing state.json returns DEFAULT_STATE", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const got = await loadState(root);
-    assert.deepEqual(got, { schemaVersion: 2, marketplaces: {} });
-  } finally {
-    await cleanup();
-  }
-});
+void ({
+  version: "1.0.0",
+  resolvedSource: "/plugins/active",
+  compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  enabled: true,
+  installedAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+} satisfies EnabledPluginRecord);
 
-test("loadState on empty {} state.json returns DEFAULT_STATE shape", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    await writeFile(path.join(root, "state.json"), "{}");
-    const got = await loadState(root);
-    assert.equal(got.schemaVersion, 2);
-    assert.deepEqual(got.marketplaces, {});
-  } finally {
-    await cleanup();
-  }
-});
+// @ts-expect-error an enabled record must retain the true discriminant
+void ({ enabled: false } satisfies EnabledPluginRecord);
 
-test("ST-1 saveState + loadState round-trip preserves marketplace shape", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const state: ExtensionState = {
-      schemaVersion: 1,
-      marketplaces: {
-        mp1: {
-          name: "mp1",
-          scope: "user",
-          source: { kind: "path", raw: "./local", logical: "./local" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/mp1/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/mp1",
-          plugins: {},
-        },
-      },
-    };
-    await saveState(root, state);
-    const stateOnDisk = JSON.parse(await readFile(path.join(root, "state.json"), "utf8")) as {
-      schemaVersion: number;
-      marketplaces: Record<string, { name: string }>;
-    };
-    assert.equal(stateOnDisk.schemaVersion, 1);
-    assert.equal(stateOnDisk.marketplaces["mp1"]?.name, "mp1");
-
-    const reloaded = await loadState(root);
-    const mp1 = (reloaded.marketplaces as Record<string, { name: string }>)["mp1"];
-    assert.equal(mp1?.name, "mp1");
-  } finally {
-    await cleanup();
-  }
-});
-
-test("ST-6 loadState classifies legacy raw-string source via pathSource (v0 fixture)", async (t) => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  // Suppress the IL-3 sanctioned warn in this test: the fire-and-forget
-  // persistMigratedState call may race the cleanup `rm` and emit ENOENT
-  // -- that's expected library behavior under the test harness, not a
-  // regression. The IL-3 callsite itself is exercised in migrate.test.ts.
-  t.mock.method(console, "warn", () => {
-    // suppress noise
-  });
-  try {
-    const fixtureRaw = await readFile(path.join(FIXTURES, "v0-no-schemaversion.json"), "utf8");
-    await writeFile(path.join(root, "state.json"), fixtureRaw);
-    const got = await loadState(root);
-    assert.equal(got.schemaVersion, 2);
-    const mp = (got.marketplaces as Record<string, { source: unknown }>)["alpha"];
-    assert.ok(mp);
-    // Source revalidated to ParsedSource object form
-    const src = mp.source as { kind: string };
-    assert.equal(src.kind, "path");
-    // ST-4 best-effort persist is fire-and-forget; let it finish before
-    // cleanup so we don't race the rm. write-file-atomic queues + fsyncs;
-    // a few microtasks plus a setImmediate is enough to flush.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("ST-6 loadState rejects state.json with malformed source object", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const malformed = {
-      schemaVersion: 1,
-      marketplaces: {
-        bad: {
-          name: "bad",
-          scope: "user",
-          source: { kind: "no-such-kind", raw: "x" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/bad/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/bad",
-          plugins: {},
-        },
-      },
-    };
-    await writeFile(path.join(root, "state.json"), JSON.stringify(malformed));
-    await assert.rejects(() => loadState(root), /malformed source/);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("ST-6 loadState accepts forward-compat unknown-kind source verbatim (NFR-12)", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const forwardCompat = {
-      schemaVersion: 1,
-      marketplaces: {
-        future: {
-          name: "future",
-          scope: "user",
-          source: { kind: "unknown", raw: "future-spec://x", reason: "forward-compat" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/future/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/future",
-          plugins: {},
-        },
-      },
-    };
-    await writeFile(path.join(root, "state.json"), JSON.stringify(forwardCompat));
-    const got = await loadState(root);
-    const mp = (got.marketplaces as Record<string, { source: unknown }>)["future"];
-    assert.ok(mp);
-    const src = mp.source as { kind: string };
-    assert.equal(src.kind, "unknown");
-  } finally {
-    await cleanup();
-  }
-});
-
-test("loadState rejects state.json that is not valid JSON", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    await writeFile(path.join(root, "state.json"), "{ this is not json");
-    await assert.rejects(() => loadState(root), /not valid JSON/);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("saveState refuses invalid in-memory state (caller-bug guard)", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const bad = { schemaVersion: 1, marketplaces: { x: { not: "valid" } } };
-    await assert.rejects(
-      () => saveState(root, bad as unknown as ExtensionState),
-      /failed schema validation/,
-    );
-  } finally {
-    await cleanup();
-  }
-});
-
-test("STATE_VALIDATOR exports a JIT-compiled validator (D-07)", () => {
-  assert.equal(typeof STATE_VALIDATOR.Check, "function");
-  assert.equal(STATE_VALIDATOR.Check(DEFAULT_STATE), true);
-  // ENBL-02: schemaVersion 2 is the new normal; both 1 and 2 are valid.
-  assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 2, marketplaces: {} }), true);
-  // schemaVersion 3 is unknown and must be rejected.
-  assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 3, marketplaces: {} }), false);
-});
-
-test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)", async (t) => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  // Suppress the IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
-  // the cleanup `rm`, surfacing as a harmless persist failure.
-  t.mock.method(console, "warn", () => {
-    // suppress noise
-  });
-  try {
-    const fixtureRaw = await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8");
-    await writeFile(path.join(root, "state.json"), fixtureRaw);
-    // D-13 gate is CLOSED here because no <scopeRoot>/claude-plugins.json
-    // exists alongside the tmp extensionRoot -- the migrator preserves the
-    // legacy `autoupdate` in-memory for the first-run migration to capture, while the
-    // STATE_SCHEMA carve-out (autoupdate removed from MARKETPLACE_RECORD_SCHEMA)
-    // means the lenient typebox default ACCEPTS the extra property at the
-    // schema gate. Both halves must hold for the load to succeed.
-    const got = await loadState(root);
-    assert.equal(got.schemaVersion, 2);
-    const mp = (got.marketplaces as Record<string, { name: string }>)["mp-with-autoupdate"];
-    assert.ok(mp);
-    assert.equal(mp.name, "mp-with-autoupdate");
-    // Flush fire-and-forget persist.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("D-13 GATE OPEN through loadState: sibling claude-plugins.json triggers the autoupdate scrub (in-memory + persisted)", async (t) => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  // Suppress the IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
-  // the cleanup `rm`, surfacing as a harmless persist failure.
-  t.mock.method(console, "warn", () => {
-    // suppress noise
-  });
-  try {
-    // `root` is <scopeRoot>/pi-claude-marketplace; the D-13 gate path is the
-    // SIBLING <scopeRoot>/claude-plugins.json. Materializing it here proves
-    // loadState's internal derivation (path.dirname(extensionRoot) join)
-    // actually points at the file the gate is specified against -- the scrub
-    // must fire end-to-end through loadState, not just at the migrator unit.
-    const scopeRoot = path.dirname(root);
-    await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}", "utf8");
-    const fixtureRaw = await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8");
-    const stateJsonPath = path.join(root, "state.json");
-    await writeFile(stateJsonPath, fixtureRaw);
-
-    const got = await loadState(root);
-    const mp = (got.marketplaces as Record<string, Record<string, unknown>>)["mp-with-autoupdate"];
-    assert.ok(mp);
-    // Gate OPEN -> the legacy autoupdate flag is scrubbed from the in-memory record.
-    assert.equal(mp["autoupdate"], undefined);
-
-    // Flush the ST-4 fire-and-forget persist, then assert the scrub was
-    // persisted: the on-disk state.json no longer carries the flag either.
-    // write-file-atomic performs real fs work (write + fsync + rename), so
-    // poll with a short backoff instead of relying on a fixed tick count.
-    let persisted: { marketplaces: Record<string, Record<string, unknown>> } | undefined;
-    for (let attempt = 0; attempt < 40; attempt++) {
-      persisted = JSON.parse(await readFile(stateJsonPath, "utf8")) as {
-        marketplaces: Record<string, Record<string, unknown>>;
-      };
-      if (persisted.marketplaces["mp-with-autoupdate"]?.["autoupdate"] === undefined) {
-        break;
-      }
-
-      await new Promise<void>((resolve) => setTimeout(resolve, 25));
-    }
-
-    assert.ok(persisted);
-    assert.equal(persisted.marketplaces["mp-with-autoupdate"]?.["autoupdate"], undefined);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("D-13 drift guard: loadState's configJsonPath derivation matches locationsFor byte-for-byte", () => {
-  // loadState derives the gate path as
-  // path.join(path.dirname(extensionRoot), "claude-plugins.json") without
-  // importing locationsFor (its external signature must stay
-  // loadState(extensionRoot)). Pin the equivalence so a future edit to
-  // either construction cannot silently divert the D-13 gate.
-  const loc = locationsFor("project", path.join(tmpdir(), "drift-guard-cwd"));
-  assert.equal(
-    path.join(path.dirname(loc.extensionRoot), "claude-plugins.json"),
-    loc.configJsonPath,
-  );
-});
-
-// ===================================================================
-// HOOK-02 / D-57-01: additive `resources.hooks` field on the plugin
-// install record. The validator is the schema gate; the default-fill in
-// persistence/migrate.ts is the responsibility for adding `hooks: []`
-// before validation runs.
-//
-// ENBL-02: `enabled: boolean` is REQUIRED from schemaVersion 2.
-// The fixture builder includes it so STATE_VALIDATOR.Check passes.
-// ===================================================================
-
-function buildValidatorFixture(opts: {
-  hooks?: unknown;
-  omitHooks?: boolean;
-  enabled?: unknown;
-  omitEnabled?: boolean;
-  resolvedSha?: string;
-}): {
-  schemaVersion: 2;
-  marketplaces: Record<string, unknown>;
-} {
-  const resources: Record<string, unknown> = {
-    skills: [],
-    prompts: [],
-    agents: [],
-    mcpServers: [],
-  };
-  if (!opts.omitHooks) {
-    resources["hooks"] = opts.hooks ?? [];
-  }
-
-  const plugin: Record<string, unknown> = {
-    version: "1.0.0",
-    resolvedSource: "/abs/mp/p1",
-    compatibility: {
-      installable: true,
-      notes: [],
-      supported: [],
-      unsupported: [],
-    },
-    resources,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
-  if (!opts.omitEnabled) {
-    plugin["enabled"] = opts.enabled ?? true;
-  }
-
-  if (opts.resolvedSha !== undefined) {
-    plugin["resolvedSha"] = opts.resolvedSha;
-  }
-
-  return {
-    schemaVersion: 2,
-    marketplaces: {
-      mp: {
-        name: "mp",
-        scope: "user",
-        source: { kind: "path", raw: "./mp", logical: "./mp" },
-        addedFromCwd: "/cwd",
-        manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
-        marketplaceRoot: "/abs/mp",
-        plugins: { p1: plugin },
-      },
-    },
-  };
+async function createExtensionRoot(t: TestContext, prefix: string): Promise<string> {
+  const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
+  const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
+  await mkdir(extensionRoot, { recursive: true });
+  return extensionRoot;
 }
 
-test("HOOK-02: STATE_VALIDATOR accepts resources.hooks: []", () => {
-  const fixture = buildValidatorFixture({ hooks: [] });
-  assert.equal(STATE_VALIDATOR.Check(fixture), true);
+test("publishes the exact frozen default state", () => {
+  // arrange
+  const expectedState = { schemaVersion: 2, marketplaces: {} };
+
+  // act
+  const defaultState = DEFAULT_STATE;
+
+  // assert
+  assert.deepStrictEqual(defaultState, expectedState);
+  assert.strictEqual(Object.isFrozen(defaultState), true);
 });
 
-test("HOOK-02 / D-57-03: STATE_VALIDATOR accepts resources.hooks with a generatedName entry", () => {
-  const fixture = buildValidatorFixture({ hooks: ["my-plugin"] });
-  assert.equal(STATE_VALIDATOR.Check(fixture), true);
-});
+for (const { enabled, expectedDisabled } of [
+  { enabled: true, expectedDisabled: false },
+  { enabled: false, expectedDisabled: true },
+]) {
+  test(`reports enabled ${String(enabled)} as disabled ${String(expectedDisabled)}`, () => {
+    // arrange
+    const record = { enabled };
 
-test("HOOK-02: STATE_VALIDATOR rejects resources.hooks of a non-array shape", () => {
-  const fixture = buildValidatorFixture({ hooks: "not-an-array" });
-  assert.equal(STATE_VALIDATOR.Check(fixture), false);
-});
+    // act
+    const disabled = isRecordedButDisabled(record);
 
-test("HOOK-02 / D-57-01: STATE_VALIDATOR rejects a record missing resources.hooks (default-fill is the migrator's responsibility)", () => {
-  const fixture = buildValidatorFixture({ omitHooks: true });
-  assert.equal(STATE_VALIDATOR.Check(fixture), false);
-});
+    // assert
+    assert.strictEqual(disabled, expectedDisabled);
+  });
+}
 
-test("ENBL-02: STATE_VALIDATOR rejects a record missing `enabled` (fill-before-validate is the migrator's responsibility)", () => {
-  // Guards the fill-before-validate contract: if `enabled` ever became
-  // optional in the schema, the migrator's default-fill could silently
-  // regress to a no-op and a field-less record would validate. This pins
-  // `enabled` as REQUIRED.
-  const fixture = buildValidatorFixture({ omitEnabled: true });
-  assert.equal(STATE_VALIDATOR.Check(fixture), false);
-});
-
-// ===================================================================
-// D-77-02 / PURL-09: resolvedSha additive-optional field.
-//
-// The full 40-hex resolved commit sha lives on the plugin install record
-// as an OPTIONAL field -- absent on legacy/path/github-name records, present
-// on git-source installs. No schemaVersion bump and no migrate fill.
-// ===================================================================
-
-test("D-77-02 STATE_VALIDATOR accepts a plugin record WITHOUT resolvedSha (legacy loads unchanged)", () => {
-  const fixture = buildValidatorFixture({ hooks: [] });
-  assert.equal(STATE_VALIDATOR.Check(fixture), true);
-});
-
-test("D-77-02 STATE_VALIDATOR accepts a plugin record WITH a 40-hex resolvedSha", () => {
-  const fixture = buildValidatorFixture({
-    hooks: [],
+test("clones every plugin field without retaining nested aliases", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "https://github.com/acme/plugin",
     resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-  });
-  assert.equal(STATE_VALIDATOR.Check(fixture), true);
-});
-
-test("D-77-02 saveState + loadState round-trips resolvedSha intact", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
-    const plugin: PluginInstallRecord = {
-      version: "sha-a1b2c3d4e5f6",
-      resolvedSource: "https://github.com/o/r",
-      resolvedSha: fullSha,
-      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-      enabled: true,
-      installedAt: "2025-01-01T00:00:00.000Z",
-      updatedAt: "2025-01-01T00:00:00.000Z",
-    };
-    const state: ExtensionState = {
-      schemaVersion: 2,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "user",
-          source: { kind: "path", raw: "./mp", logical: "./mp" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/mp",
-          plugins: { p1: plugin },
-        },
-      },
-    };
-    await saveState(root, state);
-    const reloaded = await loadState(root);
-    const mp = reloaded.marketplaces["mp"];
-    assert.ok(mp);
-    const reloadedPlugin = mp.plugins["p1"];
-    assert.equal(reloadedPlugin?.resolvedSha, fullSha);
-  } finally {
-    await cleanup();
-  }
-});
-
-// ENBL-18: the optional-key preservation template. `toDisabledRecord` copies
-// the whole record and overrides only `enabled` + `updatedAt`, so every
-// optional top-level key survives the disable by construction. A record's
-// populated `resources` block rides through the same way -- proven separately
-// in the ENBL-18 section below. Any future optional key added to the record
-// gets its own sibling of this test, built to this shape.
-test("D-77-02 / ENBL-18: toDisabledRecord preserves resolvedSha through the disable transform", () => {
-  const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
-  const record: PluginInstallRecord = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "https://github.com/o/r",
-    resolvedSha: fullSha,
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: ["s"], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
-  const disabled = toDisabledRecord(record, "2025-02-02T00:00:00.000Z");
-  assert.equal(disabled.resolvedSha, fullSha);
-  assert.equal(disabled.enabled, false);
-});
-
-// ENBL-10 / ENBL-18: the sibling built to the template above. `hookEntries` is
-// the description of a disabled plugin's hooks that `info` reads once the
-// artifacts are gone, so the disable transform losing it would defeat the
-// retention this key exists for.
-test("D-100-01 / ENBL-10: toDisabledRecord preserves hookEntries through the disable transform", () => {
-  const record: PluginInstallRecord = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "https://github.com/o/r",
     hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["h"] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
-  const disabled = toDisabledRecord(record, "2025-02-02T00:00:00.000Z");
-  assert.deepEqual(disabled.hookEntries, [
-    { event: "PreToolUse", matcher: "Bash" },
-    { event: "SessionStart" },
-  ]);
-  assert.equal(disabled.enabled, false);
-});
-
-test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; every plugin record gains resources.hooks default", async (t) => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
-  // the cleanup `rm`, surfacing as a harmless persist failure.
-  t.mock.method(console, "warn", () => {
-    // suppress noise
-  });
-  try {
-    // v1.12-shaped state.json -- plugin records carry skills/prompts/
-    // agents/mcpServers but NO `hooks`. A second plugin record carries a
-    // pre-existing `hooks: ["pre-existing"]` to assert the migrator
-    // leaves it untouched. schemaVersion stays 1 per D-57-01.
-    const v12State = {
-      schemaVersion: 1,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "user",
-          source: { kind: "path", raw: "./mp", logical: "./mp" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/mp",
-          plugins: {
-            "needs-default": {
-              version: "1.0.0",
-              resolvedSource: "/abs/mp/needs-default",
-              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
-              installedAt: "2025-01-01T00:00:00.000Z",
-              updatedAt: "2025-01-01T00:00:00.000Z",
-            },
-            "has-preexisting": {
-              version: "2.0.0",
-              resolvedSource: "/abs/mp/has-preexisting",
-              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: {
-                skills: [],
-                prompts: [],
-                agents: [],
-                mcpServers: [],
-                hooks: ["pre-existing"],
-              },
-              installedAt: "2025-01-02T00:00:00.000Z",
-              updatedAt: "2025-01-02T00:00:00.000Z",
-            },
-          },
-        },
-      },
-    };
-    await writeFile(path.join(root, "state.json"), JSON.stringify(v12State));
-
-    const got = await loadState(root);
-    const mp = (
-      got.marketplaces as Record<
-        string,
-        { plugins: Record<string, { resources: Record<string, unknown> }> }
-      >
-    )["mp"];
-    assert.ok(mp);
-    // The migrator's hooks arm fills the default for the v1.12-shaped
-    // record (no hooks field on disk).
-    assert.deepEqual(mp.plugins["needs-default"]?.resources["hooks"], []);
-    // The migrator leaves an existing hooks array untouched (D-57-03).
-    assert.deepEqual(mp.plugins["has-preexisting"]?.resources["hooks"], ["pre-existing"]);
-    // Flush fire-and-forget persist before cleanup races.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("ENBL-02: pre-enabled state.json round-trips through loadState; every plugin record gains enabled: true", async (t) => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
-  // the cleanup `rm`, surfacing as a harmless persist failure.
-  t.mock.method(console, "warn", () => {
-    // suppress noise
-  });
-  try {
-    // A pre-ENBL-02 state.json: plugin records carry full resources
-    // (including hooks, so this exercises the `enabled` arm in isolation)
-    // but NO `enabled` field. schemaVersion stays 1. This pins loadState's
-    // integration: the migrator's enabled-fill MUST run before
-    // STATE_VALIDATOR.Check -- a reorder would throw on this file undetected.
-    const preEnabledState = {
-      schemaVersion: 1,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "user",
-          source: { kind: "path", raw: "./mp", logical: "./mp" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/mp",
-          plugins: {
-            one: {
-              version: "1.0.0",
-              resolvedSource: "/abs/mp/one",
-              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-              installedAt: "2025-01-01T00:00:00.000Z",
-              updatedAt: "2025-01-01T00:00:00.000Z",
-            },
-            two: {
-              version: "2.0.0",
-              resolvedSource: "/abs/mp/two",
-              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: ["s"], prompts: [], agents: [], mcpServers: [], hooks: [] },
-              installedAt: "2025-01-02T00:00:00.000Z",
-              updatedAt: "2025-01-02T00:00:00.000Z",
-            },
-          },
-        },
-      },
-    };
-    await writeFile(path.join(root, "state.json"), JSON.stringify(preEnabledState));
-
-    const got = await loadState(root);
-    const mp = (
-      got.marketplaces as Record<string, { plugins: Record<string, { enabled: boolean }> }>
-    )["mp"];
-    assert.ok(mp);
-    assert.equal(mp.plugins["one"]?.enabled, true);
-    assert.equal(mp.plugins["two"]?.enabled, true);
-    // Flush fire-and-forget persist before cleanup races.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("ENBL-02: STATE_SCHEMA.schemaVersion accepts 1 and 2 (saveState accepts both; rejects 3+)", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    // schemaVersion 2 is the ENBL-02 shape and must be accepted.
-    const v2 = { schemaVersion: 2, marketplaces: {} } as ExtensionState;
-    await saveState(root, v2); // must not throw
-    // schemaVersion 1 is the pre-ENBL-02 shape and must still be accepted
-    // (migration is additive; old files with no plugin records are valid v1).
-    const v1 = { schemaVersion: 1, marketplaces: {} } as ExtensionState;
-    await saveState(root, v1); // must not throw
-    // schemaVersion 3 is unknown and must be refused.
-    const v3 = { schemaVersion: 3 as unknown as 1, marketplaces: {} } as ExtensionState;
-    await assert.rejects(() => saveState(root, v3), /failed schema validation/);
-  } finally {
-    await cleanup();
-  }
-});
-
-// ===================================================================
-// ENBL-02 / ENBL-18: EnabledPluginRecord / DisabledPluginRecord types + the
-// toDisabledRecord factory. The disable transform changes `enabled` and
-// `updatedAt` and NOTHING else (D-100-10).
-// ===================================================================
-
-test("ENBL-18 / D-100-10: toDisabledRecord preserves every resources array, sets enabled:false, preserves identity + restamps updatedAt", () => {
-  const record: PluginInstallRecord = {
-    version: "9.9.9",
-    resolvedSource: "/abs/mp/foo",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: ["s"], prompts: ["p"], agents: ["a"], mcpServers: ["m"], hooks: ["h"] },
-    enabled: true,
+    compatibility: {
+      installable: false,
+      notes: ["partial"],
+      supported: ["skills"],
+      unsupported: ["commands"],
+    },
+    resources: {
+      skills: ["skill-a"],
+      prompts: ["command-a"],
+      agents: ["agent-a"],
+      mcpServers: ["mcp-a"],
+      hooks: ["hooks-a"],
+    },
+    enabled: false,
     installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-02-01T00:00:00.000Z",
   };
-  const disabled = toDisabledRecord(record, "2026-02-02T00:00:00.000Z");
-  assert.equal(disabled.enabled, false);
-  assert.deepEqual(disabled.resources, {
-    skills: ["s"],
-    prompts: ["p"],
-    agents: ["a"],
-    mcpServers: ["m"],
-    hooks: ["h"],
-  });
-  // Identity fields preserved.
-  assert.equal(disabled.version, "9.9.9");
-  assert.equal(disabled.resolvedSource, "/abs/mp/foo");
-  assert.deepEqual(disabled.compatibility, record.compatibility);
-  assert.equal(disabled.installedAt, "2026-01-01T00:00:00.000Z");
-  // updatedAt restamped.
-  assert.equal(disabled.updatedAt, "2026-02-02T00:00:00.000Z");
-  // ENBL-18: a disabled record carrying a POPULATED inventory is a legal
-  // stored shape. Disabled-plus-empty stays legal too -- it merely stops
-  // being the only form a disabled record can take.
-  assert.equal(
-    STATE_VALIDATOR.Check({
-      schemaVersion: 2,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "user",
-          source: { kind: "path", raw: "./mp", logical: "./mp" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/m",
-          marketplaceRoot: "/r",
-          plugins: { foo: disabled },
-        },
-      },
-    }),
-    true,
-  );
-});
-
-test("ENBL-18 / D-100-10: toDisabledRecord's resources shape flows through the generic, and narrowing it is a compile error", () => {
-  // Compile-time guard: gated by `npm run typecheck` (tests/**/*.ts is in the
-  // tsconfig include). The proof is PRODUCER-side now: `R` is what makes
-  // "disable changed the inventory" impossible to express in the transform's
-  // return type. If the generic regresses to a fixed resources shape, the
-  // expect-error directive below stops erroring and typecheck fails.
-  interface HooksOnlyResources {
-    skills: [];
-    prompts: [];
-    agents: [];
-    mcpServers: [];
-    hooks: [string];
-  }
-  const hooksOnly: PluginInstallRecord & { resources: HooksOnlyResources } = {
-    version: "1.0.0",
-    resolvedSource: "/abs",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["h"] },
-    enabled: true,
-    installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  };
-
-  // `R` flows through: the result's `resources` is the INPUT's shape.
-  const disabled: DisabledPluginRecord<HooksOnlyResources> = toDisabledRecord(
-    hooksOnly,
-    "2026-02-02T00:00:00.000Z",
-  );
-  assert.deepEqual(disabled.resources.hooks, ["h"]);
-  assert.equal(disabled.enabled, false);
-
-  // ... and it is NOT some other shape. A transform that emptied the hooks
-  // inventory would have to return this type; the generic refuses it.
-  interface EmptiedResources {
-    skills: [];
-    prompts: [];
-    agents: [];
-    mcpServers: [];
-    hooks: [];
-  }
-  // @ts-expect-error toDisabledRecord must not narrow the inventory it was handed
-  const emptied: DisabledPluginRecord<EmptiedResources> = toDisabledRecord<HooksOnlyResources>(
-    hooksOnly,
-    "2026-02-02T00:00:00.000Z",
-  );
-  void emptied;
-
-  type DisabledSkills = DisabledPluginRecord["resources"]["skills"];
-
-  // The empty form type-checks, and an enabled record may carry populated
-  // resources (the normal active shape) -- proving the asymmetry is intended.
-  const okSkills: DisabledSkills = [];
-  const active: EnabledPluginRecord = {
-    version: "1.0.0",
-    resolvedSource: "/abs",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: ["x"], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: true,
-    installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  };
-  assert.deepEqual(okSkills, []);
-  assert.equal(active.enabled, true);
-});
-
-test("BFILL-02 state with lastReconciledExtensionVersion validates and round-trips", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    const state: ExtensionState = {
-      schemaVersion: 2,
-      lastReconciledExtensionVersion: "0.6.2",
-      marketplaces: {},
-    };
-    assert.equal(STATE_VALIDATOR.Check(state), true);
-
-    await saveState(root, state);
-    const reloaded = await loadState(root);
-    assert.equal(reloaded.lastReconciledExtensionVersion, "0.6.2");
-    assert.equal(reloaded.schemaVersion, 2);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("BFILL-02 / D-68-01 old doc without the stamp loads unchanged (no schemaVersion bump)", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    // A doc with no stamp -- the absent-stamp = scan-once case.
-    const legacy = {
-      schemaVersion: 2,
-      marketplaces: {
-        mp1: {
-          name: "mp1",
-          scope: "user",
-          source: { kind: "path", raw: "./local", logical: "./local" },
-          addedFromCwd: "/cwd",
-          manifestPath: "/abs/mp1/.claude-plugin/marketplace.json",
-          marketplaceRoot: "/abs/mp1",
-          plugins: {},
-        },
-      },
-    };
-    await writeFile(path.join(root, "state.json"), JSON.stringify(legacy));
-    const got = await loadState(root);
-    assert.equal(got.schemaVersion, 2);
-    assert.equal(got.lastReconciledExtensionVersion, undefined);
-    assert.ok((got.marketplaces as Record<string, unknown>)["mp1"]);
-  } finally {
-    await cleanup();
-  }
-});
-
-test("BFILL-02 loadState normalization preserves a stamp present in the raw doc", async () => {
-  const { root, cleanup } = await tmpExtensionRoot();
-  try {
-    // Guards the rebuilt-object drop hazard: loadState normalization rebuilds
-    // { schemaVersion, marketplaces } and would silently drop a new top-level
-    // field unless it is threaded through.
-    const raw = {
-      schemaVersion: 2,
-      lastReconciledExtensionVersion: "0.5.0",
-      marketplaces: {},
-    };
-    await writeFile(path.join(root, "state.json"), JSON.stringify(raw));
-    const got = await loadState(root);
-    assert.equal(got.lastReconciledExtensionVersion, "0.5.0");
-  } finally {
-    await cleanup();
-  }
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// clonePluginRecord. These tests lived in the reinstall orchestrator's suite
-// and reached the function through a `__test_*` re-export, because the record
-// snapshot was declared there. The hazard they guard is a field drift against
-// PLUGIN_INSTALL_RECORD_SCHEMA, which is this module's schema, so both the
-// function and its tests moved here (FLOW-09).
-// ───────────────────────────────────────────────────────────────────────────
-
-// D-100-01 / ENBL-10: `clonePluginRecord` enumerates the record's fields
-// rather than spreading it, so a key it forgets vanishes from the old-record
-// snapshot silently -- no compile error, no failing assertion elsewhere. These
-// two clauses are the alarm for the hook description specifically.
-test("D-100-01 / ENBL-10: the reinstall old-record snapshot preserves hookEntries", () => {
-  const record = {
+  const expectedRecord: PluginInstallRecord = {
     version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "/plugins/hello",
+    resolvedSource: "https://github.com/acme/plugin",
+    resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
     hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
-    enabled: true,
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
+    compatibility: {
+      installable: false,
+      notes: ["partial"],
+      supported: ["skills"],
+      unsupported: ["commands"],
+    },
+    resources: {
+      skills: ["skill-a"],
+      prompts: ["command-a"],
+      agents: ["agent-a"],
+      mcpServers: ["mcp-a"],
+      hooks: ["hooks-a"],
+    },
+    enabled: false,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-02-01T00:00:00.000Z",
   };
 
-  const snapshot = clonePluginRecord(record);
+  // act
+  const clonedRecord = clonePluginRecord(record);
 
-  assert.deepEqual(snapshot.hookEntries, [
-    { event: "PreToolUse", matcher: "Bash" },
-    { event: "SessionStart" },
-  ]);
-  // Deep copy, not an alias: the snapshot is read after the live record has
-  // been overwritten in place, so a shared element would report the new value.
-  assert.notEqual(snapshot.hookEntries?.[0], record.hookEntries[0]);
+  // assert
+  assert.deepStrictEqual(clonedRecord, expectedRecord);
+  assert.notStrictEqual(clonedRecord, record);
+  assert.notStrictEqual(clonedRecord.hookEntries, record.hookEntries);
+  assert.notStrictEqual(clonedRecord.hookEntries?.[0], record.hookEntries?.[0]);
+  assert.notStrictEqual(clonedRecord.compatibility, record.compatibility);
+  assert.notStrictEqual(clonedRecord.compatibility.notes, record.compatibility.notes);
+  assert.notStrictEqual(clonedRecord.resources, record.resources);
+  assert.notStrictEqual(clonedRecord.resources.skills, record.resources.skills);
 });
 
-test("D-100-01 / ENBL-10: a record with no hookEntries clones without inventing the key", () => {
-  const record = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "/plugins/hello",
+test("clones a legacy plugin without inventing optional fields", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "1.0.0",
+    resolvedSource: "/plugins/legacy",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: true,
@@ -898,7 +149,1072 @@ test("D-100-01 / ENBL-10: a record with no hookEntries clones without inventing 
     updatedAt: "2025-01-01T00:00:00.000Z",
   };
 
-  const snapshot = clonePluginRecord(record);
+  // act
+  const clonedRecord = clonePluginRecord(record);
 
-  assert.equal(Object.hasOwn(snapshot, "hookEntries"), false);
+  // assert
+  assert.deepStrictEqual(clonedRecord, {
+    version: "1.0.0",
+    resolvedSource: "/plugins/legacy",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: true,
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  });
+  assert.strictEqual(Object.hasOwn(clonedRecord, "resolvedSha"), false);
+  assert.strictEqual(Object.hasOwn(clonedRecord, "hookEntries"), false);
+});
+
+test("disables a plugin while preserving its complete inventory", () => {
+  // arrange
+  const resources: HooksOnlyResources = {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: ["hooks-a"],
+  };
+  const record: PluginInstallRecord & { resources: HooksOnlyResources } = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "https://github.com/acme/plugin",
+    resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }],
+    compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    resources,
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const expectedRecord: DisabledPluginRecord<HooksOnlyResources> = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "https://github.com/acme/plugin",
+    resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }],
+    compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    resources,
+    enabled: false,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-02-02T00:00:00.000Z",
+  };
+
+  // act
+  const disabledRecord: DisabledPluginRecord<HooksOnlyResources> = toDisabledRecord(
+    record,
+    "2026-02-02T00:00:00.000Z",
+  );
+
+  // assert
+  assert.deepStrictEqual(disabledRecord, expectedRecord);
+  assert.strictEqual(disabledRecord.resources, resources);
+});
+
+for (const { name, state, accepted } of [
+  { name: "schema version 1", state: { schemaVersion: 1, marketplaces: {} }, accepted: true },
+  { name: "schema version 2", state: { schemaVersion: 2, marketplaces: {} }, accepted: true },
+  { name: "schema version 3", state: { schemaVersion: 3, marketplaces: {} }, accepted: false },
+  {
+    name: "optional reconciliation stamp",
+    state: { schemaVersion: 2, lastReconciledExtensionVersion: "0.17.0", marketplaces: {} },
+    accepted: true,
+  },
+]) {
+  test(`validates ${name}`, () => {
+    // arrange
+    const storedState = state;
+
+    // act
+    const valid = STATE_VALIDATOR.Check(storedState);
+
+    // assert
+    assert.strictEqual(valid, accepted);
+  });
+}
+
+test("rejects an unsupported stored schema version without replacing future bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-future-version-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedBytes = '{"schemaVersion":3,"marketplaces":{},"futureField":"keep"}\n';
+  await writeFile(stateJsonPath, storedBytes);
+
+  // act
+  const error = await loadState(extensionRoot).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.ok(error instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.name, message: error.message, cause: error.cause },
+    {
+      name: "Error",
+      message: `state.json at ${stateJsonPath} has an unsupported schema version`,
+      cause: undefined,
+    },
+  );
+  assert.strictEqual(retainedBytes, storedBytes);
+});
+
+test("loads a null legacy root as empty state without replacing the stored bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-null-root-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedBytes = "null\n";
+  await writeFile(stateJsonPath, storedBytes);
+
+  // act
+  const state = await loadState(extensionRoot);
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(state, { schemaVersion: 2, marketplaces: {} });
+  assert.strictEqual(retainedBytes, storedBytes);
+});
+
+test("validates complete hook and resolved-sha plugin records", () => {
+  // arrange
+  const storedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "1.0.0",
+            resolvedSource: "/catalog/plugin",
+            resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            hookEntries: [{ event: "PreToolUse", matcher: "Bash" }],
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["hooks-a"],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  const valid = STATE_VALIDATOR.Check(storedState);
+
+  // assert
+  assert.strictEqual(valid, true);
+});
+
+test("returns the exact default for a missing state file", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-missing-");
+  const expectedState: ExtensionState = { schemaVersion: 2, marketplaces: {} };
+
+  // act
+  const state = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(state, expectedState);
+  assert.notStrictEqual(state, DEFAULT_STATE);
+});
+
+test("normalizes a complete version-2 document and preserves its stamp", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-valid-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedState = {
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: "0.16.0",
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "project",
+        source: { kind: "path", raw: "./catalog", logical: "stale" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        lastUpdatedAt: "2026-01-02T00:00:00.000Z",
+        plugins: {},
+      },
+    },
+  };
+  const expectedState: ExtensionState = {
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: "0.16.0",
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "project",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        lastUpdatedAt: "2026-01-02T00:00:00.000Z",
+        plugins: {},
+      },
+    },
+  };
+  await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+  // act
+  const state = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(state, expectedState);
+  assert.strictEqual(await readFile(stateJsonPath, "utf8"), JSON.stringify(storedState));
+});
+
+test(
+  "migrates legacy state, persists exact bytes, and replays as a fixed point",
+  { timeout: 5_000 },
+  async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-legacy-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 1,
+      marketplaces: {
+        legacy: {
+          name: "legacy",
+          scope: "user",
+          source: "./legacy",
+          addedFromCwd: "/work",
+          plugins: {
+            plugin: {
+              version: "1.0.0",
+              resolvedSource: "/legacy/plugin",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: ["skill-a"], prompts: ["command-a"] },
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    };
+    const expectedState: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        legacy: {
+          name: "legacy",
+          scope: "user",
+          source: { kind: "path", raw: "./legacy", logical: "./legacy" },
+          addedFromCwd: "/work",
+          manifestPath: path.join(
+            extensionRoot,
+            "sources",
+            "legacy",
+            ".claude-plugin",
+            "marketplace.json",
+          ),
+          marketplaceRoot: path.join(extensionRoot, "sources", "legacy"),
+          plugins: {
+            plugin: {
+              version: "1.0.0",
+              resolvedSource: "/legacy/plugin",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: ["skill-a"],
+                prompts: ["command-a"],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
+              enabled: true,
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    };
+    const expectedBytes = `{
+  "schemaVersion": 2,
+  "marketplaces": {
+    "legacy": {
+      "name": "legacy",
+      "scope": "user",
+      "source": {
+        "kind": "path",
+        "raw": "./legacy",
+        "logical": "./legacy"
+      },
+      "addedFromCwd": "/work",
+      "plugins": {
+        "plugin": {
+          "version": "1.0.0",
+          "resolvedSource": "/legacy/plugin",
+          "compatibility": {
+            "installable": true,
+            "notes": [],
+            "supported": [],
+            "unsupported": []
+          },
+          "resources": {
+            "skills": [
+              "skill-a"
+            ],
+            "prompts": [
+              "command-a"
+            ],
+            "agents": [],
+            "mcpServers": [],
+            "hooks": []
+          },
+          "installedAt": "2025-01-01T00:00:00.000Z",
+          "updatedAt": "2025-01-01T00:00:00.000Z",
+          "enabled": true
+        }
+      },
+      "manifestPath": ${JSON.stringify(path.join(extensionRoot, "sources", "legacy", ".claude-plugin", "marketplace.json"))},
+      "marketplaceRoot": ${JSON.stringify(path.join(extensionRoot, "sources", "legacy"))}
+    }
+  }
+}
+`;
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+    const controller = new AbortController();
+    t.after(() => {
+      controller.abort();
+    });
+    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
+    const stateJsonChanged = (async () => {
+      while (true) {
+        const change = await changes.next();
+        if (change.done) {
+          throw new Error("state.json watcher ended before persistence");
+        }
+
+        if (change.value.filename === "state.json") {
+          return change.value;
+        }
+      }
+    })();
+
+    // act
+    const state = await loadState(extensionRoot);
+    const change = await stateJsonChanged;
+    await changes.return?.();
+    const persistedBytes = await readFile(stateJsonPath, "utf8");
+    const persistedMetadata = await stat(stateJsonPath, { bigint: true });
+    const replayedState = await loadState(extensionRoot);
+    const replayedBytes = await readFile(stateJsonPath, "utf8");
+    const replayedMetadata = await stat(stateJsonPath, { bigint: true });
+
+    // assert
+    assert.deepStrictEqual({ ...change }, { eventType: "rename", filename: "state.json" });
+    assert.deepStrictEqual(state, expectedState);
+    assert.strictEqual(persistedBytes, expectedBytes);
+    assert.deepStrictEqual(replayedState, expectedState);
+    assert.strictEqual(replayedBytes, expectedBytes);
+    assert.deepStrictEqual(
+      {
+        ino: replayedMetadata.ino,
+        size: replayedMetadata.size,
+        mtimeNs: replayedMetadata.mtimeNs,
+        ctimeNs: replayedMetadata.ctimeNs,
+      },
+      {
+        ino: persistedMetadata.ino,
+        size: persistedMetadata.size,
+        mtimeNs: persistedMetadata.mtimeNs,
+        ctimeNs: persistedMetadata.ctimeNs,
+      },
+    );
+  },
+);
+
+test("saves exact version-2 bytes and loads the complete state", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-save-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: "0.17.0",
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "github", raw: "acme/catalog", repo: "acme/catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {},
+      },
+    },
+  };
+  const expectedBytes = `${JSON.stringify(state, null, 2)}\n`;
+  const expectedState: ExtensionState = {
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: "0.17.0",
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "github", raw: "acme/catalog", owner: "acme", repo: "catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {},
+      },
+    },
+  };
+
+  // act
+  await saveState(extensionRoot, state);
+  const storedBytes = await readFile(stateJsonPath, "utf8");
+  const loadedState = await loadState(extensionRoot);
+
+  // assert
+  assert.strictEqual(storedBytes, expectedBytes);
+  assert.deepStrictEqual(loadedState, expectedState);
+});
+
+test("accepts and stores a version-1 empty state", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-save-v1-");
+  const state: ExtensionState = { schemaVersion: 1, marketplaces: {} };
+
+  // act
+  await saveState(extensionRoot, state);
+  const storedBytes = await readFile(path.join(extensionRoot, "state.json"), "utf8");
+
+  // assert
+  assert.strictEqual(storedBytes, '{\n  "schemaVersion": 1,\n  "marketplaces": {}\n}\n');
+});
+
+for (const { name, source, expectedSource } of [
+  {
+    name: "a stored GitHub source",
+    source: { kind: "github", raw: "acme/catalog", owner: "stale", repo: "stale" },
+    expectedSource: { kind: "github", raw: "acme/catalog", owner: "acme", repo: "catalog" },
+  },
+  {
+    name: "a stored URL source",
+    source: {
+      kind: "url",
+      raw: "https://git.example.com/acme/catalog.git#release",
+      url: "stale",
+    },
+    expectedSource: {
+      kind: "url",
+      raw: "https://git.example.com/acme/catalog.git#release",
+      url: "https://git.example.com/acme/catalog",
+      ref: "release",
+    },
+  },
+  {
+    name: "a forward-compatible unknown source",
+    source: { kind: "unknown", raw: "future:catalog", reason: "future source" },
+    expectedSource: { kind: "unknown", raw: "future:catalog", reason: "future source" },
+  },
+]) {
+  test(`normalizes ${name} through the public load path`, async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-source-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source,
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: expectedSource,
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+    // act
+    const state = await loadState(extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(state, expectedState);
+  });
+}
+
+for (const { name, source, expectedMessage } of [
+  {
+    name: "an unclassifiable raw string",
+    source: "catalog",
+    expectedMessage:
+      'state.json marketplace "catalog" has unclassifiable source: non-relative string source catalog cannot be classified',
+  },
+  {
+    name: "a null source",
+    source: null,
+    expectedMessage: 'state.json marketplace "catalog" has missing or invalid source',
+  },
+  {
+    name: "a primitive source",
+    source: 17,
+    expectedMessage: 'state.json marketplace "catalog" has missing or invalid source',
+  },
+  {
+    name: "a URL record whose raw value classifies as GitHub",
+    source: { kind: "url", raw: "acme/catalog" },
+    expectedMessage: 'state.json marketplace "catalog" has an invalid url source: acme/catalog',
+  },
+  {
+    name: "a path record without a raw string",
+    source: { kind: "path" },
+    expectedMessage:
+      'state.json marketplace "catalog" has malformed source object (missing kind/raw)',
+  },
+]) {
+  test(`rejects ${name} with the complete public error`, async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-source-error-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source,
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+    // act & assert
+    await assert.rejects(
+      () => loadState(extensionRoot),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          { name: "Error", message: expectedMessage, cause: undefined },
+        );
+        return true;
+      },
+    );
+  });
+}
+
+test("rejects malformed JSON with its complete structured cause", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-json-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  await writeFile(stateJsonPath, "{");
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.ok(error.cause instanceof SyntaxError);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          cause: { name: error.cause.name, message: error.cause.message },
+        },
+        {
+          name: "Error",
+          message: `state.json at ${stateJsonPath} is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)`,
+          cause: {
+            name: "SyntaxError",
+            message: "Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          },
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("wraps a non-missing read failure with its filesystem cause", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-read-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  await mkdir(stateJsonPath);
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.ok(error.cause instanceof Error);
+      const cause = error.cause as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          cause: {
+            name: cause.name,
+            code: cause.code,
+            errno: cause.errno,
+            syscall: cause.syscall,
+          },
+        },
+        {
+          name: "Error",
+          // Composed from the cause rather than from a literal: the runtime owns the errno wording
+          // and later majors append the offending path to it. What this pins is the composition.
+          message: `Failed to read ${stateJsonPath}: ${cause.message}`,
+          cause: {
+            name: "Error",
+            code: "EISDIR",
+            errno: -21,
+            syscall: "read",
+          },
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("reports the exact post-normalization schema failure", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-schema-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "1.0.0",
+            resolvedSource: "/catalog/plugin",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            enabled: null,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  await writeFile(stateJsonPath, JSON.stringify(storedState));
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `state.json at ${stateJsonPath} failed schema validation: /marketplaces/catalog/plugins/plugin/enabled: must be boolean`,
+          cause: undefined,
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("formats a root validator failure through the public loader", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-root-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const rootErrors = STATE_VALIDATOR.Errors(null);
+  t.mock.method(STATE_VALIDATOR, "Check", () => false);
+  t.mock.method(STATE_VALIDATOR, "Errors", () => rootErrors);
+  await writeFile(stateJsonPath, "{}");
+
+  // act & assert
+  await assert.rejects(
+    () => loadState(extensionRoot),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `state.json at ${stateJsonPath} failed schema validation: <root>: must be object`,
+          cause: undefined,
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test("uses the no-detail fallback when an invalid save has no validator errors", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-empty-errors-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const existingBytes = '{"keep":true}\n';
+  const invalidState = { schemaVersion: 3, marketplaces: {} } as unknown as ExtensionState;
+  t.mock.method(STATE_VALIDATOR, "Errors", () => []);
+  await writeFile(stateJsonPath, existingBytes);
+
+  // act
+  const error = await saveState(extensionRoot, invalidState).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.ok(error instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.name, message: error.message, cause: error.cause },
+    {
+      name: "Error",
+      message: "saveState refused: in-memory state failed schema validation: (no detail available)",
+      cause: undefined,
+    },
+  );
+  assert.strictEqual(retainedBytes, existingBytes);
+});
+
+test("rejects an invalid save before replacing existing bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-save-error-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const existingBytes = '{"keep":true}\n';
+  const invalidState = {
+    schemaVersion: 2,
+    marketplaces: { catalog: { name: "catalog" } },
+  } as unknown as ExtensionState;
+  await writeFile(stateJsonPath, existingBytes);
+
+  // act
+  const error = await saveState(extensionRoot, invalidState).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const retainedBytes = await readFile(stateJsonPath, "utf8");
+
+  // assert
+  assert.ok(error instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.name, message: error.message, cause: error.cause },
+    {
+      name: "Error",
+      message:
+        "saveState refused: in-memory state failed schema validation: /marketplaces/catalog: must have required properties scope, source, addedFromCwd, manifestPath, marketplaceRoot, plugins",
+      cause: undefined,
+    },
+  );
+  assert.strictEqual(retainedBytes, existingBytes);
+});
+
+test("ignores a non-string reconciliation stamp", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-stamp-");
+  const storedState = {
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: 17,
+    marketplaces: {},
+  };
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const state = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(state, { schemaVersion: 2, marketplaces: {} });
+});
+
+test("preserves legacy autoupdate while the config migration gate is closed", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-gate-closed-");
+  const storedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        autoupdate: true,
+        plugins: {},
+      },
+    },
+  };
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const state = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(state, storedState);
+});
+
+test(
+  "scrubs and persists legacy autoupdate when the config migration gate is open",
+  { timeout: 5_000 },
+  async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-gate-open-");
+    const scopeRoot = path.dirname(extensionRoot);
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          autoupdate: true,
+          plugins: {},
+        },
+      },
+    };
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: {},
+        },
+      },
+    };
+    const expectedBytes = `{
+  "schemaVersion": 2,
+  "marketplaces": {
+    "catalog": {
+      "name": "catalog",
+      "scope": "user",
+      "source": {
+        "kind": "path",
+        "raw": "./catalog",
+        "logical": "./catalog"
+      },
+      "addedFromCwd": "/work",
+      "manifestPath": "/catalog/.claude-plugin/marketplace.json",
+      "marketplaceRoot": "/catalog",
+      "plugins": {}
+    }
+  }
+}
+`;
+    await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}");
+    await writeFile(stateJsonPath, JSON.stringify(storedState));
+    const controller = new AbortController();
+    t.after(() => {
+      controller.abort();
+    });
+    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
+    const stateJsonChanged = (async () => {
+      while (true) {
+        const change = await changes.next();
+        if (change.done) {
+          throw new Error("state.json watcher ended before persistence");
+        }
+
+        if (change.value.filename === "state.json") {
+          return;
+        }
+      }
+    })();
+
+    // act
+    const state = await loadState(extensionRoot);
+    await stateJsonChanged;
+    await changes.return?.();
+    const persistedBytes = await readFile(stateJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(state, expectedState);
+    assert.strictEqual(persistedBytes, expectedBytes);
+  },
+);
+
+for (const { name, plugin } of [
+  {
+    name: "a plugin without hooks",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      enabled: true,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  {
+    name: "a plugin with non-array hooks",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: "hooks" },
+      enabled: true,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  {
+    name: "a plugin without enabled",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+]) {
+  test(`rejects ${name} at the published validator`, () => {
+    // arrange
+    const storedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/catalog",
+          plugins: { plugin },
+        },
+      },
+    };
+
+    // act
+    const valid = STATE_VALIDATOR.Check(storedState);
+
+    // assert
+    assert.strictEqual(valid, false);
+  });
+}
+
+test("round-trips resolved sha and hook entries through exact state bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-plugin-roundtrip-");
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "sha-a1b2c3d4e5f6",
+            resolvedSource: "https://github.com/acme/plugin",
+            resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            hookEntries: [{ event: "SessionStart" }],
+            compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hooks-a"] },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  const expectedState: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "sha-a1b2c3d4e5f6",
+            resolvedSource: "https://github.com/acme/plugin",
+            resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            hookEntries: [{ event: "SessionStart" }],
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["hooks"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["hooks-a"],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  const expectedBytes = `${JSON.stringify(expectedState, null, 2)}\n`;
+
+  // act
+  await saveState(extensionRoot, state);
+  const storedBytes = await readFile(path.join(extensionRoot, "state.json"), "utf8");
+  const loadedState = await loadState(extensionRoot);
+
+  // assert
+  assert.strictEqual(storedBytes, expectedBytes);
+  assert.deepStrictEqual(loadedState, expectedState);
+});
+
+test("derives the config migration gate path from the public locations contract", () => {
+  // arrange
+  const locations = locationsFor("project", path.join(tmpdir(), "state-io-drift-guard"));
+
+  // act
+  const derivedConfigPath = path.join(path.dirname(locations.extensionRoot), "claude-plugins.json");
+
+  // assert
+  assert.strictEqual(derivedConfigPath, locations.configJsonPath);
 });

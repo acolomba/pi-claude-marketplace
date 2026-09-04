@@ -37,11 +37,6 @@
 //     `stop` debug-log the dropped reason and return `undefined`. NEVER
 //     notify. NEVER throw.
 //
-//   - adaptObservationResult     -> legacy 4-arm silent-drop shim retained
-//     for the architecture-level exhaustiveness gate and for any caller
-//     that lacks a claudeEvent context. Production dispatch uses
-//     adaptObservationResultForEvent instead.
-//
 // Exhaustiveness gate: each adapter exhaustively switches on `result.kind`
 // and calls `assertNever` on the impossible default arm (NFR-7). Adding a
 // fifth `HookExecResult` arm would fail `tsc` at the call site.
@@ -345,54 +340,6 @@ export function adaptObservationResultForEvent(
     case "stop":
       hookDebugLog(
         `adaptObservation: stop ignored (no Pi return slot); event=${claudeEvent} reason=${result.stopReason ?? "<none>"}`,
-      );
-      return undefined;
-
-    case "noop":
-      return undefined;
-
-    default:
-      return assertNever(result);
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// adaptObservationResult -- legacy 4-arm silent-drop adapter
-// ──────────────────────────────────────────────────────────────────────────
-
-/**
- * D-60-03: legacy observation-only adapter that silently drops every
- * mutate-arm payload. Retained because (a) the architecture-level test
- * suite pins the 4-arm exhaustiveness gate here, and (b) callers that
- * have no claudeEvent context can still discharge the result through this
- * surface. Production dispatch routes through
- * `adaptObservationResultForEvent` instead so the SessionStart
- * additionalContext path can capture into the pending buffer.
- *
- * The adapter NEVER notifies and NEVER throws -- `assertNever` only fires
- * when the union grows a new arm, which is a compile-time failure.
- *
- * @internal Use `adaptObservationResultForEvent` in production dispatch
- *   paths. This shim only exists to anchor the 4-arm exhaustiveness
- *   architecture test; new call sites should pass the `claudeEvent`.
- */
-export function adaptObservationResult(result: HookExecResult): undefined {
-  switch (result.kind) {
-    case "block":
-      hookDebugLog(
-        `adaptObservation: block ignored (no Pi return slot); reason=${result.reason ?? "<none>"}`,
-      );
-      return undefined;
-
-    case "mutate":
-      // Observation events have no mutation surface in the legacy shim --
-      // silently drop. Use adaptObservationResultForEvent for the
-      // SessionStart additionalContext capture path.
-      return undefined;
-
-    case "stop":
-      hookDebugLog(
-        `adaptObservation: stop ignored (no Pi return slot); reason=${result.stopReason ?? "<none>"}`,
       );
       return undefined;
 

@@ -1,9 +1,6 @@
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import {
-  makeNotifyCollectingCtx,
-  makeStubPi,
-  type NotificationRecord,
-} from "../helpers/ipc-child.ts";
+
+import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
 
 interface StartMessage {
   readonly plugin: string;

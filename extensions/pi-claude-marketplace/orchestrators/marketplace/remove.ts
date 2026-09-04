@@ -118,12 +118,11 @@ export type RemoveMarketplaceOutcome =
       readonly cause: string;
     }
   // I1 / PR #51: orchestrated partial-cascade arm. A subset of the
-  // marketplace's plugins successfully unstaged AND a subset failed. Pre-fix
-  // the orchestrated path collapsed this to `{ status: "failed", reason }`,
-  // dropping both the unstaged plugin rows AND failures 2..N from the
-  // reconcile cascade. The reconcile caller now renders one row per
-  // `unstaged` plugin (○ uninstalled) AND one row per `failed` plugin (⊘
-  // {reason}), plus a `(failed)` mp header (D-22-02 / CMC-31 PARTIAL).
+  // marketplace's plugins successfully unstaged AND a subset failed. Carrying
+  // both sets keeps every plugin visible in the reconcile cascade: the caller
+  // renders one row per `unstaged` plugin (○ uninstalled) AND one row per
+  // `failed` plugin (⊘ {reason}), plus a `(failed)` mp header (D-22-02 /
+  // CMC-31 PARTIAL).
   | {
       readonly status: "partial";
       readonly name: string;
@@ -242,8 +241,8 @@ function emitPartialFailure(args: {
     // through the typed outcome. The apply cascade caller composes one row
     // per plugin (○ uninstalled for unstaged, ⊘ {reason} for failed) so the
     // reconcile surface honours D-22-02 (no plugin ever disappears
-    // silently). Pre-fix this arm returned `{status:"failed",reason}` --
-    // collapsing N rows to 1.
+    // silently). A single `{status:"failed",reason}` would collapse N rows
+    // to 1.
     return {
       status: "partial",
       name: opts.name,
@@ -519,16 +518,10 @@ async function resolveRemoveTargetOrSurface(
   orchestrated: boolean,
 ): Promise<{ scope: Scope; locations: ScopedLocations } | RemoveMarketplaceOutcome | undefined> {
   if (orchestrated) {
-    const r = await resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
-    if ("status" in r) {
-      return r;
-    }
-
-    return r;
+    return resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
   }
 
-  const r = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
-  return r;
+  return resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
 }
 
 /**
@@ -638,7 +631,34 @@ async function runPostRemoveCleanup(args: {
 /**
  * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
  * `undefined` in standalone mode.
+ *
+ * D-115-10: the overload pair narrows the orchestrated-mode return to
+ * `Promise<RemoveMarketplaceOutcome>` (no `| undefined`), mirroring
+ * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
+ * outcome is now a compile error rather than a silent `continue`, so every
+ * driven removal always materialises a row. The wide overload stays last so a
+ * caller holding the entrypoint in a single-signature variable keeps its
+ * `undefined` arm.
+ *
+ * WR-01: what the overload proves and what it does not. It removes the
+ * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
+ * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * TypeScript checks an overload signature against the implementation only
+ * loosely, and a narrower overload return is accepted with no diagnostic even
+ * when the implementation demonstrably returns the excluded value on that path.
+ * The narrowing is therefore an ASSERTION about this module, relocated from the
+ * consumer to the producer's signature -- not a proof. Every orchestrated arm
+ * below does return a defined outcome today, and the reconcile owner suite
+ * drives this entrypoint in orchestrated mode across its whole outcome matrix
+ * and asserts the complete cascade, so a regression on an exercised path fails
+ * there. An arm the matrix does not reach is not covered by either.
  */
+export function removeMarketplace(
+  opts: RemoveMarketplaceOptions & { notifications: { mode: "orchestrated" } },
+): Promise<RemoveMarketplaceOutcome>;
+export function removeMarketplace(
+  opts: RemoveMarketplaceOptions,
+): Promise<RemoveMarketplaceOutcome | undefined>;
 export async function removeMarketplace(
   opts: RemoveMarketplaceOptions,
 ): Promise<RemoveMarketplaceOutcome | undefined> {

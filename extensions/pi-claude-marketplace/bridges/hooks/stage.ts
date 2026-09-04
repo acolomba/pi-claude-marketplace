@@ -69,13 +69,8 @@ async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<
   const stack: string[] = [hooksRoot];
 
   while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) {
-      // Unreachable -- the while-condition guards stack.length > 0 -- but
-      // the explicit narrowing satisfies @typescript-eslint without a
-      // non-null assertion.
-      break;
-    }
+    const dir = stack.slice(-1).join("");
+    stack.pop();
 
     const entries = await readEntriesOrSkip(dir);
     if (entries === null) {
