@@ -5,8 +5,10 @@ milestone_name: Workflow Bridge Replay onto main
 status: planning
 last_updated: "2026-09-04T19:20:00.000Z"
 last_activity: 2026-09-04
+current_phase: 109
+current_phase_name: kind-inversion
 progress:
-  total_phases: 6
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -36,7 +38,7 @@ Last activity: 2026-09-04 — Workstream ported onto `features/workflow`, spikes
 
 ## Progress
 
-**Phases Complete:** 0/6 (replay) + 0/3 (hardening, planned)
+**Phases Complete:** 0/9 (Phases 109-114 replay, 115-117 hardening)
 **Current Plan:** Not started
 
 ```text
@@ -51,9 +53,28 @@ Last activity: 2026-09-04 — Workstream ported onto `features/workflow`, spikes
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
-| 115 | Install-time admission-gate warnings | Planned (hardening) |
-| 116 | Load-time workflow convergence | Planned (hardening) |
-| 117 | Measured `agent()` failure evidence | Planned (hardening) |
+| 115 | Install-time admission-gate warnings | Not started (hardening) |
+| 116 | Load-time workflow convergence | Not started (hardening) |
+| 117 | Measured `agent()` failure evidence | Not started (hardening) |
+
+**Why one run covers both milestones.** GSD scopes a milestone by parsing a
+`vN.N` version out of STATE's `milestone:` field
+(`workstream-inventory.cjs::readCurrentMilestoneVersion`). This workstream uses
+a NAME, so scoping never engages and `roadmap analyze` returns all nine phases.
+That is the right order to run them in anyway — replay, then harden — so
+`total_phases` is 9 rather than the replay's 6. A consequence of the same gap:
+`workstream status` reports this workstream `milestone complete`, derived from
+the archived `milestones/workflows-ROADMAP.md` through the legacy fallback.
+`init milestone-op` reads it correctly as incomplete, and that is what
+`/gsd-autonomous` uses.
+
+**Why the numbers start at 109.** Phase numbers are per-workstream, not global:
+root `v1.19` uses 106-117, `defaults-enabled` uses 101-105, and this
+workstream's archived milestone uses 101-105. Only a collision *within* this
+workstream would matter, and 106-108 are free here. They are left unused
+anyway, because the spike branch's own records plan the hardening milestone as
+"Phases 106-108" — reusing those numbers for the replay would make every such
+reference ambiguous when the two branches are read side by side.
 
 ## Replay Ground Truth
 

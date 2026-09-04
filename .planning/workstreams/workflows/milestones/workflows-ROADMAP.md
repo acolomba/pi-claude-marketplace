@@ -35,7 +35,7 @@ that shows up in three places the existing five bridges never had to handle:
   than repeating the engine's message, which names a rule the script does not
   violate.
 
-Every design claim was measured against production code during spikes 021-013,
+Every design claim was measured against production code during spikes 021-026,
 not inferred from documentation. The findings are packaged in the
 `spike-findings-pi-claude-marketplace` project skill and auto-load during
 implementation.

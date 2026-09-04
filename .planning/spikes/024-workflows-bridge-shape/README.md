@@ -13,7 +13,7 @@ tags: [architecture, bridges, nfr-10, design]
 
 ## What This Validates
 
-Spikes 021-010 established that the kind is really shipped, that
+Spikes 021-023 established that the kind is really shipped, that
 `@quintinshaw/pi-dynamic-workflows` is the only credible target on trust
 grounds, and that a hand-planted artifact is discovered end-to-end. This spike
 maps the bridge onto existing house machinery and isolates what is genuinely

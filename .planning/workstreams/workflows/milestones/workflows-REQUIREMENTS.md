@@ -14,7 +14,7 @@ For current requirements, see `.planning/workstreams/workflows/REQUIREMENTS.md`.
 
 **Milestone goal:** A Claude plugin shipping `workflows/` installs its scripts as working Pi commands hosted by `@quintinshaw/pi-dynamic-workflows`, across the full plugin lifecycle, closing the silent-ignore gap that `domain/resolver.ts`'s own closed-list warning (T-02-25) predicted.
 
-**Evidence base:** Every design claim below was measured against shipped code during spikes 021-013 (`.planning/spikes/`, idea key `claude-workflows-bridge`), not inferred from documentation. The findings are packaged in the `spike-findings-pi-claude-marketplace` project skill and auto-load during implementation.
+**Evidence base:** Every design claim below was measured against shipped code during spikes 021-026 (`.planning/spikes/`, idea key `claude-workflows-bridge`), not inferred from documentation. The findings are packaged in the `spike-findings-pi-claude-marketplace` project skill and auto-load during implementation.
 
 ## v1 Requirements
 
@@ -24,7 +24,14 @@ For current requirements, see `.planning/workstreams/workflows/REQUIREMENTS.md`.
 
 - [x] **WFLW-01**: A plugin shipping `<pluginRoot>/workflows/` has its workflow scripts recognized as installable components even when its manifest declares no `workflows` field. Convention detection is the load-bearing axis, not a fallback: of 44 sampled repos, 16 are real Claude plugins shipping `workflows/`, and **zero** declare the manifest field (Spike 021). A field-only implementation would find none of them.
 - [x] **WFLW-02**: A plugin declaring the `workflows` manifest field (`string | array`, "Custom workflow script files or directories, replaces default `workflows/`") resolves those declared paths as workflow components. Mirror the both-axes structure `collectUnsupportedKinds` already uses -- declared-in-manifest OR convention-on-disk -- on the supported side.
-- [x] **WFLW-03**: A workflow-bearing plugin never installs with zero signal. `workflows` currently sits in neither `SUPPORTED_COMPONENT_KINDS` nor `UNSUPPORTED_COMPONENT_KINDS`, so today such a plugin gets no degradation, no reason token, and no count -- unlike `monitors`/`themes`, which correctly demote to `partially-available`. Joining the supported list closes this by construction.
+- [x] **WFLW-03** (amended 2026-09-04 for the replay): A workflow-bearing plugin never installs with zero signal.
+
+  **The premise below is no longer true and must not be planned against.** It states that `workflows` sits in neither closed list. PR #154 (2026-08-29) put it in `UNSUPPORTED_COMPONENT_KINDS`, so on the replay target such a plugin already gets a degradation, a reason token and a count -- the zero-signal gap is closed, by the opposite mechanism to the one this requirement proposed.
+
+  What survives is the obligation, not the diagnosis: the replay moves `workflows` to the supported side (WINV-01) and must keep a signal while changing which one. A plugin that installs its workflows silently would newly satisfy the old letter and break the intent.
+
+  Original text, kept for the record: "`workflows` currently sits in neither `SUPPORTED_COMPONENT_KINDS` nor `UNSUPPORTED_COMPONENT_KINDS`, so today such a plugin gets no degradation, no reason token, and no count -- unlike `monitors`/`themes`, which correctly demote to `partially-available`. Joining the supported list closes this by construction."
+
 - [x] **WFLW-04**: The resolver exposes a `componentPaths.workflows` member so consumers can enumerate a plugin's resolved workflow sources, matching the existing per-kind shape.
 
 ### Workflow Artifact
@@ -45,7 +52,11 @@ For current requirements, see `.planning/workstreams/workflows/REQUIREMENTS.md`.
 - [x] **WNAM-03**: A script with no `meta` declaration is skipped with a warning and not installed.
 - [x] **WNAM-04**: An unparseable script (acorn `SyntaxError`) is refused rather than name-scavenged -- it cannot run anyway.
 - [x] **WNAM-05**: Two scripts in one plugin resolving to the same name fail the install with an explicit collision error, mirroring `assertNoCommandCollisions` (RN-6). `meta.name` introduces a duplicate axis filenames cannot have.
-- [x] **WNAM-06**: Generated names take the `<plugin>:<name>` shape from `generatedColonName`, reused unchanged. Verified to pass the engine's `isSafeSavedWorkflowName`, including RN-1 prefix elision. No `:`-sanitizing step is added -- colon-bearing basenames are standing policy (`bridges/commands/stage.ts:11`, "Windows is explicitly not targeted").
+- [x] **WNAM-06** (amended 2026-09-04 for the replay): Generated names take the `<plugin>:<name>` shape and pass the engine's `isSafeSavedWorkflowName`, including RN-1 prefix elision. No `:`-sanitizing step is added -- colon-bearing basenames are standing policy (`bridges/commands/stage.ts:11`, "Windows is explicitly not targeted").
+
+  **The original wording required the shape come "from `generatedColonName`, reused unchanged". That helper does not exist on the replay target.** The spike extracted it out of `generatedCommandName` so both could call it. On main, `generatedCommandName` instead grew `/`-separated nested command paths and an elision that declines to empty the head (CM-4, D-141-02) -- rules a flat, non-recursive workflow name (WBRG-02) can never exercise. Extracting a shared helper now would push those rules into a caller that cannot produce either shape and would refactor a function main changed recently for its own reasons.
+
+  What the clause was protecting is the joining rule not drifting between commands and workflows. That is now held by a test, not by a shared call: `generatedWorkflowName` mirrors `generatedSkillName`'s structure and its owner test pins the `<plugin>:<elided>` output against the same cases. Re-verified against engine 3.10.1 in Spike 027 using this branch's `domain/name.ts`.
 
 ### Paths and Containment
 

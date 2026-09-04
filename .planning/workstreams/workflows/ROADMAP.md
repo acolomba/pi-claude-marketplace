@@ -100,11 +100,12 @@ Anthropic-authored plugins that carry a `workflows/` directory:
 
 **Phase Numbering:**
 
-- Integer phases (106-108): planned milestone work continuing the global
-  counter past Phase 108, the highest number any milestone in this repo has
-  used. Phase 106 is already held by the `workflows-detection` milestone and
-  106-108 by the archived v1.19 milestone, so the original 106-108 numbering
-  could not be kept.
+- Integer phases (115-117): the hardening milestone, renumbered from the spike
+  branch's 106-108. Phase numbers are per-workstream rather than global — root
+  `v1.19` uses 106-117, `defaults-enabled` uses 101-105, and this workstream's
+  archived milestone uses 101-105 — so 106-108 were never actually taken here.
+  They are left unused anyway, so that the spike branch's own references to
+  "Phases 106-108" cannot be read as the replay phases that now precede them.
 
 - Decimal phases (115.1, 116.1): urgent insertions only, marked `INSERTED`.
 
@@ -149,6 +150,144 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 </details>
 
 ## Phase Details
+
+### Phase 109: Kind inversion
+
+**Goal**: A plugin carrying `workflows/` resolves `installable` instead of `partially-available {workflows}`, and every closed set, classifier arm, document and locking test that PR #154 wrote to mean the opposite has been turned rather than deleted.
+**Depends on**: Nothing. It is the first phase because nothing else compiles until `componentPaths.workflows` exists.
+**Requirements**: WINV-01, WINV-02, WINV-03, WINV-04, WINV-05
+**Success Criteria** (what must be TRUE):
+
+1. `workflows` is absent from `UNSUPPORTED_COMPONENT_KINDS` and from
+   `UNSUPPORTED_COMPONENT_CONVENTIONS`, and present in both
+   `SUPPORTED_COMPONENT_KINDS` and `SUPPORTED_COMPONENT_PATH_KINDS`. The
+   resolver exposes `componentPaths.workflows`.
+2. A plugin whose only unsupported component was `workflows` resolves
+   `installable` and installs on a plain `install`, with no `--partial`.
+3. The dedicated `workflows` member of the `REASONS` closed set is either
+   retired with its `probe-classifiers` arm or kept with a stated second
+   meaning, and the closed-set counts in the `notify-reasons.ts` header comment
+   agree with the tuple.
+4. `compat-01-no-expansion`, `catalog-uat` and `notify-closed-set-locks` each
+   assert the new meaning. Each was seen to fail against the old code and pass
+   against the new; none was deleted to make room.
+5. `docs/output-catalog.md` and every other document stating that
+   workflow-bearing plugins degrade is corrected in this phase, not a later one.
+6. `npm run check` is green.
+
+**Plans**: TBD
+
+### Phase 110: Domain and platform modules
+
+**Goal**: The three leaf modules the bridge needs — script admission, project-key derivation, and the engine home directory — are on this branch with owner tests and no test-only seams.
+**Depends on**: Phase 109 (`domain/workflow-script.ts` is reachable without it, but the phase's own gate run is not green until the resolver compiles)
+**Requirements**: WNAM-01, WNAM-02, WNAM-03, WNAM-04, WNAM-05, WNAM-06, WPTH-02
+**Success Criteria** (what must be TRUE):
+
+1. `domain/workflow-script.ts`, `domain/workflow-project-key.ts` and
+   `platform/workflow-home.ts` are present, together with
+   `generatedWorkflowName` in `domain/name.ts` and the two error classes in
+   `shared/errors.ts`.
+2. `acorn` is a declared runtime dependency at `^8.16.0`, the range the host
+   engine itself pins.
+3. Each of the three modules has a mirrored owner test that covers it directly,
+   and `npm run test:corresponding` passes for them.
+4. No `__test_*` export is introduced. Where the spike reached a unit through
+   one, the unit is made reachable from its own test instead.
+5. `meta.name` extraction survives the comment decoy, the string decoy and the
+   double-quoted key, and reports its four non-admission verdicts distinctly.
+6. The project-key derivation reproduces the engine's across the Spike 025 case
+   set, proved by a test that fails when the hash width is changed.
+
+**Plans**: TBD
+
+### Phase 111: Workflows bridge
+
+**Goal**: The sixth bridge exists as a discover / stage / unstage triplet with the same shape as its five siblings, and writes its envelopes atomically into a directory outside every scope root.
+**Depends on**: Phase 110
+**Requirements**: WBRG-01, WBRG-02, WBRG-03, WBRG-04, WPTH-01, WPTH-03, WPTH-04, WPTH-05
+**Success Criteria** (what must be TRUE):
+
+1. `bridges/workflows/` provides `discover`, `prepareStage` / `commitPrepared` /
+   `abortPrepared`, and `unstage`, and `persistence/locations.ts` owns every
+   path it writes through `assertPathInside`.
+2. Discovery is flat, non-recursive, refuses symlinks, and dedups first-wins.
+3. A script that cannot be read or staged is reported through `warnings[]`
+   without failing the plugin install.
+4. Staging sits adjacent to its target so the commit `rename()` never crosses a
+   filesystem boundary, and a commit that finds foreign content at a target path
+   refuses before its first rename.
+5. Every file under `bridges/workflows/` has a mirrored owner test and
+   `npm run test:corresponding` passes.
+6. `npm run check` is green.
+
+**Plans**: TBD
+
+### Phase 112: Install and removal lifecycle
+
+**Goal**: Installing a workflow-bearing plugin writes its envelopes as a sixth ledger phase that unwinds with the rest, and every removal path takes them away again.
+**Depends on**: Phase 111
+**Requirements**: WLIF-01, WLIF-02, WLIF-03
+**Success Criteria** (what must be TRUE):
+
+1. `runPhases` carries a sixth phase whose `undo` removes the envelopes it
+   wrote. A later phase failing leaves nothing behind, which matters more here
+   than for any other bridge because the envelopes live outside every scope root
+   and no scope-root cleanup will ever find them.
+2. The ledger `phase` union in `shared/errors.ts` carries `"workflows"`.
+3. `uninstall`, `disable` and `marketplace remove --cascade` all remove workflow
+   envelopes, and a removal that partly fails reports per-name reasons through a
+   typed error.
+4. `reinstall` re-materializes envelopes from the plugin source and records the
+   names it actually wrote.
+5. The wiring is written against the current `install.ts` / `uninstall.ts` /
+   `reinstall.ts`, not transplanted from the spike branch, which predates their
+   rewrite.
+6. `npm run check` is green.
+
+**Plans**: TBD
+
+### Phase 113: Update, enable/disable, reconcile
+
+**Goal**: The remaining lifecycle verbs treat workflows as a first-class component kind, and the read surfaces show them.
+**Depends on**: Phase 112
+**Requirements**: WLIF-04, WLIF-05, WLIF-06, WFLW-04
+**Success Criteria** (what must be TRUE):
+
+1. `update` prepares, aborts, commits and records workflows as a sixth bridge,
+   so an author's workflow fix reaches the user and a withdrawn workflow stops
+   being registered.
+2. `enable` and `disable` materialize and unstage envelopes, and the staged
+   workflow names ride on the projection both verbs read.
+3. Load-time reconcile does not re-materialize envelopes on every load.
+4. `info` renders a `workflows:` line and `list` counts the kind, both under the
+   project's byte-equality contract with paired fixtures.
+5. `npm run check` is green.
+
+**Plans**: TBD
+
+### Phase 114: Degradation and documentation
+
+**Goal**: The host engine becomes the third soft dependency, and the contract of the one bridge that installs executable code is written down.
+**Depends on**: Phase 113
+**Requirements**: WDEP-01, WDEP-02, WDEP-03, WDEP-04, WDOC-01, WDOC-02, WDOC-03
+**Success Criteria** (what must be TRUE):
+
+1. `DEPENDENCIES` carries a third member and every surface that can render a
+   soft-dependency marker renders `requires pi-dynamic-workflows`.
+2. The envelopes are written whether or not the engine is loaded, and two
+   installs differing only in the session's tool list write the same bytes.
+3. A gate, not a grep, proves the marker coverage: reverting any one
+   `Dependency[]` derivation turns exactly one case red.
+4. `docs/workflows-compatibility.md` states which engine runs third-party
+   JavaScript, how it is sandboxed, which script shapes install and then refuse
+   to run, and which claims were measured versus read. Engine claims cite 3.10.1
+   and Spike 027.
+5. The engine's own peer floor (`pi-coding-agent >=0.80.8`) is documented as
+   distinct from this project's (`>=0.80.5`).
+6. `npm run check` is green.
+
+**Plans**: TBD
 
 ### Phase 115: Install-time admission-gate warnings
 

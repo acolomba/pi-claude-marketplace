@@ -93,6 +93,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| WINV-01 | Phase 109 | Pending |
+| WINV-02 | Phase 109 | Pending |
+| WINV-03 | Phase 109 | Pending |
+| WINV-04 | Phase 109 | Pending |
+| WINV-05 | Phase 109 | Pending |
+| WNAM-01..06, WPTH-02 | Phase 110 | Pending (re-land) |
+| WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Pending (re-land) |
+| WLIF-01..03 | Phase 112 | Pending (re-land) |
+| WLIF-04..06, WFLW-04 | Phase 113 | Pending (re-land) |
+| WDEP-01..04, WDOC-01..03 | Phase 114 | Pending (re-land) |
 | WGATE-01 | Phase 115 | Pending |
 | WGATE-02 | Phase 115 | Pending |
 | WGATE-03 | Phase 115 | Pending |
@@ -107,10 +117,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WDOCS-02 | Phase 117 | Pending |
 
 **Coverage:**
-- v1 requirements: 12 total
-- Mapped to phases: 12
-- Unmapped: 0
+
+- New in this workstream's active plan: 5 (WINV-01..05), all mapped to Phase 109.
+- Re-landed from the archived `workflows` milestone: 36, mapped across Phases
+  110-114. Their text lives in
+  [`milestones/workflows-REQUIREMENTS.md`](milestones/workflows-REQUIREMENTS.md);
+  WFLW-03 and WNAM-06 carry replay amendments recorded there.
+- Hardening: 12 (WGATE, WCONV, WEVID, WDOCS), mapped across Phases 115-117.
+- Unmapped: 0.
+
+**Completeness caveat.** The hardening milestone was defined in an interrupted
+session — its ROADMAP, REQUIREMENTS and STATE were uncommitted working-tree
+edits on `features/workflows-spike` when work stopped. They are internally
+consistent and every requirement maps to a phase, but they were never reviewed
+or verified as a finished set. Treat Phases 115-117 as a good draft rather than
+a settled plan, and expect `/gsd-discuss-phase` to find gaps that a completed
+session would already have closed. Spike 027 found one such gap already: the
+gate count those documents state is wrong in both directions, and
+`meta.description` is a refusal the milestone never named.
 
 ---
 *Requirements defined: 2026-08-16*
-*Traceability mapped: 2026-08-16 (roadmap, Phases 115-117)*
+*Traceability remapped: 2026-09-04 (replay Phases 109-114, hardening 115-117)*
