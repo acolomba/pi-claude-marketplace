@@ -1,0 +1,2643 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-24",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-035",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-036",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-037",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-038",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-039",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-040",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-041",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-042",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-043",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-044"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-035"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-001",
+      "findingId": "OPIA-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-002",
+      "findingId": "OPIA-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-003",
+      "findingId": "OPIA-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-004",
+      "findingId": "OPIA-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-005",
+      "findingId": "OPIA-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-006",
+      "findingId": "OPIA-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-007",
+      "findingId": "OPIA-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-008",
+      "findingId": "OPIA-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-009",
+      "findingId": "OPIA-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-010",
+      "findingId": "OPIA-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-011",
+      "findingId": "OPIA-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-012",
+      "findingId": "OPIA-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-013",
+      "findingId": "OPIA-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-014",
+      "findingId": "OPIA-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-015",
+      "findingId": "OPIA-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-016",
+      "findingId": "OPIA-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-017",
+      "findingId": "OPIA-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-018",
+      "findingId": "OPIA-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-019",
+      "findingId": "OPIA-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-020",
+      "findingId": "OPIA-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-021",
+      "findingId": "OPIA-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-022",
+      "findingId": "OPIA-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-023",
+      "findingId": "OPIA-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-024",
+      "findingId": "OPIA-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-025",
+      "findingId": "OPIA-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-026",
+      "findingId": "OPIA-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-027",
+      "findingId": "OPIA-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-028",
+      "findingId": "OPIA-F27"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-029",
+      "findingId": "OPIA-F28"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-030",
+      "findingId": "OPIA-F29"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-031",
+      "findingId": "OPIA-F30"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-032",
+      "findingId": "OPIA-F31"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-033",
+      "findingId": "OPIA-F32"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-034",
+      "findingId": "OPIA-F33"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-035",
+      "findingId": "OPIA-F34"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-036",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-036",
+      "findingId": "OPIA-F35"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-037",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-037",
+      "findingId": "OPIA-F36"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-038",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-038",
+      "findingId": "OPIA-F37"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-039",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-039",
+      "findingId": "OPIA-F38"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-040",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-040",
+      "findingId": "OPIA-F39"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-041",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-041",
+      "findingId": "OPIA-F40"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-042",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-042",
+      "findingId": "OPIA-F41"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-043",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-043",
+      "findingId": "OPIA-F42"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-044",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "label": "CLAIM-044",
+      "findingId": "OPIA-F43"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-001",
+      "findingId": "OPIB-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-002",
+      "findingId": "OPIB-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-003",
+      "findingId": "OPIB-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-004",
+      "findingId": "OPIB-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-005",
+      "findingId": "OPIB-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-006",
+      "findingId": "OPIB-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-007",
+      "findingId": "OPIB-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-008",
+      "findingId": "OPIB-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-009",
+      "findingId": "OPIB-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-010",
+      "findingId": "OPIB-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-011",
+      "findingId": "OPIB-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-012",
+      "findingId": "OPIB-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-013",
+      "findingId": "OPIB-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-014",
+      "findingId": "OPIB-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-015",
+      "findingId": "OPIB-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-016",
+      "findingId": "OPIB-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-017",
+      "findingId": "OPIB-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-018",
+      "findingId": "OPIB-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-019",
+      "findingId": "OPIB-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-020",
+      "findingId": "OPIB-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-021",
+      "findingId": "OPIB-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-022",
+      "findingId": "OPIB-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-023",
+      "findingId": "OPIB-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-024",
+      "findingId": "OPIB-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-025",
+      "findingId": "OPIB-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-026",
+      "findingId": "OPIB-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-027",
+      "findingId": "OPIB-F27"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-028",
+      "findingId": "OPIB-F28"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-029",
+      "findingId": "OPIB-F29"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-030",
+      "findingId": "OPIB-F30"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-031",
+      "findingId": "OPIB-F31"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-032",
+      "findingId": "OPIB-F32"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-033",
+      "findingId": "OPIB-F33"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-034",
+      "findingId": "OPIB-F34"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "label": "CLAIM-035",
+      "findingId": "OPIB-F35"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OPIA-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current deriveLenientComponentPaths still re-admits raw absolute or escaping component paths and discoverComponentNames still reads them without assertPathInside; the current case at 6402 explicitly accepts an absolute in-root directory."
+      },
+      "rationale": "The current deriveLenientComponentPaths still re-admits raw absolute or escaping component paths and discoverComponentNames still reads them without assertPathInside; the current case at 6402 explicitly accepts an absolute in-root directory.",
+      "destination": "Add read-site containment and revise the pinned absolute-path behavior."
+    },
+    {
+      "id": "OPIA-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "readHookSummaryEntries still carries the unreachable Object.assign fallback and historical narration in its comment."
+      },
+      "rationale": "readHookSummaryEntries still carries the unreachable Object.assign fallback and historical narration in its comment.",
+      "destination": "Remove the unreachable default and rewrite the comment in present tense."
+    },
+    {
+      "id": "OPIA-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "buildNotInstalledRow still catches resolveStrict throws, while the fault helper still cannot inject stat failures and no current case reaches this catch."
+      },
+      "rationale": "buildNotInstalledRow still catches resolveStrict throws, while the fault helper still cannot inject stat failures and no current case reaches this catch.",
+      "destination": "Add the fsOps stat seam and a permission-denied owner case."
+    },
+    {
+      "id": "OPIA-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "WR-02 still claims an unparseable reason but uses fragment and negative assertions; current resolution maps malformed plugin.json to unsupported source."
+      },
+      "rationale": "WR-02 still claims an unparseable reason but uses fragment and negative assertions; current resolution maps malformed plugin.json to unsupported source.",
+      "destination": "Retitle and pin the deterministic whole notification, then separately cover the throwing classifier path."
+    },
+    {
+      "id": "OPIA-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "repository-local .revalidation-tmp-01-24 copy; mutate current plugin-info source; node --test tests/orchestrators/plugin/info.test.ts",
+        "exitCode": 0,
+        "observed": "In the isolated current tree, replacing buildBlock arm (a)'s narrowProbeError result with source missing left the full owner suite green."
+      },
+      "rationale": "In the isolated current tree, replacing buildBlock arm (a)'s narrowProbeError result with source missing left the full owner suite green.",
+      "destination": "Add malformed and schema-invalid marketplace manifest cases with exact messages."
+    },
+    {
+      "id": "OPIA-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "repository-local .revalidation-tmp-01-24 copy; mutate current plugin-info source; node --test tests/orchestrators/plugin/info.test.ts",
+        "exitCode": 0,
+        "observed": "In the isolated current tree, replacing both localeCompare component-name comparators with plain sort left the full owner suite green."
+      },
+      "rationale": "In the isolated current tree, replacing both localeCompare component-name comparators with plain sort left the full owner suite green.",
+      "destination": "Use a mixed-case fixture whose order differs under code-unit sorting."
+    },
+    {
+      "id": "OPIA-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "normalizeDependencies still filters nonstrings, but current fixtures do not mix strings with nonstrings."
+      },
+      "rationale": "normalizeDependencies still filters nonstrings, but current fixtures do not mix strings with nonstrings.",
+      "destination": "Add a mixed untrusted dependency-array case and pin the complete result."
+    },
+    {
+      "id": "OPIA-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "discoverComponentNames still relies on Set de-duplication, but no current fixture places the same component name in two declared directories."
+      },
+      "rationale": "discoverComponentNames still relies on Set de-duplication, but no current fixture places the same component name in two declared directories.",
+      "destination": "Add a cross-directory duplicate fixture and pin one rendered name."
+    },
+    {
+      "id": "OPIA-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current test comments still contain the stale disabled-marker, nonportable-fault, incomplete ordering, and obsolete coverage narratives; the edge seed carries the same disabled-marker drift."
+      },
+      "rationale": "Current test comments still contain the stale disabled-marker, nonportable-fault, incomplete ordering, and obsolete coverage narratives; the edge seed carries the same disabled-marker drift.",
+      "destination": "Correct the comments without changing behavior."
+    },
+    {
+      "id": "OPIA-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The ten named slice-A cases still omit the severity assertion used by their siblings."
+      },
+      "rationale": "The ten named slice-A cases still omit the severity assertion used by their siblings.",
+      "destination": "Add explicit severity assertions or whole notification-object comparisons."
+    },
+    {
+      "id": "OPIA-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The weak fragment-assertion cluster remains in the current test and WR-02 still needs contract re-derivation rather than mechanical tightening."
+      },
+      "rationale": "The weak fragment-assertion cluster remains in the current test and WR-02 still needs contract re-derivation rather than mechanical tightening.",
+      "destination": "Replace fragments with independently authored complete expected values."
+    },
+    {
+      "id": "OPIA-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "makeCtx still queues verify callbacks in module-scoped state and withHermeticHome still drains them from shared finally cleanup."
+      },
+      "rationale": "makeCtx still queues verify callbacks in module-scoped state and withHermeticHome still drains them from shared finally cleanup.",
+      "destination": "Return explicit verification ownership to each case and verify after public assertions."
+    },
+    {
+      "id": "OPIA-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current out-of-slice cases still use startsWith and lower-bound clone-call assertions where exact results and counts are available."
+      },
+      "rationale": "Current out-of-slice cases still use startsWith and lower-bound clone-call assertions where exact results and counts are available.",
+      "destination": "Replace with full equality and exact interaction counts."
+    },
+    {
+      "id": "OPIA-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns production structure only."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current info.ts still ends with the dangling removed-export comment."
+      },
+      "rationale": "Current info.ts still ends with the dangling removed-export comment.",
+      "destination": "Delete the dangling comment."
+    },
+    {
+      "id": "OPIA-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns production structure only."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The three redundant Record casts remain around schema fields already typed as unknown."
+      },
+      "rationale": "The three redundant Record casts remain around schema fields already typed as unknown.",
+      "destination": "Remove the redundant casts."
+    },
+    {
+      "id": "OPIA-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "parseHooksForInfo/readHookSummaryEntries still read homedir/process cwd internally and info still imports filesystem operations directly, forcing global monkeypatching."
+      },
+      "rationale": "parseHooksForInfo/readHookSummaryEntries still read homedir/process cwd internally and info still imports filesystem operations directly, forcing global monkeypatching.",
+      "destination": "Inject narrow environment and filesystem dependencies, including stat."
+    },
+    {
+      "id": "OPIA-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current module still exports only getPluginInfo and two consumed interfaces; no test-only export exists."
+      },
+      "rationale": "The current module still exports only getPluginInfo and two consumed interfaces; no test-only export exists.",
+      "destination": "Retain this clean export-ownership evidence."
+    },
+    {
+      "id": "OPIA-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The exhaustive switches remain compiler-forced no-default forms and are not coverage gaps."
+      },
+      "rationale": "The exhaustive switches remain compiler-forced no-default forms and are not coverage gaps.",
+      "destination": "Retain as non-actionable structural evidence."
+    },
+    {
+      "id": "OPIA-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current full-message cases still discriminate rendering grammar, glyphs, ordering and indentation."
+      },
+      "rationale": "Current full-message cases still discriminate rendering grammar, glyphs, ordering and indentation.",
+      "destination": "Retain this clean evidence."
+    },
+    {
+      "id": "OPIA-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Out-of-slice cases still kill nameFromEntry kind-filter mutations and precisely pin markdown suffix stripping."
+      },
+      "rationale": "Out-of-slice cases still kill nameFromEntry kind-filter mutations and precisely pin markdown suffix stripping.",
+      "destination": "Retain this clean evidence."
+    },
+    {
+      "id": "OPIA-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current cases still pin autoupdate markers, scope order, cross-scope flags, and notification counts."
+      },
+      "rationale": "Current cases still pin autoupdate markers, scope order, cross-scope flags, and notification counts.",
+      "destination": "Retain this clean evidence."
+    },
+    {
+      "id": "OPIA-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current failed-scope, BOUND-01, hook-ladder, hook-order, persisted-status, disabled-shape, and fs-fault cases retain discriminating assertions."
+      },
+      "rationale": "Current failed-scope, BOUND-01, hook-ladder, hook-order, persisted-status, disabled-shape, and fs-fault cases retain discriminating assertions.",
+      "destination": "Retain this clean evidence."
+    },
+    {
+      "id": "OPIA-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current git fake retains an allow-list and the repository convention explicitly sanctions makeMock factory naming."
+      },
+      "rationale": "The current git fake retains an allow-list and the repository convention explicitly sanctions makeMock factory naming.",
+      "destination": "Retain this clean evidence."
+    },
+    {
+      "id": "OPIA-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's excluded sibling slices and messaging/support modules remain outside this corpus record's review boundary."
+      },
+      "rationale": "The report's excluded sibling slices and messaging/support modules remain outside this corpus record's review boundary.",
+      "destination": "Preserve the stated scope boundary."
+    },
+    {
+      "id": "OPIA-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current read-site containment bypass demonstrates that chokepoint coverage does not cover paths that skip the chokepoint."
+      },
+      "rationale": "The current read-site containment bypass demonstrates that chokepoint coverage does not cover paths that skip the chokepoint.",
+      "destination": "Audit raw manifest/state-derived reads for containment before access."
+    },
+    {
+      "id": "OPIA-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current narrowProbeError call site still has multiple reachable classifier cells but only source missing is exercised."
+      },
+      "rationale": "The current narrowProbeError call site still has multiple reachable classifier cells but only source missing is exercised.",
+      "destination": "Add member-level classifier coverage."
+    },
+    {
+      "id": "OPIA-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "WR-02 remains a current example of a test title naming a token that its loose assertions do not prove."
+      },
+      "rationale": "WR-02 remains a current example of a test title naming a token that its loose assertions do not prove.",
+      "destination": "Audit token-bearing titles backed only by fragment assertions."
+    },
+    {
+      "id": "OPIA-F28",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Multiple current comments still describe nonexistent files or obsolete fixture behavior."
+      },
+      "rationale": "Multiple current comments still describe nonexistent files or obsolete fixture behavior.",
+      "destination": "Run and fix the proposed comment-path/drift sweep."
+    },
+    {
+      "id": "OPIA-F29",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The meta count correction remains valid: at least 34 cases need tightening, with two requiring contract re-derivation."
+      },
+      "rationale": "The meta count correction remains valid: at least 34 cases need tightening, with two requiring contract re-derivation.",
+      "destination": "Update the meta finding and implementation scope."
+    },
+    {
+      "id": "OPIA-F30",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-031"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The historical recommendation to propagate an allow-list into info's git fake is obsolete because the current fake already has ALLOWED_INFO_REMOTES and the focused suite reran green."
+      },
+      "rationale": "The historical recommendation to propagate an allow-list into info's git fake is obsolete because the current fake already has ALLOWED_INFO_REMOTES and the focused suite reran green.",
+      "destination": "Close this recommendation as replaced by the current allow-listed fake."
+    },
+    {
+      "id": "OPIA-F31",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The historical claim that containment is thoroughly tested remains overbroad because the current raw-path read bypasses assertPathInside."
+      },
+      "rationale": "The historical claim that containment is thoroughly tested remains overbroad because the current raw-path read bypasses assertPathInside.",
+      "destination": "Qualify the meta statement to distinguish chokepoint tests from bypasses."
+    },
+    {
+      "id": "OPIA-F32",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "All eight inspected fragment cases still have computable full expected messages in current fixtures."
+      },
+      "rationale": "All eight inspected fragment cases still have computable full expected messages in current fixtures.",
+      "destination": "Use whole-value assertions."
+    },
+    {
+      "id": "OPIA-F33",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The newest current cases still demonstrate deep notification-array equality as the local strict pattern."
+      },
+      "rationale": "The newest current cases still demonstrate deep notification-array equality as the local strict pattern.",
+      "destination": "Propagate this local pattern."
+    },
+    {
+      "id": "OPIA-F34",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Shared-finally verification still has cross-case attribution risk through module-scoped splice state."
+      },
+      "rationale": "Shared-finally verification still has cross-case attribution risk through module-scoped splice state.",
+      "destination": "Eliminate the shared verification registry."
+    },
+    {
+      "id": "OPIA-F35",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-036"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's claim that large-file partition boundaries create both misses and false positives remains supported by current sibling coverage."
+      },
+      "rationale": "The report's claim that large-file partition boundaries create both misses and false positives remains supported by current sibling coverage.",
+      "destination": "Retain as review-method evidence."
+    },
+    {
+      "id": "OPIA-F36",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-037"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's existing-finding grading remains consistent with current source and test structure."
+      },
+      "rationale": "The report's existing-finding grading remains consistent with current source and test structure.",
+      "destination": "Preserve grading traceability."
+    },
+    {
+      "id": "OPIA-F37",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-038"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The first-pass split inventory remains a design recommendation rather than an independently actionable defect."
+      },
+      "rationale": "The first-pass split inventory remains a design recommendation rather than an independently actionable defect.",
+      "destination": "Keep it evidence-only pending implementation design."
+    },
+    {
+      "id": "OPIA-F38",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-039"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's branch census continues to distinguish reachable gaps, defensive branches, compiler-forced branches, and covered behavior in current code."
+      },
+      "rationale": "The report's branch census continues to distinguish reachable gaps, defensive branches, compiler-forced branches, and covered behavior in current code.",
+      "destination": "Retain the branch-census evidence."
+    },
+    {
+      "id": "OPIA-F39",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-040"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "No clean-file list existed for the area, so the mutation catalogue rather than a negative-list attack remains the relevant review control."
+      },
+      "rationale": "No clean-file list existed for the area, so the mutation catalogue rather than a negative-list attack remains the relevant review control.",
+      "destination": "Retain as administrative evidence."
+    },
+    {
+      "id": "OPIA-F40",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-041"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's three-export census matches the current CodeGraph export inventory."
+      },
+      "rationale": "The report's three-export census matches the current CodeGraph export inventory.",
+      "destination": "Retain the census."
+    },
+    {
+      "id": "OPIA-F41",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-042"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current focused owner suite passes without network or credentials."
+      },
+      "rationale": "The current focused owner suite passes without network or credentials.",
+      "destination": "Retain the green hermetic baseline."
+    },
+    {
+      "id": "OPIA-F42",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-043"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Supporting fake and seed files cited by the report remain owned by other review areas."
+      },
+      "rationale": "Supporting fake and seed files cited by the report remain owned by other review areas.",
+      "destination": "Preserve cross-area routing rather than duplicating fixes."
+    },
+    {
+      "id": "OPIA-F43",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md#CLAIM-044"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's no-toolchain historical limitation is superseded by this revalidation's current focused owner-suite and isolated mutation runs."
+      },
+      "rationale": "The report's no-toolchain historical limitation is superseded by this revalidation's current focused owner-suite and isolated mutation runs.",
+      "destination": "Use the current rerun evidence as authoritative."
+    },
+    {
+      "id": "OPIB-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "repository-local .revalidation-tmp-01-24 copy; mutate current plugin-info source; node --test tests/orchestrators/plugin/info.test.ts",
+        "exitCode": 0,
+        "observed": "In the isolated current tree, moving emitFetchSkip after the failed-block loop left the full owner suite green."
+      },
+      "rationale": "In the isolated current tree, moving emitFetchSkip after the failed-block loop left the full owner suite green.",
+      "destination": "Add a three-notification two-scope case that pins info, skip, then failed order."
+    },
+    {
+      "id": "OPIB-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "repository-local .revalidation-tmp-01-24 copy; mutate current plugin-info source; node --test tests/orchestrators/plugin/info.test.ts",
+        "exitCode": 0,
+        "observed": "In the isolated current tree, shrinking DISABLED_ROW_REASONS to not-in-manifest and source-missing left the full owner suite green."
+      },
+      "rationale": "In the isolated current tree, shrinking DISABLED_ROW_REASONS to not-in-manifest and source-missing left the full owner suite green.",
+      "destination": "Add disabled unreadable and permission-denied matrix cases."
+    },
+    {
+      "id": "OPIB-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The two fixture reads remain cwd-relative while the sibling hooks test derives paths from import.meta.url."
+      },
+      "rationale": "The two fixture reads remain cwd-relative while the sibling hooks test derives paths from import.meta.url.",
+      "destination": "Resolve fixture paths from the test module location."
+    },
+    {
+      "id": "OPIB-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The debug-log case still assigns console.error directly and restores process.env in finally rather than using the test context."
+      },
+      "rationale": "The debug-log case still assigns console.error directly and restores process.env in finally rather than using the test context.",
+      "destination": "Use t.mock.method and t.after; address the production debug dependency in its owning area."
+    },
+    {
+      "id": "OPIB-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "readStateOnlyHookEntries still promises all-or-nothing multi-slug behavior, but no current case seeds two hook slugs."
+      },
+      "rationale": "readStateOnlyHookEntries still promises all-or-nothing multi-slug behavior, but no current case seeds two hook slugs.",
+      "destination": "Add a good-then-bad multi-slug case that proves collected entries are discarded."
+    },
+    {
+      "id": "OPIB-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "A malformed materialized hooks file still produces unparseable, while applyDisabledRowShape still filters that reason and its comment incorrectly discusses only manifest failures."
+      },
+      "rationale": "A malformed materialized hooks file still produces unparseable, while applyDisabledRowShape still filters that reason and its comment incorrectly discusses only manifest failures.",
+      "destination": "Choose whether disabled rows retain unparseable; then align behavior, rationale, and test."
+    },
+    {
+      "id": "OPIB-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "buildStateOnlyInstalledRow still names the nonexistent info-manifest-absent.test.ts file."
+      },
+      "rationale": "buildStateOnlyInstalledRow still names the nonexistent info-manifest-absent.test.ts file.",
+      "destination": "Correct this and the separately owned phantom references."
+    },
+    {
+      "id": "OPIB-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns production structure only."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "parseHooksForInfo still creates JSON.parse.bind(JSON, null) instead of a plain typed arrow."
+      },
+      "rationale": "parseHooksForInfo still creates JSON.parse.bind(JSON, null) instead of a plain typed arrow.",
+      "destination": "Replace the bound function with a clear arrow."
+    },
+    {
+      "id": "OPIB-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current CodeGraph still reports exactly getPluginInfo plus two consumed interfaces as exports."
+      },
+      "rationale": "Current CodeGraph still reports exactly getPluginInfo plus two consumed interfaces as exports.",
+      "destination": "Retain clean export ownership."
+    },
+    {
+      "id": "OPIB-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "DISABLED_ROW_REASONS still includes network-unreachable and authentication-required although disabled fetch is gated before those producers."
+      },
+      "rationale": "DISABLED_ROW_REASONS still includes network-unreachable and authentication-required although disabled fetch is gated before those producers.",
+      "destination": "Remove the dead members or document defensive inclusion truthfully."
+    },
+    {
+      "id": "OPIB-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current exhaustive switch remains compiler-forced rather than an uncovered runtime branch."
+      },
+      "rationale": "The current exhaustive switch remains compiler-forced rather than an uncovered runtime branch.",
+      "destination": "Retain non-finding classification."
+    },
+    {
+      "id": "OPIB-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The weak-assertion count remains at least 34 and includes a vacuous loop whose cardinality depends on hidden mock verification."
+      },
+      "rationale": "The weak-assertion count remains at least 34 and includes a vacuous loop whose cardinality depends on hidden mock verification.",
+      "destination": "Update the count and strengthen complete notification values plus explicit cardinality."
+    },
+    {
+      "id": "OPIB-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The shared-finally verify registry remains present in current test helpers."
+      },
+      "rationale": "The shared-finally verify registry remains present in current test helpers.",
+      "destination": "Move verification into each case after public assertions."
+    },
+    {
+      "id": "OPIB-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current startsWith and lower-bound call-count assertions remain weak."
+      },
+      "rationale": "The current startsWith and lower-bound call-count assertions remain weak.",
+      "destination": "Use full equality and exact counts."
+    },
+    {
+      "id": "OPIB-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The dangling comment, redundant casts, hidden environment reads, and direct fs imports remain in current info.ts."
+      },
+      "rationale": "The dangling comment, redundant casts, hidden environment reads, and direct fs imports remain in current info.ts.",
+      "destination": "Apply the source cleanups and dependency seams in their routed phases."
+    },
+    {
+      "id": "OPIB-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current NFR-5 cases still assert zero call counters together with full rendered bytes."
+      },
+      "rationale": "Current NFR-5 cases still assert zero call counters together with full rendered bytes.",
+      "destination": "Retain the behavioral no-network evidence."
+    },
+    {
+      "id": "OPIB-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The architecture no-orchestrator-network test remains the separate wrong-import owner."
+      },
+      "rationale": "The architecture no-orchestrator-network test remains the separate wrong-import owner.",
+      "destination": "Retain the structural ownership split."
+    },
+    {
+      "id": "OPIB-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current cases still pin skip-reason combinations and disabled fetch gating."
+      },
+      "rationale": "Current cases still pin skip-reason combinations and disabled fetch gating.",
+      "destination": "Retain clean evidence."
+    },
+    {
+      "id": "OPIB-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current cases still discriminate state-only no-fetch behavior, grouping, headers, pluralization, and disabled row shape."
+      },
+      "rationale": "Current cases still discriminate state-only no-fetch behavior, grouping, headers, pluralization, and disabled row shape.",
+      "destination": "Retain clean evidence."
+    },
+    {
+      "id": "OPIB-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current D-100-03 cases still seed divergent hook sources and discriminate precedence."
+      },
+      "rationale": "Current D-100-03 cases still seed divergent hook sources and discriminate precedence.",
+      "destination": "Retain clean evidence."
+    },
+    {
+      "id": "OPIB-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current containment, reason-order, hook-placement, and admitted-event cases retain full-message assertions."
+      },
+      "rationale": "Current containment, reason-order, hook-placement, and admitted-event cases retain full-message assertions.",
+      "destination": "Retain clean evidence."
+    },
+    {
+      "id": "OPIB-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's sibling ranges and support modules remain outside this record's ownership."
+      },
+      "rationale": "The report's sibling ranges and support modules remain outside this record's ownership.",
+      "destination": "Preserve scope and route to their assigned records."
+    },
+    {
+      "id": "OPIB-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-023"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The historical no-toolchain limitation is replaced by a current green focused suite and isolated mutation run."
+      },
+      "rationale": "The historical no-toolchain limitation is replaced by a current green focused suite and isolated mutation run.",
+      "destination": "Retain only as historical methodology context."
+    },
+    {
+      "id": "OPIB-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Three current areas still carry a phantom test-file reference."
+      },
+      "rationale": "Three current areas still carry a phantom test-file reference.",
+      "destination": "Correct each reference in its owning phase."
+    },
+    {
+      "id": "OPIB-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current maximum-notification coverage still stops short of the reachable three-notification combination."
+      },
+      "rationale": "Current maximum-notification coverage still stops short of the reachable three-notification combination.",
+      "destination": "Add the missing maximum-cardinality ordering case."
+    },
+    {
+      "id": "OPIB-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current reason-set tests still cover only two members while two reachable members lack cases and two members are dead."
+      },
+      "rationale": "Current reason-set tests still cover only two members while two reachable members lack cases and two members are dead.",
+      "destination": "Cover reachable members and prune or explain dead members."
+    },
+    {
+      "id": "OPIB-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The meta weak-assertion count and local whole-value fix pattern remain valid in the current suite."
+      },
+      "rationale": "The meta weak-assertion count and local whole-value fix pattern remain valid in the current suite.",
+      "destination": "Update the meta inventory and propagate local strict assertions."
+    },
+    {
+      "id": "OPIB-F28",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current strong-mock setup still uses exactParams but violates verify placement."
+      },
+      "rationale": "The current strong-mock setup still uses exactParams but violates verify placement.",
+      "destination": "Qualify the meta pattern before propagation."
+    },
+    {
+      "id": "OPIB-F29",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Current fragment cases still admit concrete message omissions/reordering while siblings supply exact expected values."
+      },
+      "rationale": "Current fragment cases still admit concrete message omissions/reordering while siblings supply exact expected values.",
+      "destination": "Strengthen those cases."
+    },
+    {
+      "id": "OPIB-F30",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's attention-exhaustion conclusion remains supported by current reachable untested branches."
+      },
+      "rationale": "The report's attention-exhaustion conclusion remains supported by current reachable untested branches.",
+      "destination": "Retain review-method evidence."
+    },
+    {
+      "id": "OPIB-F31",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The notification and resolver models remain consistent except for disabled unparseable filtering."
+      },
+      "rationale": "The notification and resolver models remain consistent except for disabled unparseable filtering.",
+      "destination": "Resolve the disabled-corrupt-container policy."
+    },
+    {
+      "id": "OPIB-F32",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The report's branch census remains consistent with current CodeGraph and test inspection."
+      },
+      "rationale": "The report's branch census remains consistent with current CodeGraph and test inspection.",
+      "destination": "Retain the census."
+    },
+    {
+      "id": "OPIB-F33",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "The current owner suite reruns green and the isolated multi-mutant suite also stays green, separating baseline health from test-strength gaps."
+      },
+      "rationale": "The current owner suite reruns green and the isolated multi-mutant suite also stays green, separating baseline health from test-strength gaps.",
+      "destination": "Retain both observations."
+    },
+    {
+      "id": "OPIB-F34",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test structure only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "No clean-file list existed for this area; the current review therefore preserves the report's direct mutation-catalogue control."
+      },
+      "rationale": "No clean-file list existed for this area; the current review therefore preserves the report's direct mutation-catalogue control.",
+      "destination": "Retain as administrative evidence."
+    },
+    {
+      "id": "OPIB-F35",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md#CLAIM-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection and focused owner-suite rerun",
+        "observed": "Cross-area phantom references and debug-log production seams remain separately owned and must not be silently merged into this record."
+      },
+      "rationale": "Cross-area phantom references and debug-log production seams remain separately owned and must not be silently merged into this record.",
+      "destination": "Preserve cross-area traceability."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
