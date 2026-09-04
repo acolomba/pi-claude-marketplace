@@ -68,10 +68,11 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
   }
 
   if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-    const firstErr = MARKETPLACE_VALIDATOR.Errors(parsed)[0];
-    const detail = firstErr
-      ? `${firstErr.instancePath || "<root>"}: ${firstErr.message}`
-      : "(no detail)";
+    const validationErrors = MARKETPLACE_VALIDATOR.Errors(parsed);
+    const detail = validationErrors
+      .slice(0, 1)
+      .map((error) => `${error.instancePath || "<root>"}: ${error.message}`)
+      .join("");
     throw new InvalidMarketplaceManifestError(`marketplace.json schema invalid: ${detail}`);
   }
 

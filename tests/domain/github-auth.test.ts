@@ -1,847 +1,1247 @@
-/**
- * Unit tests for the initiateDeviceFlow state machine covering
- * AUTH-01/03/04/05/07/09.
- *
- * Each test is self-contained: fresh makeMockDeviceFlowHttp +
- * makeMockCredentialOps + notifyFn recorder per test. No shared `let`
- * state; no beforeEach. Tests use `interval: 0` on the mock deviceCode so
- * the poll loop spins synchronously through pre-loaded pollQueue
- * sequences -- no real timers, no real network.
- *
- * Source map:
- *   - AUTH-01: Test 1 (happy path), Test 2 (approve on success)
- *   - AUTH-03: Test 3 (notify content)
- *   - AUTH-04: Test 4 (slow_down cumulative), Test 5 (pending no-change)
- *   - AUTH-05: Test 6 (access_denied), Test 7 (expired_token), Test 8
- *              (timeout), Test 9 (init failure)
- *   - AUTH-07: Test 10 (authAttempted on success), Test 11 (authAttempted
- *              on failure)
- *   - AUTH-09: Test 12 (notify content negative scan)
- *   - Design contract (A9): Test 13 (approveThrows propagates)
- */
-
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test, type TestContext } from "node:test";
+
+import { mock, verify, when } from "strong-mock";
 
 import {
-  DEFAULT_DEVICE_FLOW_HTTP,
   initiateDeviceFlow,
+  type DeviceCodeResponse,
+  type DeviceFlowHttp,
+  type DeviceFlowResult,
+  type InitiateDeviceFlowOpts,
+  type NotifyFn,
   type PollResult,
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
-import { makeMockCredentialOps } from "../helpers/credential-mock.ts";
-import { makeMockDeviceFlowHttp } from "../helpers/device-flow-mock.ts";
 
-interface NotifyCall {
-  message: string;
-  severity?: "info" | "warning" | "error";
-}
+import {
+  createDeviceFlowContractParticipant,
+  registerDeviceFlowContract,
+  type DeviceFlowContractParticipant,
+  type DeviceFlowContractScenario,
+} from "./device-flow-contract.ts";
+import { createDeviceFlowFake } from "./device-flow-fake.ts";
 
-function makeNotifyRecorder(): {
-  notifyFn: (message: string, severity?: "info" | "warning" | "error") => void;
-  calls: NotifyCall[];
-} {
-  const calls: NotifyCall[] = [];
-  const notifyFn = (message: string, severity?: "info" | "warning" | "error"): void => {
-    calls.push(severity !== undefined ? { message, severity } : { message });
-  };
+import type { GitAuthProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
+import type { CredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 
-  return { notifyFn, calls };
-}
-
-test("initiateDeviceFlow: AUTH-01 happy path returns ok+cred+authAttempted", async () => {
-  const { http, state: httpState } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "success", accessToken: "gho_test", tokenType: "bearer", scope: "repo" }],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.deepEqual(result.cred, { username: "x-access-token", password: "gho_test" });
-    assert.equal(result.authAttempted, true);
-  }
-
-  assert.equal(httpState.requestCodeCalls.length, 1);
-  assert.equal(httpState.pollTokenCalls.length, 1);
-});
-
-test("initiateDeviceFlow: AUTH-01 approve on success persists via credentialOps", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "success", accessToken: "gho_test", tokenType: "bearer", scope: "repo" }],
-  });
-  const { credOps, state: credState } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  await initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
-
-  assert.equal(credState.approveCalls.length, 1);
-  assert.equal(credState.approveCalls[0]!.host, "github.com");
-  assert.equal(credState.approveCalls[0]!.cred.password, "gho_test");
-  assert.equal(credState.approveCalls[0]!.cred.username, "x-access-token");
-});
-
-test("initiateDeviceFlow: AUTH-03 notify content includes user_code AND verification_uri", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "success", accessToken: "gho_test", tokenType: "bearer", scope: "repo" }],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn, calls } = makeNotifyRecorder();
-
-  await initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
-
-  assert.equal(calls.length, 1);
-  assert.ok(calls[0]!.message.includes("ABCD-1234"), "notify must include user_code");
-  assert.ok(
-    calls[0]!.message.includes("https://github.com/login/device"),
-    "notify must include verification_uri",
-  );
-});
-
-test("initiateDeviceFlow: AUTH-04 cumulative slow_down increments intervalSec by 5 each occurrence", async () => {
-  const { http, state: httpState } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [
-      { kind: "slow_down" },
-      { kind: "slow_down" },
-      { kind: "success", accessToken: "gho_x", tokenType: "bearer", scope: "repo" },
-    ],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  await initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
-
-  assert.equal(httpState.pollTokenCalls.length, 3);
-  assert.equal(httpState.pollTokenCalls[0]!.intervalSec, 0);
-  assert.equal(httpState.pollTokenCalls[1]!.intervalSec, 5);
-  assert.equal(httpState.pollTokenCalls[2]!.intervalSec, 10);
-});
-
-test("initiateDeviceFlow: AUTH-04 pending no-change keeps intervalSec stable across iterations", async () => {
-  const { http, state: httpState } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [
-      { kind: "pending" },
-      { kind: "pending" },
-      { kind: "pending" },
-      { kind: "success", accessToken: "gho_y", tokenType: "bearer", scope: "repo" },
-    ],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  await initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
-
-  assert.equal(httpState.pollTokenCalls.length, 4);
-  for (const call of httpState.pollTokenCalls) {
-    assert.equal(call.intervalSec, 0);
-  }
-});
-
-test("initiateDeviceFlow: AUTH-05 access_denied produces human reason and authAttempted", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "access_denied" }],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.authAttempted, true);
-    assert.equal(typeof result.reason, "string");
-    assert.ok(result.reason.length > 10);
-    const lower = result.reason.toLowerCase();
-    assert.ok(
-      lower.includes("cancel") || lower.includes("run the command again"),
-      `reason should mention cancel/retry: got "${result.reason}"`,
-    );
-  }
-});
-
-test("initiateDeviceFlow: AUTH-05 expired_token produces human reason mentioning expiration", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "expired_token" }],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.authAttempted, true);
-    assert.equal(typeof result.reason, "string");
-    const lower = result.reason.toLowerCase();
-    assert.ok(
-      lower.includes("expire") || lower.includes("restart"),
-      `reason should mention expiration/restart: got "${result.reason}"`,
-    );
-  }
-});
-
-test("initiateDeviceFlow: AUTH-05 timeout terminates loop without polling when expires_in is 0", async () => {
-  const { http, state: httpState } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 0,
-      interval: 0,
-    },
-    pollQueue: [],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, false);
-  assert.equal(httpState.pollTokenCalls.length, 0);
-  if (!result.ok) {
-    assert.equal(result.authAttempted, true);
-    assert.ok(
-      result.reason.toLowerCase().includes("time"),
-      `reason should mention time/timeout: got "${result.reason}"`,
-    );
-  }
-});
-
-test("initiateDeviceFlow: AUTH-05 init failure returns ok:false when requestCode throws", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    requestCodeThrows: new Error("network down"),
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.authAttempted, true);
-    assert.equal(typeof result.reason, "string");
-    assert.ok(
-      result.reason.includes("Device Flow initialization failed"),
-      `reason should mention init failure: got "${result.reason}"`,
-    );
-  }
-});
-
-test("initiateDeviceFlow: AUTH-07 authAttempted true on success", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "success", accessToken: "gho_ok", tokenType: "bearer", scope: "repo" }],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.authAttempted, true);
-});
-
-test("initiateDeviceFlow: AUTH-07 authAttempted on failure stays true for access_denied", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "access_denied" }],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.authAttempted, true);
-});
-
-test("initiateDeviceFlow: AUTH-09 notify content negative scan -- no token or device_code leaked", async () => {
-  const successPoll: PollResult = {
-    kind: "success",
-    accessToken: "gho_test",
-    tokenType: "bearer",
-    scope: "repo",
-  };
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [successPoll],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn, calls } = makeNotifyRecorder();
-
-  await initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http });
-
-  assert.equal(calls.length, 1, "exactly one notify call (the user-code prompt)");
-  for (const call of calls) {
-    assert.equal(
-      call.message.includes("gho_test"),
-      false,
-      "notify message must not include access_token",
-    );
-    assert.equal(
-      call.message.includes("MOCK_DEVICE_CODE"),
-      false,
-      "notify message must not include device_code",
-    );
-    assert.equal(
-      call.message.includes("access_token"),
-      false,
-      "notify message must not include 'access_token' literal",
-    );
-  }
-});
-
-test("initiateDeviceFlow: unexpected poll error returns ok:false with error description (WR-03)", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [
-      { kind: "unexpected", error: "unsupported_grant_type", description: "grant not supported" },
-    ],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.authAttempted, true);
-  if (!result.ok) {
-    assert.match(result.reason, /unsupported_grant_type/);
-    assert.match(result.reason, /grant not supported/);
-  }
-});
-
-test("initiateDeviceFlow: pollToken throw returns ok:false authAttempted:true (WR-01)", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [],
-    pollTokenThrows: new Error("network error in poll"),
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  const result = await initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.authAttempted, true);
-  if (!result.ok) {
-    assert.match(result.reason, /poll failed/);
-    assert.match(result.reason, /network error in poll/);
-  }
-});
-
-test("initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts.signal path)", async () => {
-  // opts.signal abort path: runPollLoop wraps sleepMs with the signal. When the
-  // signal fires while the loop is sleeping, the sleepMs rejects with an
-  // AbortError which the catch block converts to { ok: false, reason: "Device
-  // Flow cancelled." }.
-  //
-  // The controller is aborted immediately after initiateDeviceFlow() starts;
-  // with interval: 5 the loop is sleeping when the abort fires.
-  const controller = new AbortController();
-
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      // Non-zero interval: the loop actually sleeps, giving the abort time to fire.
-      interval: 60,
-    },
-    pollQueue: [],
-  });
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn } = makeNotifyRecorder();
-
-  // Abort immediately after submitting -- the notify call fires synchronously
-  // before the first sleep, so we abort after a tick.
-  const flowPromise = initiateDeviceFlow({
-    host: "github.com",
-    credentialOps: credOps,
-    notifyFn,
-    http,
-    signal: controller.signal,
-  });
-
-  // Allow the synchronous notify to fire, then abort.
-  await Promise.resolve();
-  controller.abort();
-
-  const result = await flowPromise;
-
-  assert.equal(result.ok, false);
-  assert.equal(result.authAttempted, true);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.toLowerCase().includes("cancel"),
-      `abort reason should mention cancel: got "${result.reason}"`,
-    );
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws with bare HTTP status when the body has no `error` field (lines 162-167)", async () => {
-  // requestCodeImpl is the real implementation behind DEFAULT_DEVICE_FLOW_HTTP.
-  // Covering it requires intercepting globalThis.fetch. We temporarily replace
-  // fetch with a stub that returns a non-ok response, then restore it.
-  //
-  // No credential exists yet at this point in the flow (pre-token
-  // device-code request), so the body's error/error_description fields are
-  // safe to fold into the message (see the dedicated enriched-body test
-  // below); this fixture carries no `error` field, so the message falls
-  // back to the bare HTTP status.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (_url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
-    return Promise.resolve(
-      new Response(JSON.stringify({ message: "not an oauth error" }), { status: 401 }),
-    );
-  };
-
-  try {
-    await assert.rejects(
-      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        assert.equal(err.message, "Device code request failed: HTTP 401");
-        return true;
-      },
-      "requestCodeImpl must throw with the bare HTTP status when the body has no `error` field",
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: folds error/error_description into the message on a non-2xx response (WR-04)", async () => {
-  // A misconfigured OAuth Application (wrong scope, Device Flow disabled,
-  // client_id typo) returns a 4xx with `error`/`error_description` fields
-  // that previously never reached the thrown message -- only the bare HTTP
-  // status did.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({
-          error: "unauthorized_client",
-          error_description: "Device Flow is not enabled for this OAuth Application",
-        }),
-        { status: 400 },
-      ),
-    );
-  };
-
-  try {
-    await assert.rejects(
-      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        assert.match(err.message, /HTTP 400/);
-        assert.match(err.message, /unauthorized_client/);
-        assert.match(err.message, /Device Flow is not enabled for this OAuth Application/);
-        return true;
-      },
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: falls back to bare HTTP status when the error body isn't parseable JSON", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(new Response("not json at all", { status: 500 }));
-  };
-
-  try {
-    await assert.rejects(
-      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        assert.equal(err.message, "Device code request failed: HTTP 500");
-        return true;
-      },
-      "requestCodeImpl must fall back to the bare HTTP status on an unparseable body",
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws TypeError on missing required fields (lines 170-180)", async () => {
-  // requestCodeImpl validates the response shape; a response missing required
-  // fields (e.g. no device_code) must throw TypeError.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(JSON.stringify({ user_code: "ABCD" /* missing fields */ }), { status: 200 }),
-    );
-  };
-
-  try {
-    await assert.rejects(
-      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
-      TypeError,
-      "requestCodeImpl must throw TypeError when required fields are absent",
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: returns DeviceCodeResponse on success (lines 152-181)", async () => {
-  // Happy path: fetch returns 200 with a valid device code response.
-  const originalFetch = globalThis.fetch;
-  const fakeDeviceCode = {
-    device_code: "MOCK_DC",
-    user_code: "ABCD-1234",
-    verification_uri: "https://github.com/login/device",
+function deviceCode(overrides: Partial<DeviceCodeResponse> = {}): DeviceCodeResponse {
+  return {
+    device_code: "device-1",
+    user_code: "CODE-1",
+    verification_uri: "https://verify.example/device",
     expires_in: 900,
-    interval: 5,
+    interval: 0,
+    ...overrides,
   };
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(new Response(JSON.stringify(fakeDeviceCode), { status: 200 }));
+}
+
+function authProvider(): GitAuthProvider {
+  return {
+    id: "example",
+    hostMatch: (host) => host === "auth.example",
+    deviceCodeUrl: "https://auth.example/device",
+    tokenUrl: "https://auth.example/token",
+    clientId: "client-1",
+    scope: "read_repository",
+    credentialFrom: (accessToken) => ({ username: "oauth2", password: accessToken }),
   };
+}
 
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo");
-    assert.equal(result.device_code, "MOCK_DC");
-    assert.equal(result.user_code, "ABCD-1234");
-    assert.equal(result.expires_in, 900);
-    assert.equal(result.interval, 5);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
+function rejectNonError(reason: unknown): Promise<never> {
+  // A non-Error rejection exercises defensive handling of external ports.
+  // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+  return Promise.reject(reason);
+}
 
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns success PollResult when access_token present (lines 229-237)", async () => {
-  // pollTokenImpl parses the response body for access_token; when present,
-  // returns { kind: 'success', accessToken, tokenType, scope }.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({
-          access_token: "gho_fake",
-          token_type: "bearer",
-          scope: "repo",
-        }),
-        { status: 200 },
-      ),
-    );
-  };
+function fetchResponse(body: string, status = 200): Promise<Response> {
+  return Promise.resolve(new Response(body, { status }));
+}
 
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "success");
-    if (result.kind === "success") {
-      assert.equal(result.accessToken, "gho_fake");
-      assert.equal(result.tokenType, "bearer");
-      assert.equal(result.scope, "repo");
-    }
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
+function unexpectedFetch(): Promise<Response> {
+  return Promise.reject(new Error("Unexpected fetch"));
+}
 
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns pending on authorization_pending error (lines 241-242)", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(JSON.stringify({ error: "authorization_pending" }), { status: 200 }),
-    );
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "pending");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns slow_down on slow_down error (lines 243-244)", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(new Response(JSON.stringify({ error: "slow_down" }), { status: 200 }));
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "slow_down");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns access_denied on access_denied error (lines 245-246)", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(JSON.stringify({ error: "access_denied" }), { status: 200 }),
-    );
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "access_denied");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns expired_token on expired_token error (lines 247-248)", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(JSON.stringify({ error: "expired_token" }), { status: 200 }),
-    );
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "expired_token");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns unexpected on unknown error code (lines 249-256)", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(
-      new Response(JSON.stringify({ error: "unknown_grant", error_description: "not supported" }), {
-        status: 200,
-      }),
-    );
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "unexpected");
-    if (result.kind === "unexpected") {
-      assert.equal(result.error, "unknown_grant");
-      assert.equal(result.description, "not supported");
-    }
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns network_error unexpected on fetch throw (lines 204-209)", async () => {
-  // When fetch itself throws (network error), pollTokenImpl catches and
-  // returns { kind: 'unexpected', error: 'network_error', description: String(err) }.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.reject(new TypeError("Failed to fetch"));
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "unexpected");
-    if (result.kind === "unexpected") {
-      assert.equal(result.error, "network_error");
-      assert.ok(result.description?.includes("Failed to fetch"));
-    }
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns invalid_json unexpected on malformed body (lines 214-218)", async () => {
-  // When res.json() throws (malformed JSON body), pollTokenImpl catches and
-  // returns { kind: 'unexpected', error: 'invalid_json', description: 'HTTP <status>' }.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (): Promise<Response> => {
-    return Promise.resolve(new Response("not json at all", { status: 200 }));
-  };
-
-  try {
-    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
-    assert.equal(result.kind, "unexpected");
-    if (result.kind === "unexpected") {
-      assert.equal(result.error, "invalid_json");
-      assert.ok(result.description?.startsWith("HTTP"));
-    }
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("initiateDeviceFlow: approveThrows propagates -- initiateDeviceFlow does not wrap CredentialOps.approve (A9)", async () => {
-  const { http } = makeMockDeviceFlowHttp({
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    pollQueue: [{ kind: "success", accessToken: "gho_z", tokenType: "bearer", scope: "repo" }],
+function expectedPollingWait(
+  ...milliseconds: readonly number[]
+): NonNullable<InitiateDeviceFlowOpts["waitForPoll"]> {
+  const pollingWait = mock<NonNullable<InitiateDeviceFlowOpts["waitForPoll"]>>({
+    exactParams: true,
+    name: "polling wait",
   });
-  const { credOps } = makeMockCredentialOps({ approveThrows: new Error("keychain locked") });
-  const { notifyFn } = makeNotifyRecorder();
+  for (const duration of milliseconds) {
+    when(() => pollingWait(duration, undefined)).thenResolve(undefined);
+  }
 
-  await assert.rejects(
-    initiateDeviceFlow({ host: "github.com", credentialOps: credOps, notifyFn, http }),
-    /keychain locked/,
-  );
-});
+  return pollingWait;
+}
 
-test("initiateDeviceFlow: omitting `http` builds the default fetch-backed seam from the provider endpoints (init failure folds to ok:false)", async () => {
-  const { credOps } = makeMockCredentialOps();
-  const { notifyFn, calls } = makeNotifyRecorder();
+function pollResponseBody(pollResponse: PollResult): Record<string, unknown> {
+  switch (pollResponse.kind) {
+    case "success":
+      return {
+        access_token: pollResponse.accessToken,
+        token_type: pollResponse.tokenType,
+        scope: pollResponse.scope,
+      };
+    case "pending":
+      return { error: "authorization_pending" };
+    case "slow_down":
+      return { error: "slow_down" };
+    case "access_denied":
+      return { error: "access_denied" };
+    case "expired_token":
+      return { error: "expired_token" };
+    case "unexpected":
+      return {
+        error: pollResponse.error,
+        ...(pollResponse.description === undefined
+          ? {}
+          : { error_description: pollResponse.description }),
+      };
+  }
+}
 
-  // D-32-02: no injected http -- the engine constructs the default seam from
-  // the provider's endpoints. The provider points at a closed loopback port,
-  // so the requestCode fetch fails fast and deterministically OFFLINE; the
-  // engine must fold that into the init-failure result, never throw.
-  const result = await initiateDeviceFlow({
-    host: "auth.invalid",
-    credentialOps: credOps,
-    notifyFn,
-    provider: {
-      id: "loopback-test",
-      hostMatch: (host: string): boolean => host === "auth.invalid",
-      deviceCodeUrl: "http://127.0.0.1:1/device/code",
-      tokenUrl: "http://127.0.0.1:1/oauth/access_token",
-      clientId: "test-client-id",
+function createProductionDeviceFlowParticipant(
+  scenario: DeviceFlowContractScenario,
+  context: TestContext,
+): DeviceFlowContractParticipant {
+  const storedDeviceCode = structuredClone(scenario.deviceCode);
+  const pollResponses = [...structuredClone(scenario.pollResponses)];
+  const requestCodeError = scenario.requestCodeError;
+  context.mock.method(globalThis, "fetch", (input: string | URL | Request): Promise<Response> => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url === "https://auth.example/device") {
+      if (requestCodeError !== undefined) {
+        return Promise.reject(requestCodeError);
+      }
+
+      return fetchResponse(JSON.stringify(storedDeviceCode));
+    }
+
+    if (url === "https://auth.example/token") {
+      const pollResponse = pollResponses.shift() ?? ({ kind: "pending" } as const);
+      return fetchResponse(JSON.stringify(pollResponseBody(pollResponse)));
+    }
+
+    return Promise.reject(new Error(`Unexpected URL: ${url}`));
+  });
+
+  return createDeviceFlowContractParticipant({ contractScenario: scenario });
+}
+
+void ({ kind: "pending" } satisfies PollResult);
+void ({
+  ok: false,
+  reason: "Device Flow failed.",
+  authAttempted: true,
+} satisfies DeviceFlowResult);
+
+describe("initiateDeviceFlow", () => {
+  registerDeviceFlowContract(createProductionDeviceFlowParticipant);
+
+  test("uses the GitHub provider, notifies the user, and persists the credential", async () => {
+    // arrange
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => deviceFlowHttp.requestCode("Ov23liNcyK08uGdU0mMl", "repo")).thenResolve(
+      deviceCode(),
+    );
+    when(() => deviceFlowHttp.pollToken("Ov23liNcyK08uGdU0mMl", "device-1", 0)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
       scope: "repo",
-      credentialFrom: (accessToken: string) => ({
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("github.com", {
         username: "x-access-token",
-        password: accessToken,
+        password: "token-1",
       }),
-    },
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "github.com",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: true,
+      cred: { username: "x-access-token", password: "token-1" },
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
   });
 
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.reason, /^Device Flow initialization failed: /);
-    assert.equal(result.authAttempted, true);
+  test("emits the documented AUTH-03 prompt before any token is acquired", async () => {
+    // arrange
+    // The device-code values and the expected prompt below are the published
+    // example in docs/output-catalog.md, "Out-of-band notifications" ->
+    // "Device Flow user-code prompt" (catalog-state: device-flow-prompt).
+    // Changing the emission string in domain/github-auth.ts needs a lockstep
+    // edit of that catalog entry and of the expected string here. The poll
+    // denies authorization, so no access token ever exists while the prompt is
+    // emitted (AUTH-09) and no credential is persisted.
+    const { http } = createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode: {
+        device_code: "device-1",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 0,
+      },
+      pollResponses: [{ kind: "access_denied" }],
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => {
+      notification("Open https://github.com/login/device and enter: ABCD-1234", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "github.com",
+      credentialOps,
+      notifyFn: notification,
+      http,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "User cancelled authorization. Run the command again to retry.",
+      authAttempted: true,
+    });
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("uses a supplied provider for requests and credential conversion", async () => {
+    // arrange
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
+      scope: "read_repository",
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: true,
+      cred: { username: "oauth2", password: "token-1" },
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("keeps the polling interval after an authorization-pending response", async () => {
+    // arrange
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0, 0);
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
+      kind: "pending",
+    });
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
+      scope: "read_repository",
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.strictEqual(deviceFlow.ok, true);
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("adds five seconds cumulatively after each slow-down response", async () => {
+    // arrange
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = mock<NonNullable<InitiateDeviceFlowOpts["waitForPoll"]>>({
+      exactParams: true,
+      name: "polling wait",
+    });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
+    when(() => pollingWait(0, undefined)).thenResolve(undefined);
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
+      kind: "slow_down",
+    });
+    when(() => pollingWait(5_000, undefined)).thenResolve(undefined);
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 5)).thenResolve({
+      kind: "slow_down",
+    });
+    when(() => pollingWait(10_000, undefined)).thenResolve(undefined);
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 10)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
+      scope: "read_repository",
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.strictEqual(deviceFlow.ok, true);
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("waits for the default polling interval before polling", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+      deviceCode({ interval: 1 }),
+    );
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 1)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
+      scope: "read_repository",
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const pendingDeviceFlow = initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+    });
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+    t.mock.timers.tick(1_000);
+    const deviceFlow = await pendingDeviceFlow;
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: true,
+      cred: { username: "oauth2", password: "token-1" },
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+  });
+
+  for (const { pollResponse, expectedDeviceFlow, behavior } of [
+    {
+      behavior: "reports denied authorization",
+      pollResponse: { kind: "access_denied" } as const,
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "User cancelled authorization. Run the command again to retry.",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "reports an expired device code",
+      pollResponse: { kind: "expired_token" } as const,
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device code expired before authorization. Run the command again to restart.",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "includes an unexpected poll description",
+      pollResponse: {
+        kind: "unexpected",
+        error: "unsupported_grant_type",
+        description: "grant not supported",
+      } as const,
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device Flow failed: unsupported_grant_type -- grant not supported",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "reports an unexpected poll without a description",
+      pollResponse: { kind: "unexpected", error: "unsupported_grant_type" } as const,
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device Flow failed: unsupported_grant_type",
+        authAttempted: true,
+      } as const,
+    },
+  ]) {
+    test(behavior, async () => {
+      // arrange
+      const provider = authProvider();
+      const deviceFlowHttp = mock<DeviceFlowHttp>({
+        exactParams: true,
+        name: "device flow HTTP",
+      });
+      const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const pollingWait = expectedPollingWait(0);
+      when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+        deviceCode(),
+      );
+      when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve(pollResponse);
+      when(() => {
+        notification("Open https://verify.example/device and enter: CODE-1", "info");
+      }).thenReturn(undefined);
+
+      // act
+      const deviceFlow = await initiateDeviceFlow({
+        host: "auth.example",
+        credentialOps,
+        notifyFn: notification,
+        http: deviceFlowHttp,
+        provider,
+        waitForPoll: pollingWait,
+      });
+
+      // assert
+      assert.deepStrictEqual(deviceFlow, expectedDeviceFlow);
+      verify(deviceFlowHttp);
+      verify(credentialOps);
+      verify(notification);
+      verify(pollingWait);
+    });
   }
 
-  // AUTH-03 gate never fired: no device code was obtained, so nothing to show.
-  assert.equal(calls.length, 0);
+  test("reports a polling error", async () => {
+    // arrange
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenReject(
+      new Error("poll offline"),
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow poll failed: poll offline",
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("uses a safe reason for a non-error polling failure", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const requestCode = t.mock.fn<DeviceFlowHttp["requestCode"]>(() =>
+      Promise.resolve(deviceCode()),
+    );
+    const pollToken = t.mock.fn<DeviceFlowHttp["pollToken"]>(() => rejectNonError("poll offline"));
+    const deviceFlowHttp = { requestCode, pollToken } satisfies DeviceFlowHttp;
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow poll failed: unknown error",
+      authAttempted: true,
+    });
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("times out without polling after the device code expires", async () => {
+    // arrange
+    const provider = authProvider();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+      deviceCode({ expires_in: 0 }),
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason:
+        "Device Flow timed out before authorization completed. Run the command again to restart.",
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+  });
+
+  test("cancels before polling when the abort signal is already aborted", async () => {
+    // arrange
+    const provider = authProvider();
+    const controller = new AbortController();
+    controller.abort();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = mock<NonNullable<InitiateDeviceFlowOpts["waitForPoll"]>>({
+      exactParams: true,
+      name: "polling wait",
+    });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+      deviceCode({ interval: 60 }),
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() => pollingWait(60_000, controller.signal)).thenReject(new Error("aborted"));
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      signal: controller.signal,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow cancelled.",
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("cancels the default polling wait through an abort signal", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const provider = authProvider();
+    const controller = new AbortController();
+    controller.abort();
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(
+      deviceCode({ interval: 60 }),
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      signal: controller.signal,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow cancelled.",
+      authAttempted: true,
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+  });
+
+  for (const { requestFailure, expectedReason, behavior } of [
+    {
+      behavior: "reports an initialization error",
+      requestFailure: new Error("request offline"),
+      expectedReason: "Device Flow initialization failed: request offline",
+    },
+    {
+      behavior: "uses a safe reason for a non-error initialization failure",
+      requestFailure: "request offline",
+      expectedReason: "Device Flow initialization failed: unknown error",
+    },
+  ]) {
+    test(behavior, async () => {
+      // arrange
+      const provider = authProvider();
+      const deviceFlowHttp = mock<DeviceFlowHttp>({
+        exactParams: true,
+        name: "device flow HTTP",
+      });
+      const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenReturn(
+        requestFailure instanceof Error
+          ? Promise.reject(requestFailure)
+          : rejectNonError(requestFailure),
+      );
+
+      // act
+      const deviceFlow = await initiateDeviceFlow({
+        host: "auth.example",
+        credentialOps,
+        notifyFn: notification,
+        http: deviceFlowHttp,
+        provider,
+      });
+
+      // assert
+      assert.deepStrictEqual(deviceFlow, {
+        ok: false,
+        reason: expectedReason,
+        authAttempted: true,
+      });
+      verify(deviceFlowHttp);
+      verify(credentialOps);
+      verify(notification);
+    });
+  }
+
+  test("propagates credential persistence errors", async () => {
+    // arrange
+    const provider = authProvider();
+    const persistenceFailure = new Error("keychain locked");
+    const deviceFlowHttp = mock<DeviceFlowHttp>({
+      exactParams: true,
+      name: "device flow HTTP",
+    });
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    when(() => deviceFlowHttp.requestCode("client-1", "read_repository")).thenResolve(deviceCode());
+    when(() => deviceFlowHttp.pollToken("client-1", "device-1", 0)).thenResolve({
+      kind: "success",
+      accessToken: "token-1",
+      tokenType: "bearer",
+      scope: "read_repository",
+    });
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenReject(persistenceFailure);
+
+    // act
+    const deviceFlow = initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      http: deviceFlowHttp,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    await assert.rejects(deviceFlow, (error: unknown) => {
+      assert.strictEqual(error, persistenceFailure);
+      return true;
+    });
+    verify(deviceFlowHttp);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("sends the provider's device and token requests through fetch", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    const fetchSpy = t.mock.method(
+      globalThis,
+      "fetch",
+      (input: string | URL | Request): Promise<Response> => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url === "https://auth.example/device") {
+          return Promise.resolve(new Response(JSON.stringify(deviceCode()), { status: 200 }));
+        }
+
+        if (url === "https://auth.example/token") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                access_token: "token-1",
+                token_type: "bearer",
+                scope: "read_repository",
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+
+        return Promise.reject(new Error(`Unexpected URL: ${url}`));
+      },
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: true,
+      cred: { username: "oauth2", password: "token-1" },
+      authAttempted: true,
+    });
+    const fetchRequests = await Promise.all(
+      fetchSpy.mock.calls.map(async ({ arguments: [input, init] }) => {
+        const request = new Request(input, init);
+        return {
+          url: request.url,
+          method: request.method,
+          accept: request.headers.get("accept"),
+          contentType: request.headers.get("content-type"),
+          body: await request.text(),
+        };
+      }),
+    );
+    assert.deepStrictEqual(fetchRequests, [
+      {
+        url: "https://auth.example/device",
+        method: "POST",
+        accept: "application/json",
+        contentType: "application/x-www-form-urlencoded",
+        body: "client_id=client-1&scope=read_repository",
+      },
+      {
+        url: "https://auth.example/token",
+        method: "POST",
+        accept: "application/json",
+        contentType: "application/x-www-form-urlencoded",
+        body: "client_id=client-1&device_code=device-1&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code",
+      },
+    ]);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  for (const { responseBody, expectedReason, behavior } of [
+    {
+      behavior: "reports a device-code error and its description",
+      responseBody: JSON.stringify({
+        error: "invalid_client",
+        error_description: "bad client",
+      }),
+      expectedReason:
+        "Device Flow initialization failed: Device code request failed: HTTP 400 (invalid_client -- bad client)",
+    },
+    {
+      behavior: "reports a device-code error without a description",
+      responseBody: JSON.stringify({ error: "invalid_client" }),
+      expectedReason:
+        "Device Flow initialization failed: Device code request failed: HTTP 400 (invalid_client)",
+    },
+    {
+      behavior: "uses the HTTP status when a device-code response has no error field",
+      responseBody: JSON.stringify({ message: "bad request" }),
+      expectedReason: "Device Flow initialization failed: Device code request failed: HTTP 400",
+    },
+    {
+      behavior: "uses the HTTP status when a device-code error is not JSON",
+      responseBody: "not JSON",
+      expectedReason: "Device Flow initialization failed: Device code request failed: HTTP 400",
+    },
+  ]) {
+    test(behavior, async (t) => {
+      // arrange
+      const provider = authProvider();
+      const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      t.mock.method(globalThis, "fetch", (): Promise<Response> =>
+        Promise.resolve(new Response(responseBody, { status: 400 })),
+      );
+
+      // act
+      const deviceFlow = await initiateDeviceFlow({
+        host: "auth.example",
+        credentialOps,
+        notifyFn: notification,
+        provider,
+      });
+
+      // assert
+      assert.deepStrictEqual(deviceFlow, {
+        ok: false,
+        reason: expectedReason,
+        authAttempted: true,
+      });
+      verify(credentialOps);
+      verify(notification);
+    });
+  }
+
+  for (const { fieldName, responseBody } of [
+    { fieldName: "device_code", responseBody: { ...deviceCode(), device_code: 1 } },
+    { fieldName: "user_code", responseBody: { ...deviceCode(), user_code: 1 } },
+    {
+      fieldName: "verification_uri",
+      responseBody: { ...deviceCode(), verification_uri: 1 },
+    },
+    { fieldName: "expires_in", responseBody: { ...deviceCode(), expires_in: "900" } },
+    { fieldName: "interval", responseBody: { ...deviceCode(), interval: "5" } },
+  ]) {
+    test(`rejects a device-code response with an invalid ${fieldName}`, async (t) => {
+      // arrange
+      const provider = authProvider();
+      const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      t.mock.method(globalThis, "fetch", (): Promise<Response> =>
+        Promise.resolve(new Response(JSON.stringify(responseBody), { status: 200 })),
+      );
+
+      // act
+      const deviceFlow = await initiateDeviceFlow({
+        host: "auth.example",
+        credentialOps,
+        notifyFn: notification,
+        provider,
+      });
+
+      // assert
+      assert.deepStrictEqual(deviceFlow, {
+        ok: false,
+        reason: "Device Flow initialization failed: Device code response missing required fields",
+        authAttempted: true,
+      });
+      verify(credentialOps);
+      verify(notification);
+    });
+  }
+
+  test("accepts a token response without optional token metadata", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
+    fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
+    fetchSpy.mock.mockImplementationOnce(
+      () => fetchResponse(JSON.stringify({ access_token: "token-1" })),
+      1,
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: true,
+      cred: { username: "oauth2", password: "token-1" },
+      authAttempted: true,
+    });
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  for (const { responseBody, expectedDeviceFlow, behavior } of [
+    {
+      behavior: "maps access_denied from the token endpoint",
+      responseBody: { error: "access_denied" },
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "User cancelled authorization. Run the command again to retry.",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "maps expired_token from the token endpoint",
+      responseBody: { error: "expired_token" },
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device code expired before authorization. Run the command again to restart.",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "preserves an unknown token error description",
+      responseBody: { error: "unknown_grant", error_description: "not supported" },
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device Flow failed: unknown_grant -- not supported",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "reports an unknown token error without a description",
+      responseBody: { error: "unknown_grant" },
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device Flow failed: unknown_grant",
+        authAttempted: true,
+      } as const,
+    },
+    {
+      behavior: "maps a non-string token error to unexpected",
+      responseBody: { error: 1 },
+      expectedDeviceFlow: {
+        ok: false,
+        reason: "Device Flow failed: unexpected",
+        authAttempted: true,
+      } as const,
+    },
+  ]) {
+    test(behavior, async (t) => {
+      // arrange
+      const provider = authProvider();
+      const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+      const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+      const pollingWait = expectedPollingWait(0);
+      const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
+      fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
+      fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(responseBody)), 1);
+      when(() => {
+        notification("Open https://verify.example/device and enter: CODE-1", "info");
+      }).thenReturn(undefined);
+
+      // act
+      const deviceFlow = await initiateDeviceFlow({
+        host: "auth.example",
+        credentialOps,
+        notifyFn: notification,
+        provider,
+        waitForPoll: pollingWait,
+      });
+
+      // assert
+      assert.deepStrictEqual(deviceFlow, expectedDeviceFlow);
+      verify(credentialOps);
+      verify(notification);
+      verify(pollingWait);
+    });
+  }
+
+  test("continues polling after authorization_pending from the token endpoint", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0, 0);
+    const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
+    fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
+    fetchSpy.mock.mockImplementationOnce(
+      () => fetchResponse(JSON.stringify({ error: "authorization_pending" })),
+      1,
+    );
+    fetchSpy.mock.mockImplementationOnce(
+      () => fetchResponse(JSON.stringify({ access_token: "token-1" })),
+      2,
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.strictEqual(deviceFlow.ok, true);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("continues polling after slow_down from the token endpoint", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0, 5_000);
+    const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
+    fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
+    fetchSpy.mock.mockImplementationOnce(
+      () => fetchResponse(JSON.stringify({ error: "slow_down" })),
+      1,
+    );
+    fetchSpy.mock.mockImplementationOnce(
+      () => fetchResponse(JSON.stringify({ access_token: "token-1" })),
+      2,
+    );
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+    when(() =>
+      credentialOps.approve("auth.example", { username: "oauth2", password: "token-1" }),
+    ).thenResolve(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.strictEqual(deviceFlow.ok, true);
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("reports a token-endpoint network failure", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    const fetchSpy = t.mock.method(globalThis, "fetch", (): Promise<Response> =>
+      Promise.reject(new TypeError("offline")),
+    );
+    fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow failed: network_error -- TypeError: offline",
+      authAttempted: true,
+    });
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
+
+  test("reports malformed JSON from the token endpoint", async (t) => {
+    // arrange
+    const provider = authProvider();
+    const credentialOps = mock<CredentialOps>({ exactParams: true, name: "credentials" });
+    const notification = mock<NotifyFn>({ exactParams: true, name: "notification" });
+    const pollingWait = expectedPollingWait(0);
+    const fetchSpy = t.mock.method(globalThis, "fetch", unexpectedFetch);
+    fetchSpy.mock.mockImplementationOnce(() => fetchResponse(JSON.stringify(deviceCode())), 0);
+    fetchSpy.mock.mockImplementationOnce(() => fetchResponse("not JSON", 502), 1);
+    when(() => {
+      notification("Open https://verify.example/device and enter: CODE-1", "info");
+    }).thenReturn(undefined);
+
+    // act
+    const deviceFlow = await initiateDeviceFlow({
+      host: "auth.example",
+      credentialOps,
+      notifyFn: notification,
+      provider,
+      waitForPoll: pollingWait,
+    });
+
+    // assert
+    assert.deepStrictEqual(deviceFlow, {
+      ok: false,
+      reason: "Device Flow failed: invalid_json -- HTTP 502",
+      authAttempted: true,
+    });
+    verify(credentialOps);
+    verify(notification);
+    verify(pollingWait);
+  });
 });

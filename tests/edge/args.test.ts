@@ -1,92 +1,237 @@
-// tests/edge/args.test.ts
-//
-// AP-1 / AP-2 / AP-4 coverage for the tokenizer + --scope validator in
-// extensions/pi-claude-marketplace/edge/args.ts.
-
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import test from "node:test";
 
-import { parseArgs } from "../../extensions/pi-claude-marketplace/edge/args.ts";
+import { parseArgs, type ParsedArgs } from "../../extensions/pi-claude-marketplace/edge/args.ts";
 
-test("AP-1 :: tokenize bare string", () => {
-  const result = parseArgs("install foo@bar");
-  assert.deepEqual(result.positional, ["install", "foo@bar"]);
-  assert.equal(result.scope, undefined);
+test("parseArgs returns positionals in input order and omits scope when no pair is supplied", () => {
+  // arrange
+  const rawArgs = "official alpha";
+  const expectedArgs = { positional: ["official", "alpha"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-1 :: tokenize single-quoted spaced argument", () => {
-  const result = parseArgs("install 'foo bar'");
-  assert.deepEqual(result.positional, ["install", "foo bar"]);
+test("parseArgs returns the user scope alongside the positionals in input order", () => {
+  // arrange
+  const rawArgs = "install official --scope user";
+  const expectedArgs = {
+    positional: ["install", "official"],
+    scope: "user",
+  } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-1 :: tokenize double-quoted spaced argument", () => {
-  const result = parseArgs('install "foo bar"');
-  assert.deepEqual(result.positional, ["install", "foo bar"]);
+test("parseArgs returns the project scope alongside the positionals in input order", () => {
+  // arrange
+  const rawArgs = "install official --scope project";
+  const expectedArgs = {
+    positional: ["install", "official"],
+    scope: "project",
+  } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-1 :: tokenize mixed quotes in same input", () => {
-  // Outer single quotes wrap a literal double quote -- no escape
-  // semantics, so the inner `"` is just data.
-  const result = parseArgs('install \'foo"bar\' "baz qux"');
-  assert.deepEqual(result.positional, ["install", 'foo"bar', "baz qux"]);
+for (const { placement, rawArgs } of [
+  { placement: "leading", rawArgs: "--scope user install official" },
+  { placement: "between two positionals", rawArgs: "install --scope user official" },
+  { placement: "trailing", rawArgs: "install official --scope user" },
+]) {
+  test(`parseArgs returns the same whole value with the scope pair ${placement}`, () => {
+    // arrange
+    const expectedArgs = {
+      positional: ["install", "official"],
+      scope: "user",
+    } satisfies ParsedArgs;
+
+    // act
+    const parsedArgs = parseArgs(rawArgs);
+
+    // assert
+    assert.deepStrictEqual(parsedArgs, expectedArgs);
+  });
+}
+
+test("parseArgs keeps a single-quoted run together as one token including its spaces", () => {
+  // arrange
+  const rawArgs = "install 'alpha beta'";
+  const expectedArgs = { positional: ["install", "alpha beta"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-1 :: tokenize unicode/non-ASCII positionals", () => {
-  const result = parseArgs("install plügin@märket 𝕦𝕥𝕗-𝟠");
-  assert.deepEqual(result.positional, ["install", "plügin@märket", "𝕦𝕥𝕗-𝟠"]);
+test("parseArgs keeps a double-quoted run together as one token including its spaces", () => {
+  // arrange
+  const rawArgs = 'install "alpha beta"';
+  const expectedArgs = { positional: ["install", "alpha beta"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-2 :: --scope user is valid", () => {
-  const result = parseArgs("--scope user install foo@bar");
-  assert.deepEqual(result.positional, ["install", "foo@bar"]);
-  assert.equal(result.scope, "user");
+test("parseArgs treats a single quote as ordinary text inside a double-quoted run", () => {
+  // arrange
+  const rawArgs = '"alpha\'beta gamma" delta';
+  const expectedArgs = { positional: ["alpha'beta gamma", "delta"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-2 :: --scope project is valid", () => {
-  const result = parseArgs("--scope project install foo@bar");
-  assert.deepEqual(result.positional, ["install", "foo@bar"]);
-  assert.equal(result.scope, "project");
+test("parseArgs treats a double quote as ordinary text inside a single-quoted run", () => {
+  // arrange
+  const rawArgs = "'alpha\"beta gamma' delta";
+  const expectedArgs = { positional: ['alpha"beta gamma', "delta"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
 
-test("AP-2 :: --scope missing value throws clear error", () => {
+test("parseArgs applies no backslash escape, so a backslash before a space splits the tokens", () => {
+  // arrange
+  const rawArgs = "alpha\\ beta";
+  const expectedArgs = { positional: ["alpha\\", "beta"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
+});
+
+test("parseArgs collapses leading, trailing, and repeated interior spaces into no empty tokens", () => {
+  // arrange
+  const rawArgs = "  install   official  ";
+  const expectedArgs = { positional: ["install", "official"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
+});
+
+test("parseArgs returns an empty positional list and omits scope for an empty argument vector", () => {
+  // arrange
+  const rawArgs = "";
+  const expectedArgs = { positional: [] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
+});
+
+test("parseArgs returns a one-element positional list for a bare verb with no operand", () => {
+  // arrange
+  const rawArgs = "list";
+  const expectedArgs = { positional: ["list"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
+});
+
+test("parseArgs flushes the trailing buffer into one token when a quoted run is never closed", () => {
+  // arrange
+  const rawArgs = "install 'alpha beta";
+  const expectedArgs = { positional: ["install", "alpha beta"] } satisfies ParsedArgs;
+
+  // act
+  const parsedArgs = parseArgs(rawArgs);
+
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
+});
+
+test("parseArgs rejects a trailing scope flag with the missing-value diagnostic", () => {
+  // arrange
+  const rawArgs = "install --scope";
+
+  // act & assert
   assert.throws(
-    () => parseArgs("--scope"),
-    /^Error: --scope requires a value: "user" or "project"\.$/,
+    () => parseArgs(rawArgs),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.message, '--scope requires a value: "user" or "project".');
+      return true;
+    },
   );
 });
 
-test("AP-2 :: --scope invalid value (foo) throws clear error", () => {
+test("parseArgs rejects an empty quoted scope value with the missing-value diagnostic", () => {
+  // arrange
+  const rawArgs = 'install --scope ""';
+
+  // act & assert
   assert.throws(
-    () => parseArgs("--scope foo"),
-    /^Error: Invalid --scope value: "foo"\. Must be "user" or "project"\.$/,
+    () => parseArgs(rawArgs),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.message, '--scope requires a value: "user" or "project".');
+      return true;
+    },
   );
 });
 
-test("AP-4 :: --scope accepted at position 0", () => {
-  const result = parseArgs("--scope user install foo@bar");
-  assert.deepEqual(result.positional, ["install", "foo@bar"]);
-  assert.equal(result.scope, "user");
+test("parseArgs rejects an unrecognised scope value with the invalid-value diagnostic", () => {
+  // arrange
+  const rawArgs = "install --scope bogus";
+
+  // act & assert
+  assert.throws(
+    () => parseArgs(rawArgs),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(
+        error.message,
+        'Invalid --scope value: "bogus". Must be "user" or "project".',
+      );
+      return true;
+    },
+  );
 });
 
-test("AP-4 :: --scope accepted at middle position", () => {
-  const result = parseArgs("install --scope user foo@bar");
-  assert.deepEqual(result.positional, ["install", "foo@bar"]);
-  assert.equal(result.scope, "user");
-});
+test("parseArgs keeps the last scope value when the pair is supplied twice", () => {
+  // arrange
+  const rawArgs = "--scope user install --scope project official";
+  const expectedArgs = {
+    positional: ["install", "official"],
+    scope: "project",
+  } satisfies ParsedArgs;
 
-test("AP-4 :: --scope accepted at end position", () => {
-  const result = parseArgs("install foo@bar --scope user");
-  assert.deepEqual(result.positional, ["install", "foo@bar"]);
-  assert.equal(result.scope, "user");
-});
+  // act
+  const parsedArgs = parseArgs(rawArgs);
 
-test("AP-4 :: positionals extracted in order regardless of --scope position", () => {
-  const a = parseArgs("--scope user install foo@bar baz");
-  const b = parseArgs("install --scope user foo@bar baz");
-  const c = parseArgs("install foo@bar --scope user baz");
-  const d = parseArgs("install foo@bar baz --scope user");
-  assert.deepEqual(a.positional, ["install", "foo@bar", "baz"]);
-  assert.deepEqual(b.positional, ["install", "foo@bar", "baz"]);
-  assert.deepEqual(c.positional, ["install", "foo@bar", "baz"]);
-  assert.deepEqual(d.positional, ["install", "foo@bar", "baz"]);
+  // assert
+  assert.deepStrictEqual(parsedArgs, expectedArgs);
 });

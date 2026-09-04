@@ -92,7 +92,6 @@ import {
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
@@ -109,7 +108,6 @@ import { softDepStatus } from "../../platform/pi-api.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
-  assertNever,
   composeErrorWithCauseChain,
   errorMessage,
   PluginShapeError,
@@ -161,6 +159,7 @@ import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
+import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -171,7 +170,13 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdateSkippedOutcome } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  PluginUpdateSkippedOutcome,
+  PluginUpdateUnchangedOutcome,
+} from "../types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // updatePlugins -- direct entrypoint (PUP-1 three forms)
@@ -376,7 +381,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   // by (scope, marketplace) per CMC-21 (per-scope rendering, no collapse).
   // The bare update across multiple scopes / marketplaces becomes one
   // cascade block per (scope, marketplace) pair.
-  const outcomes: { readonly target: ResolvedTarget; readonly outcome: PluginUpdateOutcome }[] = [];
+  const outcomes: TargetedOutcome[] = [];
   // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
   // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
@@ -406,7 +411,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       return;
     }
 
-    let outcome: PluginUpdateOutcome;
+    let outcome: UpdateRunOutcome;
     try {
       outcome = await runThreePhaseUpdate(buildDirectThreePhaseArgs(opts, t));
     } catch (err) {
@@ -502,8 +507,8 @@ function surfaceUpdateDiscoveryWarnings(
  *
  * Three arms:
  *   - ATTR-02 / D-47-A marketplace-not-added: `enumerateMarketplaceTarget`
- *     raised the structural `MarketplaceNotAddedSignal` (instead of the former
- *     raw `Error`/`MarketplaceNotFoundError` -> `{not found}` misattribution).
+ *     raised the structural `MarketplaceNotAddedSignal`, so the row names the
+ *     marketplace rather than misattributing the miss to `{not found}`.
  *     Delegated to the shared `emitMarketplaceNotAddedSignal`, which reinstall
  *     drives with ITS context off the same signal -- one emitter, so the
  *     SCOPE-01 plugin row and the `{marketplace not added}` marketplace row
@@ -526,7 +531,7 @@ async function handleEnumerateFailure(opts: UpdatePluginsOptions, err: unknown):
   // scopes and propagates any I/O / schema-validation throw. The bare form has
   // no marketplace identity to thread into the row.
   if (target.kind === "all") {
-    notifyBareFormEnumerateFailure({ ctx, pi, scope: explicitScope, err });
+    notifyBareFormEnumerateFailure({ ctx, pi, scope: explicitScope, err: err as Error });
     return;
   }
 
@@ -558,7 +563,9 @@ async function handleEnumerateFailure(opts: UpdatePluginsOptions, err: unknown):
  * direct-path notify) from phase-2-or-earlier failures (which throw and
  * are handled by the `catch` block in the enclosing batch loop).
  */
-function isPhase3aAggregateFailure(outcome: PluginUpdateOutcome): boolean {
+function isPhase3aAggregateFailure(
+  outcome: UpdateRunOutcome,
+): outcome is UpdatePhase3FailedOutcome {
   return outcome.partition === "failed" && outcome.phaseFailures !== undefined;
 }
 
@@ -626,11 +633,8 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
     // without aborting the whole batch. `notes` is consumed outside the
     // notify path so the MSG-CC-1 trailer is composed inline here.
     //
-    // Pre-narrow to a closed-set `Reason` so the cascade consumer reads
-    // `outcome.reasons[0]` directly. Only `PluginShapeError` (from
-    // `requireInstallable` during preflight) is recognized; other errors
-    // leave `reasons` undefined and the consumer falls back to substring-narrow.
-    const typedReasons = reasonsFromTypedError(err);
+    // Pre-narrow to a closed-set `Reason` so the cascade consumer reads the
+    // typed producer value directly instead of reparsing its display note.
     const base: PluginUpdateOutcome = {
       partition: "failed",
       name: plugin,
@@ -641,39 +645,16 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       declaresAgents: false,
       declaresMcp: false,
     };
-    return typedReasons === undefined ? base : { ...base, reasons: typedReasons };
+    return { ...base, reasons: reasonsFromTypedError(err) };
   }
 };
 
 /**
- * Map a typed error to a closed-set `Reason[]` for cascade-failure outcomes.
- * Returns `undefined` when no recognized typed error is present; the consumer
- * then falls back to substring-narrowing on `notes`. Only `PluginShapeError`
- * carries enough structure to map directly.
+ * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
+ * outcomes. Errno codes win; concurrency/rollback messages retain the legacy
+ * public classification; the permissive fallback is `not in manifest`.
  */
-function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefined {
-  if (err instanceof PluginShapeError) {
-    // switch on `err.shape.kind` for compile-time
-    // exhaustiveness against the typed discriminated union.
-    switch (err.shape.kind) {
-      case "no-longer-installable":
-        return ["no longer installable"] as const;
-      case "not-installable":
-        // Cascade-path version: a not-installable throw from a CASCADE
-        // update means the source classification changed since install;
-        // we still surface as `"no longer installable"` because the
-        // cascade-row catalog form is `(failed) {no longer installable}`.
-        return ["no longer installable"] as const;
-      case "not-in-manifest":
-        return ["not in manifest"] as const;
-      case "already-installed":
-        // Cascade-path "already installed" should not happen at runtime
-        // (the cascade walks installed plugins only); map to `"not in
-        // manifest"` as the documented permissive fallback.
-        return ["not in manifest"] as const;
-    }
-  }
-
+function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
   // errno-bearing FS errors map to the matching
   // closed Reason instead of falling through to the consumer's
   // legacy notes-substring parse (which would land on the permissive
@@ -690,42 +671,32 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefin
     }
   }
 
-  return undefined;
+  const note = composeErrorWithCauseChain(err);
+  if (note.includes("rollback")) {
+    return ["rollback partial"] as const;
+  }
+
+  if (note.includes("concurrently uninstalled") || note.includes("concurrently removed")) {
+    return ["concurrently uninstalled"] as const;
+  }
+
+  if (note.includes("concurrently updated")) {
+    return ["concurrently updated"] as const;
+  }
+
+  return ["not in manifest"] as const;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared 3-phase swap implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ThreePhaseArgs {
+interface ThreePhaseArgsBase {
   readonly plugin: string;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly cwd: string;
   readonly locations: ScopedLocations;
-  /**
-   * PUP-9 routing flag. `true` for the cascade path (caller is
-   * `updateSinglePlugin`); `false` for the direct path (caller is
-   * `updatePlugins`). Decides whether phase-3a aggregate-error rendering
-   * emits a failed row for the direct path (cascade leaves notification
-   * to the marketplace orchestrator).
-   */
-  readonly cascade: boolean;
-  /**
-   * Direct-path-only notification surface. Undefined in cascade mode.
-   * When defined AND phase-3a aggregates failures, this is used for the
-   * direct-path notify fire. Phase-2-or-earlier throws propagate to
-   * the caller who does its own notify (so this field is only consulted
-   * at the phase-3 aggregate-error step).
-   */
-  readonly ctx?: ExtensionContext;
-  /**
-   * Direct-path-only ExtensionAPI handle. Required alongside `ctx` for the
-   * single softDepStatus(pi) probe per notify invocation.
-   * Undefined in cascade mode; the cascade orchestrator (marketplace
-   * autoupdate) owns its own notify invocation.
-   */
-  readonly pi?: ExtensionAPI;
   /**
    * AG-7 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.mapModel`
    * (which the edge handler populates from `--map-model`). The cascade
@@ -767,12 +738,61 @@ interface ThreePhaseArgs {
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
+interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
+  /** Direct mode owns its notification surface. */
+  readonly cascade: false;
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+}
+
+interface CascadeThreePhaseArgs extends ThreePhaseArgsBase {
+  /** Cascade mode returns outcomes to the marketplace orchestrator. */
+  readonly cascade: true;
+  readonly ctx?: never;
+  readonly pi?: never;
+}
+
+type ThreePhaseArgs = DirectThreePhaseArgs | CascadeThreePhaseArgs;
+
 interface PrepHandles {
   skills: PreparedSkillsStaging;
   commands: PreparedCommandsStaging;
   agents: PreparedAgentsStaging;
   mcp: PreparedMcpStaging;
 }
+
+interface UpdatePhase3Failure extends Omit<Phase3Failure, "cause"> {
+  readonly cause: Error;
+}
+
+type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFailedOutcome>;
+
+interface DirectRenderableFailedOutcome extends Omit<
+  PluginUpdateFailedOutcome,
+  "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
+> {
+  readonly reasons: readonly ContentReason[];
+  readonly cause?: never;
+  readonly fromVersion?: never;
+  readonly phaseFailures?: never;
+  readonly toVersion?: never;
+}
+
+interface UpdatePhase3FailedOutcome extends Omit<
+  PluginUpdateFailedOutcome,
+  "cause" | "fromVersion" | "phaseFailures" | "reasons"
+> {
+  readonly fromVersion: string;
+  readonly reasons: readonly ContentReason[];
+  readonly phaseFailures: NonNullable<PluginUpdateFailedOutcome["phaseFailures"]>;
+  readonly cause?: never;
+}
+
+type UpdatePreflightOutcome =
+  PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | DirectRenderableFailedOutcome;
+type DirectRenderableOutcome = NonFailedUpdateOutcome | DirectRenderableFailedOutcome;
+type UpdateRunOutcome = DirectRenderableOutcome | UpdatePhase3FailedOutcome;
+type NonEmptyUpdatePhase3Failures = readonly [UpdatePhase3Failure, ...UpdatePhase3Failure[]];
 
 interface PluginPreflight {
   readonly state: ExtensionState;
@@ -927,6 +947,27 @@ async function deriveUpdateToVersion(
   return resolvePluginVersion(entry, installable);
 }
 
+type PartialableUpdateShapeError = PluginShapeError & {
+  readonly shape: PluginShapeError["shape"] & {
+    readonly kind: "no-longer-installable";
+    readonly partialable: true;
+    readonly unsupportedKinds: readonly string[];
+  };
+};
+
+/**
+ * The resolver's partialable update throw comes only from `requireInstallable`,
+ * which writes `unsupportedKinds: r.unsupported` on that same object. The
+ * partial gate may omit the field only on its non-partialable structural throw.
+ */
+function isPartialableUpdateShapeError(err: unknown): err is PartialableUpdateShapeError {
+  return (
+    err instanceof PluginShapeError &&
+    err.shape.kind === "no-longer-installable" &&
+    err.shape.partialable
+  );
+}
+
 /**
  * Resolve + gate the update candidate, returning the materializable plugin on
  * success or a skipped `PluginUpdateOutcome` on a decline. Extracted from
@@ -944,7 +985,7 @@ async function resolveUpdateCandidate(
   marketplaceRoot: string,
   resolveGitPluginRoot: (source: GitBackedSource) => Promise<GitPluginRootResult>,
   ctx: { readonly plugin: string; readonly fromVersion: string; readonly partial: boolean },
-): Promise<MaterializablePlugin | PluginUpdateOutcome> {
+): Promise<MaterializablePlugin | PluginUpdateSkippedOutcome> {
   const { plugin, fromVersion, partial } = ctx;
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot, resolveGitPluginRoot });
@@ -992,17 +1033,13 @@ async function resolveUpdateCandidate(
     // `narrowUnsupportedKinds` helper the `list (partially-upgradable)` row uses
     // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true`. A
     // structural decline keeps the `no longer installable` reason.
-    if (
-      err instanceof PluginShapeError &&
-      err.shape.kind === "no-longer-installable" &&
-      err.shape.partialable
-    ) {
+    if (isPartialableUpdateShapeError(err)) {
       return {
         partition: "skipped",
         name: plugin,
         fromVersion,
         notes: [errorMessage(err)],
-        reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds ?? []),
+        reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds),
         partialUpgradable: true,
         declaresAgents: false,
         declaresMcp: false,
@@ -1053,15 +1090,31 @@ function widensPartialGate(
  * a skipped nor a failed row renders the soft-dep marker (MSG-SD-3), so both
  * are always false here.
  */
-function staticPreflightRow(args: {
-  readonly partition: "skipped" | "failed";
+type StaticPreflightRowArgs = {
   readonly plugin: string;
   readonly notes: readonly string[];
   readonly reason: ContentReason;
-  readonly fromVersion?: string;
-}): PluginUpdateOutcome {
+} & (
+  | { readonly partition: "failed"; readonly fromVersion?: never }
+  | { readonly partition: "skipped"; readonly fromVersion?: string }
+);
+
+function staticPreflightRow(
+  args: StaticPreflightRowArgs,
+): PluginUpdateSkippedOutcome | DirectRenderableFailedOutcome {
+  if (args.partition === "failed") {
+    return {
+      partition: "failed",
+      name: args.plugin,
+      notes: [...args.notes],
+      reasons: [args.reason],
+      declaresAgents: false,
+      declaresMcp: false,
+    };
+  }
+
   return {
-    partition: args.partition,
+    partition: "skipped",
     name: args.plugin,
     ...(args.fromVersion !== undefined && { fromVersion: args.fromVersion }),
     notes: [...args.notes],
@@ -1085,7 +1138,7 @@ function triageUpdateMembership(
   plugin: string,
   record: PluginStateRecord | undefined,
   lookup: ReturnType<typeof lookupDeclaredPlugin>,
-): PluginUpdateOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
+): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
   if (record === undefined) {
     return lookup.kind === "absent"
       ? // Not installed AND absent from the manifest. No `fromVersion` --
@@ -1117,23 +1170,12 @@ function triageUpdateMembership(
     });
   }
 
-  const entryRaw = lookup.entry;
-  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
-    return staticPreflightRow({
-      partition: "skipped",
-      plugin,
-      notes: ["entry failed schema validation"],
-      reason: "invalid manifest",
-      fromVersion: record.version,
-    });
-  }
-
-  return { record, entry: entryRaw };
+  return { record, entry: lookup.entry };
 }
 
 async function preflightUpdate(
   args: ThreePhaseArgs,
-): Promise<PluginPreflight | PluginUpdateOutcome> {
+): Promise<PluginPreflight | UpdatePreflightOutcome> {
   const { plugin, marketplace, scope, locations } = args;
   const state = await loadState(locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
@@ -1245,7 +1287,9 @@ async function preflightUpdate(
   };
 }
 
-function isOutcome(value: PluginPreflight | PluginUpdateOutcome): value is PluginUpdateOutcome {
+function isOutcome(
+  value: PluginPreflight | UpdatePreflightOutcome,
+): value is UpdatePreflightOutcome {
   return "partition" in value;
 }
 
@@ -1300,6 +1344,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       resolved: installable,
       agentsSourceDir,
+      knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
@@ -1347,10 +1392,6 @@ function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly
 
 async function abortPartialHandles(handles: Partial<PrepHandles>): Promise<(string | undefined)[]> {
   const leaks: (string | undefined)[] = [];
-  if (handles.mcp !== undefined) {
-    abortPreparedMcp(handles.mcp);
-  }
-
   if (handles.agents !== undefined) {
     leaks.push(await abortPreparedAgents(handles.agents));
   }
@@ -1561,12 +1602,11 @@ function nextDisabledPin(
 /**
  * WR-02 / NFR-3: would the refresh below write anything, judged from the record
  * `preflightUpdate` already loaded? A disabled record at an unchanged version
- * now falls THROUGH to the refresh, and the refresh opens a `retries: 0` scope
- * lock. On a scope where nothing moved, that turned a previously lock-free
- * no-op into a `StateLockHeldError` whenever another process held the lock --
- * and the bare-form batch aborts on that throw, taking every target after the
- * disabled one with it. A plugin with nothing to write must not pay for the
- * lock.
+ * falls THROUGH to the refresh, and the refresh opens a `retries: 0` scope
+ * lock even when nothing would move -- risking a `StateLockHeldError`
+ * whenever another process holds the lock, which would abort the bare-form
+ * batch on that throw, taking every target after the disabled one with it. A
+ * plugin with nothing to write must not pay for the lock.
  *
  * The snapshot is read outside the lock, so this answer is advisory about the
  * RECORD: the in-transaction guard re-derives the same comparison against the
@@ -1687,7 +1727,7 @@ async function refreshDisabledRecord(
 async function runDisabledRecordRefresh(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
-): Promise<PluginUpdateOutcome> {
+): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
   const { plugin } = args;
   const { fromVersion, toVersion } = preflight;
   // WR-02 / NFR-3: skip the whole transaction -- and therefore the `retries: 0`
@@ -2038,10 +2078,10 @@ async function commitUpdatePhase3a(
   preflight: PluginPreflight,
   handles: PrepHandles,
 ): Promise<{
-  readonly failures: Phase3Failure[];
+  readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
 }> {
-  const failures: Phase3Failure[] = [];
+  const failures: UpdatePhase3Failure[] = [];
 
   try {
     const leak = await commitPreparedSkills(handles.skills);
@@ -2053,13 +2093,13 @@ async function commitUpdatePhase3a(
       });
     }
   } catch (err) {
-    failures.push({ phase: "skills", msg: errorMessage(err), cause: err });
+    failures.push({ phase: "skills", msg: errorMessage(err), cause: err as Error });
   }
 
   try {
     await commitPreparedCommands(handles.commands);
   } catch (err) {
-    failures.push({ phase: "commands", msg: errorMessage(err), cause: err });
+    failures.push({ phase: "commands", msg: errorMessage(err), cause: err as Error });
   }
 
   try {
@@ -2072,23 +2112,29 @@ async function commitUpdatePhase3a(
       });
     }
   } catch (err) {
-    failures.push({ phase: "agents", msg: errorMessage(err), cause: err });
+    failures.push({ phase: "agents", msg: errorMessage(err), cause: err as Error });
   }
 
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   try {
     hookEntries = await commitUpdateHooks(args, preflight.installable);
   } catch (err) {
-    failures.push({ phase: "hooks", msg: errorMessage(err), cause: err });
+    failures.push({ phase: "hooks", msg: errorMessage(err), cause: err as Error });
   }
 
   try {
     await commitPreparedMcp(handles.mcp);
   } catch (err) {
-    failures.push({ phase: "mcp", msg: errorMessage(err), cause: err });
+    failures.push({ phase: "mcp", msg: errorMessage(err), cause: err as Error });
   }
 
   return { failures, hookEntries };
+}
+
+function hasUpdatePhase3Failures(
+  failures: readonly UpdatePhase3Failure[],
+): failures is NonEmptyUpdatePhase3Failures {
+  return failures.length > 0;
 }
 
 /**
@@ -2103,19 +2149,17 @@ async function commitUpdatePhase3a(
  */
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
-  failures: readonly Phase3Failure[],
+  failures: NonEmptyUpdatePhase3Failures,
   versions: { readonly fromVersion: string; readonly toVersion: string },
-): PluginUpdateOutcome {
+): UpdatePhase3FailedOutcome {
   const { plugin } = args;
   const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
   const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
-  const aggregate = new PluginUpdatePhase3Error(
-    aggregateMsg,
-    failures,
-    aggregateCause(failures[0]?.cause),
-  );
+  const aggregate = new PluginUpdatePhase3Error(aggregateMsg, failures, {
+    cause: failures[0].cause,
+  });
 
-  if (isDirectUpdate(args) && args.ctx !== undefined && args.pi !== undefined) {
+  if (isDirectUpdate(args)) {
     notifyDirectFailure({
       ctx: args.ctx,
       pi: args.pi,
@@ -2142,10 +2186,9 @@ function composePhase3FailureOutcome(
     toVersion: versions.toVersion,
     notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
     // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
-    // {rollback partial}` per docs/output-catalog.md. The local
-    // `outcomeToCascadePluginMessage` short-circuits on
-    // `phaseFailures.length > 0` and ignores `reasons`; the marketplace
-    // cascade consumer reads `reasons[0]` directly.
+    // {rollback partial}` per docs/output-catalog.md. The direct entrypoint
+    // emits these inline and filters them before its local mapper; the
+    // marketplace cascade consumer reads `reasons[0]` directly.
     reasons: ["rollback partial"] as const,
     phaseFailures: failures.map((f) => ({ phase: f.phase, msg: f.msg })),
     // declaresAgents / declaresMcp are required `boolean`. `(failed)` rows
@@ -2163,11 +2206,7 @@ function composePhase3FailureOutcome(
  * path never calls the write-back (gated by `!args.cascade`), so it is
  * structurally unaffected.
  */
-function notifyInvalidConfigWriteBack(args: ThreePhaseArgs): void {
-  if (!isDirectUpdate(args) || args.ctx === undefined || args.pi === undefined) {
-    return;
-  }
-
+function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs): void {
   const targetBasename = path.basename(
     args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
   );
@@ -2195,7 +2234,7 @@ function notifyInvalidConfigWriteBack(args: ThreePhaseArgs): void {
 // commits, finalize, the phase-3b aggregate error path, and the S5
 // invalid-config write-back warning. The per-phase save-vs-throw discipline
 // stays visible here; the phase bodies themselves are extracted above.
-async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {
+async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
   const { plugin, marketplace, scope } = args;
 
   // ─── Pre-phase: resolve current vs new (PUP-3/4/5 short-circuits) ─────────
@@ -2300,13 +2339,13 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     phase3aFailures.push({
       phase: "mcp",
       msg: `state finalize failed: ${errorMessage(finalizeErr)}`,
-      cause: finalizeErr,
+      cause: finalizeErr as Error,
     });
   }
 
   // ─── Phase 3b: aggregate error path with recovery hint, OR success ────────
 
-  if (phase3aFailures.length > 0) {
+  if (hasUpdatePhase3Failures(phase3aFailures)) {
     return composePhase3FailureOutcome(args, phase3aFailures, { fromVersion, toVersion });
   }
 
@@ -2344,7 +2383,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   const degradedKinds = collectDegradedKinds(handles);
   const updateWarnings = collectUpdateWarnings(handles, args.cascade);
   await dropPluginCompletionCache(args);
-  if (invalidConfigWriteBack) {
+  if (isDirectUpdate(args) && invalidConfigWriteBack) {
     notifyInvalidConfigWriteBack(args);
   }
 
@@ -2431,7 +2470,7 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
 
 interface TargetedOutcome {
   readonly target: ResolvedTarget;
-  readonly outcome: PluginUpdateOutcome;
+  readonly outcome: DirectRenderableOutcome;
 }
 
 /**
@@ -2468,9 +2507,9 @@ function cascadeSkipSeverity(
  * XSURF-03: the partially-upgradable manual update-decline (`outcome.partialUpgradable`)
  * flips to the `partially-upgradable` token (consistent with how `list` describes
  * the same plugin) + the update-worded `--partial` trailer. The SEV-04 split
- * (targeted=warning / bulk=info) moves onto this status arm directly -- it is no
- * longer keyed on the reason string (the reason now carries the list-consistent
- * degrade kinds, not `no longer installable`). Every other skipped reason keeps
+ * (targeted=warning / bulk=info) is keyed on this status arm directly, not on
+ * the reason string -- the reason here carries the list-consistent degrade
+ * kinds, not `no longer installable`. Every other skipped reason keeps
  * `status: "skipped"` + the unchanged `cascadeSkipSeverity` judgment.
  */
 function projectSkippedOutcome(
@@ -2478,10 +2517,7 @@ function projectSkippedOutcome(
   outcome: PluginUpdateSkippedOutcome,
   cardinality: "single" | "plural",
 ): UpdateMsg {
-  // Producer-narrowed `outcome.reasons` (CR-06) takes precedence over the
-  // legacy notes-substring parse; empty `reasons` opts into the back-compat
-  // fallback path.
-  const reasons = outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes);
+  const reasons = outcome.reasons;
   const version =
     outcome.fromVersion !== undefined && outcome.fromVersion !== ""
       ? { version: outcome.fromVersion }
@@ -2534,7 +2570,7 @@ function projectSkippedOutcome(
  */
 function outcomeToCascadePluginMessage(
   target: ResolvedTarget,
-  outcome: PluginUpdateOutcome,
+  outcome: DirectRenderableOutcome,
   probe: SoftDepStatus,
   cardinality: "single" | "plural",
 ): UpdateMsg {
@@ -2578,60 +2614,16 @@ function outcomeToCascadePluginMessage(
       return projectSkippedOutcome(target, outcome, cardinality);
 
     case "failed": {
-      const phaseFailures = outcome.phaseFailures ?? [];
-      const hasPhaseFailures = phaseFailures.length > 0;
-      const reasons: readonly ContentReason[] = hasPhaseFailures
-        ? (["rollback partial"] as const)
-        : (outcome.reasons ?? narrowFailReasons(outcome.notes));
-      // carve-out: PluginFailedMessage has NO `from`/`to` fields
-      // (only the `updated` variant carries them). The renderer emits at
-      // most the bare `version?` token, so we surface only the
-      // pre-update version (`fromVersion`) when available -- the catalog
-      // form `failed-with-rollback-partial` (510-522) renders
-      // `⊘ delta v1.0.0 (failed) {rollback partial}` using the old
-      // version.
-      const version = outcome.fromVersion;
-      const base: PluginFailedMessage = {
+      return {
         status: "failed",
         name: outcome.name,
         scope: target.scope,
-        reasons,
-        ...(version !== undefined && version !== "" && { version }),
-        ...(outcome.cause !== undefined && { cause: outcome.cause }),
-        // D-03/D-06: a failed update -> error, no reload (the rollbackPartial
-        // spread below inherits these).
+        reasons: outcome.reasons,
+        // D-03/D-06: a failed update -> error, no reload.
         severity: "error",
         needsReload: false,
       };
-      if (!hasPhaseFailures) {
-        return base;
-      }
-
-      // Catalog `failed-with-rollback-partial` (docs/output-catalog.md:510-522):
-      // the renderer composes ` [<phase>] (rollback failed)` at 4-space
-      // indent followed by the optional 6-space-indent per-phase cause-chain
-      // . `UpdatePhaseFailure` carries `msg: string` (and the
-      // underlying `Phase3Failure.cause` carries an `unknown` cause); the
-      // outcome's `phaseFailures` is pre-narrowed to `{phase, msg}` only,
-      // so synthesize an Error from the typed msg to feed the cause-chain
-      // walker caveat fallback.
-      return {
-        ...base,
-        rollbackPartial: phaseFailures.map((p) => ({
-          phase: p.phase,
-          // `UpdatePhaseFailure` discards the original `Phase3Failure.cause`
-          // (it's typed `unknown` and never threaded into the outcome
-          // shape); synthesize a typed Error from `msg` so the renderer's
-          // 6-space-indent cause-chain walker has structured input.
-          ...(p.msg !== "" && { cause: new Error(p.msg) }),
-        })),
-      };
     }
-
-    default:
-      // exhaustiveness guard for PluginUpdateOutcome's
-      // discriminated union; any future partition must update this switch.
-      return assertNever(outcome);
   }
 }
 
@@ -2833,13 +2825,10 @@ interface NotifyDirectFailureArgs {
   readonly reasonOverride?: ContentReason;
   /**
    * Optional per-phase rollback children. Threaded only by the phase-3
-   * aggregate path. Each entry's `msg` is wrapped in a synthesized Error
-   * so the renderer's 6-space-indent cause-chain walker has structured
-   * input (the underlying Phase3Failure.cause is `unknown` and discarded
-   * earlier in the pipeline; this preserves the cause-text via the
-   * msg field).
+   * aggregate path; the update-local type preserves each internal Error
+   * identity for the renderer's cause-chain walker.
    */
-  readonly rollbackPartial?: readonly Phase3Failure[];
+  readonly rollbackPartial?: readonly UpdatePhase3Failure[];
 }
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
@@ -2879,23 +2868,10 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
 }
 
 /**
- * Coerce a `Phase3Failure.cause` (typed `unknown`) into the optional
- * `{ cause?: Error }` slot consumed by `PluginFailedMessage.rollbackPartial`.
- * Prefers the typed Error when present; falls back to synthesizing a typed
- * Error from `msg` caveat so the renderer's 6-space-indent
- * cause-chain walker has structured input. Returns the empty object when
- * neither is available (caller spreads it via `...`).
+ * Preserve the update-local phase failure Error in the structured child.
  */
-function rollbackPartialCauseSlot(p: Phase3Failure): { readonly cause?: Error } {
-  if (p.cause instanceof Error) {
-    return { cause: p.cause };
-  }
-
-  if (p.msg !== "") {
-    return { cause: new Error(p.msg) };
-  }
-
-  return {};
+function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Error } {
+  return { cause: p.cause };
 }
 
 /**
@@ -2908,26 +2884,6 @@ function rollbackPartialCauseSlot(p: Phase3Failure): { readonly cause?: Error } 
 function narrowDirectFailReason(err: Error): ContentReason {
   // Phase-3 aggregate failures are surfaced via reasonOverride; here we
   // handle the enumerate / syncClone / phase-2 paths only.
-  if (err instanceof PluginShapeError) {
-    // IN-03: add `default: assertNever(err.shape)` for compile-time
-    // exhaustiveness against the `PluginShapeError.shape.kind`
-    // discriminator. Mirrors install.ts +
-    // outcomeToCascadePluginMessage default-arm precedent. Without this
-    // a future 5th shape kind would silently fall through to the errno-
-    // substring branch below and surface as `unreadable manifest` --
-    // masking a class of errors that should have a precise mapping.
-    switch (err.shape.kind) {
-      case "no-longer-installable":
-      case "not-installable":
-        return "no longer installable";
-      case "not-in-manifest":
-      case "already-installed":
-        return "not in manifest";
-      default:
-        return assertNever(err.shape);
-    }
-  }
-
   const code = (err as NodeJS.ErrnoException).code;
   if (code === "EACCES" || code === "EPERM") {
     return "permission denied";
@@ -2989,11 +2945,10 @@ function notifyBareFormEnumerateFailure(args: {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
   readonly scope: Scope | undefined;
-  readonly err: unknown;
+  readonly err: Error;
 }): void {
   const { ctx, pi, scope, err } = args;
-  const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly ContentReason[] = [narrowDirectFailReason(cause)];
+  const reasons: readonly ContentReason[] = [narrowDirectFailReason(err)];
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
   // bracket in that case. Matches the omit convention used by
@@ -3002,7 +2957,7 @@ function notifyBareFormEnumerateFailure(args: {
     status: "failed",
     name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
     reasons,
-    cause,
+    cause: err,
     // D-03/D-06: bare-form enumerate failure -> error, no reload.
     severity: "error",
     needsReload: false,
@@ -3027,69 +2982,7 @@ const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 // The renderer (shared/notify.ts) owns version-arrow composition via the
 // PluginUpdatedMessage's required from/to fields.
 
-function narrowSkipReasons(notes: readonly string[] | undefined): readonly ContentReason[] {
-  if (notes === undefined || notes.length === 0) {
-    return [];
-  }
-
-  return [narrowSkipReason(notes[0] ?? "")];
-}
-
-function narrowSkipReason(note: string): ContentReason {
-  if (note === "not installed") {
-    return "not installed";
-  }
-
-  if (note === "not in manifest") {
-    return "not in manifest";
-  }
-
-  if (note === "up-to-date") {
-    return "up-to-date";
-  }
-
-  // PUP-4 path: "Plugin "...." is no longer installable: <cause>" -> closed
-  // Reason "no longer installable".
-  if (note.includes("no longer installable") || note.includes("not installable")) {
-    return "no longer installable";
-  }
-
-  if (note.includes("entry failed schema validation")) {
-    return "invalid manifest";
-  }
-
-  return "not in manifest";
-}
-
-function narrowFailReasons(notes: readonly string[] | undefined): readonly ContentReason[] {
-  if (notes === undefined || notes.length === 0) {
-    return [];
-  }
-
-  return [narrowFailReason(notes[0] ?? "")];
-}
-
-function narrowFailReason(note: string): ContentReason {
-  if (note.includes("rollback")) {
-    return "rollback partial";
-  }
-
-  if (note.includes("concurrently uninstalled") || note.includes("concurrently removed")) {
-    return "concurrently uninstalled";
-  }
-
-  if (note.includes("concurrently updated")) {
-    return "concurrently updated";
-  }
-
-  return "not in manifest";
-}
-
-function aggregateCause(firstCause: unknown): { cause: unknown } | undefined {
-  return firstCause === undefined ? undefined : { cause: firstCause };
-}
-
-function isDirectUpdate(args: ThreePhaseArgs): boolean {
+function isDirectUpdate(args: ThreePhaseArgs): args is DirectThreePhaseArgs {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare -- keeps Sonar S7735 from flagging an inverted boolean condition at the callsite.
   return args.cascade === false;
 }
@@ -3146,8 +3039,8 @@ async function enumerateMarketplaceTarget(
   // downstream `(skipped) {not installed}` preflight. A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
-  // standalone `{marketplace not added}` variant -- instead of the former raw
-  // `Error`/`MarketplaceNotFoundError` -> `{not found}` misattribution (M10/M11).
+  // standalone `{marketplace not added}` variant, so the miss is never
+  // misattributed to `{not found}` (M10/M11).
   const resolved = await resolveUpdateMarketplaceScope(cwd, mpName, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[mpName];

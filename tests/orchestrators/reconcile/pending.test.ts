@@ -1,342 +1,134 @@
-// tests/orchestrators/reconcile/pending.test.ts
+// Owner suite for orchestrators/reconcile/pending.ts.
 //
-// DIFF-01 SC #2 + DIFF-02 + CFG-03 abort proofs for
-// `orchestrators/reconcile/pending.ts`. The suite covers:
+// D-115-03: pending reads the real merged config and the real state off a
+// case-owned temporary tree and delegates the row projection, so every case
+// shapes its inputs on disk rather than injecting a seam. The only doubles are
+// the two Pi surfaces the orchestrator hands to `notify`.
 //
-//   1. Idempotency: two consecutive invocations against unchanged state +
-//      config produce byte-identical `ctx.ui.notify` argument lists.
-//   2. No-mutation: file mtimes + on-disk bytes of `state.json`,
-//      `claude-plugins.json`, `claude-plugins.local.json` are unchanged across
-//      both invocations.
-//   3. CFG-03 abort: a malformed `claude-plugins.json` surfaces
-//      a `(failed) {invalid manifest}` row carrying the BASENAME (never the
-//      absolute path) AND `planReconcile`'s side effects (any plan content)
-//      do NOT appear for that scope. Invalid input is NEVER coerced into an
-//      empty desired state that would render as a mass-uninstall pending list.
-//   4. Scope fan-out: omitted `--scope` walks both scopes project-first;
-//      explicit `--scope user` walks only user.
-//   5. Single-notify (IL-2): exactly one ctx.ui.notify call per invocation.
-//   6. Empty-steady-state: the dedicated ReconcilePendingEmptyMessage
-//      variant emits the catalog-locked advisory body line.
+// IL-2 is proved by sizing the notification boundary: each case promises the
+// exact number of emissions it expects, so a second `ctx.ui.notify` call throws
+// where it is made instead of being counted afterwards.
+//
+// Every seeded state.json is written in the canonical shape (`enabled` present,
+// `resources.hooks` present, both marketplace paths present), so `loadState`
+// performs no legacy migration and fires no best-effort background save. That
+// keeps the IL-3 legacy-migration warning off standard error and keeps the
+// no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test, { mock } from "node:test";
+import { test } from "node:test";
 
 import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
+import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { TestContext } from "node:test";
 
-interface MockCtx {
-  cwd: string;
-  ui: { notify: ReturnType<typeof mock.fn> };
+interface HermeticScopes {
+  readonly cwd: string;
+  readonly project: ScopedLocations;
+  readonly user: ScopedLocations;
 }
-
-function makeCtx(cwd: string): MockCtx {
-  return { cwd, ui: { notify: mock.fn() } };
-}
-
-const STUB_PI = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-
-async function withHermeticHome<T>(
-  fn: (env: { cwd: string; home: string }) => Promise<T>,
-): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "pending-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "pending-cwd-"));
-  process.env.HOME = home;
-  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
-  // to homedir(). Clear it so the hermetic HOME above actually governs the
-  // user scope -- otherwise a developer/CI env that sets the variable would
-  // make these tests read the real Pi agent dir.
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await fn({ cwd, home });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  }
-}
-
-test("DIFF-01 SC #2 / empty-steady-state: bare invocation against zero config + zero state emits the advisory once", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
-    // IL-2: exactly one notify call.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments;
-    // info severity -> no 2nd arg.
-    assert.equal(args.length, 1);
-    assert.equal(args[0], "Pending: next reload will apply 0 actions.");
-  });
-});
-
-test("DIFF-01 SC #2 / idempotency: two invocations against unchanged state -> byte-identical notify args", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const ctxA = makeCtx(cwd);
-    const ctxB = makeCtx(cwd);
-    await pendingReconcile({ ctx: ctxA as unknown as ExtensionContext, pi: STUB_PI, cwd });
-    await pendingReconcile({ ctx: ctxB as unknown as ExtensionContext, pi: STUB_PI, cwd });
-    assert.deepEqual(
-      ctxA.ui.notify.mock.calls[0]!.arguments,
-      ctxB.ui.notify.mock.calls[0]!.arguments,
-    );
-  });
-});
-
-test("DIFF-01 SC #2 / no-mutation: pending run leaves config + state file mtimes + bytes unchanged", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Lay down a minimal project-scope config + empty state directory so the
-    // orchestrator reads real on-disk files (rather than absent-arms).
-    const projectScopeRoot = path.join(cwd, ".pi");
-    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
-    await mkdir(extensionRoot, { recursive: true });
-    const configPath = path.join(projectScopeRoot, "claude-plugins.json");
-    const statePath = path.join(extensionRoot, "state.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1 }, null, 2), "utf8");
-    await writeFile(
-      statePath,
-      JSON.stringify({ schemaVersion: 1, marketplaces: {} }, null, 2),
-      "utf8",
-    );
-
-    const beforeConfig = await readFile(configPath, "utf8");
-    const beforeConfigMtime = (await stat(configPath)).mtimeMs;
-    const beforeState = await readFile(statePath, "utf8");
-    const beforeStateMtime = (await stat(statePath)).mtimeMs;
-
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    const afterConfig = await readFile(configPath, "utf8");
-    const afterConfigMtime = (await stat(configPath)).mtimeMs;
-    const afterState = await readFile(statePath, "utf8");
-    const afterStateMtime = (await stat(statePath)).mtimeMs;
-
-    assert.equal(beforeConfig, afterConfig, "config bytes must be unchanged across pending runs");
-    assert.equal(
-      beforeConfigMtime,
-      afterConfigMtime,
-      "config mtime must be unchanged across pending runs",
-    );
-    assert.equal(beforeState, afterState, "state bytes must be unchanged across pending runs");
-    assert.equal(
-      beforeStateMtime,
-      afterStateMtime,
-      "state mtime must be unchanged across pending runs",
-    );
-  });
-});
-
-test("CFG-03 abort: malformed claude-plugins.json -> (failed) {invalid manifest} row with BASENAME (not absolute path)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const projectScopeRoot = path.join(cwd, ".pi");
-    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
-    await mkdir(extensionRoot, { recursive: true });
-    const badConfigPath = path.join(projectScopeRoot, "claude-plugins.json");
-    // Truncated JSON -- JSON.parse fails -> invalid arm.
-    await writeFile(badConfigPath, "{", "utf8");
-
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-    const emitted = args[0];
-    // Severity: error (the cascade has a failed marketplace row) -> summary
-    // prepended (GRAM-01 / GRAM-02).
-    assert.equal(args[1], "error");
-    // The marketplace name is the BASENAME (T-53-02-02 information-disclosure
-    // mitigation -- the absolute path is NEVER emitted).
-    assert.ok(
-      emitted.includes("claude-plugins.json"),
-      `expected emitted output to include the BASENAME 'claude-plugins.json'; got:\n${emitted}`,
-    );
-    assert.ok(
-      !emitted.includes(projectScopeRoot),
-      `emitted output must NOT include the absolute path '${projectScopeRoot}'; got:\n${emitted}`,
-    );
-    assert.ok(
-      emitted.includes("(failed)") && emitted.includes("{invalid manifest}"),
-      `expected (failed) {invalid manifest} row; got:\n${emitted}`,
-    );
-    // The row must NOT render as `(will uninstall)` etc. --
-    // invalid config NEVER coerced to an empty desired state.
-    assert.ok(
-      !emitted.includes("will uninstall"),
-      `CFG-03 abort must NEVER render as a mass-uninstall pending list; got:\n${emitted}`,
-    );
-  });
-});
-
-test("failure containment (WR-04): corrupt state.json -> (failed) {unparseable} row with BASENAME, no raw throw", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const projectScopeRoot = path.join(cwd, ".pi");
-    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
-    await mkdir(extensionRoot, { recursive: true });
-    // Valid (empty) config; corrupt state -- the asymmetric twin of the
-    // CFG-03 case above. loadState throws on unparseable JSON; the
-    // orchestrator must contain it as a structured row (IL-2), mirroring
-    // listPlugins, instead of escaping as an unhandled rejection.
-    await writeFile(
-      path.join(projectScopeRoot, "claude-plugins.json"),
-      JSON.stringify({ schemaVersion: 1 }, null, 2),
-      "utf8",
-    );
-    const statePath = path.join(extensionRoot, "state.json");
-    await writeFile(statePath, "{", "utf8");
-
-    const ctx = makeCtx(cwd);
-    // Must NOT throw.
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    // IL-2: exactly one notify call.
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-    const emitted = args[0];
-    // Severity: error (failed marketplace row).
-    assert.equal(args[1], "error");
-    // BASENAME only (T-53-02-02) -- the absolute path is NEVER emitted.
-    assert.ok(
-      emitted.includes("state.json"),
-      `expected emitted output to include the BASENAME 'state.json'; got:\n${emitted}`,
-    );
-    assert.ok(
-      !emitted.includes(extensionRoot),
-      `emitted output must NOT include the absolute path '${extensionRoot}'; got:\n${emitted}`,
-    );
-    assert.ok(
-      emitted.includes("(failed)") && emitted.includes("{unparseable}"),
-      `expected (failed) {unparseable} row; got:\n${emitted}`,
-    );
-  });
-});
-
-test("mixed output ordering (WR-05): invalid-config block sorts with plan blocks via compareByNameThenScope (MSG-GR-3)", async () => {
-  await withHermeticHome(async ({ cwd, home }) => {
-    // Project scope: invalid config -> (failed) {invalid manifest} block
-    // named "claude-plugins.json". User scope: a bare-header pending block
-    // named "zzz-mp" carrying a `will install` child (WILL-01 / D-65.1-02: the
-    // marketplace add itself is immediate and carries no token; the child
-    // install is the reload-deferred work that materializes the block). MSG-GR-3
-    // (name primary, case-insensitive) requires "claude-plugins.json" BEFORE
-    // "zzz-mp" -- appending invalid blocks after the sorted projection would
-    // mis-order them.
-    const projectScopeRoot = path.join(cwd, ".pi");
-    await mkdir(projectScopeRoot, { recursive: true });
-    await writeFile(path.join(projectScopeRoot, "claude-plugins.json"), "{", "utf8");
-
-    const userScopeRoot = path.join(home, ".pi", "agent");
-    await mkdir(userScopeRoot, { recursive: true });
-    await writeFile(
-      path.join(userScopeRoot, "claude-plugins.json"),
-      JSON.stringify(
-        {
-          schemaVersion: 1,
-          marketplaces: { "zzz-mp": { source: "acme/z" } },
-          plugins: { "pp@zzz-mp": { enabled: true } },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    const failedIdx = emitted.indexOf("claude-plugins.json");
-    const mpIdx = emitted.indexOf("zzz-mp");
-    assert.ok(failedIdx >= 0, `expected the invalid-config row; got:\n${emitted}`);
-    assert.ok(mpIdx >= 0, `expected the zzz-mp pending block; got:\n${emitted}`);
-    assert.ok(
-      failedIdx < mpIdx,
-      `MSG-GR-3: "claude-plugins.json" must sort before "zzz-mp"; got:\n${emitted}`,
-    );
-  });
-});
-
-test("scope fan-out: omitted --scope walks both scopes project-first (advisory in project + advisory in user converges to one advisory)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const ctx = makeCtx(cwd);
-    // No --scope -> both scopes. Both are empty so the empty-steady-state
-    // advisory fires.
-    await pendingReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    assert.equal(
-      ctx.ui.notify.mock.calls[0]!.arguments[0],
-      "Pending: next reload will apply 0 actions.",
-    );
-  });
-});
 
 /**
- * Lay down a FULLY-MODERN populated project-scope state.json (all
- * MARKETPLACE_RECORD_SCHEMA fields present, plugin resources arrays
- * complete) so `loadState` performs NO legacy migration and fires NO
- * background persist -- the no-write assertions below must not race an
- * ST-4 best-effort save.
+ * One project root and one user root per case, both removed with the
+ * environment restore in a single hook registered before the act phase.
  */
-async function writePopulatedProjectState(cwd: string): Promise<{ statePath: string }> {
-  const projectScopeRoot = path.join(cwd, ".pi");
-  const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
-  await mkdir(extensionRoot, { recursive: true });
-  const statePath = path.join(extensionRoot, "state.json");
-  await writeFile(
-    statePath,
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        marketplaces: {
-          "mp-github": {
-            name: "mp-github",
-            scope: "project",
-            source: "acme/tools",
-            addedFromCwd: "/some/cwd",
-            manifestPath: "/abs/mp-github/.claude-plugin/marketplace.json",
-            marketplaceRoot: "/abs/mp-github",
-            plugins: {
-              "code-reviewer": {
+async function createHermeticScopes(t: TestContext, label: string): Promise<HermeticScopes> {
+  const cwd = await mkdtemp(path.join(tmpdir(), `pending-${label}-cwd-`));
+  const home = await mkdtemp(path.join(tmpdir(), `pending-${label}-home-`));
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  const previousHome = process.env.HOME;
+  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
+    } else {
+      delete process.env.HOME;
+    }
+
+    if (agentDirExisted) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+
+    await rm(cwd, { force: true, recursive: true });
+    await rm(home, { force: true, recursive: true });
+  });
+  process.env.HOME = home;
+  // SC-1: getAgentDir() reads PI_CODING_AGENT_DIR before homedir(), so an
+  // environment that sets it would defeat the hermetic HOME above.
+  delete process.env.PI_CODING_AGENT_DIR;
+  return { cwd, project: locationsFor("project", cwd), user: locationsFor("user", cwd) };
+}
+
+/** Write `bytes` at `filePath`, creating the parent directory first. */
+async function writeUnder(filePath: string, bytes: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, bytes, "utf8");
+}
+
+interface DeclaredPlugin {
+  readonly key: string;
+  readonly enabled: boolean;
+}
+
+/** The bytes of a `claude-plugins.json` declaring one marketplace and its plugins. */
+function configBytes(
+  marketplace: string,
+  source: string,
+  plugins: readonly DeclaredPlugin[],
+): string {
+  return JSON.stringify(
+    {
+      schemaVersion: 1,
+      marketplaces: { [marketplace]: { source } },
+      plugins: Object.fromEntries(plugins.map(({ key, enabled }) => [key, { enabled }])),
+    },
+    null,
+    2,
+  );
+}
+
+interface RecordedPlugin {
+  readonly name: string;
+  readonly skills: readonly string[];
+}
+
+/**
+ * The bytes of a canonical state.json recording one marketplace. Every field the
+ * migrator would otherwise fill is present, so the load performs no migration.
+ */
+function stateBytes(
+  marketplace: string,
+  source: string,
+  marketplaceRoot: string,
+  plugins: readonly RecordedPlugin[],
+): string {
+  return JSON.stringify(
+    {
+      schemaVersion: 2,
+      marketplaces: {
+        [marketplace]: {
+          name: marketplace,
+          scope: "project",
+          source,
+          addedFromCwd: "/declared/cwd",
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: Object.fromEntries(
+            plugins.map((plugin) => [
+              plugin.name,
+              {
                 version: "1.0.0",
-                resolvedSource: "/abs/mp-github/code-reviewer",
+                resolvedSource: path.join(marketplaceRoot, plugin.name),
                 compatibility: {
                   installable: true,
                   notes: [],
@@ -344,181 +136,354 @@ async function writePopulatedProjectState(cwd: string): Promise<{ statePath: str
                   unsupported: [],
                 },
                 resources: {
-                  skills: ["cr-skill"],
+                  skills: [...plugin.skills],
                   prompts: [],
                   agents: [],
                   mcpServers: [],
+                  hooks: [],
                 },
-                installedAt: "2025-01-01T00:00:00.000Z",
-                updatedAt: "2025-01-01T00:00:00.000Z",
+                enabled: true,
+                installedAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
               },
-            },
-          },
+            ]),
+          ),
         },
       },
-      null,
-      2,
-    ),
-    "utf8",
+    },
+    null,
+    2,
   );
-  return { statePath };
 }
 
-test("MIG-01 pre-migration window: absent config + populated state -> EMPTY advisory, NOT a mass-uninstall plan", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Populated state.json, NO claude-plugins.json: the post-upgrade,
-    // pre-first-/reload window. The apply path migrates FIRST (the next
-    // load's reconcile is a no-op), so the pending must converge on the
-    // same answer -- planning against the absent-as-empty merged view would
-    // tear down every recorded marketplace and render its per-plugin
-    // `(will uninstall)` cascade rows for everything in state (the DIFF-01
-    // 'exactly what the next load would do' violation).
-    await writePopulatedProjectState(cwd);
+test("DIFF-01: reports the zero-action advisory when neither scope has pending work", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "empty");
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
+  // act
+  await pendingReconcile({ ctx, pi, cwd });
 
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments;
-    assert.equal(args.length, 1, "empty advisory is info severity (no 2nd arg)");
-    assert.equal(args[0], "Pending: next reload will apply 0 actions.");
-  });
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "Pending: next reload will apply 0 actions." },
+  ]);
+  verifyBoundary();
 });
 
-test("MIG-01 pre-migration window: idempotent + READ-ONLY -- run twice, byte-identical output, NO config file created", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { statePath } = await writePopulatedProjectState(cwd);
-    const beforeState = await readFile(statePath, "utf8");
-    const beforeStateMtime = (await stat(statePath)).mtimeMs;
+test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketplace name project before user", async (t) => {
+  // arrange
+  const { cwd, project, user } = await createHermeticScopes(t, "fanout");
+  await writeUnder(
+    project.configJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
+  );
+  await writeUnder(
+    user.configJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
+  );
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
-    const ctxA = makeCtx(cwd);
-    const ctxB = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctxA as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-    await pendingReconcile({
-      ctx: ctxB as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
+  // act
+  await pendingReconcile({ ctx, pi, cwd });
 
-    // DIFF-01 SC #2: byte-identical across consecutive runs.
-    assert.deepEqual(
-      ctxA.ui.notify.mock.calls[0]!.arguments,
-      ctxB.ui.notify.mock.calls[0]!.arguments,
-    );
-    // NFR-5 read-surface discipline: the pending projection must NOT have
-    // performed the migration -- no claude-plugins.json appears.
-    const configPath = path.join(cwd, ".pi", "claude-plugins.json");
-    await assert.rejects(
-      stat(configPath),
-      (err: NodeJS.ErrnoException) => err.code === "ENOENT",
-      "pending must NEVER create claude-plugins.json (migration is the apply path's job)",
-    );
-    // state.json bytes + mtime untouched.
-    assert.equal(await readFile(statePath, "utf8"), beforeState);
-    assert.equal((await stat(statePath)).mtimeMs, beforeStateMtime);
-  });
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)",
+    },
+  ]);
+  verifyBoundary();
 });
 
-test("MIG-01 pre-migration window: local arm merges over the projection (immediate local-only add, no uninstalls)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Populated state + absent BASE config + a local config declaring one
-    // EXTRA marketplace with no plugins: the post-migration merged view is
-    // projection + local, so the planner must NOT plan uninstalls for the
-    // recorded entries. WILL-01 / D-65.1-02: the local-only marketplace add is
-    // immediate and has no reload-deferred child work, so it produces no
-    // pending row -- a change consisting only of immediate actions yields the
-    // empty advisory. The regression this guards against (absent base treated
-    // as empty desired state) would instead surface `will uninstall` rows for
-    // every recorded entry, so the empty advisory is the discriminating signal.
-    await writePopulatedProjectState(cwd);
-    await writeFile(
-      path.join(cwd, ".pi", "claude-plugins.local.json"),
-      JSON.stringify(
-        { schemaVersion: 1, marketplaces: { "zzz-extra": { source: "acme/extra" } }, plugins: {} },
-        null,
-        2,
-      ),
-      "utf8",
-    );
+test("an explicit user scope reports the user scope's pending work and never reads the project scope", async (t) => {
+  // arrange
+  const { cwd, project, user } = await createHermeticScopes(t, "user-only");
+  await writeUnder(
+    project.configJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
+  );
+  await writeUnder(
+    user.configJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
+  );
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
+  // act
+  await pendingReconcile({ ctx, pi, cwd, scope: "user" });
 
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.equal(emitted, "Pending: next reload will apply 0 actions.");
-  });
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● mp [user]\n  ● p-user (will install)" }]);
+  verifyBoundary();
 });
 
-test("scope routing: explicit --scope user routes to user-scope load only (still emits the empty advisory in a clean env)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "user",
-    });
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    assert.equal(
-      ctx.ui.notify.mock.calls[0]!.arguments[0],
-      "Pending: next reload will apply 0 actions.",
+test("an explicit project scope reports the project scope's pending work and never reads the user scope", async (t) => {
+  // arrange
+  const { cwd, project, user } = await createHermeticScopes(t, "project-only");
+  await writeUnder(
+    project.configJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
+  );
+  await writeUnder(
+    user.configJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
+  );
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+
+  // act
+  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● mp [project]\n  ● p-proj (will install)" }]);
+  verifyBoundary();
+});
+
+test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and leaves both scope roots byte-identical", async (t) => {
+  // arrange
+  const { cwd, project, user } = await createHermeticScopes(t, "idempotent");
+  const declaredConfig = configBytes("mp", "acme/tools", []);
+  const recordedState = stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+    { name: "p1", skills: ["mp-p1-tool"] },
+  ]);
+  await writeUnder(project.configJsonPath, declaredConfig);
+  await writeUnder(project.stateJsonPath, recordedState);
+  const expectedNotification = { message: "● mp [project]\n  ○ p1 (will uninstall)" };
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
+
+  // act
+  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, pi, cwd });
+
+  // assert
+  assert.deepStrictEqual(notifications, [expectedNotification, expectedNotification]);
+  assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+    "claude-plugins.json",
+    "pi-claude-marketplace/",
+    "pi-claude-marketplace/state.json",
+  ]);
+  assert.deepStrictEqual(await retryTree(user.scopeRoot), []);
+  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), declaredConfig);
+  assert.strictEqual(await readFile(project.stateJsonPath, "utf8"), recordedState);
+  verifyBoundary();
+});
+
+// CFG-03: an invalid config arm aborts the planner for its scope and reports the
+// file's BASENAME (T-53-02-02: the absolute path is never emitted). Each row
+// records a marketplace the surviving config arm does not fully declare, so
+// skipping the abort would plan and render `(will uninstall)` rows.
+const invalidConfigRows = [
+  {
+    reported: "claude-plugins.json",
+    files: {
+      "claude-plugins.json": "{",
+    },
+  },
+  {
+    reported: "claude-plugins.local.json",
+    files: {
+      "claude-plugins.json": configBytes("mp", "acme/tools", []),
+      "claude-plugins.local.json": "{",
+    },
+  },
+] satisfies readonly {
+  readonly reported: string;
+  readonly files: Readonly<Record<string, string>>;
+}[];
+
+for (const { reported, files } of invalidConfigRows) {
+  test(`CFG-03: a malformed ${reported} reports its basename as a failed block and plans nothing for that scope`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "invalid-config");
+    await writeUnder(
+      project.stateJsonPath,
+      stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+        { name: "p1", skills: ["mp-p1-tool"] },
+      ]),
     );
+    for (const [name, bytes] of Object.entries(files)) {
+      await writeUnder(path.join(project.scopeRoot, name), bytes);
+    }
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+
+    // act
+    await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ ${reported} [project] (failed) {invalid manifest}`,
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
   });
+}
+
+// A `loadState` throw is contained as a structured failed block rather than
+// escaping the command with no output at all. The two rows separate the
+// classifier's arms: a parse failure carries a SyntaxError cause and reports
+// `unparseable`; every other load failure delegates to the shared probe ladder,
+// which reports `unreadable` for a wrapper error that carries no errno code.
+const stateLoadFailureRows = [
+  { condition: "an unparseable state.json", bytes: "{", reason: "unparseable" },
+  {
+    condition: "a state.json declaring an unsupported schema version",
+    bytes: JSON.stringify({ schemaVersion: 99, marketplaces: {} }, null, 2),
+    reason: "unreadable",
+  },
+] satisfies readonly {
+  readonly condition: string;
+  readonly bytes: string;
+  readonly reason: string;
+}[];
+
+for (const { condition, bytes, reason } of stateLoadFailureRows) {
+  test(`WR-04: ${condition} is contained as a failed block reporting {${reason}}`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "state-load-failure");
+    await writeUnder(project.configJsonPath, configBytes("mp", "acme/tools", []));
+    await writeUnder(project.stateJsonPath, bytes);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+
+    // act
+    await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ state.json [project] (failed) {${reason}}`,
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+  });
+}
+
+test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name rather than trailing them", async (t) => {
+  // arrange
+  const { cwd, project, user } = await createHermeticScopes(t, "mixed-order");
+  await writeUnder(project.configJsonPath, "{");
+  await writeUnder(
+    user.configJsonPath,
+    configBytes("zzz-mp", "acme/z", [{ key: "pp@zzz-mp", enabled: true }]),
+  );
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+
+  // act
+  await pendingReconcile({ ctx, pi, cwd });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n" +
+        "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n\n" +
+        "● zzz-mp [user]\n  ● pp (will install)",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("MIG-01: an absent base configuration plans against the state projection instead of an empty desired state", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "premigration");
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+      { name: "p1", skills: ["mp-p1-tool"] },
+    ]),
+  );
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+
+  // act
+  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "Pending: next reload will apply 0 actions." },
+  ]);
+  verifyBoundary();
+});
+
+test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes the base configuration file", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "premigration-readonly");
+  const recordedState = stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+    { name: "p1", skills: ["mp-p1-tool"] },
+  ]);
+  await writeUnder(project.stateJsonPath, recordedState);
+  const expectedNotification = { message: "Pending: next reload will apply 0 actions." };
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
+
+  // act
+  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [expectedNotification, expectedNotification]);
+  assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+    "pi-claude-marketplace/",
+    "pi-claude-marketplace/state.json",
+  ]);
+  assert.strictEqual(await readFile(project.stateJsonPath, "utf8"), recordedState);
+  verifyBoundary();
+});
+
+test("MIG-01: a local-only marketplace merges over the state projection and adds no uninstalls", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "premigration-local");
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+      { name: "p1", skills: ["mp-p1-tool"] },
+    ]),
+  );
+  await writeUnder(project.configLocalJsonPath, configBytes("zzz-extra", "acme/extra", []));
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+
+  // act
+  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "Pending: next reload will apply 0 actions." },
+  ]);
+  verifyBoundary();
 });
 
 /**
- * FSTAT-06 / D-66-04: stage a project scope where marketplace `mp-github` is
- * RECORDED (its clone is on disk with a real manifest) but plugin `cr` is
- * DECLARED+enabled and NOT yet installed -- so the planner emits a
- * `pluginsToInstall`. The on-disk `cr` plugin root carries a `.lsp.json`
- * (lspServers) when `degrade` is true, which resolveStrict resolves
- * `unsupported` -> the install would degrade -> `(will partially install)`. With
- * `degrade` false the root is clean -> `installable` -> plain `(will install)`.
+ * FSTAT-06 / D-66-04: stage a project scope whose marketplace `mp-github` is
+ * RECORDED with a clone on disk, and whose plugin `cr` is DECLARED and enabled
+ * but not yet recorded, so the planner emits one install. A `.lsp.json` in the
+ * plugin root is a component kind the resolver cannot support, so the
+ * no-network candidate resolve degrades and the row takes the partial modifier.
  */
-async function stageForceInstallScenario(cwd: string, degrade: boolean): Promise<void> {
-  const projectScopeRoot = path.join(cwd, ".pi");
-  const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
-  const marketplaceRoot = path.join(extensionRoot, "marketplaces", "mp-github");
+async function stagePlannedInstall(
+  cwd: string,
+  locations: ScopedLocations,
+  options: { readonly degrade: boolean },
+): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
+  const marketplaceRoot = path.join(locations.extensionRoot, "marketplaces", "mp-github");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
-  if (degrade) {
-    // lspServers is an unsupported component kind -> resolveStrict yields
-    // `unsupported` (no structural defect).
-    await writeFile(path.join(marketplaceRoot, "cr", ".lsp.json"), "{}", "utf8");
+  if (options.degrade) {
+    await writeUnder(path.join(marketplaceRoot, "cr", ".lsp.json"), "{}");
   }
 
-  await writeFile(
+  await writeUnder(
     manifestPath,
     JSON.stringify({
       name: "mp-github",
       plugins: [{ name: "cr", source: "./cr", version: "1.0.0" }],
     }),
-    "utf8",
   );
-
-  // Recorded marketplace, NO recorded plugin -> `cr` is a planned install.
-  await writeFile(
-    path.join(extensionRoot, "state.json"),
+  await writeUnder(
+    locations.stateJsonPath,
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         "mp-github": {
           name: "mp-github",
@@ -531,239 +496,91 @@ async function stageForceInstallScenario(cwd: string, degrade: boolean): Promise
         },
       },
     }),
-    "utf8",
   );
-
-  // Declared+enabled `cr@mp-github`; marketplace source matches the record so
-  // the planner produces an install (not a source mismatch).
-  await writeFile(
-    path.join(projectScopeRoot, "claude-plugins.json"),
-    JSON.stringify({
-      schemaVersion: 1,
-      marketplaces: { "mp-github": { source: "acme/tools" } },
-      plugins: { "cr@mp-github": { enabled: true } },
-    }),
-    "utf8",
+  await writeUnder(
+    locations.configJsonPath,
+    configBytes("mp-github", "acme/tools", [{ key: "cr@mp-github", enabled: true }]),
   );
+  return { marketplaceRoot, manifestPath };
 }
 
-test("FSTAT-06: a planned install whose candidate resolves unsupported renders (will partially install) through the pending surface", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    await stageForceInstallScenario(cwd, true);
+// FSTAT-06: the pending preview resolves a planned install against the recorded
+// marketplace's cached manifest, no-network. Only a candidate that both resolves
+// and degrades takes the partial modifier; every way of failing to locate or
+// resolve one leaves the plain token, because the preview must not assert a
+// degrade it could not establish. D-66-05: no will-update analog exists.
+const plannedInstallRows = [
+  {
+    condition: "a candidate that resolves with an unsupported component kind",
+    stage: async (cwd: string, locations: ScopedLocations): Promise<void> => {
+      await stagePlannedInstall(cwd, locations, { degrade: true });
+    },
+    rendered: "● cr (will partially install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will partially install)",
+  },
+  {
+    condition: "a candidate that resolves cleanly",
+    stage: async (cwd: string, locations: ScopedLocations): Promise<void> => {
+      await stagePlannedInstall(cwd, locations, { degrade: false });
+    },
+    rendered: "● cr (will install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)",
+  },
+  {
+    condition: "a marketplace that is declared but not recorded",
+    stage: async (_cwd: string, locations: ScopedLocations): Promise<void> => {
+      await writeUnder(
+        locations.configJsonPath,
+        configBytes("newmp", "acme/new", [{ key: "pp@newmp", enabled: true }]),
+      );
+    },
+    rendered: "● pp (will install)",
+    expectedMessage: "● newmp [project]\n  ● pp (will install)",
+  },
+  {
+    condition: "a recorded manifest that does not parse",
+    stage: async (cwd: string, locations: ScopedLocations): Promise<void> => {
+      const { manifestPath } = await stagePlannedInstall(cwd, locations, { degrade: true });
+      await writeFile(manifestPath, "{ not valid json at all", "utf8");
+    },
+    rendered: "● cr (will install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)",
+  },
+  {
+    condition: "a recorded manifest that omits the planned plugin",
+    stage: async (cwd: string, locations: ScopedLocations): Promise<void> => {
+      const { manifestPath } = await stagePlannedInstall(cwd, locations, { degrade: true });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp-github",
+          plugins: [{ name: "other", source: "./other", version: "1.0.0" }],
+        }),
+        "utf8",
+      );
+    },
+    rendered: "● cr (will install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)",
+  },
+] satisfies readonly {
+  readonly condition: string;
+  readonly stage: (cwd: string, locations: ScopedLocations) => Promise<void>;
+  readonly rendered: string;
+  readonly expectedMessage: string;
+}[];
 
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
+for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows) {
+  test(`FSTAT-06: a planned install with ${condition} renders "${rendered}"`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "planned-install");
+    await stage(cwd, project);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
 
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.ok(
-      emitted.includes("(will partially install)"),
-      "expected the degrading planned install to render (will partially install); got:\n" + emitted,
-    );
-    assert.ok(emitted.includes("cr"), "expected the cr plugin row; got:\n" + emitted);
-    // D-66-05: no will-force-update analog is ever produced.
-    assert.ok(
-      !emitted.includes("will force update") && !emitted.includes("will update"),
-      "the reconcile pending surface must never render a will-(force-)update row; got:\n" + emitted,
-    );
+    // act
+    await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    verifyBoundary();
   });
-});
-
-test("FSTAT-06: a planned install whose candidate resolves installable renders plain (will install)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    await stageForceInstallScenario(cwd, false);
-
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.ok(
-      emitted.includes("(will install)"),
-      "expected the clean planned install to render (will install); got:\n" + emitted,
-    );
-    assert.ok(
-      !emitted.includes("(will partially install)"),
-      "an installable candidate must NOT render the force modifier; got:\n" + emitted,
-    );
-  });
-});
-
-// FSTAT-06 fallback: a planned install whose marketplace is DECLARED-but-not-
-// RECORDED (no state.json entry) has no cached clone to resolve against, so
-// `locateCandidate` finds no `recordedMarketplaces` entry (record === undefined)
-// and the row stays a plain `(will install)` -- the preview cannot truthfully
-// assert a degrade it cannot resolve.
-test("FSTAT-06 fallback: an install under a declared-but-not-recorded marketplace renders plain (will install)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Config declares `newmp` + `pp@newmp`, but there is NO state.json -> the
-    // marketplace is not recorded, so no cached manifest to resolve the candidate.
-    const projectScopeRoot = path.join(cwd, ".pi");
-    await mkdir(projectScopeRoot, { recursive: true });
-    await writeFile(
-      path.join(projectScopeRoot, "claude-plugins.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        marketplaces: { newmp: { source: "acme/new" } },
-        plugins: { "pp@newmp": { enabled: true } },
-      }),
-      "utf8",
-    );
-
-    const ctx = makeCtx(cwd);
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.ok(emitted.includes("pp"), "expected the pp plugin row; got:\n" + emitted);
-    assert.ok(
-      emitted.includes("(will install)"),
-      "an unresolvable candidate must render plain (will install); got:\n" + emitted,
-    );
-    assert.ok(
-      !emitted.includes("(will partially install)"),
-      "an unrecorded marketplace must NOT render the force modifier; got:\n" + emitted,
-    );
-  });
-});
-
-// FSTAT-06 fallback: a RECORDED marketplace whose cached manifest is corrupt.
-// `locateCandidate` calls loadMarketplaceManifest, which THROWS on unparseable
-// JSON; `resolvePendingForceInstalls` catches the throw and degrades the row to
-// a plain `(will install)`. The read-only pending surface must never let the
-// throw escape (IL-2 single-notify discipline).
-test("FSTAT-06 fallback: a corrupt recorded manifest degrades the force preview to plain (will install), no throw", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Stage the degrading scenario (cr resolves unsupported -> would be
-    // `(will partially install)`), then corrupt the recorded manifest so the
-    // force-preview resolve throws and is caught.
-    await stageForceInstallScenario(cwd, true);
-    const manifestPath = path.join(
-      cwd,
-      ".pi",
-      "pi-claude-marketplace",
-      "marketplaces",
-      "mp-github",
-      ".claude-plugin",
-      "marketplace.json",
-    );
-    await writeFile(manifestPath, "{ not valid json at all", "utf8");
-
-    const ctx = makeCtx(cwd);
-    // Must NOT throw despite the corrupt manifest.
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.ok(emitted.includes("cr"), "expected the cr plugin row; got:\n" + emitted);
-    assert.ok(
-      emitted.includes("(will install)"),
-      "a caught force-preview throw must degrade to plain (will install); got:\n" + emitted,
-    );
-    assert.ok(
-      !emitted.includes("(will partially install)"),
-      "a caught force-preview throw must NOT render the force modifier; got:\n" + emitted,
-    );
-  });
-});
-
-// FSTAT-06 fallback: a RECORDED marketplace whose cached manifest is VALID but
-// does NOT list the planned plugin. `locateCandidate` loads the manifest
-// successfully, then `manifest.plugins.find` returns undefined
-// (manifestEntry === undefined) -> no candidate -> plain `(will install)`.
-// This is the distinct twin of the `record === undefined` (unrecorded
-// marketplace) fallback above: here the marketplace IS recorded and the
-// manifest IS readable, but the plugin name is absent from it.
-test("FSTAT-06 fallback: a recorded manifest that omits the planned plugin renders plain (will install), no throw", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const projectScopeRoot = path.join(cwd, ".pi");
-    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
-    const marketplaceRoot = path.join(extensionRoot, "marketplaces", "mp-github");
-    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-    await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
-
-    // Valid manifest that lists a DIFFERENT plugin -- the planned `ghost`
-    // install has no manifest entry to resolve its force preview against.
-    await writeFile(
-      manifestPath,
-      JSON.stringify({
-        name: "mp-github",
-        plugins: [{ name: "other", source: "./other", version: "1.0.0" }],
-      }),
-      "utf8",
-    );
-
-    // Recorded marketplace, NO recorded plugin -> `ghost` is a planned install.
-    await writeFile(
-      path.join(extensionRoot, "state.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        marketplaces: {
-          "mp-github": {
-            name: "mp-github",
-            scope: "project",
-            source: "acme/tools",
-            addedFromCwd: cwd,
-            manifestPath,
-            marketplaceRoot,
-            plugins: {},
-          },
-        },
-      }),
-      "utf8",
-    );
-
-    // Declared+enabled `ghost@mp-github`; the marketplace source matches the
-    // record so the planner produces an install (not a source mismatch).
-    await writeFile(
-      path.join(projectScopeRoot, "claude-plugins.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        marketplaces: { "mp-github": { source: "acme/tools" } },
-        plugins: { "ghost@mp-github": { enabled: true } },
-      }),
-      "utf8",
-    );
-
-    const ctx = makeCtx(cwd);
-    // Must NOT throw despite the manifest omitting the plugin.
-    await pendingReconcile({
-      ctx: ctx as unknown as ExtensionContext,
-      pi: STUB_PI,
-      cwd,
-      scope: "project",
-    });
-
-    assert.equal(ctx.ui.notify.mock.calls.length, 1);
-    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.ok(emitted.includes("ghost"), "expected the ghost plugin row; got:\n" + emitted);
-    assert.ok(
-      emitted.includes("(will install)"),
-      "a manifest that omits the plugin must render plain (will install); got:\n" + emitted,
-    );
-    assert.ok(
-      !emitted.includes("(will partially install)"),
-      "a missing manifest entry must NOT render the force modifier; got:\n" + emitted,
-    );
-  });
-});
+}

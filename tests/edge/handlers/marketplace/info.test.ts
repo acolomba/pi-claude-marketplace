@@ -1,150 +1,285 @@
-// marketplace info handler shim tests.
+// Owner for edge/handlers/marketplace/info.ts (MOD-09).
 //
-// Mirrors the structure of `tests/edge/handlers/marketplace/list.test.ts`
-// and `remove.test.ts`. The shim parses one required positional + the
-// optional `--scope` filter and delegates to `getMarketplaceInfo`. With
-// an empty hermetic state, the orchestrator's INFO-04 `{marketplace not added}`
-// carve-out surfaces (the orchestrator's responsibility -- the shim is
-// "thin" and only enforces argv shape).
+// The module is one factory returning the shared single-name marketplace
+// handler, so its whole promise is three things: the usage block it supplies,
+// the delegate it supplies, and the Pi handle it forwards. The parse itself,
+// the collapse of the duplicated usage block, the surplus-token drop, and the
+// options-bag shape belong to `tests/edge/handlers/marketplace/shared.test.ts`,
+// which drives `makeSingleNameMarketplaceHandler` with an injected collaborator
+// (D-116-07). Nothing here restates that mechanism; what is asserted is WHICH
+// constant and WHICH workflow this factory wires into it, observed end to end.
 //
-// Also asserts the router-constant wiring (MARKETPLACE_SUBCOMMANDS +
-// MARKETPLACE_USAGE) here because there is no dedicated router test
-// file in the existing layout.
+// D-116-05 (O3) places this handler in Group C: `getMarketplaceInfo` is reached
+// by direct import at the factory call site with no injection point, so a
+// delegating case cannot state an exact argument list against it. Delegation is
+// observed instead as one minimal effect -- the emitted row naming the seeded
+// marketplace and the scope bracket it carries. That exact-argument gap is this
+// owner's recorded scope, and the negative half of D-116-06 is proven in full.
+//
+// A rejecting case sizes the boundary at one emission, zero probes, and leaves
+// the working directory UNSTATED. `getMarketplaceInfo` reads `opts.cwd` inside
+// its scope fan-out before it can emit anything, so a workflow that ran would
+// carry strong-mock's pending-call proxy into that read and fail there. A
+// delegating case states one emission, two tool probes (one soft-dependency
+// probe reading twice), and one working-directory read -- all four counts
+// measured against the real module through a counting proxy before this file
+// was written.
+//
+// Every case also installs a fail-fast replacement of `https.request`, the door
+// the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT, and the
+// replacement is NOT an offline proof: the import closure of
+// `edge/handlers/marketplace/info.ts` reaches no HTTP client at all -- neither
+// `platform/git.ts` nor `isomorphic-git` nor `node:https` -- so a zero here
+// could not rise whatever this surface did. What it is, is a hermeticity
+// device: a dial-out this path acquires later fails the case where it happens
+// instead of passing silently. That is the half of NFR-5 the architecture suite
+// cannot cover here, since it names orchestrator files only. See
+// `installNetworkTrap`.
+//
+// Three marketplaces are seeded in every case, rejecting ones included, so a
+// workflow that did run would have records to report. `beta` exists in the user
+// scope alone and is never named by any expectation; a lookup that widened past
+// the first positional would surface it.
+//
+// No exhaustiveness claim: marketplace/info.ts holds no switch and no
+// closed-union dispatch, so a missing-arm plant has no target here. No case
+// asserts the absence of direct process output (ESLint and fallow own that),
+// and none re-derives the info workflow's own row grammar, which
+// tests/orchestrators/marketplace/info.test.ts owns.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
+import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { makeMarketplaceInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts";
-import {
-  MARKETPLACE_SUBCOMMANDS,
-  MARKETPLACE_USAGE,
-} from "../../../../extensions/pi-claude-marketplace/edge/router.ts";
+import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createNotificationBoundary } from "../../notification-boundary.ts";
+import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+/** The usage block this shim supplies, written out rather than read back. */
+const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
+
+/** The row the project-scope record renders as. */
+const PROJECT_ALPHA_ROW = "● alpha [project] <no autoupdate>\npath: /repo/path/alpha";
+
+/** The row the user-scope record renders as. */
+const USER_ALPHA_ROW = "● alpha [user] <no autoupdate>\npath: /home/user/marketplaces/alpha";
+
+interface HermeticWorkspace {
+  /** The project working directory the handler forwards as `ctx.cwd`. */
+  readonly cwd: string;
 }
 
-function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  const ctx = {
-    cwd,
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-  } as unknown as ExtensionCommandContext;
-  return { ctx, notifications };
+/**
+ * Replace the door the git transport opens with a fail-fast throw owned by the
+ * test context, which restores it after the case.
+ *
+ * A HERMETICITY DEVICE, not an offline proof: nothing in this handler's import
+ * closure can open a connection, so no count asserted against it could ever
+ * rise, and none is. The value is that a dial-out acquired later fails the case
+ * where it happens.
+ *
+ * The door is `https.request` because that is the one the git transport opens:
+ * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
+ * `https.request`. `globalThis.fetch` is NOT watched -- its only production
+ * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * which this closure does not reach.
+ */
+function installNetworkTrap(t: TestContext): void {
+  t.mock.method(https, "request", (): never => {
+    throw new Error("the marketplace info surface must not open a network connection");
+  });
 }
 
-function makePi(): ExtensionAPI {
-  return { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-}
-
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-info-shim-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-info-shim-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
+/**
+ * One temporary working directory and one temporary home per case, with the
+ * agent-directory variable cleared: `getAgentDir()` reads it before `homedir()`,
+ * so an ambient value would defeat a hermetic `HOME` (SC-1). Removal, both
+ * environment restores, and the transport replacement are all registered before
+ * the handler runs.
+ */
+async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
+  const cwd = await mkdtemp(path.join(tmpdir(), `mp-info-${label}-cwd-`));
+  const home = await mkdtemp(path.join(tmpdir(), `mp-info-${label}-home-`));
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  const previousHome = process.env.HOME;
+  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  t.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
     } else {
-      process.env.HOME = originalHome;
+      delete process.env.HOME;
     }
 
-    await rm(home, { recursive: true, force: true });
+    if (agentDirExisted) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+
     await rm(cwd, { recursive: true, force: true });
-  }
+    await rm(home, { recursive: true, force: true });
+  });
+  process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
+  installNetworkTrap(t);
+  return { cwd };
 }
 
-test("shim :: missing name positional emits USAGE via notifyUsageError", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeMarketplaceInfoHandler(makePi());
-    await handler("", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /Usage: \/claude:plugin marketplace info <name>/);
+/**
+ * Persist one path-source marketplace record plus the manifest the info
+ * projection reads. `marketplaceRoot` is a literal this file chose so the
+ * rendered `path:` line stays hand-authored; only the manifest has to exist.
+ */
+async function seedMarketplace(
+  cwd: string,
+  scope: Scope,
+  name: string,
+  marketplaceRoot: string,
+): Promise<void> {
+  const locations = locationsFor(scope, cwd);
+  const manifestPath = path.join(locations.extensionRoot, `${name}.json`);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(manifestPath, JSON.stringify({ name, plugins: [] }), "utf8");
+  await mergeMarketplaceIntoState(locations.extensionRoot, name, {
+    addedFromCwd: cwd,
+    manifestPath,
+    marketplaceRoot,
+    name,
+    plugins: {},
+    scope,
+    source: pathSource(marketplaceRoot),
   });
-});
+}
 
-test("shim :: `info my-mp` delegates with scope: undefined; absent-from-both -> bare {marketplace not added} row (no [scope] bracket)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeMarketplaceInfoHandler(makePi());
-    await handler("my-mp", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ my-mp (failed) {marketplace not added}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
+/**
+ * `alpha` in both scopes so a scope selection is visible as which rows survive,
+ * and `beta` in the user scope alone as a marketplace no expectation names.
+ */
+async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
+  await seedMarketplace(workspace.cwd, "project", "alpha", "/repo/path/alpha");
+  await seedMarketplace(workspace.cwd, "user", "alpha", "/home/user/marketplaces/alpha");
+  await seedMarketplace(workspace.cwd, "user", "beta", "/home/user/marketplaces/beta");
+}
+
+for (const { expectedMessage, flags, selection } of [
+  {
+    expectedMessage: `${PROJECT_ALPHA_ROW}\n\n${USER_ALPHA_ROW}`,
+    flags: "",
+    selection: "both scopes when no scope flag is supplied",
+  },
+  {
+    expectedMessage: PROJECT_ALPHA_ROW,
+    flags: " --scope project",
+    selection: "the project scope alone",
+  },
+  {
+    expectedMessage: USER_ALPHA_ROW,
+    flags: " --scope user",
+    selection: "the user scope alone",
+  },
+]) {
+  test(`reaches the info workflow, which reports ${selection}`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "delegates");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      reads: 1,
+      value: workspace.cwd,
+    });
+    const infoHandler = makeMarketplaceInfoHandler(pi);
+
+    // act
+    await infoHandler(`alpha${flags}`, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    verifyBoundary();
   });
+}
+
+test("supplies the info usage block, shown when the name positional is missing", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "missing-name");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const infoHandler = makeMarketplaceInfoHandler(pi);
+
+  // act
+  await infoHandler("", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: `Missing required argument.\n\n${INFO_USAGE}`, severity: "error" },
+  ]);
+  verifyBoundary();
 });
 
-test("shim :: `info my-mp --scope user` delegates with scope: 'user'; absent -> `⊘ my-mp [user] (failed) {marketplace not added}` + error", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeMarketplaceInfoHandler(makePi());
-    await handler("my-mp --scope user", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {marketplace not added}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
+test("supplies the info usage block beside a parse diagnostic the parser reports verbatim", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "invalid-scope");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const infoHandler = makeMarketplaceInfoHandler(pi);
+
+  // act
+  await infoHandler("alpha --scope bogus", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: `Invalid --scope value: "bogus". Must be "user" or "project".\n\n${INFO_USAGE}`,
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("queries the first positional alone, so a surplus token reaches no second lookup", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "surplus");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    reads: 1,
+    value: workspace.cwd,
   });
+  const infoHandler = makeMarketplaceInfoHandler(pi);
+
+  // act
+  await infoHandler("alpha beta", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: `${PROJECT_ALPHA_ROW}\n\n${USER_ALPHA_ROW}` }]);
+  verifyBoundary();
 });
 
-test("shim :: `info my-mp --scope project` delegates with scope: 'project'; absent -> `⊘ my-mp [project] (failed) {marketplace not added}` + error", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeMarketplaceInfoHandler(makePi());
-    await handler("my-mp --scope project", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {marketplace not added}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
+test("treats the scope-target flag as the name positional rather than a scope selector", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "scope-target");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    reads: 1,
+    value: workspace.cwd,
   });
-});
+  const infoHandler = makeMarketplaceInfoHandler(pi);
 
-test("shim :: bad --scope value routes through notifyUsageError (orchestrator NOT invoked)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx(cwd);
-    const handler = makeMarketplaceInfoHandler(makePi());
-    await handler("my-mp --scope bogus", ctx);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    // The argv parser rejects the bogus scope before the orchestrator
-    // runs; the body carries the Usage block (notifyUsageError shape).
-    assert.match(notifications[0]!.message, /Usage: \/claude:plugin marketplace info <name>/);
-    // The orchestrator's `{marketplace not added}` byte form does not appear because
-    // it never ran.
-    assert.ok(
-      !notifications[0]!.message.includes("marketplace not added"),
-      "the orchestrator must not have been invoked",
-    );
-  });
-});
+  // act
+  await infoHandler("--scope project --local", ctx);
 
-test("router :: MARKETPLACE_SUBCOMMANDS includes `info`", () => {
-  assert.ok(
-    (MARKETPLACE_SUBCOMMANDS as readonly string[]).includes("info"),
-    `MARKETPLACE_SUBCOMMANDS missing "info" -- got ${MARKETPLACE_SUBCOMMANDS.join(", ")}`,
-  );
-});
-
-test("router :: MARKETPLACE_USAGE contains the `info <name>` usage line", () => {
-  assert.match(MARKETPLACE_USAGE, /info <name> \[--scope user\|project\]/);
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n⊘ --local [project] (failed) {marketplace not added}",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
 });

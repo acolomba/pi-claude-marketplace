@@ -28,6 +28,41 @@ wave, or task produced the code. Git history owns process history.
   planning-artifact clause above.
 - Any other phrasing whose only purpose is to record which planning artifact
   authored the line.
+- Narration of code that no longer exists. A comment describes the code as it
+  stands, not the shape it replaced. Git history owns the diff, so drop
+  `the former X`, `X used to ...`, `X no longer ...`, `Pre-fix, X ...`,
+  `replacing the former X`, `byte-identical to the former X`, and
+  `superseding the former X`.
+
+  Where the removed shape carried the rationale, restate the rationale as a
+  present-tense fact about the current code. A claim of the form "this is
+  byte-identical to what came before" is not a fact about the current code at
+  all -- the gate that pins the bytes is, so name the gate or say nothing.
+
+Forbidden -> Allowed:
+
+```text
+// The D-03 stamps map `failed` rows to `error`, exactly the rows the former
+// status-based counter matched, so the count is byte-identical.
+```
+
+becomes
+
+```text
+// The D-03 stamps map `failed` rows to `error`.
+```
+
+```text
+// ATTR-09: the former `"not in manifest"` lied that the plugin was gone from
+// the manifest; `"source mismatch"` is the truthful existing member.
+```
+
+becomes
+
+```text
+// ATTR-09: a content/ownership mismatch is not a manifest absence, so the
+// truthful member is `"source mismatch"` and not `"not in manifest"`.
+```
 
 ## Allowed (and encouraged) as traceability anchors
 

@@ -1,62 +1,148 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import lockfile from "proper-lockfile";
+import { It, mock, verify, when } from "strong-mock";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { setMarketplaceAutoupdate } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
-import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import {
-  loadState,
-  saveState,
-} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-interface NotifyRecord {
-  message: string;
-  severity?: string;
+interface ExactNotification {
+  readonly message: string;
+  readonly severity?: "error" | "info" | "warning";
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
-  const notifications: NotifyRecord[] = [];
-  // `pi` required on AutoupdateOptions; mirror production
-  // wiring shape (D-18-06). `pi` is actively
-  // consumed by the orchestrator to drive notify()'s soft-dep probe
-  // (D-16-14); the stub still satisfies the ExtensionAPI surface.
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-  const ctx = {
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-    pi,
-  } as unknown as ExtensionContext;
-  return { ctx, pi, notifications };
+interface MatchedNotification {
+  readonly matches: (message: string) => boolean;
+  readonly severity: "error" | "info" | "warning";
+}
+
+type NotificationExpectation = ExactNotification | MatchedNotification;
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
+function notificationBoundary(expectation: NotificationExpectation): {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly ui: ExtensionContext["ui"];
+} {
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .twice();
+  if ("message" in expectation) {
+    if (expectation.severity === undefined) {
+      when(() => {
+        ui.notify(expectation.message);
+      }).thenReturn(undefined);
+    } else {
+      when(() => {
+        ui.notify(expectation.message, expectation.severity);
+      }).thenReturn(undefined);
+    }
+  } else {
+    when(() => {
+      ui.notify(It.matches(expectation.matches), expectation.severity);
+    }).thenReturn(undefined);
+  }
+
+  return { ctx, pi, ui };
+}
+
+function marketplaceRecord(
+  name: string,
+  scope: "project" | "user",
+  cwd: string,
+  source: MarketplaceRecord["source"] = pathSource("./src"),
+  plugins: Readonly<Record<string, PluginInstallRecord>> = {},
+): MarketplaceRecord {
+  return {
+    addedFromCwd: cwd,
+    manifestPath: path.join(cwd, `${name}.marketplace.json`),
+    marketplaceRoot: path.join(cwd, `${name}-root`),
+    name,
+    plugins,
+    scope,
+    source,
+  };
+}
+
+async function saveMarketplaces(
+  locations: ScopedLocations,
+  records: readonly MarketplaceRecord[],
+): Promise<void> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: Object.fromEntries(records.map((record) => [record.name, record])),
+  });
+}
+
+async function writeConfig(
+  locations: ScopedLocations,
+  config: ScopeConfig,
+  local = false,
+): Promise<void> {
+  await saveConfig(
+    local ? locations.configLocalJsonPath : locations.configJsonPath,
+    config,
+    locations.scopeRoot,
+  );
+}
+
+async function readOptionalBytes(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function configSnapshot(filePath: string): Promise<{
+  readonly bytes: string;
+  readonly inode: bigint;
+  readonly mtimeNs: bigint;
+}> {
+  const [bytes, metadata] = await Promise.all([
+    readFile(filePath, "utf8"),
+    stat(filePath, { bigint: true }),
+  ]);
+  return { bytes, inode: metadata.ino, mtimeNs: metadata.mtimeNs };
 }
 
 async function withHermeticHome<T>(
-  fn: (env: { home: string; cwd: string }) => Promise<T>,
+  fn: (environment: { readonly cwd: string; readonly home: string }) => Promise<T>,
 ): Promise<T> {
   const originalHome = process.env.HOME;
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-au-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-au-cwd-"));
+  const home = await mkdtemp(path.join(tmpdir(), "mp-autoupdate-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "mp-autoupdate-cwd-"));
   process.env.HOME = home;
-  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
-  // to homedir(). Clear it so the hermetic HOME above actually governs the
-  // user scope -- otherwise a developer/CI env that sets the variable would
-  // make these tests read AND write the real Pi agent dir.
   delete process.env.PI_CODING_AGENT_DIR;
   try {
-    return await fn({ home, cwd });
+    return await fn({ cwd, home });
   } finally {
     if (originalHome === undefined) {
       delete process.env.HOME;
@@ -70,584 +156,409 @@ async function withHermeticHome<T>(
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
-    // A best-effort migration persist (write-file-atomic, fired off by
-    // loadState without await) may still be renaming state.json.<rand> into
-    // place when teardown runs; retry removal so the transient tmp entry does
-    // not yield ENOTEMPTY on macOS.
     await rm(home, { recursive: true, force: true, maxRetries: 10 });
     await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
   }
 }
 
-// SPLIT-01: autoupdate is carved out of MARKETPLACE_RECORD_SCHEMA and the
-// write-back lives in `claude-plugins.json` (CFG-02). After a flip, read
-// the post-flip value from the config file, not from state.json (D-13
-// ORDERING RAIL scrubs the legacy field on the next loadState once the
-// config file exists).
-function recordAutoupdate(
-  rec: ExtensionState["marketplaces"][string] | undefined,
-): boolean | undefined {
-  return (rec as unknown as Record<string, unknown> | undefined)?.autoupdate as boolean | undefined;
-}
-
-/** Read the post-flip `autoupdate` for a marketplace from `claude-plugins.json`. */
-async function configAutoupdate(
-  locations: ScopedLocations,
-  name: string,
-): Promise<boolean | undefined> {
-  const cfg = await loadConfig(locations.configJsonPath);
-  if (cfg.status !== "valid") {
-    return undefined;
-  }
-
-  return cfg.config.marketplaces?.[name]?.autoupdate;
-}
-
-function makeMarketplaceRecord(
-  name: string,
-  scope: "user" | "project",
-  cwd: string,
-  autoupdate?: boolean,
-): ExtensionState["marketplaces"][string] {
-  const base: ExtensionState["marketplaces"][string] = {
-    name,
-    scope,
-    source: pathSource("./src"),
-    addedFromCwd: cwd,
-    manifestPath: path.join(cwd, "marketplace.json"),
-    marketplaceRoot: cwd,
-    plugins: {},
-  };
-
-  // SPLIT-01: write autoupdate via cast (carved out of MARKETPLACE_RECORD_SCHEMA).
-  if (autoupdate !== undefined) {
-    (base as Record<string, unknown>).autoupdate = autoupdate;
-  }
-
-  return base;
-}
-
-test("MAU-1 / UXG-04: enable=true on a single marketplace flips false->true and emits V2 `<autoupdate>` marker with NO reload-hint trailer (SNM-33 / D-22-03)", async () => {
+test("enables one project marketplace in the base config without rewriting state", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
-    });
-
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-
-    // post-flip `autoupdate` lives in `claude-plugins.json`.
-    assert.equal(await configAutoupdate(locations, "mp"), true);
-    assert.equal(notifications.length, 1);
-    // SNM-33 / D-22-03: a fresh autoupdate flip mutates a marketplace record,
-    // not a Pi-visible resource, so NO `/reload` trailer.
-    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
-    // D-18-05 severity ladder: fresh autoupdate enable -> info (no 2nd arg).
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("MAU-1 / UXG-04: enable=false flips true->false and emits V2 `<no autoupdate>` off-marker with NO reload-hint trailer (SNM-33 / D-22-03)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, true) },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(await configAutoupdate(locations, "mp"), false);
-    // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
-    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate>");
-    // D-18-05 severity ladder: fresh autoupdate disable -> info (no 2nd arg).
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoupdate> {already autoupdate}` at severity info (benign per UXG-02 / D-28-07)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, true) },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-    const after = await loadState(locations.extensionRoot);
-    assert.equal(recordAutoupdate(after.marketplaces["mp"]), true);
-    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already autoupdate}");
-    // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
-    // `already autoupdate` is in IDEMPOTENT_REASONS -> info (no severity arg).
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("MAU-3 / UXG-04: idempotent -- already-false + enable=false emits V2 `<no autoupdate> {already no autoupdate}` at severity info (benign per UXG-02 / D-28-07)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [project] <no autoupdate> {already no autoupdate}",
-    );
-    // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
-    // `already no autoupdate` is in IDEMPOTENT_REASONS -> info (no severity arg).
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("MAU-4: missing autoupdate field treated as false; enable=true flips it to true (V2 `<autoupdate>` marker)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    // No autoupdate field -- treated as false per MAU-4.
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd) },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-    // post-flip `autoupdate` lives in `claude-plugins.json`.
-    assert.equal(await configAutoupdate(locations, "mp"), true);
-    // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
-    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
-    // D-18-05 severity ladder: fresh enable -> info.
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("MAU-4: missing autoupdate field treated as false; enable=false reports V2 `<no autoupdate> {already no autoupdate}` idempotently", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd) },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [project] <no autoupdate> {already no autoupdate}",
-    );
-    // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
-    // `already no autoupdate` is in IDEMPOTENT_REASONS -> info (no severity arg).
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notify() emits both rows separated by blank line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    // Two marketplaces: one already true, one false.
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        already: makeMarketplaceRecord("already", "project", cwd, true),
-        "to-flip": makeMarketplaceRecord("to-flip", "project", cwd, false),
-      },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, enable: true, scope: "project", cwd });
-
-    // Only the FRESH flip (to-flip) writes back to
-    // the config; the idempotent `already` row is byte-stable. Both end up
-    // resolved as `autoupdate: true` via the merged config (state still
-    // carries the seeded `already.autoupdate=true` unscrubbed because the
-    // config write touched only the flipped row, and the test's loadState
-    // scrubs only when the config file exists -- it does, so we read from
-    // the config-side source of truth).
-    assert.equal(await configAutoupdate(locations, "to-flip"), true);
-
-    // Catalog forms: one notification carries both rows.
-    // D-16-06: caller-order honored (no alphabetic sort at the
-    // orchestrator). The orchestrator's accumulator pushes
-    // `result.changed[]` rows BEFORE `result.unchanged[]` rows (see
-    // setMarketplaceAutoupdate's per-scope loop), so the changed
-    // marketplace ("to-flip") precedes the unchanged one ("already")
-    // in the rendered output -- regardless of state insertion order.
-    // Both row bytes assert as substrings so the test stays robust to
-    // the intra-block join discipline.
-    assert.equal(notifications.length, 1);
-    const message = notifications[0]!.message;
-    assert.ok(
-      message.includes("● already [project] <autoupdate> {already autoupdate}"),
-      `expected idempotent row, got: ${message}`,
-    );
-    assert.ok(
-      message.includes("● to-flip [project] <autoupdate>"),
-      `expected fresh-enable row, got: ${message}`,
-    );
-    // Caller-order invariant: changed-first-then-unchanged grouping
-    // (the orchestrator's accumulator order); to-flip precedes already.
-    assert.ok(
-      message.indexOf("● to-flip [project]") < message.indexOf("● already [project]"),
-      `expected changed-first ordering (to-flip before already), got: ${message}`,
-    );
-    // Mixed-outcome multi-marketplace: the only non-success row is the
-    // benign idempotent flip (`already autoupdate` in IDEMPOTENT_REASONS) and the
-    // other row is a fresh enable (success), so per UXG-02 / D-28-06 the whole
-    // cascade computes info (no severity arg). The fresh `<autoupdate>` row is
-    // not a skip, so there is no actionable row to poison the routing.
-    assert.equal(notifications[0]!.severity, undefined);
-    // SNM-33 / D-22-03: neither row carries a plugin state-change token
-    // (autoupdate flips mutate marketplace records only), so NO trailer.
-    assert.ok(
-      !message.includes("/reload to pick up changes"),
-      `expected NO reload-hint trailer, got: ${message}`,
-    );
-  });
-});
-
-test("I2 / PR #51: write-back skipped (unsynthesizable source) renders a failed row, never silent success", async () => {
-  // Pre-fix: writeAutoupdateBack silently dropped entries with no
-  // synthesizable source from the batch but the name stayed in
-  // `finalResult.changed`, so the final notify rendered success for a flip
-  // that was never persisted. After the fix the skipped name is demoted to
-  // an honest failed row (closed-set `not found` reason; no new tokens).
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-
-    // Seed a record whose source.raw is NOT a string (forward-compat unknown
-    // shape) so buildAutoupdatePatch cannot synthesize a `source` for the
-    // first-time config write. State carries no autoupdate field so the flip
-    // is fresh; the config file does not exist yet so no config-side `source`
-    // is available either.
-    const record: ExtensionState["marketplaces"][string] = {
-      name: "mp-unsynth",
-      scope: "project",
-      // source.raw deliberately a non-string; SP-7 path is taken via
-      // the unknown-kind admission.
-      source: { kind: "unknown" },
-      addedFromCwd: cwd,
-      manifestPath: path.join(cwd, "marketplace.json"),
-      marketplaceRoot: cwd,
-      plugins: {},
+    const disabledPlugin: PluginInstallRecord = {
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      enabled: false,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      resolvedSource: "/fixture/plugins/example",
+      resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      version: "1.0.0",
     };
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { "mp-unsynth": record },
+    await saveMarketplaces(locations, [
+      marketplaceRecord("mp", "project", cwd, pathSource("./src"), {
+        example: disabledPlugin,
+      }),
+    ]);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: "● mp [project] <autoupdate>",
     });
+    const expectedConfigBytes = [
+      "{",
+      '  "schemaVersion": 1,',
+      '  "marketplaces": {',
+      '    "mp": {',
+      '      "autoupdate": true,',
+      '      "source": "./src"',
+      "    }",
+      "  },",
+      '  "plugins": {}',
+      "}",
+      "",
+    ].join("\n");
 
-    const { ctx, pi, notifications } = makeCtx();
+    // act
     await setMarketplaceAutoupdate({
-      ctx,
-      pi,
-      name: "mp-unsynth",
-      enable: true,
-      scope: "project",
-      cwd,
-    });
-
-    assert.equal(notifications.length, 1);
-    const msg = notifications[0]!.message;
-    // The row MUST NOT claim success -- the `<autoupdate>` fresh-flip marker
-    // is forbidden because the write-back never landed.
-    assert.ok(
-      !msg.includes("● mp-unsynth [project] <autoupdate>") || msg.includes("(failed)"),
-      `unsynthesizable source must NOT render as silent fresh-flip success; got: ${msg}`,
-    );
-    // The row MUST surface a failure -- closed-set `not found` reason is the
-    // permissive fallback used elsewhere in this orchestrator (matches the
-    // synthetic-child cascade form).
-    assert.match(
-      msg,
-      /\(failed\)/,
-      `unsynthesizable source must render a (failed) row; got: ${msg}`,
-    );
-    // Severity must be error per D-16-11 (any failed row -> error).
-    assert.equal(notifications[0]!.severity, "error");
-  });
-});
-
-test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marketplaces)` sentinel", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, enable: true, cwd }); // no name, no scope
-    // D-16-17: empty marketplaces[] -> notify() emits the sentinel
-    // verbatim.
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
-  });
-});
-
-test("Single-name flip across BOTH scopes when --scope omitted: flip in user scope only emits V2 `<autoupdate>` marker (no error)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { only: makeMarketplaceRecord("only", "user", cwd, false) },
-    });
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
-    // user-scope flip succeeded; project-scope MarketplaceNotFoundError was swallowed gracefully.
-    assert.equal(notifications.length, 1);
-    // post-flip `autoupdate` lives in `claude-plugins.json` (user scope).
-    assert.equal(await configAutoupdate(userLocations, "only"), true);
-    // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
-    assert.equal(notifications[0]!.message, "● only [user] <autoupdate>");
-    assert.notEqual(notifications[0]!.severity, "error");
-    // D-18-05: fresh enable -> info severity.
-    assert.equal(notifications[0]!.severity, undefined);
-  });
-});
-
-test("single-name cross-scope flip surfaces state lock failures as V2 `(failed)` row at severity error", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const userLocations = locationsFor("user", cwd);
-    const projectLocations = locationsFor("project", cwd);
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { only: makeMarketplaceRecord("only", "user", cwd, false) },
-    });
-    const release = await lockfile.lock(projectLocations.extensionRoot, {
-      lockfilePath: projectLocations.stateLockFile,
-      realpath: false,
-    });
-
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
-
-      // The marketplace header carries no cause (SNM-10), so the held-lock
-      // failure is surfaced through a synthetic failed-plugin child whose
-      // cause-chain trailer carries StateLockHeldError's actionable retry
-      // message ("Retry after it completes."). The child narrows to the
-      // `lock held` reason.
-      assert.equal(notifications.length, 1);
-      assert.match(notifications[0]!.message, /^⊘ only \[project\] \(failed\)$/m);
-      assert.match(notifications[0]!.message, /\{lock held\}/);
-      assert.match(notifications[0]!.message, /cause:.*Retry after it completes\./);
-      // failed -> error severity.
-      assert.equal(notifications[0]!.severity, "error");
-    } finally {
-      await release();
-    }
-  });
-});
-
-test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces standalone `(failed) {marketplace not added}` (no reason-less row)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "absent-zzz-9999", enable: true, cwd });
-    assert.equal(notifications.length, 1);
-    // ATTR-05 / D-48-C Shape 1: missing-everywhere routes through the
-    // standalone MarketplaceNotAddedMessage `{marketplace not added}` variant -- NOT the
-    // former reason-LESS bare `(failed)`. The bare form carries `first.scope`
-    // (the scope where the first not-found was observed); SC-6 iterates
-    // project-before-user, so the bracket is `[project]`. The standalone
-    // not-added variant routes via isInfoKind -> error severity with NO
-    // summary prefix.
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ absent-zzz-9999 [project] (failed) {marketplace not added}",
-    );
-    // D-18-05 severity ladder: not-added -> error.
-    assert.equal(notifications[0]!.severity, "error");
-  });
-});
-
-test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone `(failed) {marketplace not added}` with the scope bracket (not `{not found}`)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // Empty project scope; request an explicit project-scope flip of a name
-    // that is not added there. classifyAutoupdateFlip throws
-    // MarketplaceNotFoundError for the explicit scope (S1).
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({
-      ctx,
-      pi,
-      name: "absent-explicit",
-      enable: true,
-      scope: "project",
-      cwd,
-    });
-    assert.equal(notifications.length, 1);
-    // ATTR-05: the explicit-scope MarketplaceNotFoundError converts to the
-    // standalone `{marketplace not added}` variant carrying the requested `[project]`
-    // bracket -- the former synthetic-child `{not found}` reason is gone.
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ absent-explicit [project] (failed) {marketplace not added}",
-    );
-    assert.doesNotMatch(notifications[0]!.message, /\{not found\}/);
-    assert.equal(notifications[0]!.severity, "error");
-  });
-});
-
-// CMP-4 / SCOPE-01: the qualified sibling of the ATTR-05 explicit-scope test
-// above. When the named marketplace IS added, just in the other scope, the row
-// says so -- the qualified token REPLACES the plain one rather than joining it,
-// because "the container does not exist" and "it exists, but not in the scope
-// you targeted" are competing claims about one subject. This is the user-target
-// direction: the container sits in project, the operator named user.
-//
-// The probe lives at the `missingEverywhere` emission -- the single-name flip
-// that missed in every iterated scope -- which is the only autoupdate site a
-// named marketplace can reach.
-test("CMP-4 / SCOPE-01: explicit --scope user flip of a project-only marketplace renders the user-direction qualified row", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const projectLocations = locationsFor("project", cwd);
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
-    });
-
-    const { ctx, pi, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "user", cwd });
-
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
-    // The flip never reached the scope that DOES hold the record.
-    assert.equal(await configAutoupdate(projectLocations, "mp"), undefined);
-  });
-});
-
-function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
-    .replace(/^\s*\/\/.*$/gm, ""); // line comments
-}
-
-test("NFR-5: autoupdate source has zero references to platform/git, gitOps, or DEFAULT_GIT_OPS", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
-    "utf8",
-  );
-  const code = stripComments(src);
-  assert.equal(code.includes("platform/git"), false);
-  assert.equal(code.includes("DEFAULT_GIT_OPS"), false);
-  assert.equal(code.includes("gitOps"), false);
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// autoupdate WB-01 / --local / WR-09
-// ──────────────────────────────────────────────────────────────────────────
-
-test("WB-01: fresh enable writes back autoupdate=true to claude-plugins.json (with source carried from state)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
-    });
-
-    const { ctx, pi } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-
-    const cfg = await loadConfig(locations.configJsonPath);
-    assert.equal(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    assert.equal(cfg.config.marketplaces?.["mp"]?.autoupdate, true);
-    // The local file MUST be absent (base-target path).
-    assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
-  });
-});
-
-test("IDEMPOTENT flip leaves the targeted config file BYTE-IDENTICAL (no mtime drift)", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    // Seed state autoupdate=false so the FIRST call is a fresh flip and
-    // creates the config; the SECOND call (now seed-aligned) is idempotent.
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
-    });
-
-    const { ctx, pi } = makeCtx();
-    // First flip: fresh enable=true -> writes claude-plugins.json (state's
-    // autoupdate=false flips to true; not aligned).
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-
-    const { readFile, stat } = await import("node:fs/promises");
-    const bytes1 = await readFile(locations.configJsonPath, "utf8");
-    const stat1 = await stat(locations.configJsonPath);
-
-    // Second flip: state is now autoupdate=true; enable=true -> idempotent.
-    // The config file mtime MUST NOT change.
-    await new Promise<void>((resolve) => setTimeout(resolve, 20));
-    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-
-    const bytes2 = await readFile(locations.configJsonPath, "utf8");
-    const stat2 = await stat(locations.configJsonPath);
-
-    assert.equal(bytes1, bytes2, "idempotent flip MUST be byte-identical");
-    assert.equal(
-      stat1.mtimeMs,
-      stat2.mtimeMs,
-      "idempotent flip MUST NOT touch mtime (RECON-05 fixed point preserved)",
-    );
-  });
-});
-
-test("WB-01: --local routes the autoupdate write to claude-plugins.local.json; base file untouched", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
-    });
-
-    const { ctx, pi } = makeCtx();
-    await setMarketplaceAutoupdate({
-      ctx,
-      pi,
+      ctx: boundary.ctx,
+      pi: boundary.pi,
       name: "mp",
       enable: true,
       scope: "project",
       cwd,
-      local: true,
     });
 
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
-    assert.equal(localCfg.status, "valid");
-    if (localCfg.status === "valid") {
-      assert.equal(localCfg.config.marketplaces?.["mp"]?.autoupdate, true);
-    }
-
-    // The base file MUST be untouched.
-    assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+    // assert
+    assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
+    assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
   });
 });
 
-test("WR-09 / T-56-02-01: orchestrated-mode autoupdate flip skips write-back (state-only mutation)", async () => {
+test("disables one project marketplace when base config is enabled", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await writeConfig(locations, {
       schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
+      marketplaces: { mp: { source: "./src", autoupdate: true } },
+      plugins: { "example@mp": { enabled: false } },
+    });
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: "● mp [project] <no autoupdate>",
+    });
+    const expectedConfigBytes = [
+      "{",
+      '  "schemaVersion": 1,',
+      '  "marketplaces": {',
+      '    "mp": {',
+      '      "source": "./src",',
+      '      "autoupdate": false',
+      "    }",
+      "  },",
+      '  "plugins": {',
+      '    "example@mp": {',
+      '      "enabled": false',
+      "    }",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: false,
+      scope: "project",
+      cwd,
     });
 
-    const { ctx, pi } = makeCtx();
+    // assert
+    assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("reports an already-enabled base entry without changing bytes or metadata", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: "./src", autoupdate: true } },
+    });
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const configBefore = await configSnapshot(locations.configJsonPath);
+    const boundary = notificationBoundary({
+      message: "● mp [project] <autoupdate> {already autoupdate}",
+    });
+
+    // act
     await setMarketplaceAutoupdate({
-      ctx,
-      pi,
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("reports an already-disabled base entry without changing bytes or metadata", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: "./src", autoupdate: false } },
+    });
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const configBefore = await configSnapshot(locations.configJsonPath);
+    const boundary = notificationBoundary({
+      message: "● mp [project] <no autoupdate> {already no autoupdate}",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: false,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("enables all project marketplaces in changed-before-unchanged order with one atomic batch", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("already", "project", cwd, pathSource("./already")),
+      marketplaceRecord("to-flip", "project", cwd, pathSource("./to-flip")),
+    ]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { already: { source: "./already", autoupdate: true } },
+    });
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: [
+        "● to-flip [project] <autoupdate>",
+        "",
+        "● already [project] <autoupdate> {already autoupdate}",
+      ].join("\n"),
+    });
+    const expectedConfigBytes = [
+      "{",
+      '  "schemaVersion": 1,',
+      '  "marketplaces": {',
+      '    "already": {',
+      '      "source": "./already",',
+      '      "autoupdate": true',
+      "    },",
+      '    "to-flip": {',
+      '      "autoupdate": true,',
+      '      "source": "./to-flip"',
+      "    }",
+      "  },",
+      '  "plugins": {}',
+      "}",
+      "",
+    ].join("\n");
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("reports an empty implicit two-scope inventory without creating files", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    const boundary = notificationBoundary({ message: "(no marketplaces)" });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      enable: true,
+      cwd,
+    });
+
+    // assert
+    assert.equal(await readOptionalBytes(projectLocations.stateJsonPath), undefined);
+    assert.equal(await readOptionalBytes(projectLocations.configJsonPath), undefined);
+    assert.equal(await readOptionalBytes(userLocations.stateJsonPath), undefined);
+    assert.equal(await readOptionalBytes(userLocations.configJsonPath), undefined);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("finds a named user marketplace after an implicit project miss", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    await saveMarketplaces(userLocations, [marketplaceRecord("only", "user", cwd)]);
+    const stateBytes = await readFile(userLocations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({ message: "● only [user] <autoupdate>" });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "only",
+      enable: true,
+      cwd,
+    });
+
+    // assert
+    assert.equal(await readOptionalBytes(projectLocations.configJsonPath), undefined);
+    assert.equal(
+      await readFile(userLocations.configJsonPath, "utf8"),
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "only": {\n      "autoupdate": true,\n      "source": "./src"\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    assert.equal(await readFile(userLocations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("reports a named marketplace absent from both implicit scopes", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const boundary = notificationBoundary({
+      message:
+        "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {marketplace not added}",
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "missing-mp",
+      enable: true,
+      cwd,
+    });
+
+    // assert
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("reports a named marketplace absent from an explicit user scope", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const boundary = notificationBoundary({
+      message:
+        "A marketplace operation has failed.\n\n⊘ missing-mp [user] (failed) {marketplace not added}",
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "missing-mp",
+      enable: false,
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("writes a user marketplace only to the local config layer", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "user", cwd)]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { base: { source: "./base", autoupdate: false } },
+    });
+    const baseBytes = await readFile(locations.configJsonPath, "utf8");
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({ message: "● mp [user] <autoupdate>" });
+    const expectedLocalBytes = [
+      "{",
+      '  "schemaVersion": 1,',
+      '  "marketplaces": {',
+      '    "mp": {',
+      '      "autoupdate": true,',
+      '      "source": "./src"',
+      "    }",
+      "  },",
+      '  "plugins": {}',
+      "}",
+      "",
+    ].join("\n");
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "user",
+      cwd,
+      local: true,
+    });
+
+    // assert
+    assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+    assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), expectedLocalBytes);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("orchestrated enable preserves semantic output while suppressing config write-back", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({ message: "● mp [project] <autoupdate>" });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
       name: "mp",
       enable: true,
       scope: "project",
@@ -655,28 +566,179 @@ test("WR-09 / T-56-02-01: orchestrated-mode autoupdate flip skips write-back (st
       notifications: { mode: "orchestrated" },
     });
 
-    // Neither config file is written in orchestrated mode.
-    assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
-    assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    // assert
+    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
+    assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
   });
 });
 
-test("CFG-03 / T-56-02-05: invalid local config aborts the flip; basename-only message; state untouched", async () => {
+test("orchestrated enable preserves an existing config source and opposite value", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await saveState(locations.extensionRoot, {
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await writeConfig(locations, {
       schemaVersion: 1,
-      marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
+      marketplaces: { mp: { source: "./configured", autoupdate: false } },
+    });
+    const configBefore = await configSnapshot(locations.configJsonPath);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({ message: "● mp [project] <autoupdate>" });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+      notifications: { mode: "orchestrated" },
     });
 
-    const { writeFile } = await import("node:fs/promises");
-    await writeFile(locations.configLocalJsonPath, "{ broken json", "utf8");
+    // assert
+    assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
 
-    const { ctx, pi, notifications } = makeCtx();
+test("standalone enable reports an unsynthesizable source without writing config", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("odd", "project", cwd, { kind: "unknown" }),
+    ]);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: "A marketplace operation has failed.\n\n⊘ odd [project] (failed) {not found}",
+      severity: "error",
+    });
+
+    // act
     await setMarketplaceAutoupdate({
-      ctx,
-      pi,
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "odd",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("orchestrated enable reports an unsynthesizable source without writing config", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("odd", "project", cwd, { kind: "unknown" }),
+    ]);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: "A marketplace operation has failed.\n\n⊘ odd [project] (failed) {not found}",
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "odd",
+      enable: true,
+      scope: "project",
+      cwd,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("rejects malformed base config with a basename-only failure and unchanged state", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await writeFile(locations.configJsonPath, "{ malformed", "utf8");
+    const configBytes = await readFile(locations.configJsonPath, "utf8");
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ mp [project] (failed)",
+        "  ⊘ mp (failed) {not found}",
+        '    cause: Config file "claude-plugins.json" failed schema validation.',
+      ].join("\n"),
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("rejects schema-invalid local config with a basename-only failure and unchanged state", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await writeFile(
+      locations.configLocalJsonPath,
+      JSON.stringify({ schemaVersion: 2, marketplaces: {} }),
+      "utf8",
+    );
+    const configBytes = await readFile(locations.configLocalJsonPath, "utf8");
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ mp [project] (failed)",
+        "  ⊘ mp (failed) {not found}",
+        '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+      ].join("\n"),
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
       name: "mp",
       enable: true,
       scope: "project",
@@ -684,96 +746,272 @@ test("CFG-03 / T-56-02-05: invalid local config aborts the flip; basename-only m
       local: true,
     });
 
-    // The throw is caught and routed through `notifyAutoupdateScopeFailure`
-    // -> the synthetic-child cascade form. The message MUST NOT leak the
-    // absolute local config path; the basename is acceptable as a clue.
-    assert.ok(notifications.length >= 1);
-    const note = notifications[0]!;
-    assert.ok(
-      !note.message.includes(locations.configLocalJsonPath),
-      `must NOT leak absolute configLocalJsonPath, got: ${note.message}`,
-    );
-
-    // State was NOT saved: the seed value (autoupdate=false) persists.
-    const after = await loadState(locations.extensionRoot);
-    assert.equal(recordAutoupdate(after.marketplaces["mp"]), false);
+    // assert
+    assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), configBytes);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// D-UPD: autoupdate flag-flip must leave a DISABLED plugin record alone.
-// `setMarketplaceAutoupdate` flips a config flag; it does NOT update plugins.
-// This test pins that the flip never accidentally re-materializes a
-// disabled-but-recorded plugin's resources (ENBL-02 marker: enabled=false +
-// installable=true).
-// ──────────────────────────────────────────────────────────────────────────
-
-test("D-UPD: setMarketplaceAutoupdate leaves a disabled plugin record untouched (state-side resources stay empty)", async () => {
+test("rejects a local config read failure without replacing the directory", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    // Seed a marketplace with a disabled plugin row: enabled:false +
-    // installable:true (ENBL-02). The autoupdate flag-flip is a config-only
-    // mutation; it must never re-materialize.
-    const seededMp = makeMarketplaceRecord("mp", "project", cwd, false);
-    (seededMp as { plugins: Record<string, unknown> }).plugins = {
-      foo: {
-        version: "1.0.0",
-        resolvedSource: "/tmp/dummy-mp/plugins/foo",
-        compatibility: {
-          installable: true,
-          notes: [],
-          supported: [],
-          unsupported: [],
-        },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-        enabled: false,
-        installedAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-    };
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 2,
-      marketplaces: { mp: seededMp },
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    await mkdir(locations.configLocalJsonPath, { recursive: true });
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ mp [project] (failed)",
+        "  ⊘ mp (failed) {not found}",
+        '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+      ].join("\n"),
+      severity: "error",
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    // act
     await setMarketplaceAutoupdate({
-      ctx,
-      pi,
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+      local: true,
+    });
+
+    // assert
+    assert.equal((await stat(locations.configLocalJsonPath)).isDirectory(), true);
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("reports a held named scope lock and succeeds after the lock is released", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+    const blockedBoundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ mp [project] (failed)",
+        "  ⊘ mp (failed) {lock held}",
+        `    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+      ].join("\n"),
+      severity: "error",
+    });
+    const retryBoundary = notificationBoundary({ message: "● mp [project] <autoupdate>" });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: blockedBoundary.ctx,
+      pi: blockedBoundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+    await release();
+    await setMarketplaceAutoupdate({
+      ctx: retryBoundary.ctx,
+      pi: retryBoundary.pi,
       name: "mp",
       enable: true,
       scope: "project",
       cwd,
     });
 
-    // Flag-flip surfaced (rendered byte form pinned by other tests).
-    assert.ok(notifications.length >= 1);
+    // assert
+    assert.equal(
+      await readFile(locations.configJsonPath, "utf8"),
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "autoupdate": true,\n      "source": "./src"\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(blockedBoundary.ctx);
+    verify(blockedBoundary.pi);
+    verify(blockedBoundary.ui);
+    verify(retryBoundary.ctx);
+    verify(retryBoundary.pi);
+    verify(retryBoundary.ui);
+  });
+});
 
-    // D-UPD: state-side plugin record is UNTOUCHED -- resources.* still
-    // empty (the plugin stays disabled until the user explicitly enables).
-    const after = await loadState(locations.extensionRoot);
-    const rec = (
-      after.marketplaces["mp"] as unknown as {
-        plugins: Record<
-          string,
-          {
-            resources: {
-              skills: string[];
-              prompts: string[];
-              agents: string[];
-              mcpServers: string[];
-            };
-            compatibility: { installable: boolean };
-          }
-        >;
-      }
-    ).plugins.foo;
-    assert.ok(rec !== undefined);
-    assert.deepEqual(rec.resources.skills, [], "disabled record stays disabled across flag-flip");
-    assert.deepEqual(rec.resources.prompts, []);
-    assert.deepEqual(rec.resources.agents, []);
-    assert.deepEqual(rec.resources.mcpServers, []);
-    assert.equal(rec.compatibility.installable, true, "installable flag preserved");
+test("reports a held unnamed scope lock against the unknown aggregate subject", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+    const boundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ (unknown) [project] (failed)",
+        "  ⊘ (unknown) (failed) {lock held}",
+        `    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+      ].join("\n"),
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      enable: false,
+      scope: "project",
+      cwd,
+    });
+    await release();
+
+    // assert
+    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("keeps config absent after an atomic write refusal and converges on retry", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const failedBoundary = notificationBoundary({
+      matches: (message) => {
+        const escapedScopeRoot = locations.scopeRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(
+          `^Some operations have failed\\.\\n\\n⊘ mp \\[project\\] \\(failed\\)\\n  ⊘ mp \\(failed\\) \\{not found\\}\\n    cause: EACCES: permission denied, open '${escapedScopeRoot}/claude-plugins\\.json\\.[0-9]+'$`,
+        ).test(message);
+      },
+      severity: "error",
+    });
+    const retryBoundary = notificationBoundary({ message: "● mp [project] <autoupdate>" });
+
+    // act
+    await chmod(locations.scopeRoot, 0o500);
+    try {
+      await setMarketplaceAutoupdate({
+        ctx: failedBoundary.ctx,
+        pi: failedBoundary.pi,
+        name: "mp",
+        enable: true,
+        scope: "project",
+        cwd,
+      });
+    } finally {
+      await chmod(locations.scopeRoot, 0o700);
+    }
+
+    const configAfterFailure = await readOptionalBytes(locations.configJsonPath);
+    await setMarketplaceAutoupdate({
+      ctx: retryBoundary.ctx,
+      pi: retryBoundary.pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.equal(configAfterFailure, undefined);
+    assert.equal(
+      await readFile(locations.configJsonPath, "utf8"),
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "autoupdate": true,\n      "source": "./src"\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    verify(failedBoundary.ctx);
+    verify(failedBoundary.pi);
+    verify(failedBoundary.ui);
+    verify(retryBoundary.ctx);
+    verify(retryBoundary.pi);
+    verify(retryBoundary.ui);
+  });
+});
+
+test("retains a committed project flip when the user scope is locked and converges on retry", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    await saveMarketplaces(projectLocations, [marketplaceRecord("shared", "project", cwd)]);
+    await saveMarketplaces(userLocations, [marketplaceRecord("shared", "user", cwd)]);
+    const projectStateBytes = await readFile(projectLocations.stateJsonPath, "utf8");
+    const userStateBytes = await readFile(userLocations.stateJsonPath, "utf8");
+    const release = await lockfile.lock(userLocations.extensionRoot, {
+      lockfilePath: userLocations.stateLockFile,
+      realpath: false,
+    });
+    const partialBoundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ shared [user] (failed)",
+        "  ⊘ shared (failed) {lock held}",
+        `    cause: Another pi-claude-marketplace operation is in progress for user scope (${userLocations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+      ].join("\n"),
+      severity: "error",
+    });
+    const retryBoundary = notificationBoundary({
+      message: [
+        "● shared [project] <autoupdate> {already autoupdate}",
+        "",
+        "● shared [user] <autoupdate>",
+      ].join("\n"),
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: partialBoundary.ctx,
+      pi: partialBoundary.pi,
+      name: "shared",
+      enable: true,
+      cwd,
+    });
+    const projectConfigAfterFailure = await readFile(projectLocations.configJsonPath, "utf8");
+    const userConfigAfterFailure = await readOptionalBytes(userLocations.configJsonPath);
+    await release();
+    await setMarketplaceAutoupdate({
+      ctx: retryBoundary.ctx,
+      pi: retryBoundary.pi,
+      name: "shared",
+      enable: true,
+      cwd,
+    });
+
+    // assert
+    assert.equal(
+      projectConfigAfterFailure,
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "shared": {\n      "autoupdate": true,\n      "source": "./src"\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    assert.equal(userConfigAfterFailure, undefined);
+    assert.equal(
+      await readFile(userLocations.configJsonPath, "utf8"),
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "shared": {\n      "autoupdate": true,\n      "source": "./src"\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    assert.equal(await readFile(projectLocations.stateJsonPath, "utf8"), projectStateBytes);
+    assert.equal(await readFile(userLocations.stateJsonPath, "utf8"), userStateBytes);
+    verify(partialBoundary.ctx);
+    verify(partialBoundary.pi);
+    verify(partialBoundary.ui);
+    verify(retryBoundary.ctx);
+    verify(retryBoundary.pi);
+    verify(retryBoundary.ui);
   });
 });

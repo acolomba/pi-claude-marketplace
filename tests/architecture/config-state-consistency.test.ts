@@ -35,7 +35,9 @@ import {
 import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { writeMarketplaceConfigEntry } from "../../extensions/pi-claude-marketplace/persistence/config-write-back.ts";
 import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
+import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
 // The addMarketplace path is wired so write-back lands the marketplace
@@ -43,6 +45,42 @@ import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persist
 // is exercised transitively through the write-back helper; the direct
 // import is retained for symmetry with sibling tests.
 void saveConfig;
+
+const OFFICIAL_MARKETPLACE_REMOTE = "https://github.com/anthropics/claude-plugins-official.git";
+
+function fixtureMarketplaceDir(name: "valid-marketplace"): string {
+  return path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    "..",
+    "orchestrators",
+    "marketplace",
+    "_fixtures",
+    name,
+  );
+}
+
+function makeMockGitOps(options: { readonly fixtureSourceDir: string }) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [OFFICIAL_MARKETPLACE_REMOTE],
+    cloneFixture: {
+      boundary: "local",
+      sourceDir: options.fixtureSourceDir,
+    },
+  });
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...cloneOptionsWithoutCredentials } = cloneOptions;
+      await git.gitOps.clone(cloneOptionsWithoutCredentials);
+    },
+  };
+
+  return {
+    ...git,
+    gitOps,
+  };
+}
 
 async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-consistency-test-"));
@@ -126,7 +164,6 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
   // Wire-up: invoke the real `addMarketplace` (standalone mode) against a
   // mock GitOps + valid fixture. Read back the config + the post-mutation
   // state. Plan and assert: planReconcile produces emptyReconcilePlan.
-  const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { loadState } =
@@ -175,7 +212,6 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
 });
 
 test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND unknown forward-compat keys survive", async () => {
-  const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { loadState } =
@@ -268,7 +304,6 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
 });
 
 test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", async () => {
-  const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { loadState } =
@@ -330,7 +365,6 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
 });
 
 test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and config no longer carries the marketplace entry", async () => {
-  const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { loadState } =
@@ -554,7 +588,6 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
 });
 
 test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orchestrated' does NOT touch the config file", async () => {
-  const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { readFile, stat, writeFile } = await import("node:fs/promises");

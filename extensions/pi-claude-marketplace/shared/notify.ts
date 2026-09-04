@@ -39,11 +39,10 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * Closed-set source of truth: the `REASONS`, `STATUS_TOKENS`,
  * `PLUGIN_STATUSES` and `MARKETPLACE_STATUSES` const tuples and their derived
  * literal-union types `Reason`, `StatusToken`, `PluginStatus`,
- * `MarketplaceStatus` live in THIS file. `MARKERS` / `PATTERN_CLASSES` tuples
- * used to sit alongside them, but no call site ever indexed either one -- the
- * `<autoupdate>` / `<no autoupdate>` chevron tokens are written as literals at
- * their render sites in `renderMpHeader`, and the pattern-class labels only
- * ever named message shapes in prose -- so both are gone. The
+ * `MarketplaceStatus` live in THIS file. No `MARKERS` / `PATTERN_CLASSES`
+ * tuples sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
+ * tokens are written as literals at their render sites in `renderMpHeader`,
+ * and the pattern-class labels only ever named message shapes in prose. The
  * `compareByNameThenScope` comparator also lives here as the single per-scope
  * row-order policy across every list-rendering surface.
  *
@@ -64,10 +63,9 @@ import type { Dependency } from "./concerns/soft-dep.ts";
 // ---------------------------------------------------------------------------
 
 /**
- * CMC-11 closed reasons set. This tuple is the SOLE closed-set authority
- * (style guide v2.0 retired the binding YAML frontmatter at
- * `docs/messaging-style-guide.md`; the guide's prose references these
- * tuples). The set covers the
+ * CMC-11 closed reasons set. This tuple is the SOLE closed-set authority --
+ * `docs/messaging-style-guide.md` carries no binding YAML frontmatter of its
+ * own; the guide's prose references these tuples. The set covers the
  * autoupdate-flip idempotent rows (`"already autoupdate"` /
  * `"already no autoupdate"`) and the failure-class closed Reasons the catalog
  * UAT requires across uninstall / marketplace-remove partial / reinstall /
@@ -131,8 +129,8 @@ export const REASONS = [
   "source missing",
   "network unreachable",
   "marketplace not added",
-  // CMP-4 / SCOPE-01: the STRUCTURAL sibling of `marketplace not added`, replacing it (never
-  // joining it) when the marketplace container was found in the scope the
+  // CMP-4 / SCOPE-01: the STRUCTURAL sibling of `marketplace not added`, which it
+  // replaces (never joins) when the marketplace container was found in the scope the
   // command did not target. `marketplace not added` claims the container does not exist;
   // this token claims it does, just not here, and the two claims cannot both be
   // true of one subject. Excluded from `ContentReason` for the same reason
@@ -302,8 +300,8 @@ export function redactAbsolutePaths(text: string): string {
 
 /**
  * CMC-08 closed status-token set. This tuple is the SOLE closed-set
- * authority (style guide v2.0 retired the binding YAML frontmatter at
- * `docs/messaging-style-guide.md`).
+ * authority -- `docs/messaging-style-guide.md` carries no binding YAML
+ * frontmatter of its own.
  * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
@@ -795,9 +793,9 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  * renders this same row.
  * RLD-05 / D-07: the reload-hint is driven by the caller-stamped `needsReload`
  * -- the fresh-disable transition stamps `true`, the list / info inventory row
- * stamps `false` -- so the row's reload behavior no longer depends on a cascade
- * kind. Structurally distinct from `(unavailable)`: the byte form differs
- * (`(disabled)` vs `(unavailable)`).
+ * stamps `false` -- so the row's reload behavior comes from the per-row stamp,
+ * not a cascade kind. Structurally distinct from `(unavailable)`: the byte
+ * form differs (`(disabled)` vs `(unavailable)`).
  *
  * NO `dependencies` / `cause` / `rollbackPartial` by construction.
  *
@@ -1354,7 +1352,7 @@ export type MarketplaceNotificationMessage =
  * payload at construction time.
  *
  * RLD-05 / D-07: the `/claude:plugin disable` command's realized-transition
- * cascade no longer needs a distinguishing kind. The fresh `(disabled)` row
+ * cascade does not need a distinguishing kind. The fresh `(disabled)` row
  * stamps `needsReload: true` directly, while the list / info inventory
  * `(disabled)` rows stamp `needsReload: false`; the RLD-02 OR-reduce reads
  * those per-row facts, so the disable reload-hint is driven by the stamp, not
@@ -1600,11 +1598,10 @@ export interface ReconcilePendingEmptyMessage {
  * `marketplaceScope` / `marketplaceDetails` fields and NO `reasons` field --
  * the structural `{marketplace not added}` brace is hard-coded by `renderMarketplaceNotAdded`.
  *
- * Renders byte-identical to the former `renderPluginInfo` `{marketplace not added}`
- * carve-out (D-46-01a): a bare column-0 row
- * `⊘ <name> [scope?] (failed) {marketplace not added}` at severity `"error"`. The info
- * construction sites build it in this phase; install / uninstall / reinstall /
- * update reuse the SAME variant in later phases (no re-cut).
+ * D-46-01a: renders a bare column-0 row
+ * `⊘ <name> [scope?] (failed) {marketplace not added}` at severity `"error"`. The
+ * info, install, uninstall, reinstall and update surfaces all build this SAME
+ * variant.
  */
 export interface MarketplaceNotAddedMessage {
   readonly kind: "marketplace-not-added";
@@ -1619,8 +1616,8 @@ export interface MarketplaceNotAddedMessage {
    * A BOOLEAN, deliberately: the caller decides WHETHER the container was found
    * elsewhere, this file owns the BYTES. A caller-supplied string would put
    * user-visible prose back in the hands of the construction site, which is
-   * exactly what `docs/messaging-style-guide.md` retired. `scope` supplies the
-   * target scope, so no further field is needed.
+   * exactly what `docs/messaging-style-guide.md` disallows. `scope` supplies
+   * the target scope, so no further field is needed.
    */
   readonly presentInOtherScope?: boolean;
 }
@@ -1750,8 +1747,8 @@ export const ICON_UNINSTALLABLE = "⊘";
  * already in the grammar (`●` for `(installed)` / `(will install)`,
  * `○` for `(available)` / `(will uninstall)`).
  *
- * D-80-01: uses `◍` (U+25CD, circle with vertical fill). The `◌` (U+25CC,
- * dotted circle) it previously carried was reassigned to `ICON_REMOTE`.
+ * D-80-01: uses `◍` (U+25CD, circle with vertical fill), distinct from `◌`
+ * (U+25CC, dotted circle), which `ICON_REMOTE` uses instead.
  */
 export const ICON_DISABLED = "◍";
 
@@ -1759,7 +1756,7 @@ export const ICON_DISABLED = "◍";
  * RSTA-02 / D-80-01: dedicated glyph (`◌` U+25CC, dotted circle) for the
  * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
  * yet materialized locally. The dotted circle reads "declared but not
- * present". Reassigned from `ICON_DISABLED`, which now uses `◍` (U+25CD).
+ * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
  */
 export const ICON_REMOTE = "◌";
 
@@ -2730,8 +2727,8 @@ function renderPluginRow(
 // Reload-hint (RLD-02): the OR-reduce of the caller-stamped `row.needsReload`
 // over the same flattened rows. Realized transitions (install/update/reinstall/
 // uninstall + the fresh-disable) stamp needsReload:true; inventory rows stamp
-// false. No marketplace-status / cascade-kind inference -- the former
-// `disable-cascade` straddle is now a per-row stamped fact. Info-surface kinds
+// false. No marketplace-status / cascade-kind inference: the hint is a per-row
+// stamped fact. Info-surface kinds
 // short-circuit to no-trailer (including reconcile-applied-cascade, which
 // suppresses the trailer at the kind level even though its rows stamp true).
 //
@@ -2825,13 +2822,11 @@ type ComputedSeverity = "warning" | "error" | undefined;
 /**
  * SEV-02: the cascade severity is the numeric MAX over the caller-stamped
  * `severity` of every row -- both the marketplace-level rows AND their nested
- * plugin rows (the same flattened traversal the deleted content ladder walked).
- * An absent `severity` defaults to `info` (rank 0) per SEV-01. The reducer reads
+ * plugin rows. An absent `severity` defaults to `info` (rank 0) per SEV-01. The reducer reads
  * ONLY the stamped field -- no `status`/`reasons` content inference. Rank 0
  * returns `undefined` (info -> no 2nd `ctx.ui.notify` arg); rank 1 -> "warning";
  * rank 2 -> "error", preserving the `ComputedSeverity` host-arg contract. The
- * D-03 producer stamps reproduce the former first-match ladder's output exactly,
- * so this is byte-identical (gated by catalog-uat).
+ * D-03 producer stamps are gated by catalog-uat.
  *
  * Structural-subset typed so any message whose `marketplaces[]` carries the
  * `(severity?, plugins[].severity?)` shape can be evaluated (the cascade arm and
@@ -2930,9 +2925,8 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
 /**
  * SEV-02: error-severity tally by stamped fact -- the marketplace rows AND
  * plugin rows whose caller-stamped `severity === "error"`. The D-03 stamps map
- * `failed` rows to `error`, exactly the rows the former status-based counter
- * matched, so the count is byte-identical. Consumed by both the cascade arm and
- * the RECON-04 `reconcile-applied-cascade` standalone arm.
+ * `failed` rows to `error`. Consumed by both the cascade arm and the RECON-04
+ * `reconcile-applied-cascade` standalone arm.
  */
 function countFailedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
   return countRowsBySeverity(marketplaces, "error");
@@ -2949,8 +2943,7 @@ function countSkippedOperations(message: CascadeNotificationMessage): SummaryCou
 /**
  * SEV-02: warning-severity tally by stamped fact -- the rows whose caller-
  * stamped `severity === "warning"`. The D-03 stamps map actionable skips and
- * manual-recovery anchors to `warning` (benign idempotent skips stamp `info`),
- * so this is byte-identical to the former content-derived counter.
+ * manual-recovery anchors to `warning`; benign idempotent skips stamp `info`.
  */
 function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
   return countRowsBySeverity(marketplaces, "warning");
@@ -3221,14 +3214,13 @@ function foldTallyAndHint(body: string, tally: string, hint: string): string {
  *
  * RLD-02 / RLD-05 / D-07: the rule is the OR-reduce of the caller-stamped
  * `needsReload` over the cascade rows -- no status-token or cascade-kind
- * inference. The D-06 stamps reproduce the former trigger set exactly: the
- * realized install / update / reinstall / uninstall transitions AND the
- * realized fresh-disable transition stamp `needsReload: true`, while
- * list / info inventory `disabled` / `installed` rows and every marketplace
- * status (added / removed / updated / autoupdate enabled / autoupdate disabled
- * / skipped / failed) stamp `needsReload: false`. The former `"disable-cascade"`
- * kind straddle (where a `disabled` row's hint depended on the cascade kind) is
- * thus replaced by a per-row stamped fact.
+ * inference. Under the D-06 stamps the realized install / update / reinstall /
+ * uninstall transitions AND the realized fresh-disable transition stamp
+ * `needsReload: true`, while list / info inventory `disabled` / `installed` rows
+ * and every marketplace status (added / removed / updated / autoupdate enabled /
+ * autoupdate disabled / skipped / failed) stamp `needsReload: false`. A
+ * `disabled` row's hint is a per-row stamped fact, never a function of the
+ * cascade kind.
  *
  * A fresh autoupdate enabled/disabled flip does NOT emit the trailer (the
  * flip changes a marketplace record, not a Pi-visible resource). The
@@ -3276,12 +3268,10 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
   }
 
   // RLD-02: the trailer fires iff the OR-reduce of the stamped `needsReload`
-  // over the flattened marketplace + plugin rows is true. The D-06 stamps
-  // reproduce the former trigger set exactly: realized install/update/
-  // reinstall/uninstall and the realized fresh-disable transition stamp
+  // over the flattened marketplace + plugin rows is true. Realized install/
+  // update/reinstall/uninstall and the realized fresh-disable transition stamp
   // needsReload:true, while list/info inventory `disabled`/`installed` rows
-  // stamp needsReload:false. (See this function's JSDoc for the migration
-  // rationale that retired the former cascade-kind straddle.)
+  // stamp needsReload:false.
   for (const mp of message.marketplaces) {
     if (mp.needsReload === true) {
       return true;
@@ -3577,8 +3567,7 @@ function appendResolvedComponentLines(
 
 /**
  * TYPE-01 / D-46-01a: render the dedicated `MarketplaceNotAddedMessage`
- * variant. Lifted from the former `renderPluginInfo` `{marketplace not added}` carve-out;
- * emits the byte-identical bare column-0 row
+ * variant. Emits a bare column-0 row
  * `⊘ <name> [scope?] (failed) {marketplace not added}` with NO marketplace header (the row
  * IS the message). `name` carries the MARKETPLACE name. `scope` present =>
  * `[scope]` bracket; absent => no bracket. The version slot collapses to `""`

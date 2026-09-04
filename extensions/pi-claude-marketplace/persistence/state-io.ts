@@ -399,6 +399,19 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     });
   }
 
+  const parsedRecord =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  if (
+    parsedRecord !== undefined &&
+    Object.hasOwn(parsedRecord, "schemaVersion") &&
+    parsedRecord.schemaVersion !== 1 &&
+    parsedRecord.schemaVersion !== 2
+  ) {
+    throw new Error(`state.json at ${stateJsonPath} has an unsupported schema version`);
+  }
+
   // ST-4 / ST-5 / D-13: normalize legacy records. The third argument is the
   // D-13 ORDERING RAIL gate: the `autoupdate` scrub fires only when the
   // scope's `claude-plugins.json` already exists, preserving the legacy
@@ -429,12 +442,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   //   1. raw string -> classify via parsePluginSource
   //   2. ParsedSource object -> revalidate via pathSource/githubSource
   //   3. unknown-kind object (forward-compat / NFR-12) -> accept verbatim
-  for (const [mpName, mpRaw] of Object.entries(marketplaces)) {
-    if (typeof mpRaw !== "object" || mpRaw === null) {
-      throw new Error(`state.json marketplace "${mpName}" is not an object`);
-    }
-
-    const mp = mpRaw as Record<string, unknown>;
+  for (const [mpName, mp] of Object.entries(marketplaces)) {
     normalizeStoredSource(mpName, mp);
   }
 
@@ -443,12 +451,12 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   // marketplaces } and would otherwise SILENTLY DROP this top-level field,
   // leaving the backfill gate permanently open. Only a string is carried
   // through; a non-string or absent stamp is ignored (absent = scan-once).
-  const parsedRoot = parsed as { lastReconciledExtensionVersion?: unknown };
+  const reconciliationStamp = parsedRecord?.lastReconciledExtensionVersion;
   const normalized: unknown =
-    typeof parsedRoot.lastReconciledExtensionVersion === "string"
+    typeof reconciliationStamp === "string"
       ? {
           schemaVersion: 2,
-          lastReconciledExtensionVersion: parsedRoot.lastReconciledExtensionVersion,
+          lastReconciledExtensionVersion: reconciliationStamp,
           marketplaces,
         }
       : { schemaVersion: 2, marketplaces };

@@ -320,7 +320,7 @@ export interface InvalidBlockOutcome {
    * specific schema key) instead of bare `{invalid manifest}`. Absolute
    * paths MUST already be stripped via `redactAbsolutePaths` BEFORE wrapping
    * into this Error -- T-53-02-02 / T-55-02-01 information-disclosure
-   * mitigation. Pre-fix this detail was dropped at every consumer surface.
+   * mitigation.
    */
   readonly cause?: Error;
 }
@@ -399,8 +399,6 @@ export function classifyOrchestratorThrow(
  * `migrateFirstRunConfig`'s inner `saveConfig` call. The per-scope read-pass
  * catch unwraps `.configFilePath` to attribute the failure row to
  * `claude-plugins.json` (the actual failing file) rather than `state.json`.
- * Pre-fix every read-pass throw misattributed to state.json regardless of
- * origin.
  */
 export class MigrateConfigSaveError extends Error {
   readonly configFilePath: string;

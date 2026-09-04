@@ -159,7 +159,7 @@ export interface AddMarketplaceOptions {
   /**
    * AUTH-01 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
+   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -345,9 +345,9 @@ async function runAddInGuard(args: {
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
   const configBasename = path.basename(targetConfigPath);
 
-  let recordedName: string | undefined;
-  await withLockedStateTransaction(locations, async (tx) => {
+  return withLockedStateTransaction(locations, async (tx) => {
     const state = tx.state;
+    let recordedName: string;
 
     // CFG-03 (T-56-02-05): abort BEFORE any state mutation. The
     // basename-only error message prevents an absolute-path information leak.
@@ -432,14 +432,9 @@ async function runAddInGuard(args: {
 
       throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
     }
+
+    return recordedName;
   });
-
-  if (recordedName === undefined) {
-    // Defensive: the guard always sets it on success.
-    throw new Error("addMarketplace: internal error -- guard returned without recording a name");
-  }
-
-  return recordedName;
 }
 
 /**
@@ -505,7 +500,34 @@ function handleAddFailure(
  * `undefined` in standalone mode (after firing the standalone notify()).
  * Callers in orchestrated mode know the outcome is defined; standalone
  * callers ignore the return.
+ *
+ * D-115-10: the overload pair narrows the orchestrated-mode return to
+ * `Promise<AddMarketplaceOutcome>` (no `| undefined`), mirroring
+ * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
+ * outcome is now a compile error rather than a silent `continue`, so every
+ * driven add always materialises a row. The wide overload stays last so a
+ * caller holding the entrypoint in a single-signature variable -- the import
+ * cascade's collaborator resolver -- keeps its `undefined` arm.
+ *
+ * WR-01: what the overload proves and what it does not. It removes the
+ * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
+ * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * TypeScript checks an overload signature against the implementation only
+ * loosely, and a narrower overload return is accepted with no diagnostic even
+ * when the implementation demonstrably returns the excluded value on that path.
+ * The narrowing is therefore an ASSERTION about this module, relocated from the
+ * consumer to the producer's signature -- not a proof. Every orchestrated arm
+ * below does return a defined outcome today, and the reconcile owner suite
+ * drives this entrypoint in orchestrated mode across its whole outcome matrix
+ * and asserts the complete cascade, so a regression on an exercised path fails
+ * there. An arm the matrix does not reach is not covered by either.
  */
+export function addMarketplace(
+  opts: AddMarketplaceOptions & { notifications: { mode: "orchestrated" } },
+): Promise<AddMarketplaceOutcome>;
+export function addMarketplace(
+  opts: AddMarketplaceOptions,
+): Promise<AddMarketplaceOutcome | undefined>;
 export async function addMarketplace(
   opts: AddMarketplaceOptions,
 ): Promise<AddMarketplaceOutcome | undefined> {

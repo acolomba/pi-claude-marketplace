@@ -3263,7 +3263,7 @@ const FIXTURES: FixtureMap = {
     // D-48-B IN-02: a schema-invalid `marketplace.json` (typed
     // InvalidMarketplaceManifestError, NO SyntaxError cause) reads
     // `{invalid manifest}` for parity with the `marketplace add` write path,
-    // not the former generic `{unreadable}` fallback. Mirrors
+    // not the generic `{unreadable}` fallback. Mirrors
     // buildManifestFailureMessage: a `plugin-info` payload on the marketplace
     // subject (marketplaceName === plugin.name, plugin.scope ===
     // marketplaceScope so the renderer's orphan-fold rule drops the failed-row
@@ -4221,8 +4221,8 @@ const FIXTURES: FixtureMap = {
 
     // ATTR-05 / S1 / D-48-C Shape 1: an explicit-scope flip of a name not
     // added in the requested scope routes to the standalone
-    // `marketplace-not-added` `{marketplace not added}` variant carrying the requested
-    // scope bracket -- superseding the former reason-less / `{not found}` form.
+    // `marketplace-not-added` `{marketplace not added}` variant carrying the
+    // requested scope bracket.
     "autoupdate-missing-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -4235,8 +4235,7 @@ const FIXTURES: FixtureMap = {
 
     // ATTR-05 / S2: the bare form absent from EVERY iterated scope routes to
     // the SAME standalone variant carrying `first.scope` (project-before-user
-    // SC-6 order -> `[project]`). Supersedes the former reason-LESS bare
-    // `(failed)` row.
+    // SC-6 order -> `[project]`).
     "autoupdate-missing-not-added-bare": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -4941,8 +4940,8 @@ const FIXTURES: FixtureMap = {
     // unstaged some plugins and failed others. Bare `(failed)` mp header +
     // one row per unstaged plugin (○ uninstalled) + one row per failed
     // plugin (⊘ {reason}). Mirrors the standalone `marketplace remove`
-    // `partial` byte form. Pre-fix the orchestrated arm collapsed this to
-    // ONE mp-failed row, silently dropping the N-1 other rows.
+    // `partial` byte form: collapsing to ONE mp-failed row would silently
+    // drop the N-1 other rows.
     "partial-marketplace-remove": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

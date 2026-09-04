@@ -122,7 +122,7 @@ async function writeConfig(cwd: string, body: unknown): Promise<void> {
  * Pre-record a marketplace in state.json BYPASSING saveState's schema check.
  * Used to seed the legacy `autoupdate` field on the marketplace record so
  * the D-13 gated migration path can capture it on the first load.
- * (saveState validates against STATE_SCHEMA which no longer declares
+ * (saveState validates against STATE_SCHEMA, which does not declare
  * `autoupdate`, so the legacy-field test cannot use saveState directly.)
  */
 async function seedStateRaw(cwd: string, raw: unknown): Promise<void> {
@@ -342,7 +342,7 @@ test("Concurrent first-load race: two processes race against state with legacy a
   const env = await setupRaceEnv("pi-cm-recon06-mig22-");
   try {
     // Pre-record a marketplace in state with the legacy `autoupdate: true`
-    // field. STATE_SCHEMA no longer declares the field (SPLIT-01), so we
+    // field. STATE_SCHEMA does not declare the field (SPLIT-01), so we
     // bypass saveState to seed it; loadState's D-13 ORDERING RAIL preserves
     // the field on the first load (existsSync(claude-plugins.json) is
     // false), letting migrateFirstRunConfig capture it.

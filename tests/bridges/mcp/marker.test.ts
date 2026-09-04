@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
@@ -8,76 +8,282 @@ import {
   readMarker,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
-// MC-5 -- per-server `_piClaudeMarketplace` marker shape and ownership.
+describe("CLAUDE_MARKETPLACE_MARKER_KEY", () => {
+  test("keeps the exact per-server ownership key", () => {
+    // arrange
+    const expectedMarkerKey = "_piClaudeMarketplace";
 
-test("MC-5 CLAUDE_MARKETPLACE_MARKER_KEY === '_piClaudeMarketplace' (user contract snapshot)", () => {
-  // This is byte-for-byte user contract. Snapshot the literal.
-  assert.equal(CLAUDE_MARKETPLACE_MARKER_KEY, "_piClaudeMarketplace");
-});
+    // act
+    const markerKey = CLAUDE_MARKETPLACE_MARKER_KEY;
 
-test("MC-5 readMarker returns null for non-object input", () => {
-  assert.equal(readMarker(null), null);
-  assert.equal(readMarker(undefined), null);
-  assert.equal(readMarker("string"), null);
-  assert.equal(readMarker(42), null);
-  assert.equal(readMarker(true), null);
-  assert.equal(readMarker([]), null);
-});
-
-test("MC-5 readMarker returns null when marker key absent", () => {
-  assert.equal(readMarker({}), null);
-  assert.equal(readMarker({ command: "x", args: [] }), null);
-});
-
-test("MC-5 readMarker returns parsed marker when valid", () => {
-  const m = readMarker({
-    command: "node",
-    [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: "acme", marketplace: "official" },
+    // assert
+    assert.strictEqual(markerKey, expectedMarkerKey);
   });
-  assert.deepEqual(m, { plugin: "acme", marketplace: "official" });
 });
 
-test("MC-5 readMarker returns null when marker has missing plugin or marketplace", () => {
-  assert.equal(
-    readMarker({ [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: "acme" } }),
-    null,
-    "missing marketplace -> null",
-  );
-  assert.equal(
-    readMarker({ [CLAUDE_MARKETPLACE_MARKER_KEY]: { marketplace: "official" } }),
-    null,
-    "missing plugin -> null",
-  );
-  assert.equal(
-    readMarker({ [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: 1, marketplace: "official" } }),
-    null,
-    "non-string plugin -> null",
-  );
-  assert.equal(
-    readMarker({ [CLAUDE_MARKETPLACE_MARKER_KEY]: null }),
-    null,
-    "null marker subobject -> null",
-  );
-  assert.equal(
-    readMarker({ [CLAUDE_MARKETPLACE_MARKER_KEY]: [] }),
-    null,
-    "array marker subobject -> null",
-  );
+describe("buildMarker", () => {
+  test("returns the complete plugin and marketplace identity", () => {
+    // arrange
+    const plugin = "deploy-tools";
+    const marketplace = "team-marketplace";
+    const expectedMarker = {
+      plugin: "deploy-tools",
+      marketplace: "team-marketplace",
+    };
+
+    // act
+    const marker = buildMarker(plugin, marketplace);
+
+    // assert
+    assert.deepStrictEqual(marker, expectedMarker);
+  });
 });
 
-test("MC-5 buildMarker returns { plugin, marketplace } untouched", () => {
-  const m = buildMarker("acme", "official");
-  assert.deepEqual(m, { plugin: "acme", marketplace: "official" });
+describe("readMarker", () => {
+  test("returns the complete marker from an owned per-server entry", () => {
+    // arrange
+    const server = {
+      command: "node",
+      args: ["server.mjs"],
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official-marketplace",
+      },
+    };
+    const expectedMarker = {
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    };
+
+    // act
+    const marker = readMarker(server);
+
+    // assert
+    assert.deepStrictEqual(marker, expectedMarker);
+  });
+
+  for (const { description, server } of [
+    { description: "null", server: null },
+    { description: "an array", server: [] },
+    { description: "a primitive", server: "mcp-server" },
+    { description: "a server without the marker key", server: { command: "node" } },
+    { description: "a null marker", server: { _piClaudeMarketplace: null } },
+    { description: "an array marker", server: { _piClaudeMarketplace: [] } },
+    { description: "a primitive marker", server: { _piClaudeMarketplace: "owned" } },
+    {
+      description: "a marker without plugin",
+      server: { _piClaudeMarketplace: { marketplace: "official-marketplace" } },
+    },
+    {
+      description: "a marker without marketplace",
+      server: { _piClaudeMarketplace: { plugin: "search-tools" } },
+    },
+    {
+      description: "a marker with a non-string plugin",
+      server: {
+        _piClaudeMarketplace: { plugin: 7, marketplace: "official-marketplace" },
+      },
+    },
+    {
+      description: "a marker with a non-string marketplace",
+      server: {
+        _piClaudeMarketplace: { plugin: "search-tools", marketplace: false },
+      },
+    },
+  ] satisfies ReadonlyArray<{ description: string; server: unknown }>) {
+    test(`returns null for ${description}`, () => {
+      // arrange
+      const expectedMarker = null;
+
+      // act
+      const marker = readMarker(server);
+
+      // assert
+      assert.strictEqual(marker, expectedMarker);
+    });
+  }
+
+  test("returns null when the marker key is inherited", () => {
+    // arrange
+    const server: unknown = Object.create({
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official-marketplace",
+      },
+    });
+    const expectedMarker = null;
+
+    // act
+    const marker = readMarker(server);
+
+    // assert
+    assert.strictEqual(marker, expectedMarker);
+  });
+
+  for (const { description, marker } of [
+    {
+      description: "plugin",
+      marker: Object.assign(Object.create({ plugin: "search-tools" }), {
+        marketplace: "official-marketplace",
+      }) as unknown,
+    },
+    {
+      description: "marketplace",
+      marker: Object.assign(Object.create({ marketplace: "official-marketplace" }), {
+        plugin: "search-tools",
+      }) as unknown,
+    },
+  ] satisfies ReadonlyArray<{ description: string; marker: unknown }>) {
+    test(`returns null when the marker ${description} field is inherited`, () => {
+      // arrange
+      const server = { _piClaudeMarketplace: marker };
+      const expectedMarker = null;
+
+      // act
+      const parsedMarker = readMarker(server);
+
+      // assert
+      assert.strictEqual(parsedMarker, expectedMarker);
+    });
+  }
 });
 
-test("MC-5 isOwnedBy returns true for matching tuple, false otherwise", () => {
-  const value = {
-    command: "node",
-    [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: "acme", marketplace: "official" },
-  };
-  assert.equal(isOwnedBy(value, "acme", "official"), true);
-  assert.equal(isOwnedBy(value, "acme", "other"), false, "wrong marketplace -> false");
-  assert.equal(isOwnedBy(value, "other", "official"), false, "wrong plugin -> false");
-  assert.equal(isOwnedBy({}, "acme", "official"), false, "no marker -> false");
-  assert.equal(isOwnedBy(null, "acme", "official"), false, "null value -> false");
+describe("isOwnedBy", () => {
+  test("returns true for the exact plugin and marketplace owner", () => {
+    // arrange
+    const server = {
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official-marketplace",
+      },
+    };
+    const plugin = "search-tools";
+    const marketplace = "official-marketplace";
+    const expectedOwnership = true;
+
+    // act
+    const owned = isOwnedBy(server, plugin, marketplace);
+
+    // assert
+    assert.strictEqual(owned, expectedOwnership);
+  });
+
+  for (const { description, server, plugin, marketplace } of [
+    {
+      description: "a different plugin",
+      server: {
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: "official-marketplace",
+        },
+      },
+      plugin: "deploy-tools",
+      marketplace: "official-marketplace",
+    },
+    {
+      description: "a different marketplace",
+      server: {
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: "official-marketplace",
+        },
+      },
+      plugin: "search-tools",
+      marketplace: "team-marketplace",
+    },
+    {
+      description: "a missing marker key",
+      server: { command: "node" },
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    },
+    {
+      description: "a partial marker",
+      server: { _piClaudeMarketplace: { plugin: "search-tools" } },
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    },
+    {
+      description: "an array",
+      server: [],
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    },
+    {
+      description: "null",
+      server: null,
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    },
+    {
+      description: "a primitive",
+      server: 17,
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    },
+    {
+      description: "a malformed field type",
+      server: {
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: 17,
+        },
+      },
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    },
+  ] satisfies ReadonlyArray<{
+    description: string;
+    server: unknown;
+    plugin: string;
+    marketplace: string;
+  }>) {
+    test(`returns false for ${description}`, () => {
+      // arrange
+      const expectedOwnership = false;
+
+      // act
+      const owned = isOwnedBy(server, plugin, marketplace);
+
+      // assert
+      assert.strictEqual(owned, expectedOwnership);
+    });
+  }
+
+  test("returns false when the marker key is inherited", () => {
+    // arrange
+    const server: unknown = Object.create({
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official-marketplace",
+      },
+    });
+    const plugin = "search-tools";
+    const marketplace = "official-marketplace";
+    const expectedOwnership = false;
+
+    // act
+    const owned = isOwnedBy(server, plugin, marketplace);
+
+    // assert
+    assert.strictEqual(owned, expectedOwnership);
+  });
+
+  test("returns false when marker fields are inherited", () => {
+    // arrange
+    const marker: unknown = Object.create({
+      plugin: "search-tools",
+      marketplace: "official-marketplace",
+    });
+    const server = { _piClaudeMarketplace: marker };
+    const plugin = "search-tools";
+    const marketplace = "official-marketplace";
+    const expectedOwnership = false;
+
+    // act
+    const owned = isOwnedBy(server, plugin, marketplace);
+
+    // assert
+    assert.strictEqual(owned, expectedOwnership);
+  });
 });

@@ -7,6 +7,10 @@ findings_in_scope: 2
 fixed: 2
 skipped: 0
 status: all_fixed
+audit_acknowledged:
+  milestone: v1.19
+  at: 2026-09-04
+  gap_snapshot: "all_fixed::scenarios=0"
 ---
 
 # Phase 56: UAT Fix Report (UAT-03 + UAT-04)

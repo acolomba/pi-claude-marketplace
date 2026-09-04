@@ -44,9 +44,9 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 /**
  * D-67-02 / LIST-02: the installed-inventory cache statuses. A plugin present
- * in state derives one of these finer statuses (the cache no longer flattens
- * them to `installed`); the no-`--partial` installed-modes completion candidate
- * set spans the whole group so its output stays byte-identical to today.
+ * in state derives one of these finer statuses; the no-`--partial`
+ * installed-modes completion candidate set spans the whole group so it
+ * covers every installed plugin, regardless of which finer status it holds.
  */
 const INSTALLED_INVENTORY_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "installed",
@@ -360,8 +360,7 @@ async function getInstallPluginToMarketplacesMap(
 ): Promise<Map<string, string[]>> {
   // LIST-02 / D-67-02: `--partial` widens the install candidate set to the
   // partially-available statuses (`available` + `partially-available`); the no-`--partial`
-  // set stays `available`-only (byte-identical to today). `unavailable` is
-  // never admitted (FORCE-05).
+  // set stays `available`-only. `unavailable` is never admitted (FORCE-05).
   const allowed = partial ? PARTIAL_INSTALL_STATUSES : INSTALL_STATUSES;
   const result = new Map<string, string[]>();
   for (const source of await sourceMarketplacesForInstall(resolver, targetScope)) {

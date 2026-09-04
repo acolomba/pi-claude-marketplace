@@ -22,7 +22,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 /** D-12: walk filter -- entries by name that are skipped at every level. */
-export const HASH_WALK_SKIP = Object.freeze([".git", "node_modules", ".DS_Store"] as const);
+const HASH_WALK_SKIP = Object.freeze([".git", "node_modules", ".DS_Store"] as const);
 
 const HASH_TRUNC = 12;
 
@@ -34,16 +34,6 @@ export async function computeHashVersion(pluginRoot: string): Promise<string> {
 }
 
 /**
- * D-77-01 / PURL-09: anchored-exact predicate for a git-source sha-version
- * string. Matches EXACTLY `sha-` + 12 lowercase-hex chars -- the shape produced
- * by `shaVersion` (`"sha-" + fullSha.slice(0, 12)`). Uppercase hex, wrong
- * length, a `hash-` prefix, or an affixed character are all rejected so a
- * malformed pseudo-sha is never silently rewritten into a misleading short SHA
- * (mirrors the HASH_VERSION_RE hardening in shared/notify.ts).
- */
-export const SHA_VERSION_RE = /^sha-[0-9a-f]{12}$/;
-
-/**
  * D-77-01 / PURL-09: build the git-source version string from a resolved commit
  * sha -- `sha-` + the first 12 hex chars. Parallels the PI-7 `hash-<12hex>`
  * convention but names the git-commit provenance. The full 40-hex sha is
@@ -51,11 +41,6 @@ export const SHA_VERSION_RE = /^sha-[0-9a-f]{12}$/;
  */
 export function shaVersion(fullSha: string): string {
   return "sha-" + fullSha.slice(0, HASH_TRUNC);
-}
-
-/** D-77-01 / PURL-09: true iff `v` is exactly `sha-<12 lowercase hex>`. */
-export function looksLikeShaVersion(v: string): boolean {
-  return SHA_VERSION_RE.test(v);
 }
 
 async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void> {
@@ -107,16 +92,11 @@ function normalizeBytes(buf: Buffer): Buffer {
   let j = 0;
 
   for (let i = 0; i < stripped.length; i++) {
-    const byte = stripped[i];
+    const byte = stripped.readUInt8(i);
 
     // Skip the \r in any \r\n pair; preserve standalone \r (matches git
     // behavior: autocrlf=input collapses \r\n only, leaves bare \r alone).
     if (byte === 0x0d && stripped[i + 1] === 0x0a) {
-      continue;
-    }
-
-    if (byte === undefined) {
-      // Unreachable: i < stripped.length, but the type system needs the guard.
       continue;
     }
 

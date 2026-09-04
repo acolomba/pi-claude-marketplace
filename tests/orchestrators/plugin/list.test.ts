@@ -32,10 +32,15 @@ import path from "node:path";
 import test from "node:test";
 
 import * as git from "isomorphic-git";
+import { mock, verify, when } from "strong-mock";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { listPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import {
+  availableRowMessage,
+  listPlugins,
+  loadPluginListPayload,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -44,36 +49,52 @@ import {
   buildInstalledPluginRecord,
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
-} from "../../helpers/marketplace-seed.ts";
+} from "../../edge/handlers/marketplace-seed.ts";
 
+import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
+type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
+void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
+// @ts-expect-error list is filesystem/state-only and exposes no Git transport option
+void ({ cwd: "/workspace", gitOps: {} } satisfies ListPluginsWithoutConnections);
+
 interface NotifyRecord {
   message: string;
-  severity?: string;
+  severity?: NotificationSeverity;
 }
+
+type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
+type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
+  readonly notify: (message: string, severity?: NotificationSeverity) => void;
+};
 
 function makeCtx(): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
+  ui: NotificationUi;
 } {
   const notifications: NotifyRecord[] = [];
-  const pi = {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
-  const ctx = {
-    ui: {
-      notify: (m: string, s?: string): void => {
-        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
-      },
-    },
-    pi,
-  } as unknown as ExtensionContext;
-  return { ctx, pi, notifications };
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .twice();
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .once();
+
+  return { ctx, pi, notifications, ui };
 }
 
 /**
@@ -103,6 +124,38 @@ async function withHermeticHome<T>(
   }
 }
 
+interface TreeEntry {
+  readonly bytes?: string;
+  readonly path: string;
+  readonly type: "directory" | "file";
+}
+
+async function snapshotTree(root: string): Promise<readonly TreeEntry[]> {
+  const entries: TreeEntry[] = [];
+  const walk = async (directory: string): Promise<void> => {
+    const children = await fs.promises.readdir(directory, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const absolutePath = path.join(directory, child.name);
+      const relativePath = path.relative(root, absolutePath);
+      if (child.isDirectory()) {
+        entries.push({ path: relativePath, type: "directory" });
+        await walk(absolutePath);
+      } else {
+        entries.push({
+          path: relativePath,
+          type: "file",
+          bytes: (await readFile(absolutePath)).toString("base64"),
+        });
+      }
+    }
+  };
+
+  await walk(root);
+
+  return entries;
+}
+
 interface SeedMarketplaceOpts {
   scope: "user" | "project";
   scopeRoot: string;
@@ -118,8 +171,8 @@ interface SeedMarketplaceOpts {
    * every `resources.*` array, so a disabled record's inventory is whatever the
    * caller supplies. The load-bearing "currently disabled" marker is the
    * explicit `enabled: false` boolean alone (ENBL-05 /
-   * `persistence/state-io.ts::isRecordedButDisabled`); emptiness is no longer
-   * part of it. The default inventory seeds a populated `resources.skills` --
+   * `persistence/state-io.ts::isRecordedButDisabled`), not the emptiness of
+   * any resource array. The default inventory seeds a populated `resources.skills` --
    * a PRODUCTION installed record always has at least one populated array (the
    * resolver's `requireInstallable` gate rules out zero-component
    * installables). `hooksOnly: true` (D-63-04) seeds a hooks-only installed
@@ -249,11 +302,18 @@ test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel
   // (D-16-17). Catalog reference:
   // docs/output-catalog.md:139-145 -- `<!-- catalog-state: empty -->`.
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, pi, notifications } = makeCtx();
+    // arrange
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd });
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, "(no marketplaces)");
     assert.equal(notifications[0]!.severity, undefined);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -263,6 +323,7 @@ test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel
 
 test("PL-1: no flags = every bucket (installed, available, unavailable)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -283,8 +344,10 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
     // Per D-16-17 orphan-fold rule the renderer suppresses `[<scope>]`
@@ -305,11 +368,16 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
         "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
       ].join("\n"),
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-1: --installed alone shows only installed plugins", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -327,8 +395,10 @@ test("PL-1: --installed alone shows only installed plugins", async () => {
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
     const out = notifications[0]!.message;
     // plugin.scope === mp.scope (both "user") -> bracket suppressed
     // per D-16-17. The installed alpha row is `● alpha v1.0.0 (installed)`,
@@ -338,11 +408,16 @@ test("PL-1: --installed alone shows only installed plugins", async () => {
     assert.equal(out.includes("● alpha [user]"), false, out);
     assert.equal(out.includes("○ beta"), false);
     assert.equal(out.includes("⊘"), false);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-1: --available alone shows only available (not-yet-installed installable) plugins", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -360,17 +435,24 @@ test("PL-1: --available alone shows only available (not-yet-installed installabl
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+    // assert
     const out = notifications[0]!.message;
     assert.equal(out.includes("● alpha"), false);
     assert.match(out, /○ beta v2\.0\.0 \(available\)/);
     assert.equal(out.includes("⊘"), false);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -389,12 +471,18 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
+    // assert
     const out = notifications[0]!.message;
     assert.equal(out.includes("● alpha"), false);
     assert.equal(out.includes("○ beta"), false);
     assert.match(out, /⊘ gamma v3\.0\.0 \(unavailable\)/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -402,8 +490,8 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
 // RSTA-01 / RSTA-07 / D-80-03 / D-80-07: the `(remote)` git-source row + the
 // `--remote` filter. A not-installed git source with no materialized clone
 // renders `◌ <name> (remote)` (bare) and lands in the `remote` filter bucket;
-// `--available` no longer admits it (the intended behavior change). A WARM clone
-// resolves the three-way verdict against the on-disk tree.
+// `--available` excludes it by design. A WARM clone resolves the three-way
+// verdict against the on-disk tree.
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
@@ -441,6 +529,7 @@ async function stageWarmMirror(
 
 test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `◌ <name> (remote)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -453,19 +542,26 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), and no
     // PROBE- or SOFT-DEP-derived reason brace (D-80-03 as narrowed by
     // OUT-05). This fixture's entry declares nothing, so there is no
     // entry-derived token either, and the row is bare on both counts.
     assert.equal(out, ["● mp1 [user]", "  ◌ gitplug v1.0.0 (remote)"].join("\n"), out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabled: false` carries `{installs disabled}` on its `(remote)` row; a silent cold entry stays bare", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -487,8 +583,10 @@ test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabl
       // No mirror staged for either source: both rows are COLD.
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // The load-bearing fact is that NO tree exists for either row -- no clone,
     // no mirror, no plugin manifest to read -- so `delta`'s claim can only have
@@ -506,11 +604,16 @@ test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabl
       ].join("\n"),
       out,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO clone directory on disk after the call returns", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -531,8 +634,10 @@ test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO cl
       // No mirror staged: the row is COLD.
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.equal(
       out,
@@ -567,11 +672,16 @@ test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO cl
     }
 
     assert.equal(probeCode, "ENOENT", "plugin-clones/ must not exist after the render");
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` row; a declared-true entry and a silent entry stay bare", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -589,8 +699,10 @@ test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts 
       installablePluginDirs: ["alpha", "beta", "gamma"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Byte-equal over the whole body, so the three rows prove two facts on one
     // run. `alpha`'s ENTRY declares that installing it would leave it disabled,
@@ -609,11 +721,16 @@ test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts 
       ].join("\n"),
       out,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs disabled}` in EITHER direction, because install checks it first", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -645,8 +762,10 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
       locations.scopeRoot,
     );
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // The row states what an install WOULD do, so it must model the same
     // precedence `install` applies (install.ts::readDeclaredEnabled), not a
@@ -676,11 +795,16 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
       ].join("\n"),
       out,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-02: on a `(partially-available)` row the author-declared token appends at the TAIL, after the degrade tokens", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -705,8 +829,10 @@ test("OUT-02: on a `(partially-available)` row the author-declared token appends
       installablePluginDirs: ["zeta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // The ORDER is asserted deliberately, not incidentally: `composeReasons`
     // joins the array in order and there is no per-row sort, so the tail
@@ -718,11 +844,16 @@ test("OUT-02: on a `(partially-available)` row the author-declared token appends
       ["● mp1 [user]", "  ⊖ zeta v1.0.0 (partially-available) {lsp, installs disabled}"].join("\n"),
       out,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structural resolver arm, not the probe-failure catch -- though both entries declare `defaultEnabled: false`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -749,8 +880,10 @@ test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structu
       // No installablePluginDirs: neither entry resolves.
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Byte-equal rather than a non-match, so absence is proven together with
     // everything else on both rows staying put. The exclusion is deliberate:
@@ -766,11 +899,16 @@ test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structu
       ].join("\n"),
       out,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, though its entry declares `defaultEnabled: false`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -785,8 +923,10 @@ test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, thou
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // The durable-versus-transient rule (D-95-02): the token is a claim about an
     // action NOT YET TAKEN, and a steady-state inventory row states durable
@@ -795,11 +935,16 @@ test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, thou
     // news. This holds because the installed-row builder was never taught the
     // token -- there is no runtime guard to relax.
     assert.equal(out, ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n"), out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available` alone EXCLUDES the cold git source; `--available --remote` includes both", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -820,36 +965,51 @@ test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available
 
     // --remote: only the remote git row.
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
+      // act
       await listPlugins({ ctx, pi, cwd, scope: "user", remote: true });
       const out = notifications[0]!.message;
       assert.match(out, /◌ gitplug v2\.0\.0 \(remote\)/, out);
       assert.equal(out.includes("avail"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
 
     // --available alone: the cold git source is EXCLUDED (the intended change);
     // only the path-source available row shows.
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
       const out = notifications[0]!.message;
       assert.match(out, /○ avail v1\.0\.0 \(available\)/, out);
       assert.equal(out.includes("gitplug"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
 
     // --available --remote: BOTH rows restore the pre-`defaultEnabled` set.
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", available: true, remote: true });
+      // assert
       const out = notifications[0]!.message;
       assert.match(out, /○ avail v1\.0\.0 \(available\)/, out);
       assert.match(out, /◌ gitplug v2\.0\.0 \(remote\)/, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
   });
 });
 
 test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies its three-way verdict (`available`), NOT `remote`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     // Canonical url (no `.git`) so the manifest source and the staged mirror key
     // agree on the hashed url.
@@ -866,7 +1026,8 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
     });
     await stageWarmMirror(cwd, canonicalUrl);
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     // A warm tree resolves `installable` -> `(available)`, never `(remote)`.
@@ -875,21 +1036,35 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
 
     // The warm source is NOT in the `--remote` bucket, and DOES pass `--available`.
     {
-      const { ctx: c2, pi: p2, notifications: n2 } = makeCtx();
+      const { ctx: c2, pi: p2, notifications: n2, ui: u2 } = makeCtx();
       await listPlugins({ ctx: c2, pi: p2, cwd, scope: "user", remote: true });
       assert.equal(n2[0]!.message.includes("warm-plugin"), false, n2[0]!.message);
+
+      verify(c2);
+      verify(p2);
+      verify(u2);
     }
 
     {
-      const { ctx: c3, pi: p3, notifications: n3 } = makeCtx();
+      const { ctx: c3, pi: p3, notifications: n3, ui: u3 } = makeCtx();
       await listPlugins({ ctx: c3, pi: p3, cwd, scope: "user", available: true });
+      // assert
       assert.match(n3[0]!.message, /○ warm-plugin v1\.0\.0 \(available\)/, n3[0]!.message);
+
+      verify(c3);
+      verify(p3);
+      verify(u3);
     }
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const canonicalUrl = "https://example.com/warmdecl";
     await seedMarketplace({
@@ -908,8 +1083,10 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     // ignoring it a decision rather than an inability.
     await stageWarmMirror(cwd, canonicalUrl, { name: "warmdecl", defaultEnabled: false });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Three things this pins, in the order they matter (OUT-05 / DOC-02):
     //
@@ -930,11 +1107,16 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     //    network-free requirement forbids. OUT-05 / DOC-02 own the rule; do
     //    not "fix" this toward what install reads.
     assert.equal(out, ["● mp1 [user]", "  ○ warmdecl v1.0.0 (available)"].join("\n"), out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(installed)`, never `(remote)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -950,14 +1132,20 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
       installed: { gitplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // The installed path (installedRowMessage) never renders `(remote)` -- the
     // `remote` derivation lives only on the not-installed availableRowMessage
     // path. A cold clone does not regress the row (D-78-04 degrade preserved).
     assert.match(out, /● gitplug v1\.0\.0 \(installed\)/, out);
     assert.equal(out.includes("(remote)"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -968,14 +1156,15 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
 //                     resolver bucket, which is independent of the render token.
 //   --installed    -> installed + force-installed + force-upgradable (all
 //                     installed-inventory render statuses) (A1).
-//   --unavailable  -> structural-unavailable ONLY; it no longer admits the
-//                     not-installed `unsupported` rows (A2 partition).
+//   --unavailable  -> structural-unavailable ONLY; excludes the not-installed
+//                     `unsupported` rows (A2 partition).
 // USTAT-01 / D-64-01: a not-installed `unsupported` plugin renders the
 // de-collapsed `(unsupported)` / `⊖` token; the filter buckets are unchanged.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows under --unsupported (the `(unsupported)` row token) and is ABSENT under --unavailable and --available", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1001,17 +1190,22 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
     // --unsupported: the unsupported row appears, rendered with the de-collapsed
     // `(unsupported)` / `⊖` token (USTAT-01). clean/gone are excluded.
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
+      // act
       await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊖ unsup v1\.0\.0 \(partially-available\) \{lsp\}/, out);
       assert.equal(out.includes("clean"), false, out);
       assert.equal(out.includes("gone"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
 
     // --unavailable: structural `gone` only; the unsupported `unsup` is NOT here.
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
@@ -1019,22 +1213,32 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
       // `unsup` substring, so the bare name would false-positive).
       assert.equal(out.includes("unsup v1.0.0"), false, out);
       assert.equal(out.includes("clean"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
 
     // --available: only the clean row.
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+      // assert
       const out = notifications[0]!.message;
       assert.match(out, /○ clean v2\.0\.0 \(available\)/, out);
       assert.equal(out.includes("unsup v1.0.0"), false, out);
       assert.equal(out.includes("gone"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
   });
 });
 
 test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavailable and is ABSENT under --unsupported", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1049,23 +1253,34 @@ test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavail
     });
 
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
+      // act
       await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
 
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
+      // assert
       const out = notifications[0]!.message;
       assert.equal(out.includes("gone"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
   });
 });
 
 test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) and is ABSENT under --unsupported", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1082,23 +1297,34 @@ test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) a
     });
 
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
+      // act
       await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
       const out = notifications[0]!.message;
       assert.match(out, /◉ forced v1\.0\.0 \(partially-installed\)/, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
 
     {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications, ui } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
+      // assert
       const out = notifications[0]!.message;
       assert.equal(out.includes("forced"), false, out);
+
+      verify(ctx);
+      verify(pi);
+      verify(ui);
     }
   });
 });
 
 test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the single aggregate {unsupported hooks} marker on the list row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1118,15 +1344,22 @@ test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the sing
       installablePluginDirs: ["hookplug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◉ hookplug v1\.0\.0 \(partially-installed\) \{unsupported hooks\}/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1143,10 +1376,16 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
       installablePluginDirs: ["fup"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● fup v1\.0\.0 \(partially-upgradable\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1158,6 +1397,7 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
 // that pair drives the `force-installed` / `force-upgradable` sort arms.
 test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows across scopes exercise the force scope-sort arms", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
 
     // User scope: `fi` force-installed (persisted unsupported) + `fu` clean
@@ -1243,10 +1483,12 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
           },
         },
       },
-    } as unknown as Parameters<typeof saveState>[1]);
+    });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd });
+    // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
     // Both the user-side row (no bracket) AND the folded project-side row
@@ -1256,6 +1498,10 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
     assert.match(out, /◉ fi \[project\] v1\.0\.0 \(partially-installed\)/, out);
     assert.match(out, /● fu v1\.0\.0 \(partially-upgradable\)/, out);
     assert.match(out, /● fu \[project\] v1\.0\.0 \(partially-upgradable\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1266,6 +1512,7 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
 // `unsupported` status -- the only list-surface producer of that sort arm.
 test("USTAT-01 / SNM-11: two same-name not-installed unsupported rows exercise the unsupported scope-sort arm", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1282,17 +1529,24 @@ test("USTAT-01 / SNM-11: two same-name not-installed unsupported rows exercise t
       installablePluginDirs: ["dup"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
     const matches = out.match(/⊖ dup v1\.0\.0 \(partially-available\) \{lsp\}/g) ?? [];
     assert.equal(matches.length, 2, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed unsupported row renders the `(unsupported)` byte form", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1312,8 +1566,10 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
       installablePluginDirs: ["inst", "avail", "unsup"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● inst v1\.0\.0 \(installed\)/, out);
     assert.match(out, /○ avail v2\.0\.0 \(available\)/, out);
@@ -1321,6 +1577,10 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
     // USTAT-01 / D-64-01: the not-installed `unsupported` row renders the
     // de-collapsed `(unsupported)` / `⊖` token, distinct from structural `⊘`.
     assert.match(out, /⊖ unsup v4\.0\.0 \(partially-available\) \{lsp\}/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1330,6 +1590,7 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
 
 test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(installed)` -- and stays distinct from `(unavailable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1345,8 +1606,10 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
     // Catalog `disabled-inventory` row form: ◍ glyph (ICON_DISABLED), version
@@ -1356,11 +1619,16 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
     assert.equal(out.includes("(installed)"), false, `must not render (installed): ${out}`);
     assert.equal(out.includes("(unavailable)"), false, `must not render (unavailable): ${out}`);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("ENBL-04: disabled record with drifted manifest version does NOT render `(upgradable)` (version pin frozen while disabled)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1375,16 +1643,23 @@ test("ENBL-04: disabled record with drifted manifest version does NOT render `(u
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◍ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(upgradable)"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disabled plugin IS recorded)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1402,11 +1677,17 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◍ alpha v1\.0\.0 \(disabled\)/, out);
     assert.equal(out.includes("○ beta"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1424,6 +1705,7 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
 // inside one marketplace block.
 test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) {not in manifest}` beside an enabled partial's `(partially-installed) {not in manifest, lsp}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1441,9 +1723,11 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
 
+    // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
     // The byte form IS the contract: one join proves both status tokens, the
@@ -1468,6 +1752,10 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
     assert.equal(alphaRow.includes("lsp"), false, `no unsupported-kind token: ${alphaRow}`);
     assert.equal(alphaRow.includes("(partially-installed)"), false, alphaRow);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1507,7 +1795,7 @@ async function renderDisabledWithInventory(inventory: {
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
 
@@ -1523,6 +1811,10 @@ async function renderDisabledWithInventory(inventory: {
         }
       >;
     };
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
     return {
       out: notifications[0]!.message,
       recorded: state.marketplaces.mp1!.plugins.alpha!.resources,
@@ -1531,6 +1823,8 @@ async function renderDisabledWithInventory(inventory: {
 }
 
 test("ENBL-15 / D-100-06: a disabled record with populated agents and mcpServers renders the same bytes as one with empty arrays", async () => {
+  // arrange
+  // act
   const populated = await renderDisabledWithInventory({
     agents: ["alpha-agent"],
     mcpServers: ["alpha-mcp"],
@@ -1538,6 +1832,7 @@ test("ENBL-15 / D-100-06: a disabled record with populated agents and mcpServers
   const empty = await renderDisabledWithInventory({ agents: [], mcpServers: [] });
 
   // The populated fixture must really be populated on disk.
+  // assert
   assert.deepEqual(populated.recorded.agents, ["alpha-agent"]);
   assert.deepEqual(populated.recorded.mcpServers, ["alpha-mcp"]);
   assert.deepEqual(empty.recorded.agents, []);
@@ -1558,6 +1853,7 @@ test("ENBL-15 / D-100-06: a disabled record with populated agents and mcpServers
 // list renderer routed the row to the (disabled) arm.
 test("D-63-04: hooks-only installed plugin renders `(installed)` -- NOT `(disabled)` -- on /claude:plugin list", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1575,11 +1871,17 @@ test("D-63-04: hooks-only installed plugin renders `(installed)` -- NOT `(disabl
       installablePluginDirs: ["hookplug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● hookplug v1\.0\.0 \(installed\)/, out);
     assert.equal(out.includes("(disabled)"), false, `must not render (disabled): ${out}`);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1589,6 +1891,7 @@ test("D-63-04: hooks-only installed plugin renders `(installed)` -- NOT `(disabl
 
 test("SC-6: bare form (no opts.scope) enumerates marketplaces from BOTH scopes", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const projectRoot = path.join(cwd, ".pi");
 
@@ -1607,8 +1910,10 @@ test("SC-6: bare form (no opts.scope) enumerates marketplaces from BOTH scopes",
       manifest: { name: "p-mp", plugins: [] },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd });
+    // assert
     const out = notifications[0]!.message;
     // MSG-GR-3 sort: p-mp < u-mp alphabetically -> p-mp renders first.
     assert.match(out, /● p-mp \[project\]/);
@@ -1616,11 +1921,16 @@ test("SC-6: bare form (no opts.scope) enumerates marketplaces from BOTH scopes",
     const pIdx = out.indexOf("p-mp");
     const uIdx = out.indexOf("u-mp");
     assert.ok(pIdx >= 0 && uIdx >= 0 && pIdx < uIdx, `expected p-mp before u-mp: ${out}`);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders TWO separate headers when added independently", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const projectRoot = path.join(cwd, ".pi");
 
@@ -1653,8 +1963,10 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd });
+    // assert
     const out = notifications[0]!.message;
     // Both headers render; project-before-user per MSG-GR-3 tie-break.
     assert.match(out, /● official \[project\]/);
@@ -1672,6 +1984,10 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
     assert.match(out, /● alpha v1\.0\.0 \(installed\)/);
     assert.equal(out.includes("● alpha [project]"), false, out);
     assert.equal(out.includes("● alpha [user]"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1696,6 +2012,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   // because both seedMarketplace calls allocate independent
   // `marketplaceRoot` paths -- the fold rule does not trigger.
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
 
     // Seed user-scope first so the on-disk marketplace fixture exists
@@ -1761,10 +2078,12 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
           },
         },
       },
-    } as unknown as Parameters<typeof saveState>[1]);
+    });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd });
+    // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
 
@@ -1792,6 +2111,10 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
       false,
       `expected no project-scope mp1 header in cloned-state phase: ${out}`,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1801,6 +2124,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
 
 test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces are excluded", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1827,13 +2151,19 @@ test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces
       installablePluginDirs: ["com-plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", marketplace: "official" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /official/);
     assert.match(out, /off-plug/);
     assert.equal(out.includes("community"), false);
     assert.equal(out.includes("com-plug"), false);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1843,6 +2173,7 @@ test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces
 
 test("PL-5: installed version differs from manifest version -> upgradable", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1857,18 +2188,25 @@ test("PL-5: installed version differs from manifest version -> upgradable", asyn
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // CMC-09 (upgradable) carries the ● effective-state
     // icon. D-16-17: `[<scope>]` suppressed when `p.scope === mp.scope`.
     assert.match(out, /● plug v1\.0\.0 \(upgradable\)/);
     assert.equal(out.includes("● plug [user]"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-5: installed version equals manifest version -> NOT upgradable", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1883,18 +2221,25 @@ test("PL-5: installed version equals manifest version -> NOT upgradable", async 
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // D-16-17 suppresses `[<scope>]` bracket on same-scope rows.
     assert.match(out, /● plug v1\.0\.0 \(installed\)/);
     assert.equal(out.includes("● plug [user]"), false, out);
     assert.equal(out.includes("upgradable"), false);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT semver)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1909,10 +2254,16 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /\(upgradable\)/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -1922,8 +2273,9 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
 // no-network candidate split, and auto-return-to-installed.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported derives `(partially-installed)` with NO state write", async () => {
+test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported derives `(partially-installed)` without mutating the workspace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1939,24 +2291,32 @@ test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported deri
       installablePluginDirs: ["plug"],
     });
 
-    // FSTAT-01 purity: the deriver is a pure read of the persisted record --
-    // listing MUST NOT rewrite state.json.
-    const stateJsonPath = path.join(locationsFor("user", cwd).extensionRoot, "state.json");
-    const before = await readFile(stateJsonPath, "utf8");
+    const workspaceBefore = {
+      cwd: await snapshotTree(cwd),
+      home: await snapshotTree(home),
+    };
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
-    const out = notifications[0]!.message;
-    // ◉ glyph + `(partially-installed)`; version is the installed record's version.
-    assert.match(out, /◉ plug v1\.0\.0 \(partially-installed\)/);
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp1 [user]\n  ◉ plug v1.0.0 (partially-installed) {lsp}" },
+    ]);
+    assert.deepStrictEqual(
+      { cwd: await snapshotTree(cwd), home: await snapshotTree(home) },
+      workspaceBefore,
+    );
 
-    const after = await readFile(stateJsonPath, "utf8");
-    assert.equal(after, before, "the deriver must not write state.json (FSTAT-01)");
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported derives `(partially-installed)` on list (parity with info)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -1978,19 +2338,26 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
       installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     assert.equal(
       notifications[0]!.message,
       // Byte-identical to the non-path `info` row (sans the info-only
       // `components: not resolved` line) -- the WR-02 cross-surface parity.
       ["● mp1 [user]", "  ◉ remote v1.0.0 (partially-installed) {lsp}"].join("\n"),
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives `(partially-installed)`, NEVER `(partially-upgradable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2008,16 +2375,23 @@ test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives 
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /\(partially-installed\)/);
     assert.equal(out.includes("(partially-upgradable)"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` derives `(partially-upgradable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2034,7 +2408,8 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` deriv
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     // ● glyph (clean today) + `(partially-upgradable)`; version stays the installed
@@ -2042,11 +2417,17 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` deriv
     // marker for the degrading candidate kind.
     assert.match(out, /● plug v1\.0\.0 \(partially-upgradable\)/);
     assert.match(out, new RegExp(`\\{${narrowUnsupportedKinds(["lspServers"]).join(", ")}\\}`));
+
+    // assert
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` derives `(upgradable)` (no force state)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2062,11 +2443,17 @@ test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` deri
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plug v1\.0\.0 \(upgradable\)/);
     assert.equal(out.includes("force-"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2079,6 +2466,7 @@ test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(up
   // every sibling plugin. The guard must degrade ONLY the offending row to a
   // plain `(upgradable)` and keep the rest of the list intact.
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2102,8 +2490,10 @@ test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(up
       installablePluginDirs: ["good"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // The throwing candidate degrades to a plain `(upgradable)` row...
     assert.match(out, /bad\/name v1\.0\.0 \(upgradable\)/, out);
@@ -2112,11 +2502,16 @@ test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(up
     // ...and the whole list was NOT replaced by the synthetic failure row.
     assert.equal(out.includes("(failed)"), false, out);
     assert.equal(out.includes("(list)"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-return, no lingering force state)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2131,16 +2526,23 @@ test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-re
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plug v1\.0\.0 \(installed\)/);
     assert.equal(out.includes("force-"), false, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("FSTAT-01 / D-64-02: the force-installed row's reasons are the narrowUnsupportedKinds dropped-component markers", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2157,12 +2559,18 @@ test("FSTAT-01 / D-64-02: the force-installed row's reasons are the narrowUnsupp
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     const expectedMarkers = narrowUnsupportedKinds(["lspServers", "monitors"]).join(", ");
+    // assert
     assert.match(out, /\(partially-installed\)/);
     assert.match(out, new RegExp(`\\{${expectedMarkers}\\}`));
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2180,6 +2588,7 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
   // D-16-11 (any mp.status === "failed" routes to error). No reload-hint
   // (failed is not in the state-changing variant set per D-16-12).
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const fakePath = path.join(userRoot, "marketplaces", "mp1", ".claude-plugin", "no-such.json");
     await seedMarketplace({
@@ -2191,8 +2600,10 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
       installed: { stranded: { version: "9.9.9" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     assert.equal(notifications.length, 1);
     const note = notifications[0]!;
     // Severity is "error" because the synthetic mp has status "failed".
@@ -2208,6 +2619,10 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
     // (the failure replaces the per-plugin enumeration; plugins: [] in
     // the V2 payload).
     assert.equal(out.includes("stranded"), false);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2217,6 +2632,7 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
 
 test("PL-7 / CMC-05: marketplace with autoupdate=true renders the <autoupdate> marker on the header", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2227,15 +2643,22 @@ test("PL-7 / CMC-05: marketplace with autoupdate=true renders the <autoupdate> m
       autoupdate: true,
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● auto-mp \[user\] <autoupdate>/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT render the <autoupdate> marker", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2246,11 +2669,17 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
       autoupdate: false,
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plain-mp \[user\]/);
     assert.equal(out.includes("<autoupdate>"), false);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2281,94 +2710,17 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
 // ──────────────────────────────────────────────────────────────────────────
 
 // ──────────────────────────────────────────────────────────────────────────
-// Source-grep self-tests (NFR-5 / PI-2 / PL-3 defense-in-depth)
-//
-// Redundant with tests/architecture/no-orchestrator-network.test.ts
-// but lives here so a future contributor of list logic
-// reads the constraint at the same file they are editing.
-// ──────────────────────────────────────────────────────────────────────────
-
-function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
-    .replace(/^\s*\/\/.*$/gm, ""); // line comments
-}
-
-test("NFR-5 / PL-3: list.ts source has zero imports from platform/git", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-    "utf8",
-  );
-  const code = stripComments(src);
-  assert.equal(code.includes("platform/git"), false);
-});
-
-test("NFR-5 / PL-3: list.ts source contains no DEFAULT_GIT_OPS or gitOps reference", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-    "utf8",
-  );
-  const code = stripComments(src);
-  assert.equal(code.includes("DEFAULT_GIT_OPS"), false);
-  assert.equal(code.includes("gitOps"), false);
-});
-
-test("D-04 corollary: list.ts does not use withStateGuard (read-only)", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-    "utf8",
-  );
-  const code = stripComments(src);
-  assert.equal(code.includes("withStateGuard"), false);
-});
-
-test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumulator", async () => {
-  // D-19-01: there is no PROBE_FAILURES module-level capture-buffer +
-  // drain notifyWarning. Probe failures manifest at row granularity
-  // via the per-row `(unavailable) {<narrowed-reason>}` discriminator.
-  // This test locks that with defense-in-depth: a direct
-  // identifier match (caught if anyone reintroduces by name) AND a
-  // top-level mutable-state heuristic (caught if anyone reintroduces by
-  // shape under a different name).
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-    "utf8",
-  );
-  const code = stripComments(src);
-
-  // Assertion A -- direct identifier match.
-  assert.equal(
-    code.includes("PROBE_FAILURES"),
-    false,
-    "list.ts must not contain a PROBE_FAILURES identifier",
-  );
-
-  // Assertion B -- generic top-level mutable-state heuristic. Match
-  // top-of-line `let|var <identifier>`. `const` is INTENTIONALLY omitted:
-  // const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)" is a
-  // legitimate module-level constant (deliberate, immutable, non-
-  // accumulating); only let/var declarations at module scope are the
-  // anti-pattern this guard targets.
-  const topLevelLetVar = code.match(/^(let|var)\s+\w+/gm) ?? [];
-  assert.equal(
-    topLevelLetVar.length,
-    0,
-    `list.ts must not have top-level let/var module state, found: ${topLevelLetVar.join(", ")}`,
-  );
-});
-
-// ──────────────────────────────────────────────────────────────────────────
 // Uncovered-path gap tests
 // ──────────────────────────────────────────────────────────────────────────
 
-// HOOK-01: hooks moved from UNSUPPORTED_COMPONENT_KINDS to the supported
-// set. A plugin declaring `hooks` at entry level with NO hooks/hooks.json
-// on disk is no longer rejected -- the resolver owns convention-file
-// discovery only; entry/manifest-level hooks-field semantics are deferred
-// to future dispatch work. The plugin now lands as `available`
-// (not installed, no admission blocker).
+// HOOK-01: hooks are a supported component kind. A plugin declaring `hooks`
+// at entry level with NO hooks/hooks.json on disk is not rejected -- the
+// resolver owns convention-file discovery only; entry/manifest-level
+// hooks-field semantics are deferred to future dispatch work. The plugin
+// lands as `available` (not installed, no admission blocker).
 test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2382,13 +2734,19 @@ test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buc
       installablePluginDirs: ["hooks-plugin"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Plugin admits cleanly (no hooks.json on disk -> no parse-fail flip).
     assert.match(out, /○ hooks-plugin/);
     assert.doesNotMatch(out, /\{hooks\}/);
     assert.doesNotMatch(out, /contains hooks/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2396,6 +2754,7 @@ test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buc
 // Same path as Gap 1 but for the "lspServers" kind.
 test("gap: plugin declaring lspServers field renders as ⊖ (unsupported) with {lsp} note", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2409,19 +2768,26 @@ test("gap: plugin declaring lspServers field renders as ⊖ (unsupported) with {
       installablePluginDirs: ["lsp-plugin"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /⊖ lsp-plugin/);
     assert.match(out, /{lsp}/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
-// HOOK-01 + D-57-04: hooks/hooks.json convention file now drives admission.
-// A PARSEABLE file admits the plugin (no longer unavailable); a MALFORMED
-// file flips to unavailable with the parse-failure note.
+// HOOK-01 + D-57-04: the hooks/hooks.json convention file drives admission.
+// A PARSEABLE file admits the plugin; a MALFORMED file flips to unavailable
+// with the parse-failure note.
 test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
 
@@ -2441,11 +2807,17 @@ test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (availa
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{}", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /○ hooks-conv/);
     assert.doesNotMatch(out, /\{hooks\}/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2455,6 +2827,7 @@ test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (availa
 // `"malformed hooks.json: "` wrapper).
 test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {unsupported hooks} reason", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
 
@@ -2474,17 +2847,24 @@ test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {u
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-conv/);
     assert.match(out, /\{unsupported hooks\}/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 // Gap 4: lspServers via file convention (.lsp.json)
 test("gap: plugin dir with .lsp.json file renders as ⊖ (unsupported) via file convention", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
 
@@ -2504,11 +2884,17 @@ test("gap: plugin dir with .lsp.json file renders as ⊖ (unsupported) via file 
     const pluginDir = path.join(mpRoot, "lsp-conv");
     await writeFile(path.join(pluginDir, ".lsp.json"), "{}", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /⊖ lsp-conv/);
     assert.match(out, /{lsp}/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2519,6 +2905,7 @@ test("gap: plugin dir with .lsp.json file renders as ⊖ (unsupported) via file 
 // {status:"uninstallable", notes:[errorMessage(err)]}.
 test("gap: plugin with path-separator in name -- resolveStrict throws, caught as ⊘", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2535,12 +2922,18 @@ test("gap: plugin with path-separator in name -- resolveStrict throws, caught as
       // No installablePluginDirs -- resolveStrict throws before stat checks.
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Row is bucketed as uninstallable; note contains the assertSafeName message.
     assert.match(out, /⊘/);
     assert.match(out, /{unreadable}/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2550,6 +2943,7 @@ test("gap: plugin with path-separator in name -- resolveStrict throws, caught as
 
 test("PL-4: manifest description appears as 4-space-indented second line on installed, available, and unavailable rows", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2586,8 +2980,10 @@ test("PL-4: manifest description appears as 4-space-indented second line on inst
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
 
     // Installed row (present) -> description indented 4 spaces below it.
@@ -2609,11 +3005,16 @@ test("PL-4: manifest description appears as 4-space-indented second line on inst
       out.includes("    Gamma is an unavailable plugin."),
       `gamma description missing; got: ${out}`,
     );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PL-4: manifest entry without description renders no second line", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2628,13 +3029,19 @@ test("PL-4: manifest entry without description renders no second line", async ()
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Only the plugin row -- no second line follows the (installed) token.
     assert.ok(out.includes("● alpha v1.0.0 (installed)"), `plugin row missing; got: ${out}`);
     // No 4-space indent anywhere (no description).
     assert.ok(!out.includes("    "), `unexpected indented second line; got: ${out}`);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2645,6 +3052,7 @@ test("PL-4: manifest entry without description renders no second line", async ()
 // the marketplace record itself is valid.
 test("gap: manifest load fails + zero installed -> marketplace renders with warning and no plugin rows", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const fakePath = path.join(userRoot, "marketplaces", "mp1", ".claude-plugin", "no-such.json");
     await seedMarketplace({
@@ -2656,12 +3064,18 @@ test("gap: manifest load fails + zero installed -> marketplace renders with warn
       // No installed plugins -- collectMarketplacePlugins returns [] immediately.
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Manifest load failure renders the marketplace as (failed) with error severity.
     assert.match(out, /mp1.*failed/);
     assert.equal(notifications[0]?.severity, "error");
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2670,6 +3084,7 @@ test("gap: manifest load fails + zero installed -> marketplace renders with warn
 // listPlugins try/catch (lines 264-269) catches it and calls notifyError.
 test("gap: corrupt state.json causes listPlugins to notify an error", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     const extensionRoot = path.join(userRoot, "pi-claude-marketplace");
     await mkdir(extensionRoot, { recursive: true });
@@ -2677,8 +3092,10 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     // Write corrupt JSON -- loadState throws, listPlugins catches it.
     await writeFile(stateJsonPath, "{ this is not valid json }", "utf8");
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     assert.equal(notifications.length, 1);
     // notifyError is called; severity should be "error".
     assert.equal(notifications[0]!.severity, "error");
@@ -2694,6 +3111,10 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     // the error reaching the classifier is not a bare SyntaxError and lands
     // on the permissive fallback arm.
     assert.match(notifications[0]!.message, /\{unreadable\}/);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
@@ -2709,6 +3130,7 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
 
 test("RSTA-01 / D-80-03: an uninstalled url-source plugin renders (remote), not (unavailable)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2725,16 +3147,23 @@ test("RSTA-01 / D-80-03: an uninstalled url-source plugin renders (remote), not 
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
     assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("RSTA-01 / D-80-03: an uninstalled github-object-source plugin renders (remote)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2749,16 +3178,23 @@ test("RSTA-01 / D-80-03: an uninstalled github-object-source plugin renders (rem
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ ghplug v2\.0\.0 \(remote\)/, out);
     assert.doesNotMatch(out, /ghplug.*\(unavailable\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("RSTA-01 / D-80-03: an uninstalled git-subdir-source plugin renders (remote)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2777,16 +3213,23 @@ test("RSTA-01 / D-80-03: an uninstalled git-subdir-source plugin renders (remote
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ subplug v3\.0\.0 \(remote\)/, out);
     assert.doesNotMatch(out, /subplug.*\(unavailable\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PURL-08 / D-78-04: an installed git-source plugin with a missing clone keeps its recorded (installed) status", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2803,17 +3246,24 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a missing clone kee
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● gplug v1\.0\.0 \(installed\)/, out);
     assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
     assert.doesNotMatch(out, /gplug.*\(partially/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("PURL-08 / D-78-04: an installed git-source plugin with a newer manifest and a missing clone degrades to plain (upgradable), never (unavailable)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2830,16 +3280,23 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a newer manifest an
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /● gplug v1\.0\.0 \(upgradable\)/, out);
     assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("RSTA-01: list renders an uninstalled git-source plugin as a `(remote)` row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2852,15 +3309,22 @@ test("RSTA-01: list renders an uninstalled git-source plugin as a `(remote)` row
       },
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });
 
 test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its name case-ties a sibling row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -2882,12 +3346,1069 @@ test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its n
       installablePluginDirs: ["caseplug"],
     });
 
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
     const out = notifications[0]!.message;
     // Both rows render inside the one mp1 block; the scope tie-break returns
     // equal scopes, so the original (manifest) order is preserved.
     assert.match(out, /○ caseplug v1\.0\.0 \(available\)/, out);
     assert.match(out, /◌ CasePlug v2\.0\.0 \(remote\)/, out);
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// Manifest-absence cases.
+
+test("plugin list manifest absent: INV-01: an enabled, fully supported record absent from a LOADED manifest renders `{not in manifest}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // A manifest that parses with an EMPTY `plugins` array is a successful
+      // load, so every installed record under it is genuinely absent.
+      manifest: { name: "mp1", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: INV-01 / MSG-GR-4: the soft-dep marker composes AFTER the typed reason inside one brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      // The record declares agents and the companion probes as unloaded.
+      installed: {
+        alpha: { version: "1.0.0", resources: { agents: ["alpha-agent"] } },
+      },
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp1 [user]",
+        "  ● alpha v1.0.0 (installed) {not in manifest, requires pi-subagents}",
+      ].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: INV-01: a record the loaded manifest DOES declare renders with no reason brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      // Same version as the manifest entry, so the row stays `(installed)`
+      // rather than deriving `(upgradable)` on the PL-5 string compare.
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: INV-01: manifest membership is EXACT string identity -- a name differing only in case is a miss", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The manifest declares `Alpha`; the installed record is `alpha`. The
+      // membership test applies no case folding and no Unicode normalization,
+      // so the record is absent.
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "Alpha", source: "./Alpha", version: "1.0.0" }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["Alpha"],
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // `--installed` keeps the undeclared-but-available `Alpha` row out of the
+    // expectation so the assertion isolates the membership question.
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// INV-02: the degraded manifest-absent row
+// ──────────────────────────────────────────────────────────────────────────
+
+test("plugin list manifest absent: INV-02: a manifest-absent degraded record keeps its glyph, recorded version and unsupported-kind reasons", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // Manifest LOADS and simply does not declare `plug`.
+      manifest: { name: "mp1", plugins: [] },
+      installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // Same-scope row: the `[user]` bracket is suppressed (D-16-17). INV-02
+      // puts the absence reason FIRST, ahead of the unsupported-kind token:
+      // `composeReasons` joins in array order.
+      ["● mp1 [user]", "  ◉ plug v1.0.0 (partially-installed) {not in manifest, lsp}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: INV-02: a degraded record its manifest still DECLARES keeps its unsupported-kind reasons alone", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "remote", source: "./remote", version: "1.0.0" }],
+      },
+      installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
+      installablePluginDirs: ["remote"],
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // The prepend is GATED on manifest absence: this record IS declared
+      // (same name, same version, so the row stays `partially-installed`
+      // rather than deriving the upgradable arm), and an ungated prepend
+      // would falsify it.
+      ["● mp1 [user]", "  ◉ remote v1.0.0 (partially-installed) {lsp}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: INV-02: a manifest-absent degraded record with a non-carve-out kind renders `{not in manifest, unsupported component}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      // `themes` is not one of `narrowUnsupportedKinds`' carve-outs
+      // (`lspServers` -> `lsp`, `hooks` -> `unsupported hooks`), so it maps to
+      // the generic token.
+      installed: { plug: { version: "1.0.0", unsupported: ["themes"] } },
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp1 [user]",
+        "  ◉ plug v1.0.0 (partially-installed) {not in manifest, unsupported component}",
+      ].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// ENBL-16: the disabled row names manifest absence, and nothing else
+// ──────────────────────────────────────────────────────────────────────────
+
+// ENBL-16 / D-100-07 overrides INV-04's no-reason clause for this one case.
+// Manifest absence is a DURABLE fact that constrains what the user can do
+// next: `plugin enable` re-runs the install ledger, which resolves from the
+// marketplace manifest, so a disabled record the manifest no longer declares
+// cannot be re-enabled. Showing `{not in manifest}` warns the user before
+// they attempt it. Every OTHER reason stays suppressed on this row -- they
+// describe runtime behavior that is currently suspended.
+test("plugin list manifest absent: ENBL-16: a manifest-absent disabled record renders `(disabled) {not in manifest}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      installed: { dis: { version: "1.2.3", disabled: true } },
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ◍ dis v1.2.3 (disabled) {not in manifest}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// The gate half of the pair: an absence claim is made only against a manifest
+// that loaded AND omitted the entry (BOUND-03 / D-95-05). A manifest that still
+// declares the plugin backs no claim, so the row stays byte-identical to the
+// legacy bare form.
+test("plugin list manifest absent: ENBL-16: a disabled record its manifest STILL declares renders `(disabled)` with no reason brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "dis", source: "./dis", version: "1.2.3" }],
+      },
+      installed: { dis: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["dis"],
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ◍ dis v1.2.3 (disabled)"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// INV-03: `--installed` membership
+// ──────────────────────────────────────────────────────────────────────────
+
+test("plugin list manifest absent: INV-03: `--installed` spans both manifest-absent installed forms and excludes `(available)` rows", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // `avail` is declared but NOT installed; neither installed record is
+      // declared. One manifest, three distinct row fates.
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "avail", source: "./avail", version: "1.0.0" }],
+      },
+      installed: {
+        clean: { version: "1.0.0" },
+        degraded: { version: "2.0.0", unsupported: ["lspServers"] },
+      },
+      installablePluginDirs: ["avail"],
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // MSG-GR-3 row order is name-primary (case-insensitive), scope-secondary
+      // and never consults reasons: `clean` precedes `degraded`.
+      [
+        "● mp1 [user]",
+        "  ● clean v1.0.0 (installed) {not in manifest}",
+        "  ◉ degraded v2.0.0 (partially-installed) {not in manifest, lsp}",
+      ].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// BOUND-03: the cross-scope orphan fold
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Write a PROJECT-scope marketplace record that is a CLONE of the user-scope
+ * one: the install orchestrator copies `marketplaceRoot` verbatim, and that
+ * root is the ONLY field `isCloneOfUserMarketplace` compares, so sharing it is
+ * what makes the fold trigger. `manifestPath` is the axis under test -- a
+ * missing file makes the project-side manifest read FAIL, the user record's
+ * real manifest makes it LOAD without the entry.
+ *
+ * `seedMarketplace` cannot express this: it allocates a fresh marketplace root
+ * per call.
+ */
+async function seedFoldedProjectClone(opts: {
+  cwd: string;
+  marketplaceRoot: string;
+  manifestPath: string;
+  pluginName: string;
+  version: string;
+}): Promise<void> {
+  const projectLocations = locationsFor("project", opts.cwd);
+  await mkdir(projectLocations.extensionRoot, { recursive: true });
+  await saveState(projectLocations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp1: {
+        name: "mp1",
+        scope: "project",
+        source: pathSource("./mp1-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath: opts.manifestPath,
+        marketplaceRoot: opts.marketplaceRoot,
+        plugins: {
+          [opts.pluginName]: {
+            version: opts.version,
+            resolvedSource: "./placeholder",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            // Populated resources: an ENABLED installed record (empty
+            // resources + installable:true would read as disabled per
+            // ENBL-04 and render `(disabled)` instead of `(installed)`).
+            resources: {
+              skills: [`${opts.pluginName}-skill`],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  });
+}
+
+// BOUND-03: the load-failure state is the ONLY thing that suppresses the brace
+// here -- the project record's own manifest is the authority either way, and
+// the sibling test below proves a successful read of that same path renders the
+// brace. Treating the failed read as "manifest omits the record" is the exact
+// false claim D-95-05 forbids.
+test("plugin list manifest absent: BOUND-03: a folded row whose project-side manifest FAILED to load is preserved and carries no reason brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      // No user-scope installs -- alpha lives in project scope (the fold case).
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      // Nonexistent file -> the project-side manifest read throws.
+      manifestPath: path.join(sharedMpRoot, ".claude-plugin", "does-not-exist.json"),
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // D-95-05: the row survives and carries its cross-scope `[project]`
+      // bracket; only the unverified absence claim is suppressed. Dropping the
+      // row instead would hide a plugin already materialized on disk.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed)"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: BOUND-03: a folded row whose project-side manifest LOADED without the entry renders `{not in manifest}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      // The user record's REAL manifest: it loads, and it omits alpha. Only
+      // the manifestPath differs from the failed-read case above.
+      manifestPath: path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"),
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// INV-01: the fold triggers on `marketplaceRoot` equality alone, so the two
+// records can name DIFFERENT manifests -- `marketplace add` derives the root by
+// walking up two levels when the source path is a manifest FILE, which pairs
+// one root with an arbitrary manifest name. The folded row is a statement about
+// the PROJECT record, so its absence is judged against the manifest that record
+// names, even though the row renders under the user-scope header. D-96-02
+// settles that a folded row describes its own record's manifest for every fact
+// it states -- the absence claim, the upgradable derivation and the description
+// -- since all three read the one `ManifestLookup` value built for that
+// manifest. This test pins the absence fact; the three below pin the others.
+test("plugin list manifest absent: INV-01: a folded row absent from its OWN manifest claims the absence even when the user block names another manifest", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The USER block's manifest DECLARES alpha.
+      manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    // Same root, different manifest file -- and this one loads cleanly while
+    // omitting alpha.
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(otherManifestPath, JSON.stringify({ name: "mp1", plugins: [] }), "utf8");
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // The user block's own manifest DOES declare alpha, so the folded row
+      // suppresses the duplicate `(available)` enumeration -- but the row's
+      // own reason brace is read off `other.json`, which omits it.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// D-96-02: the absence claim above is one of THREE facts a folded row states
+// about a manifest. The upgradable derivation and the description are the other
+// two, and all three read the SINGLE `ManifestLookup` value `manifestLookupFor`
+// produces for the manifest the folded record itself names. The three pins below
+// state that authority in the directions where the two manifests DISAGREE --
+// agreeing fixtures prove nothing about which manifest was consulted.
+
+test("plugin list manifest absent: D-96-02: a folded row is NOT upgradable when its OWN manifest declares the installed version, though the user block's manifest declares a newer one", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The discriminator: the USER block's manifest declares 2.0.0. Consulting
+      // it against the record's installed 1.0.0 would derive `(upgradable)`.
+      manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "2.0.0" }] },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    // Same root, different manifest file -- and this one declares the version
+    // the project record is actually installed at.
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // `other.json` declares alpha at the installed version, so the PL-5
+      // string compare finds no drift: `(installed)`, and no `{not in manifest}`
+      // brace either -- the same lookup backs both facts.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed)"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: D-96-02: a folded row IS upgradable when its OWN manifest declares a newer version, though the user block's manifest declares the installed one", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The inverse discriminator: the USER block's manifest declares the
+      // installed version, so consulting it would leave the row `(installed)`.
+      manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "2.0.0" }],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // The candidate probe has no materialized plugin tree under this fixture's
+      // marketplace root, so the CR-01 degrade returns the PLAIN `(upgradable)`
+      // row rather than the `(partially-upgradable)` variant. That degradation
+      // is the documented behavior of an unassertable candidate, not a defect.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (upgradable)"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("plugin list manifest absent: D-96-02: a folded row's description comes from its OWN manifest entry, not the user block's entry for the same name", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // Both manifests declare alpha at the installed version, so the version
+      // axis is held constant and the description is the ONLY disagreement.
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            description: "From the user manifest.",
+          },
+        ],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            description: "From the project manifest.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // PL-4 renders the description as a 4-space-indented second line. The
+      // user block's text appears nowhere: whole-message equality is what makes
+      // that a real assertion rather than a hopeful one.
+      [
+        "● mp1 [user]",
+        "  ● alpha [project] v1.0.0 (installed)",
+        "    From the project manifest.",
+      ].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+// BOUND-01 / D-96-02: the own-manifest authority rule has a second half. A
+// marketplace whose OWN manifest cannot be read renders nothing beneath it --
+// folded rows from a scope whose manifest reads perfectly well included. The
+// mechanism is the `!scopedManifest.ok` early return, which emits `plugins: []`
+// before the folded extras are merged. This is the decided contract, not a
+// defect: the block states one honest failure instead of a partial truth
+// assembled from a neighbouring scope's evidence. Changing it needs a decision,
+// not a patch, and this pin is what stops such a "fix" from landing silently.
+test("plugin list manifest absent: BOUND-01: a marketplace whose OWN manifest failed to load renders the bare `(failed)` header -- folded rows are suppressed with it", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    // The project clone's OWN manifest reads cleanly and declares its installed
+    // alpha, so nothing about the project record is in doubt.
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    // Remove the file the USER record names, so its own manifest read throws.
+    await rm(path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"));
+
+    const { ctx, pi, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, pi, cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.equal(
+      notifications[0]!.message,
+      // No `alpha` row of any kind: the fold computed one, and the failed
+      // header discarded it.
+      ["A marketplace operation has failed.", "", "⊘ mp1 [user] (failed)"].join("\n"),
+    );
+
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("availableRowMessage returns the complete available candidate projection", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "marketplace");
+    await mkdir(path.join(marketplaceRoot, "alpha"), { recursive: true });
+    const locations = locationsFor("project", cwd);
+    const manifestEntry = {
+      name: "alpha",
+      source: "./alpha",
+      version: "1.0.0",
+      description: "Alpha plugin.",
+    } satisfies Parameters<typeof availableRowMessage>[0];
+
+    // act
+    const candidate = await availableRowMessage(
+      manifestEntry,
+      marketplaceRoot,
+      locations,
+      undefined,
+    );
+
+    // assert
+    assert.deepStrictEqual(candidate, {
+      message: {
+        status: "available",
+        name: "alpha",
+        version: "1.0.0",
+        description: "Alpha plugin.",
+      },
+      bucket: "available",
+    });
+  });
+});
+
+test("listPlugins renders the installed MCP dependency marker after inventory reasons", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      installed: {
+        mcpplug: { version: "1.0.0", resources: { mcpServers: ["mcpplug-server"] } },
+      },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp}",
+      },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("loadPluginListPayload filters project marketplaces and projects autoupdate exactly", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const projectRoot = path.join(cwd, ".pi");
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "zeta",
+      manifest: { name: "zeta", plugins: [] },
+    });
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "alpha",
+      manifest: { name: "alpha", plugins: [] },
+      autoupdate: true,
+    });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      marketplace: "alpha",
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [
+      {
+        name: "alpha",
+        scope: "project",
+        details: { autoupdate: true },
+        plugins: [],
+      },
+    ]);
+    verify(ctx);
+    verify(pi);
+  });
+});
+
+test("loadPluginListPayload preserves input order for case-tied marketplaces in one scope", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const projectRoot = path.join(cwd, ".pi");
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "Bravo",
+      manifest: { name: "Bravo", plugins: [] },
+    });
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "bravo",
+      manifest: { name: "bravo", plugins: [] },
+    });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({ ctx, pi, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [
+      { name: "Bravo", scope: "project", plugins: [] },
+      { name: "bravo", scope: "project", plugins: [] },
+    ]);
+    verify(ctx);
+    verify(pi);
+  });
+});
+
+test("listPlugins defaults a bare orchestration failure to user scope", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const stateJsonPath = path.join(home, ".pi", "agent", "pi-claude-marketplace", "state.json");
+    await mkdir(path.dirname(stateJsonPath), { recursive: true });
+    await writeFile(stateJsonPath, "{ this is not valid json }", "utf8");
+    const { ctx, pi, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    const parseFailure = "Expected property name or '}' in JSON at position 2 (line 1 column 3)";
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● (list) [user]",
+          "  ⊘ (list) (failed) {unreadable}",
+          `    cause: state.json at ${stateJsonPath} is not valid JSON: ${parseFailure} -> ${parseFailure}`,
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("listPlugins normalizes a non-Error notification failure before reporting it", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+    const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+    const notifications: NotifyRecord[] = [];
+    const notificationFailure = (function* (): Generator<void, void, unknown> {
+      yield;
+    })();
+    notificationFailure.next();
+    let notifyCall = 0;
+    when(() => ctx.ui)
+      .thenReturn(ui)
+      .twice();
+    when(() => pi.getAllTools())
+      .thenReturn([])
+      .times(4);
+    when(() => ui.notify)
+      .thenReturn((message, severity) => {
+        notifyCall += 1;
+        if (notifyCall === 1) {
+          notificationFailure.throw("ui unavailable");
+        }
+
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      })
+      .twice();
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    assert.strictEqual(notifyCall, 2);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● (list) [user]",
+          "  ⊘ (list) (failed) {unreadable}",
+          "    cause: ui unavailable",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
   });
 });

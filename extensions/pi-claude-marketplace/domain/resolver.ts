@@ -16,12 +16,12 @@
 // Literal-tagged variants ARE the discriminator -- TypeScript narrowing
 // works automatically on `switch (r.state)` / `if (r.state === ...)`.
 //
-// Per D-64-01: a three-way string-literal discriminant
-// `state: "installable" | "partially-available" | "unavailable"` (supersedes D-05's
-// boolean `installable: true | false`). `installable` and `partially-available` both
-// carry `pluginRoot` + component lists (D-64-06: `partially-available` is the
-// partially-available arm); `unavailable` is the minimal structural-defect arm
-// and never carries `pluginRoot` (D-64-05, NFR-7). Structural precedence
+// RES-01: `installable: true | false` is the primary materializability
+// discriminator. The three-way `state` field keeps the secondary
+// `"installable" | "partially-available" | "unavailable"` detail. Both true
+// arms carry `pluginRoot` + component lists (D-64-06); the false `unavailable`
+// arm is the minimal structural-defect arm and never carries `pluginRoot`
+// (D-64-05, NFR-7). Structural precedence
 // (D-64-07): a plugin that is both structurally broken AND declares
 // unsupported component kinds resolves `unavailable`.
 //
@@ -50,6 +50,7 @@ import {
   parsePluginSource,
   type GitHubSource,
   type GitSubdirSource,
+  type PathSource,
   type ParsedSource,
   type UrlSource,
 } from "./source.ts";
@@ -165,6 +166,7 @@ export type _DroppedHookArmKeysCheck = _AssertTrue<
 // token-identical by construction (spreading `state` first keeps the literal
 // discriminant on each arm; TypeBox key order does not affect the static type).
 const MATERIALIZABLE_FIELDS = {
+  installable: Type.Literal(true),
   name: Type.String(),
   // pluginRoot is present on installable + partially-available only (NFR-7); D-64-06
   // lets a partial install degrade past the unsupported parts, so both arms
@@ -223,6 +225,7 @@ const ResolvedPluginPartiallyAvailableSchema = Type.Object({
 // cannot be reliably enumerated once the manifest/structure is broken.
 const ResolvedPluginUnavailableSchema = Type.Object({
   state: Type.Literal("unavailable"),
+  installable: Type.Literal(false),
   name: Type.String(),
   notes: Type.Array(Type.String()), // structural reasons
   // pluginRoot intentionally absent -- NFR-7 enforces non-readability
@@ -443,6 +446,7 @@ function emptyResolution(): PartialResolution {
 function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
   return {
     state: "unavailable",
+    installable: false,
     name,
     notes,
   };
@@ -450,8 +454,8 @@ function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
 
 // The non-discriminant payload shared by the two materializable arms.
 // Because `ResolvedPluginInstallable` and `ResolvedPluginPartiallyAvailable` differ
-// ONLY in `state`, `Omit<..., "state">` is the same structural type for both,
-// so each constructor re-adds its own `state` literal and keeps its precise
+// only in `state`, `Omit<..., "state">` is the same structural type for both.
+// Each constructor re-adds its own `state` literal and keeps its precise
 // discriminated-union return type with no cast.
 function materializableFields(
   name: string,
@@ -460,6 +464,7 @@ function materializableFields(
   defaultEnabled: boolean,
 ): Omit<ResolvedPluginInstallable, "state"> {
   return {
+    installable: true,
     name,
     pluginRoot,
     supported: partial.supported,
@@ -576,17 +581,26 @@ async function collectUnsupportedKinds(
 // derive theirs from the injected `resolveGitPluginRoot` callback. `npm` stays
 // out of scope, and `unknown` is the NFR-12 forward-compat tail. The exhaustive
 // switch keeps this sound: a future ParsedSource kind fails the compile.
-function sourceUnsupportedReason(parsedSource: ParsedSource): string | undefined {
+type SupportedParsedSource = PathSource | GitHubSource | UrlSource | GitSubdirSource;
+
+type SourceSupport =
+  | { readonly kind: "supported"; readonly source: SupportedParsedSource }
+  | { readonly kind: "rejected"; readonly reason: string };
+
+function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
   switch (parsedSource.kind) {
     case "path":
     case "github":
     case "url":
     case "git-subdir":
-      return undefined;
+      return { kind: "supported", source: parsedSource };
     case "npm":
-      return `unsupported source kind: npm`;
+      return { kind: "rejected", reason: `unsupported source kind: npm` };
     case "unknown":
-      return `unsupported source kind: unknown (${parsedSource.reason})`;
+      return {
+        kind: "rejected",
+        reason: `unsupported source kind: unknown (${parsedSource.reason})`,
+      };
   }
 }
 
@@ -621,10 +635,10 @@ async function readManifest(
     const parsed: unknown = JSON.parse(raw);
 
     if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
-      const firstErr = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)[0];
-      const detail = firstErr
-        ? `${firstErr.instancePath || "(root)"}: ${firstErr.message}`
-        : "(no detail)";
+      const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
+        .slice(0, 1)
+        .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
+        .join("");
       return { ok: false, reason: `malformed plugin.json: ${detail}` };
     }
 
@@ -768,7 +782,7 @@ function resolveDefaultEnabled(
 async function deriveSourcePluginRoot(
   entry: PluginEntry,
   ctx: ResolveContext,
-  parsedSource: ParsedSource,
+  parsedSource: SupportedParsedSource,
   partial: PartialResolution,
 ): Promise<
   { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable }
@@ -784,24 +798,6 @@ async function deriveSourcePluginRoot(
     }
 
     return { kind: "ok", pluginRoot };
-  }
-
-  // The caller's `sourceUnsupportedReason` gate already rejected `npm` /
-  // `unknown`, so only the three git kinds remain. Narrow explicitly so the
-  // callback receives its precise `UrlSource | GitSubdirSource | GitHubSource`
-  // parameter type.
-  if (
-    parsedSource.kind !== "url" &&
-    parsedSource.kind !== "git-subdir" &&
-    parsedSource.kind !== "github"
-  ) {
-    return {
-      kind: "unavailable",
-      result: unavailable(entry.name, [
-        ...partial.notes,
-        `unsupported source kind: ${parsedSource.kind}`,
-      ]),
-    };
   }
 
   // url | git-subdir | github -- the injected policy owns clone-vs-probe and,
@@ -868,11 +864,11 @@ async function preflightStages(
 
   // PR-2 case 1 / PURL-01: url / git-subdir / github / path are installable;
   // npm and unknown reject here.
-  const unsupportedReason = sourceUnsupportedReason(parsedSource);
-  if (unsupportedReason !== undefined) {
+  const sourceSupport = classifySourceSupport(parsedSource);
+  if (sourceSupport.kind === "rejected") {
     return {
       kind: "unavailable",
-      result: unavailable(entry.name, [...partial.notes, unsupportedReason]),
+      result: unavailable(entry.name, [...partial.notes, sourceSupport.reason]),
     };
   }
 
@@ -882,7 +878,7 @@ async function preflightStages(
   // discriminated result already carries the clone-root-anchored containment
   // outcome (D-77-03: git-subdir containment is the callback's responsibility,
   // never a marketplaceRoot-anchored check).
-  const rooted = await deriveSourcePluginRoot(entry, ctx, parsedSource, partial);
+  const rooted = await deriveSourcePluginRoot(entry, ctx, sourceSupport.source, partial);
   if (rooted.kind === "unavailable") {
     return rooted;
   }
@@ -1163,7 +1159,7 @@ async function readReferencedMcp(
   } catch (err) {
     return {
       ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${err instanceof Error ? err.message : String(err)}`,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${(err as SyntaxError).message}`,
     };
   }
 }
@@ -1228,7 +1224,7 @@ async function readStandaloneHooks(
   // bridge `IfPredicate` union (D-11), and the resolver-emitted map is
   // unreachable from any consumer at this call site.
   const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
-  const noopCompileIf = (): null => null;
+  const noopCompileIf = JSON.parse.bind(JSON, "null") as () => null;
   const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
   if (!parsed.ok) {
     return { ok: false, reason: `malformed hooks.json: ${parsed.reason}` };
@@ -1357,8 +1353,11 @@ function applyMcpValue(partial: PartialResolution, mcp: unknown, detail = true):
   }
 
   if (detail) {
-    const firstErr = MCP_SERVERS_VALIDATOR.Errors(mcp)[0];
-    partial.notes.push(`malformed mcpServers: ${firstErr ? firstErr.message : "shape mismatch"}`);
+    const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
+      .slice(0, 1)
+      .map((error) => error.message)
+      .join("");
+    partial.notes.push(`malformed mcpServers: ${errorDetail}`);
   } else {
     partial.notes.push(`malformed mcpServers`);
   }
@@ -1562,8 +1561,8 @@ async function resolveWithMode(
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
-  // `hooks` is no longer in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission
-  // is owned by step 8b. D-64-07: this signal does NOT feed `dirty` (it is
+  // `hooks` is not in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission is
+  // owned by step 8b. D-64-07: this signal does NOT feed `dirty` (it is
   // not a structural defect); it is read separately via `partial.unsupported`
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
@@ -1694,6 +1693,16 @@ export function requireInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
 ): asserts r is ResolvedPluginInstallable {
+  if (!r.installable) {
+    throw new PluginShapeError({
+      kind: op === "update" ? "no-longer-installable" : "not-installable",
+      plugin: r.name,
+      reasons: r.notes,
+      partialable: false,
+      unsupportedKinds: [],
+    });
+  }
+
   if (r.state === "installable") {
     return;
   }
@@ -1705,13 +1714,13 @@ export function requireInstallable(
     // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
     // a structural defect `--partial` cannot help -- carry the distinction the
     // render row uses to condition the `--partial` hint.
-    partialable: r.state === "partially-available",
+    partialable: true,
     // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
     // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
     // `partially-available` arm carries the field; `unavailable` keeps an empty list so
     // its structural reasons stay sourced from `notes` (unchanged).
-    unsupportedKinds: r.state === "partially-available" ? r.unsupported : [],
+    unsupportedKinds: r.unsupported,
   });
 }
 
@@ -1732,7 +1741,7 @@ export function requirePartialInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
 ): asserts r is ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable {
-  if (r.state === "installable" || r.state === "partially-available") {
+  if (r.installable) {
     return;
   }
 

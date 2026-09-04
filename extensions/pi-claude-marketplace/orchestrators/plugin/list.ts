@@ -67,7 +67,7 @@ import {
   loadState,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
-import { assertNever, errorMessage } from "../../shared/errors.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -152,8 +152,8 @@ export type FilterBucket =
   | "partially-available"
   | "unavailable"
   // RSTA-07 / D-80-07: the `--remote` filter bucket -- a not-installed git source
-  // with no materialized clone. `--available` no longer admits it (intended
-  // behavior change); `--available --remote` restores the former `--available` set.
+  // with no materialized clone. `--available` alone excludes it;
+  // `--available --remote` together admit both buckets.
   | "remote";
 
 /**
@@ -181,8 +181,8 @@ export interface ListPluginsOptions {
   /** PL-1 union filter: include available (not-yet-installed installable) plugins. */
   readonly available?: boolean;
   /** PL-1 union filter: include STRUCTURALLY-uninstallable (⊘) plugins. A2:
-   *  narrowed to the resolver `unavailable` bucket -- it no longer admits the
-   *  not-installed `partially-available` rows (those are reached by `partially-available`). */
+   *  the resolver `unavailable` bucket only -- it excludes the not-installed
+   *  `partially-available` rows (those are reached by `partially-available`). */
   readonly unavailable?: boolean;
   /** LIST-01 / D-67-01 union filter: include NOT-installed plugins that resolve
    *  `partially-available` (the partially-available candidates). Keys on the internal
@@ -244,9 +244,9 @@ function shouldShow(
   }
 
   // RSTA-07: `--remote` selects the `(remote)` bucket -- a not-installed git
-  // source with no materialized clone. A cold git source now carries render
-  // status `"remote"` and bucket `"remote"`, so it no longer passes the
-  // `--available` arm above (the INTENDED behavior change).
+  // source with no materialized clone. A cold git source carries render
+  // status `"remote"` and bucket `"remote"`, so it does not pass the
+  // `--available` arm above.
   if (opts.remote === true && bucket === "remote") {
     return true;
   }
@@ -560,17 +560,15 @@ async function installedRowMessage(
     };
   }
 
-  if (status === "partially-upgradable") {
-    // The classifier returns `partially-upgradable` ONLY when the candidate
-    // resolved `partially-available`; narrow on the same condition to read its
-    // dropped-component kinds for the row reasons.
+  // The earlier partially-installed return consumes every degraded record.
+  // For the remaining clean record, a partially-available candidate is the
+  // classifier's exact `partially-upgradable` condition. Branch on the value
+  // that carries the reasons so TypeScript retains the resolver narrowing.
+  if (candidateResolved?.state === "partially-available") {
     return {
       status: "partially-upgradable",
       name: pluginName,
-      reasons:
-        candidateResolved?.state === "partially-available"
-          ? narrowUnsupportedKinds(candidateResolved.unsupported)
-          : [],
+      reasons: narrowUnsupportedKinds(candidateResolved.unsupported),
       version: record.version,
       ...scopeField,
       ...descriptionField,
@@ -605,8 +603,8 @@ async function installedRowMessage(
 
   return {
     // The list-surface inventory row is `installed` with `needsReload: false`
-    // -- the stamped flag IS the old `present` reload-suppression (the
-    // OR-reduce reload-hint stays suppressed for steady-state inventory).
+    // -- the stamped flag suppresses the OR-reduce reload-hint for
+    // steady-state inventory.
     status: "installed",
     name: pluginName,
     dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp),
@@ -838,10 +836,10 @@ async function resolveCandidateEntry(
  * partition keys on the pre-collapse classification without a second classifier
  * on this surface.
  *
- * WR-03: discriminate the three-way union with an exhaustive
- * `switch (resolved.state)` + `assertNever` so a future fourth `ResolvedPlugin`
- * arm becomes a compile-time error here rather than silently falling through
- * into the `unavailable`/`notes` path.
+ * WR-03: discriminate the three-way union with an exhaustive switch. The
+ * explicit return type plus `noImplicitReturns` makes a future fourth
+ * `ResolvedPlugin` arm a compile-time error rather than silently falling
+ * through into the `unavailable`/`notes` path.
  */
 function resolvedCandidateRow(
   manifestEntry: MarketplaceManifest["plugins"][number],
@@ -888,9 +886,6 @@ function resolvedCandidateRow(
         // bucket.
         bucket,
       };
-
-    default:
-      return assertNever(resolved);
   }
 }
 
@@ -1144,7 +1139,7 @@ async function loadMarketplaceManifestSoftly(
 function isCloneOfUserMarketplace(
   projectMp: ExtensionState["marketplaces"][string] | undefined,
   userMp: ExtensionState["marketplaces"][string] | undefined,
-): boolean {
+): projectMp is ExtensionState["marketplaces"][string] {
   if (projectMp === undefined || userMp === undefined) {
     return false;
   }
@@ -1167,6 +1162,9 @@ interface OrphanFold {
 }
 
 const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
+
+/** Project-before-user rank shared by both alphabetical presentation sorts. */
+const SCOPE_SORT_RANK: Readonly<Record<Scope, number>> = { project: 0, user: 1 };
 
 /**
  * D-13-17 / D-13-18 orphan fold: carry the project-scope installed rows under
@@ -1202,7 +1200,7 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
 async function computeOrphanFold(
   opts: ListPluginsOptions,
   mpName: string,
-  projectMp: ExtensionState["marketplaces"][string] | undefined,
+  projectMp: ExtensionState["marketplaces"][string],
   /**
    * DFEN-04: the PROJECT scope's merged config view. The folded rows are
    * project-scope rows, so the `enabled` opinion they read must come from the
@@ -1210,10 +1208,6 @@ async function computeOrphanFold(
    */
   projectConfig: MergedConfig,
 ): Promise<OrphanFold> {
-  if (projectMp === undefined) {
-    return EMPTY_ORPHAN_FOLD;
-  }
-
   const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
   const projectSideRows = await enumerateMarketplacePlugins({
     opts,
@@ -1431,11 +1425,7 @@ function compareMpForSort(a: MarketplaceRows<ListMsg>, b: MarketplaceRows<ListMs
     return byName;
   }
 
-  if (a.scope === b.scope) {
-    return 0;
-  }
-
-  return a.scope === "project" ? -1 : 1;
+  return SCOPE_SORT_RANK[a.scope] - SCOPE_SORT_RANK[b.scope];
 }
 
 /**
@@ -1475,11 +1465,7 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
 
     const aScope = scopeOf(a);
     const bScope = scopeOf(b);
-    if (aScope === bScope) {
-      return 0;
-    }
-
-    return aScope === "project" ? -1 : 1;
+    return SCOPE_SORT_RANK[aScope] - SCOPE_SORT_RANK[bScope];
   });
 }
 
