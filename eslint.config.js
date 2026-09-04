@@ -327,32 +327,7 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    // The repository gate scripts. They are plain ESM JavaScript that Node runs
-    // directly and they sit outside the typed tree on purpose -- tsconfig.json
-    // includes only extensions/**/*.ts and tests/**/*.ts -- so the type-aware
-    // presets are switched off for them the way they are for this config file.
-    //
-    // Switching the presets off is not enough on its own. The block carrying
-    // this repository's own rules is scoped `**/*.{js,ts}`, which does not
-    // match `.mjs`, so a gate script would otherwise keep only the tseslint
-    // defaults: measured, a braceless `if` and a `console.log` both passed at
-    // exit 0. The rules below restate that bar for these files, which matters
-    // because they carry the correspondence and direct-coverage invariants and
-    // used to be unlinted, unformatted and untypechecked all at once. Each was
-    // added against a plant and watched to fire.
-    //
-    // What stays off, and why. Everything needing the type service, because
-    // `scripts/` is outside tsconfig.json's `include` on purpose and the
-    // service would refuse the file -- so widening the base block's glob to
-    // `**/*.{js,mjs,ts}` is NOT the fix here. Also
-    // `explicit-module-boundary-types`, because a return-type annotation is not
-    // valid JavaScript.
-    //
-    // The format half of that repair is in package.json, where `scripts/**/*.mjs`
-    // is a SEPARATE glob argument rather than an `mjs` entry in the brace list.
-    // Do not merge the two: a repo-wide `**/*.mjs` glob makes fallow read
-    // tests/live-uat/*.mjs as package.json entry points, which turns their
-    // `fallow-ignore-file unused-file` markers stale and fails `npm run fallow`.
+    // The repository gate scripts.
     files: ["scripts/**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
