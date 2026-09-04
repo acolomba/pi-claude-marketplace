@@ -182,6 +182,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 **Goal**: The three leaf modules the bridge needs — script admission, project-key derivation, and the engine home directory — are on this branch with owner tests and no test-only seams.
 **Depends on**: Phase 109 (`domain/workflow-script.ts` is reachable without it, but the phase's own gate run is not green until the resolver compiles)
 **Requirements**: WNAM-01, WNAM-02, WNAM-03, WNAM-04, WNAM-05, WNAM-06, WPTH-02
+**Start from**: branch `features/workflow-port-wip`, which already carries these modules verbatim from the spike branch plus the three additive edits their imports need. Do NOT rewrite them from scratch. `git checkout features/workflow-port-wip -- extensions/pi-claude-marketplace/domain/workflow-script.ts extensions/pi-claude-marketplace/domain/workflow-project-key.ts extensions/pi-claude-marketplace/platform/workflow-home.ts extensions/pi-claude-marketplace/domain/name.ts extensions/pi-claude-marketplace/shared/errors.ts`. Read [`port/README.md`](port/README.md) first — it records what is verbatim, what is not, and why. The work of this phase is the owner tests and the seam removal, not the modules.
 **Success Criteria** (what must be TRUE):
 
 1. `domain/workflow-script.ts`, `domain/workflow-project-key.ts` and
@@ -206,6 +207,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 **Goal**: The sixth bridge exists as a discover / stage / unstage triplet with the same shape as its five siblings, and writes its envelopes atomically into a directory outside every scope root.
 **Depends on**: Phase 110
 **Requirements**: WBRG-01, WBRG-02, WBRG-03, WBRG-04, WPTH-01, WPTH-03, WPTH-04, WPTH-05
+**Start from**: branch `features/workflow-port-wip`. `git checkout features/workflow-port-wip -- extensions/pi-claude-marketplace/bridges/workflows extensions/pi-claude-marketplace/persistence/locations.ts`. These are verbatim from the spike branch and were verified to compile against this branch once Phase 109 lands. The work of this phase is the owner tests, not the bridge.
 **Success Criteria** (what must be TRUE):
 
 1. `bridges/workflows/` provides `discover`, `prepareStage` / `commitPrepared` /
@@ -228,6 +230,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 **Goal**: Installing a workflow-bearing plugin writes its envelopes as a sixth ledger phase that unwinds with the rest, and every removal path takes them away again.
 **Depends on**: Phase 111
 **Requirements**: WLIF-01, WLIF-02, WLIF-03
+**Start from**: nothing ported. `orchestrators/plugin/update-row.ts` and the `"workflows"` widening of the ledger `phase` union were deliberately left out of `features/workflow-port-wip`, because main rewrote the orchestrators they touch (`install.ts` 1243+/1222-, `reinstall.ts` 244+/715-). Read the spike branch's versions for intent, then write against the current files. `git show features/workflows-spike:extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` is reference, not a source to copy.
 **Success Criteria** (what must be TRUE):
 
 1. `runPhases` carries a sixth phase whose `undo` removes the envelopes it
@@ -252,6 +255,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 **Goal**: The remaining lifecycle verbs treat workflows as a first-class component kind, and the read surfaces show them.
 **Depends on**: Phase 112
 **Requirements**: WLIF-04, WLIF-05, WLIF-06, WFLW-04
+**Start from**: nothing ported, for the same reason as Phase 112 — main rewrote `update.ts` (860+/771-), `enable-disable.ts` (466+/406-) and `reconcile/apply.ts` (205+/781-). `orchestrators/plugin/update-row.ts` on `features/workflows-spike` is the one file here that would still apply cleanly; treat it as a starting draft to re-verify, not a drop-in.
 **Success Criteria** (what must be TRUE):
 
 1. `update` prepares, aborts, commits and records workflows as a sixth bridge,
