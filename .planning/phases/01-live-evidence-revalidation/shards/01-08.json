@@ -1,0 +1,1976 @@
+{
+  "version": 1,
+  "inventoryMode": "shard",
+  "plan": "01-08",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-035",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-036",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-037",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-038",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-039",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-040",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-041",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-042",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-043",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-044",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-045",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-046",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-047",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-048",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-049",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-050",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-051",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-052",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-053",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-054",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-055",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-056"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-001"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-001",
+      "findingId": "ANG-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-002",
+      "findingId": "ANG-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-003",
+      "findingId": "ANG-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-004",
+      "findingId": "ANG-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-005",
+      "findingId": "ANG-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-006",
+      "findingId": "ANG-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-007",
+      "findingId": "ANG-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-008",
+      "findingId": "ANG-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-009",
+      "findingId": "ANG-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-010",
+      "findingId": "ANG-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-011",
+      "findingId": "ANG-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-012",
+      "findingId": "ANG-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-013",
+      "findingId": "ANG-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-014",
+      "findingId": "ANG-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-015",
+      "findingId": "ANG-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-016",
+      "findingId": "ANG-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-017",
+      "findingId": "ANG-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-018",
+      "findingId": "ANG-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-019",
+      "findingId": "ANG-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-020",
+      "findingId": "ANG-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-021",
+      "findingId": "ANG-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-022",
+      "findingId": "ANG-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-023",
+      "findingId": "ANG-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-024",
+      "findingId": "ANG-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-025",
+      "findingId": "ANG-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-026",
+      "findingId": "ANG-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-027",
+      "findingId": "ANG-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-028",
+      "findingId": "ANG-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-029",
+      "findingId": "ANG-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-030",
+      "findingId": "ANG-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-031",
+      "findingId": "ANG-031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-032",
+      "findingId": "ANG-032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-033",
+      "findingId": "ANG-033"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-034",
+      "findingId": "ANG-034"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-035",
+      "findingId": "ANG-035"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-036",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-036",
+      "findingId": "ANG-036"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-037",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-037",
+      "findingId": "ANG-037"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-038",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-038",
+      "findingId": "ANG-038"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-039",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-039",
+      "findingId": "ANG-039"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-040",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-040",
+      "findingId": "ANG-040"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-041",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-041",
+      "findingId": "ANG-041"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-042",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-042",
+      "findingId": "ANG-042"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-043",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-043",
+      "findingId": "ANG-043"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-044",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-044",
+      "findingId": "ANG-044"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-045",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-045",
+      "findingId": "ANG-045"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-046",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-046",
+      "findingId": "ANG-046"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-047",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-047",
+      "findingId": "ANG-047"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-048",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-048",
+      "findingId": "ANG-048"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-049",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-049",
+      "findingId": "ANG-049"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-050",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-050",
+      "findingId": "ANG-050"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-051",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-051",
+      "findingId": "ANG-051"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-052",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-052",
+      "findingId": "ANG-052"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-053",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-053",
+      "findingId": "ANG-053"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-054",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-054",
+      "findingId": "ANG-054"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-055",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-055",
+      "findingId": "ANG-055"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-056",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "label": "ANG-056",
+      "findingId": "ANG-056"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "label": "ASD-001",
+      "findingId": "ASD-001"
+    }
+  ],
+  "findings": [
+    {
+      "id": "ANG-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/partial-vocabulary-guard.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The D-75-01 guard cannot see the camelCase/PascalCase form of the retired force vocabulary, and 21 live violations sit inside `extensions/` behind that hole — `lines 224-230` (`ABSENT_FORCE_PROSE`), `lines 187-199` (`ABSENT_IDENTIFIERS`)",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/partial-vocabulary-guard.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The guard's scan surface excludes every unit-test file outside `tests/architecture/`, hiding 99 retired-vocabulary hits across 8 files — `lines 83-103` (`collectGuardedSources`), `line 52` (`ARCH_DIR`)",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/partial-vocabulary-guard.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Hand-rolls `REPO_ROOT` instead of importing the one built for this — `line 50`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/markers-snapshot.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The file's header cites a companion gate that does not exist, and no gate anywhere blocks the 5 superseded ES-5 literals — `lines 16-20`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/locations.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/markers-snapshot.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The `D-09` case belongs to `tests/persistence/locations.test.ts`, and its expected value is derived from the object under test — `lines 72-76`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/markers-snapshot.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] No `// arrange` / `// act` / `// assert` phase comments in any of the 6 cases — `lines 34-76`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The GRAM-01/04/05 gate disables itself on exactly the mutation it exists to catch — `lines 628-630`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] Four cases pass when `notify()` renders an empty string — `lines 419-425`, `lines 564-567`, `lines 593-608`, and `notify-will-reload-agreement.test.ts:269-275`, `notify-stamp-coverage.test.ts:206-209`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] `ROW_ICONS` and `ROW_ICONS_AT_START` are byte-identical duplicates, and both omit the `◍` glyph the file elsewhere treats as a row icon — `line 73` vs `line 578`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Module-scope fixture arrays shared across cases — `lines 88-115`, `121-165`, `167-243`, `257-307`, `334-393`, `492-548`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-will-reload-agreement.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The WILL-02 \"agreement\" gate only exercises one side of the agreement; `pendingToken` is never asserted — `lines 75-80` (the `pendingToken` field), `lines 258-276`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-closed-set-locks.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] All 4 cases are strictly subsumed by `compat-01-no-expansion.test.ts`; the file can never fail alone — `lines 29-77`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/cross-surface-reason-parity.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Two members of the gate's own domain have no parity row: the `workflows` kind and the install-side errno arm — `lines 65-84` (kind rows), `lines 10-49` (note rows)",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/cross-surface-reason-parity.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The third assertion in every case is a tautology — `lines 47`, `62`, `82`, `98`, `112`, `128`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `extensions/pi-claude-marketplace/shared/notify.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The `STATUS_TOKENS` ordering comments describe a reload-hint mechanism the code no longer has — `lines 309-317`, `340-346`, `349-355`, `356-363`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `extensions/pi-claude-marketplace/shared/notify.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Doc comment cites a test module that does not exist — `line 374` (`tests/shared/notify-v2.test.ts`)",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `extensions/pi-claude-marketplace/shared/notify-context.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] Three casts, one of which writes through a declared-`readonly` field — `lines 317-318`, `line 327`, `line 337`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-producer-wire-coverage.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[WARNING] The partial-install status family has no wire row — `lines 74-377`",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`notify-context.ts:319-334` — the `arm === undefined` fallback row. Covered at `tests/shared/notify-context.test.ts:339`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`notify-context.ts:328-332` — the frozen-row `catch`. Covered at `tests/shared/notify-context.test.ts:392`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`reconcile/notify.ts:359,391` — the non-default `forceInstallKeys` branch. `notify-stamp-coverage.test.ts:205` calls the one-argument form only; covered at `tests/orchestrators/reconcile/notify.test.ts:1712,1750`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/probe-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`probe-classifiers.ts:216-218` — the `workflows` kind arm. Covered at `tests/shared/probe-classifiers.test.ts:266`, but see the parity-gate finding.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`install.messaging.ts:493-507` (`errnoReasonFromNote`) as reached through `narrowResolverReasons` — the parity gate never drives it, and no counterpart exists on the read-only surface. Reachable, and the divergence is real.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`install.messaging.ts:515-517` — the `reason === \"\"` early return in `classifyResolverReason`. Not driven by the parity gate.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`install.messaging.ts:613-618` — the \"both sources empty\" permissive `unsupported source` fallback. Not driven by the parity gate.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`install.messaging.ts:366-408` (`classifyEntityShapeError`) and `reinstall.messaging.ts:276` (`outcomeToPluginMessage`) — the missing `default: assertNever` arms. `tsconfig.json` sets `noImplicitReturns: true`, and every arm of both switches returns, so adding a union member makes the end of the function reachable and raises TS7030 (`reinstall`'s non-nullable `ReinstallMsg` return also raises TS2366). The silent-omission risk is already closed by the compiler for these two. See the META correction below.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Branch census claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`notify-context.ts:337` — the `as unknown as` bridge. The narrow `RenderFn<Extract<Msg, …>>` cannot be assigned to `RenderFn<PluginNotificationMessage>` without it; removing the cast requires re-typing `dispatchRow`, not deleting a line.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Hand-rolled `MockCtx`/`MockPi` forced past the compiler with `as never`* (BLOCKER) — `lines 39-61`, used at 7 call sites; the proposed `createWireHarness` mirror does type-check without casts, so the fix is executable as written. Sequence it with META §1 (narrowing the `notify()` parameters), or this patches 2 of 14+ files.",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Process-wide `mock` imported from `node:test`* (WARNING) — `line 28`, `mock.fn()` at `line 44`; no case takes a `t` parameter. Moot once the BLOCKER fix lands.",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "UNDERSTATED — *Fixture arrays looped inside a single `test()`* (WARNING) — the recorded rationale says \"the loop body contains no branching so splitting is mechanical.\" That is factually wrong for the GRAM case: `lines 628-630` contain a `continue` that skips every assertion, and that branch is the self-disabling bug filed as a new BLOCKER above. The split is still correct, but it is a prerequisite for the severity fix, not a standalone readability change. Raise to BLOCKER and pair it with the `expectedSeverity` field.",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-grammar-invariant.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *File header describes a retired summary grammar* (WARNING) — `lines 12-14` versus `SUMMARY_GRAMMAR` at `lines 70-71` and `summaryPhrase()`; the accurate description at `lines 64-68` is the text to promote.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-will-reload-agreement.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Hand-rolled `MockCtx`/`MockPi` forced past the compiler with `as never`* (BLOCKER) — `lines 40-61`, `line 248`.",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-033",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-will-reload-agreement.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Process-wide `mock` imported from `node:test`* (WARNING) — `line 29`, `line 45`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-034",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-will-reload-agreement.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Fixture arrays looped inside a single `test()`* (WARNING) — `lines 258`, `268`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-035",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-will-reload-agreement.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "CONFIRMED — *Harness duplicates `notify-grammar-invariant.test.ts` near-verbatim* (WARNING) — `lines 40-61` vs `39-61`; the recorded drift detail (`MockTool.sourceInfo` present in one, absent in the other) checks out at `notify-grammar-invariant.test.ts:49`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-036",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-036"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection positively establishes that this historical `tests/architecture/notify-stamp-coverage.test.ts` assertion is superseded, compiler-closed, already owned, or explicitly clean; the replacement evidence is preserved in the report's current grading and the live referenced owner."
+      },
+      "rationale": "REFUTED — *`assert.deepEqual` used where the house rule is `assert.deepStrictEqual`* (WARNING) — `line 11` is `import assert from \"node:assert/strict\"`, under which `assert.deepEqual` is `assert.deepStrictEqual`. The stated rationale (\"would not distinguish `1` from `\"1\"`\") is false, and the same spelling is used deliberately throughout `compat-01-no-expansion.test.ts:181,215,251,275`. What remains is a spelling-consistency nit, not a defect. The real defect in this file is the vacuous empty-list negative at `line 209`, filed above.",
+      "destination": "Retain as positive stale/clean evidence; no implementation route.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-037",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-037"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/notify-closed-set-locks.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "OVERSTATED — *Per-test comments read as an incremental changelog* (WARNING) — the first pass already conceded this is sanctioned by the file's own tripwire design and by the comment policy's decision-ID allowance. It is a style preference, and it is moot: the file is fully subsumed by `compat-01-no-expansion.test.ts` (new WARNING above), so the correct action is to move the provenance comments into that file's `expected` arrays, not to condense them here.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-038",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-038"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `extensions/pi-claude-marketplace/shared/notify.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "DUPLICATE-OF — *File size stresses the module's reviewability* (WARNING) — already owned as a planning decision in `META-FINDINGS.md` §\"Decisions the fixing pass cannot make\" item 2 (module splits), where it is the named seam. Keep it there; a per-area restatement adds nothing. (Note the line count: this file is 4,217 lines, not the 4,039 META and `ARCHITECTURE.md` both carry.)",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-039",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-039"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-producer-wire-coverage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`tests/architecture/notify-producer-wire-coverage.test.ts` — genuinely strong, and the strongest file in the area. Mutations it does catch: (a) stamping `\"info\"` explicitly instead of omitting the second `ui.notify` argument — `wireFacts` pins `severity: undefined` structurally; (b) emitting the notification twice, or not at all — the expectation is a whole-array `deepStrictEqual` of length 1; (c) changing the reload trailer's bytes — `RELOAD_TRAILER` is hand-written in the test and matched with `endsWith`; (d) probing soft deps a third time or skipping a probe — `when(() => pi.getAllTools()).thenReturn([]).twice()` plus `verify()` on all three mocks in every case; (e) reading `ctx.ui` more than once. Its only gap is coverage breadth (partial-install family), not assertion strength.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-040",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-040"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/cross-surface-reason-parity.test.ts"
+        },
+        {
+          "path": "tests/shared/probe-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`tests/architecture/cross-surface-reason-parity.test.ts` — catches every mutation to the duplicated hooks-prefix ladder: all four prefixes from `isHooksResolverNote` (`install.messaging.ts:478-485`) and `classifyResolverNote` (`probe-classifiers.ts:132-136`) have a row, so deleting or renaming any one on either side turns a row red. It also catches the `malformed mcp reference` arm's presence on both sides, and the multi-note ordering. The WR-01 arm-order hazard (an `lspServers` substring inside a `malformed mcp reference` note) is not covered here, but is covered on the probe side at `tests/shared/probe-classifiers.test.ts:208` — no install-side analogue exists because the install side gates on `startsWith(\"contains \")` rather than a substring, so the hazard cannot arise there.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-041",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-041"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/probe-classifiers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/probe-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`extensions/pi-claude-marketplace/shared/probe-classifiers.ts` — attacked the arm order, the first-wins dedup, and the `kindToReason` fallback. Each is documented at the arm and pinned by a case in `tests/shared/probe-classifiers.test.ts`. No finding.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-042",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-042"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/markers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`extensions/pi-claude-marketplace/shared/markers.ts` — two constants, both pinned byte-for-byte. Clean.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-043",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-043"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`extensions/pi-claude-marketplace/orchestrators/plugin/{enable-disable,uninstall,update}.messaging.ts` — the `as const satisfies CommandContext<Status, Msg>` pin makes an omitted render arm a TS2741 at the declaration site, so the mutation \"delete a render arm\" cannot compile. `enable-disable.messaging.ts:203-210` has a proper `default:` arm. Clean.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-044",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-044"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Still clean after attack claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`extensions/pi-claude-marketplace/orchestrators/plugin/{install,reinstall}.messaging.ts` — the missing `default: assertNever` arms flagged in META §5 are compiler-guarded here (see Branch census). No finding beyond the dangling doc citation at `install.messaging.ts:476`.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-045",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-045"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "1. Production comments cite test modules that do not exist — three instances, and one of them is load-bearing. `grep -rn \"tests/\" extensions/pi-claude-marketplace | grep -oP \"tests/[A-Za-z0-9/._-]+\"` yields 22 distinct cited paths; three do not resolve:",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-046",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-046"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "2. `noImplicitReturns` already closes the silent-omission risk for return-only switches. `tsconfig.json` sets `noImplicitReturns: true`. For a `switch` over a closed union where every arm returns, omitting `default: assertNever` is not a silent-omission hazard: adding a union member makes the end of the function reachable and raises TS7030 (and TS2366 when the return type is non-nullable). This is the repo's own recorded lesson (`switch-exhaustiveness-ts7030.md`). Areas that filed a missing-`default` finding should re-check whether their switch is return-only or statement-only; only the statement-only case is a real hazard.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-047",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-047"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "3. A recurring vacuity shape: the filtered-then-compared-to-empty assertion. Three distinct files in this area assert `deepStrictEqual(filtered, [])` or `assert.ok(!x.includes(…))` as the *sole* content check, each of which passes when the producer emits nothing at all. This is a sibling of META §3's fragment-assertion cluster but is not the same defect and will not be found by grepping for `.includes(`. Recommend a repo-wide grep for `, [])` and `assert.ok(!` in `tests/` — every hit needs a positive assertion of the unfiltered value beside it.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-048",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-048"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/update.test.ts"
+        },
+        {
+          "path": "tests/domain/resolver.test.ts"
+        },
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's New cross-cutting evidence claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "4. Retired-vocabulary drift is not confined to `extensions/`. The D-75-01 rename left 21 sites in `extensions/` (including 2 exports) and ~99 in `tests/`, all invisible to the guard that exists to prevent exactly this. Areas holding `tests/orchestrators/plugin/{list,install,update,info}.test.ts`, `tests/orchestrators/marketplace/update.test.ts`, `tests/domain/resolver.test.ts`, and `tests/shared/notify.test.ts` should expect a wording sweep, and `orchestrators-reconcile-*` should expect a rename of two production exports.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-049",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-049"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "\"Restore exhaustiveness on closed-union switches\" (§Ranked by leverage item 5) lists `orchestrators/plugin/install.messaging.ts` and `orchestrators/plugin/reinstall.messaging.ts` as WARNING members of \"the silent-omission class: adding a member to a closed set compiles clean at every derivation site.\" For these two modules that is wrong. `install.messaging.ts:366-408` and `reinstall.messaging.ts:276` are both return-only switches under `noImplicitReturns: true`, so a new member makes the function's end reachable and fails to compile (TS7030; `reinstall`'s non-nullable `ReinstallMsg` return also gives TS2366). Adding `default: assertNever` there improves the error message, nothing more. The claim may still hold for `orchestrators/reconcile/{plan,apply}.ts` — those were not in my scope and should be re-checked for whether their switches return from every arm. Correction: split item 5 into ",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-050",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-050"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "\"Gates that do not gate\" lists five instances. My area adds three more, all in files the first pass declared clean: the D-75-01 vocabulary guard's camelCase blind spot and its test-tree scan hole (`partial-vocabulary-guard.test.ts`), the WILL-02 gate that only renders one side of the agreement (`notify-will-reload-agreement.test.ts`), and the GRAM-01/04/05 gate that skips its own assertions when severity is not stamped (`notify-grammar-invariant.test.ts`). The count should read eight, and the pattern is now strong enough to state as a rule: in this repo, a gate named for an invariant tends to test the half of the invariant that was easy to reach.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-051",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-051"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "\"`shared/notify.ts` (4,039 lines)\" (§Decisions item 2) — the file is 4,217 lines (`wc -l`). `ARCHITECTURE.md` carries the same stale figure. Minor, but the number is quoted as a sizing input for the module-split decision.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-052",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-052"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Corrections to META-FINDINGS.md claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "`_CLEAN-LIST-REPAIR.md` records `compat-01-no-expansion.test.ts` as \"No findings — model for the rest of the area.\" I confirm the file's assertion quality, but it now carries one stale artefact: its own \"MUST NOT be added to this file\" note (`lines 56-58`) reserves the length pins for `notify-closed-set-locks.test.ts`, whose four cases its own enumeration pins make unfalsifiable. Its `STATUS_TOKENS` assertion message (`line 219`) also repeats the retired \"four head-of-tuple tokens drive the reload hint\" claim. Both are one-line edits and belong in the same change as the deletion.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-053",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-053"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "§1 \"Narrow the over-wide context parameters\" — independently confirmed. Both `as never` files in this area exist solely because `notify(ctx: ExtensionContext, pi: ExtensionAPI, …)` demands full SDK objects. `notify-producer-wire-coverage.test.ts:52-65` is the counter-proof from inside the same directory: `mock<ExtensionContext>({ exactParams: true })` satisfies the same parameter with zero casts. So the cluster is real, and the workaround is already demonstrated next door — but narrowing the production parameter is still the change that removes the need for a three-mock harness at every call site.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-054",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-054"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "§\"The dominant shape: sibling drift\" — confirmed, and now demonstrated *within a single file*. `notify-grammar-invariant.test.ts:458` guards its loop with `assert.ok(lines.length > 0)`; the structurally identical loops at `line 419` and `line 593` in the same file do not. The known-good form was two hundred lines away and still did not propagate.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-055",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-055"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/source-scan.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "§\"Patterns to propagate\" — `tests/architecture/source-scan.ts` under-used. Confirmed for this area: `partial-vocabulary-guard.test.ts:50` recomputes `REPO_ROOT` locally while its neighbour `compat-01-no-expansion.test.ts:95` imports it from the shared helper. That is one of the five hand-rollers META counts.",
+      "destination": "Address the preserved claim through Phase 3.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ANG-056",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md#ANG-056"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/notify-grammar-invariant.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's Confirmations claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "§\"Clean verdicts are not reliable\" — confirmed emphatically. Every one of this area's six new BLOCKERs came from a file the first pass listed under `### Clean files` or gave a single non-blocking WARNING. The findings it *did* record are all real (7 CONFIRMED, 1 understated, 1 overstated, 1 refuted on a factual error about `node:assert/strict`).",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    },
+    {
+      "id": "ASD-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md#ASD-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The corpus claim names no current extensions/ path; current evidence is in the named architecture gate and repository scan."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/call-graph exploration plus repository-local live file inspection",
+        "observed": "Current inspection reproduces the report's `tests/architecture/manifest-read-seam.test.ts` claim in the live gate/source shape; named regex, assertion, scan-surface, comment, ownership, or hermeticity structure remains present."
+      },
+      "rationale": "[BLOCKER] The NFR-8 read-seam regex is directionally backwards and cannot match the repo's own read — `line 32`",
+      "destination": "Address the preserved claim through Phase 2.",
+      "duplicateOf": null
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
