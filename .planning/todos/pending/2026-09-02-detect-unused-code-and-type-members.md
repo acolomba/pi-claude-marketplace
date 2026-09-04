@@ -2,6 +2,9 @@
 created: 2026-09-02
 resolves_phase: 117
 source: 116-CONTEXT discussion
+audit_acknowledged:
+  milestone: v1.19
+  at: 2026-09-04
 ---
 
 # No gate detects an unused type member

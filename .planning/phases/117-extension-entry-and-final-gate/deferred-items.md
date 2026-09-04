@@ -19,6 +19,7 @@ it and why that plan could not resolve it.
   editing this file.
 - **Impact:** documentation only. No gate reads the cited path, and the pinning
   suite still runs — at its new location.
+  status: acknowledged
 
 ## 2. Stale byte-form-lock path in the output catalog
 
@@ -39,6 +40,7 @@ it and why that plan could not resolve it.
 - **Impact:** documentation only. No gate reads the cited path — `catalog-uat`
   pairs on the `catalog-state` marker, not on the prose — and the byte form is
   still locked, at its new location.
+  status: acknowledged
 
 ## 3. Stale `tests/helpers/` references throughout the codebase map
 
@@ -61,6 +63,7 @@ it and why that plan could not resolve it.
 - **Impact:** documentation only. No gate reads `TESTING.md`; the
   glob-completeness control reads the live scripts in `package.json`, which are
   correct.
+  status: acknowledged
 
 ## 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted
 
@@ -97,6 +100,7 @@ it and why that plan could not resolve it.
   recording each row's exit code; `117-ALL-PAIR-RESULT.md` carries the reading, the line
   dimension per shortfall, the runtime and the concurrency decision. Ledger entry 27 is
   closed. Nothing is left for the 117-12 sweep here.
+  status: acknowledged
 
 ## 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests
 
@@ -129,6 +133,7 @@ it and why that plan could not resolve it.
   sentence read the runtime's wording back from the same failing read. Measured after:
   `npm test` 5142/295/0 on v26.8.1, and the ten suites 411/411 on BOTH v22.22.2 and
   v26.8.1. Five plants confirm the assertions still fire. Ledger entry 28 is closed.
+  status: acknowledged
 
 ## 6. RESOLVED - The direct-coverage sweeps still have no automated control
 
@@ -153,7 +158,6 @@ it could never run unattended on a nine-minute sweep, and it becomes redundant t
 seven shortfalls close, at which point `--all` is itself the drift check. `CONTRIBUTING.md`
 instead states plainly that seven `accepted-shortfall` rows with those exact readings is the
 expected result and an eighth is a real failure.
-
 
 - **Found during:** code review iteration 2, finding WR-05 of `117-REVIEW-2.md`
 - **File:** `scripts/test-coverage-direct.mjs`, `CONTRIBUTING.md`, `package.json`
@@ -196,3 +200,4 @@ expected result and an eighth is a real failure.
 - **Impact:** no gate weakened and nothing silently accepted. The seven remain
   pinned by identity in their own pairs, and `npm run check` is unchanged.
 - **Ledger:** recorded as broken-windows entry 30.
+  status: acknowledged

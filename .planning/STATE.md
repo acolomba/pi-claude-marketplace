@@ -484,6 +484,35 @@ None for roadmap creation.
 | Category | Item | Status | Deferred At | Milestone |
 | -------- | ---- | ------ | ----------- | --------- |
 | Tooling | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted) | Pending | Phase 116 discussion | v1.19 |
+| quick_tasks | 260720-d8i-move-agent-provenance-from-body-comment- | unknown | 2026-09-04 | v1.19 |
+| todos | 2026-09-02-detect-unused-code-and-type-members.md | (presence-only) | 2026-09-04 | v1.19 |
+| uat_gaps | 89/89-UAT.md (archived v1.16) | passed | 2026-09-04 | v1.19 |
+| uat_gaps | 63/63-UAT.md (archived v1.13) | passed | 2026-09-04 | v1.19 |
+| uat_gaps | 56/56-UAT-FIX-2.md (archived v1.12) | all_fixed | 2026-09-04 | v1.19 |
+| uat_gaps | 56/56-UAT-FIX.md (archived v1.12) | all_fixed | 2026-09-04 | v1.19 |
+| deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment - **Found during:** 117-04 Task 1 - **File:** `extensions/pi-claude-marketplace/orchestrat | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog - **Found during:** 117-05 Task 1 - **File:** `docs/output-catalog.md` (the `### Device Flow user-c | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 117/deferred-items.md: 3. Stale `tests/helpers/` references throughout the codebase map - **Found during:** 117-07 Task 1 - **File:** `.planning/codebase/TESTING.md` (lines  | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted - **Found during:** 117-11 Task 2 - **File:** `scripts/test-coverag | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests - **Found during:** 117-11 Task 2 - **File:** ten test suites, led by  | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control **Resolved 2026-09-04 by operator decision.** Two parts, closed differently:  | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 90/deferred-items.md (archived v1.17): 90-03 execution - **Pre-existing environment failure (pi-subagents global peer):** two integration tests in `tests/integration/skill-path-resolution.t | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 86/deferred-items.md (archived v1.15): Pre-existing integration test failures (NOT introduced by Plan 03) Two `tests/integration/*` cases fail on the current branch. They fail IDENTICALLY w | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 85/deferred-items.md (archived v1.14): Pre-existing integration-test failures (unrelated to this phase) `npm run test:integration` reports 2 failures that also fail on the base commit `2aa2 | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 50/deferred-items.md (archived v1.11): Pre-existing test failure: reinstall README documentation gap - **Test:** `tests/architecture/reinstall-docs.test.ts` -- "PRL-01/03/04/05/13/14/15/16: | acknowledged | 2026-09-04 | v1.19 |
+| deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures (`import imports enabled Claude settings across both scopes`, `import --scope project narrows writes to  | acknowledged | 2026-09-04 | v1.19 |
+
+**One item could NOT be suppressed by the tool** - `deferred_items` phase 25 (archived
+v1.4.1). Its deferred items live in a markdown TABLE, not a bullet list: the scanner
+synthesizes that row's `text` by joining cells with ` - ` while the file stores them as
+` | `, so the acknowledge writer's literal-text search can never match and it refuses with
+`no deferred item matched --text`. The other 17 were suppressed normally. This one is
+disclosed here instead and WILL resurface at the next milestone close - it was not silently
+discarded, and the archived file was deliberately left byte-identical rather than
+restructured to satisfy a scanner. Its content is a pre-existing
+`tests/e2e/import-command.test.ts` failure already disclosed when v1.4.1 closed, and
+`tests/e2e/**` is excluded from `npm run check`.
 
 ## Session Continuity
 
