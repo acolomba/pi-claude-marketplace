@@ -8,16 +8,16 @@ component as a working Pi artifact.
 
 ### Live Revalidation
 
-- [ ] **RVAL-01**: Maintainers individually inspect all 110 files under
+- [x] **RVAL-01**: Maintainers individually inspect all 110 files under
   `.planning/reviews/unit-test-adversarial/`: 45 first-pass reports, 58
   adversarial reports, and 7 briefs, synthesis documents, or controls.
-- [ ] **RVAL-02**: A 110/110 coverage manifest maps every report and recorded
+- [x] **RVAL-02**: A 110/110 coverage manifest maps every report and recorded
   finding to a current disposition, live source and test references, and
   reproduction evidence where applicable; archived line references alone never
   authorize implementation.
-- [ ] **RVAL-03**: The nine operator decisions in `META-FINDINGS.md` are resolved
+- [x] **RVAL-03**: The nine operator decisions in `META-FINDINGS.md` are resolved
   only after their current premises are revalidated.
-- [ ] **RVAL-04**: Stale, struck, or superseded findings and bundled backlog
+- [x] **RVAL-04**: Stale, struck, or superseded findings and bundled backlog
   claims move out of active scope with explicit current evidence before
   implementation planning.
 
@@ -116,10 +116,10 @@ Roadmap creation assigns each requirement to exactly one phase.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| RVAL-01 | Phase 1 | Pending |
-| RVAL-02 | Phase 1 | Pending |
-| RVAL-03 | Phase 1 | Pending |
-| RVAL-04 | Phase 1 | Pending |
+| RVAL-01 | Phase 1 | Complete |
+| RVAL-02 | Phase 1 | Complete |
+| RVAL-03 | Phase 1 | Complete |
+| RVAL-04 | Phase 1 | Complete |
 | PDEF-01 | Phase 3 | Pending |
 | PDEF-02 | Phase 2 | Pending |
 | PDEF-03 | Phase 2 | Pending |

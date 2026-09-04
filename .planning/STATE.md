@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-04T20:14:27.832Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-04T20:53:46.004Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 711c9ab1bc570bed95d847f1c3a3583b41174fe8
+state_head: 1338ea52489b6702fdb67cc338450e98d7e523fa
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -33,8 +33,8 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 1 of 69
-Status: Executing Phase 01
+Plan: 2 of 69
+Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
 ## Performance Metrics
@@ -184,6 +184,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 117 P10 | 12 min | 1 tasks | 1 files |
 | Phase 117 P11 | 50 min | 1 tasks | 4 files |
 | Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
+| Phase 01 P01 | 28 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -393,6 +394,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: D-117-20 amended to 190 + 7 + 7: 190 complete numeric records, 7 accepted D-116-01a shortfalls, 7 type-only — Operator decision after plan 117-11 measured it; the gate is deliberately unchanged, no ledger-keyed verdict and no production licence, because a ledger-keyed pass would be the coverage-exception pragma D-116-01a bans
 - [Phase 117]: Concurrency is NOT added to the all-pair run, decided against a measured 533.2 s for all 204 rows — Under nine minutes at a phase boundary does not justify D-117-11's obligation of a second planting control proving a failing pair is still detected under interleaving
 - [Phase 117]: An errno path and errno message text are runtime-owned, not contractual; assertions pin name, code and syscall, and read the runtime's wording back where production composes around it — A package upgrade changed the EISDIR wording mid-phase and reddened 11 assertions with no behaviour change; the ten hardened suites are now identical on v22.22.2 and v26.8.1
+- [Phase 01]: Keep canonical revalidation state in normalized JSON and render Markdown deterministically from it.
+- [Phase 01]: Seed every corpus file and operator decision unresolved so shards cannot inherit false completion.
 
 ### Pending Todos
 
@@ -445,16 +448,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 1 context gathered
+**Stopped at:** Completed 01-01-PLAN.md
 phase are complete.
 
-**Resume file:** .planning/phases/01-live-evidence-revalidation/01-CONTEXT.md
+**Resume file:** None
 
 **Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T19:24:20.796Z
+Last session: 2026-09-04T20:53:45.904Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
