@@ -80,7 +80,12 @@ be narrowed or moved out of scope with evidence.
    requirements and remaining roadmap are revised before Phase 2 planning.
 
 Plans:
+**Wave 1**
+
 - [ ] 01-01-PLAN.md — Build the production-quality evidence-gate tracer and its complete validator foundation
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-02-PLAN.md — Individually revalidate corpus paths 001-002 into one bounded exclusive shard
 - [ ] 01-03-PLAN.md — Individually revalidate corpus paths 003-005 into one bounded exclusive shard
 - [ ] 01-04-PLAN.md — Individually revalidate corpus paths 006-007 into one bounded exclusive shard
@@ -134,21 +139,76 @@ Plans:
 - [ ] 01-52-PLAN.md — Individually revalidate corpus paths 103-105 into one bounded exclusive shard
 - [ ] 01-53-PLAN.md — Individually revalidate corpus paths 106-108 into one bounded exclusive shard
 - [ ] 01-54-PLAN.md — Individually revalidate corpus paths 109-110 into one bounded exclusive shard
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-55-PLAN.md — Merge all corpus evidence, resolve cross-shard identity/disposition conflicts, and clear every evidence gap before operator policy decisions
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-56-PLAN.md — Merge all corpus evidence, resolve cross-shard identity/disposition conflicts, and clear every evidence gap before operator policy decisions
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 01-57-PLAN.md — Merge all corpus evidence, resolve cross-shard identity/disposition conflicts, and clear every evidence gap before operator policy decisions
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 01-58-PLAN.md — Resolve MF-DEC-01 as one evidence dossier and blocking checkpoint
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 01-59-PLAN.md — Resolve MF-DEC-04 as one evidence dossier and blocking checkpoint
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 01-60-PLAN.md — Resolve MF-DEC-05 as one evidence dossier and blocking checkpoint
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
 - [ ] 01-61-PLAN.md — Resolve MF-DEC-06 as one evidence dossier and blocking checkpoint
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
 - [ ] 01-62-PLAN.md — Resolve MF-DEC-02 as one evidence dossier and blocking checkpoint
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
 - [ ] 01-63-PLAN.md — Resolve MF-DEC-03 as one evidence dossier and blocking checkpoint
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
 - [ ] 01-64-PLAN.md — Resolve MF-DEC-07 as one evidence dossier and blocking checkpoint
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
 - [ ] 01-65-PLAN.md — Resolve MF-DEC-08 as one evidence dossier and blocking checkpoint
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
 - [ ] 01-66-PLAN.md — Resolve MF-DEC-09 as one evidence dossier and blocking checkpoint
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
 - [ ] 01-67-PLAN.md — Rewrite the active milestone scope from the completed ledger and seal Phase 1 as the hard evidence gate
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
 - [ ] 01-68-PLAN.md — Rewrite the active milestone scope from the completed ledger and seal Phase 1 as the hard evidence gate
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
 - [ ] 01-69-PLAN.md — Rewrite the active milestone scope from the completed ledger and seal Phase 1 as the hard evidence gate
+
+**Cross-cutting constraints:**
+
+- Evidence uses the D-11 ladder and D-12 positive stale proof; mutations run only in repository-local isolated copies and never alter live source/test files (D-14).
+- The normalized files/sourceClaims/findings ledger contract is used exactly, with evidence status independent from routing (D-01, D-05 through D-07).
+- This plan owns one exclusive shard and cannot write the canonical ledger or another plan's shard.
+- Only decisions with surviving current premises reach the operator; stale premises close as evidence-only (D-15).
+- Dossiers are presented one at a time in risk/dependency order and never batched (D-15, D-16).
+- Recommendations favor safety and guideline conformity, including removing test-only exports, dead branches, and dishonest cases (D-17).
+- Every choice records evidence, selected and rejected alternatives, affected finding IDs, and exact downstream consequences (D-18).
 
 ### Phase 2: Containment and Input Safety
 
