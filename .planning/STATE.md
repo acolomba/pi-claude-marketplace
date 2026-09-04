@@ -4,11 +4,11 @@ milestone: v1.19
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
 status: complete
-stopped_at: Completed 117-12-PLAN.md — phase 117 closed and every v1.19 phase complete
-last_updated: "2026-09-03T22:30:00.000Z"
+stopped_at: Phase 117 verified passed; milestone v1.19 ready for audit
+last_updated: "2026-09-04T02:30:00.000Z"
 last_activity: 2026-09-03
-last_activity_desc: Phase 117 complete; closing inventory sweep landed
-state_head: ba4993de00dd822582abdd1c530cd7efdb0a4a44
+last_activity_desc: Phase 117 verified passed after a two-iteration code review
+state_head: c12b0ac6588fa43a31a10f297fbba02f066c0509
 progress:
   total_phases: 10
   completed_phases: 10
@@ -39,10 +39,26 @@ All 204 source-test pairs are complete. The entry pair, `extensions/pi-claude-ma
 → `tests/index.test.ts`, landed in 117-08 and the retained all-pair result records it `complete` at
 branches 15/15, functions 3/3, lines 161/161.
 
-Closing gates, each run separately and unpiped on Node v26.8.1 during 117-12: `npm test`
-5142 tests / 295 suites / 0 fail, `test:integration` 31/31, `typecheck` 0, the correspondence gate 0
-with zero violations, and both negative controls 0. `git diff --quiet 562f5d13 HEAD -- extensions/`
-exits 0: phase 117 changed no production file at all.
+Closing gates, each run separately and unpiped, and re-measured by the orchestrator after the
+code-review loop: `npm test` **5144 tests / 295 suites / 0 fail on BOTH Node v22.22.2 and v26.8.1**,
+`test:integration` 31/31, `typecheck` 0, `lint` 0, `fallow` 0, the correspondence gate 0 with zero
+violations, and all three negative controls 0. `git diff --quiet 562f5d13 HEAD -- extensions/` exits
+0: phase 117 changed no production file at all, including through the review fixes.
+
+VERIFICATION: passed, 5 of 5 roadmap success criteria, 36 of 36 requirement IDs. Four criteria were
+verified directly; Success Criterion 4 is closed by an accepted operator override recorded on
+`117-VERIFICATION.md`. `npm run test:coverage:direct:all` exits 1 on a clean tree because the gate
+refuses the first of seven accepted D-116-01a shortfalls — the amended D-117-20 working as designed,
+not a regression. SC-4 and SUITE-05 were worded before that amendment, so their literal "passes"
+clause is superseded.
+
+CODE REVIEW: two iterations. The first found 2 critical and 8 warning findings and all ten were fixed
+with planted proof; the second confirmed all ten closed by re-running each experiment and raised 5
+more, of which 4 were fixed and 1 was correctly REFUSED as contrary to the operator's own D-117-20.
+The reproducibility gap the verifier then found was fixed rather than waived:
+`npm run test:coverage:direct:report` regenerates all 204 rows from the gate's own enumeration, with a
+row-by-row diff at exit 0 against the retained artifact. Its diff to the gate itself is three `export`
+keywords and nothing else.
 
 HISTORY (Phase 116, retained): its verification measured every promise directly rather than reading
 the summaries. Its one gap — the two D-116-01a claimants predating the amendment were pinned in their
