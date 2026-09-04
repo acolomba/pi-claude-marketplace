@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "inventoryMode": "shard",
+  "plan": "01-05",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-024"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-001", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-001", "findingId": "ABG-001" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-002", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-002", "findingId": "ABG-002" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-003", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-003", "findingId": "ABG-003" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-004", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-004", "findingId": "ABG-004" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-005", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-005", "findingId": "ABG-005" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-006", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-006", "findingId": "ABG-006" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-007", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-007", "findingId": "ABG-007" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-008", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-008", "findingId": "ABG-008" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-009", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-009", "findingId": "ABG-009" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-010", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-010", "findingId": "ABG-010" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-011", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-011", "findingId": "ABG-011" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-012", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-012", "findingId": "ABG-012" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-013", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-013", "findingId": "ABG-013" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-014", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-014", "findingId": "ABG-014" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-015", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-015", "findingId": "ABG-015" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-016", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-016", "findingId": "ABG-016" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-017", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-017", "findingId": "ABG-017" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-018", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-018", "findingId": "ABG-018" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-019", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-019", "findingId": "ABG-019" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-020", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-020", "findingId": "ABG-020" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-021", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-021", "findingId": "ABG-021" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-022", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-022", "findingId": "ABG-022" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-023", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-023", "findingId": "ABG-023" },
+    { "id": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-024", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md", "label": "ABG-024", "findingId": "ABG-024" }
+  ],
+  "findings": [
+    {
+      "id": "ABG-001", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-001"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-shell-out.test.ts" }], "testRefs": [{ "path": "tests/architecture/no-shell-out.test.ts" }],
+      "validation": { "method": "surviving-mutation", "command": "node --test .tmp-revalidation-01-05/tests/architecture/no-shell-out.test.ts", "exitCode": 0, "observed": "In a repository-local isolated copy, deleting recursive descent left the D-21 gate green; the copy was removed and the live test remained unchanged." },
+      "rationale": "The walker still has no visited-file assertion, and the same absence-only case also gives the six regexes no synthetic offender control.", "destination": "Add traversal and matcher controls before relying on this architecture gate.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-002", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-002"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-shell-out.test.ts" }, { "path": "tests/architecture/source-scan.ts" }], "testRefs": [{ "path": "tests/architecture/no-shell-out.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "CodeGraph plus current source inspection", "observed": "The gate still reads raw source, while the shared scanner still declares comment stripping mandatory; its three waiver paths are pinned only as strings and are not read to prove continued necessity." },
+      "rationale": "Both the false-positive risk and dead-waiver risk remain in current code.", "destination": "Use the shared stripped scanner and positively validate each waiver.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-003", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-003"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-split-01-cast-reads.test.ts" }], "testRefs": [{ "path": "tests/architecture/no-split-01-cast-reads.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "CodeGraph and current test source", "observed": "Both scans still use a private recursive walker without a visited-path assertion and scan unstripped source; the two synthetic cases still name a walker they do not invoke." },
+      "rationale": "The traversal, prose-match, and misleading-title claims all remain directly visible.", "destination": "Share a guarded walker, strip comments, and retitle matcher-only cases.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-004", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-004"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/import-boundaries.test.ts" }, { "path": "eslint.config.js" }], "testRefs": [{ "path": "tests/architecture/import-boundaries.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "CodeGraph and resolved call-path inspection", "observed": "loadZones still returns the first raw flat-config rule block rather than ESLint.calculateConfigForFile, and the zone cases still do not assert the exact target set, except, scalar target shape, or resolved severity/basePath." },
+      "rationale": "A later disabling override or duplicate-zone substitution is still invisible.", "destination": "Resolve the effective ESLint config and compare the complete zone contract.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-005", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-005"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/import-boundaries.test.ts" }], "testRefs": [{ "path": "tests/architecture/import-boundaries.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current source and import graph", "observed": "The plugin ledger side remains a fixed five-name tuple, regexes still accept only the shortest static from-clause, and stale 8/9/10-folder wording remains split between comments and diagnostics." },
+      "rationale": "New ledgers, longer relative imports, and dynamic imports remain outside the asserted boundary.", "destination": "Derive both ledger populations, cover dynamic/long imports, and reconcile the count wording.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-006", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-006"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts" }], "testRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "CodeGraph call-path and pattern inspection", "observed": "FORBIDDEN_PATTERNS still lacks a dynamic platform/git import matcher although dynamic import is a live local form; marketplace/list.ts and remove.ts remain absent from FORBIDDEN_TARGETS." },
+      "rationale": "The reported NFR-5 bypass and target asymmetry remain.", "destination": "Add the dynamic-import matcher and the two marketplace targets.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-007", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-007"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts" }], "testRefs": [{ "path": "tests/orchestrators/marketplace/info.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current comments and test source", "observed": "The architecture test retains the retired ENOENT-skip explanation, and marketplace/info.ts still attributes its grep gate to an owner test that does not implement one." },
+      "rationale": "Both documentation-mechanic drift claims remain current.", "destination": "Correct both comments to name mandatory WR-06 behavior and the actual architecture gate.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-008", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-008"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/source-scan.ts" }], "testRefs": [{ "path": "tests/architecture/source-scan.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "CodeGraph plus focused suite run", "observed": "The focused suite passes, but no case proves assertNoForbiddenSurface calls stripComments, accumulates multiple offenders, forwards their payload, rethrows EISDIR, or resolves REPO_ROOT to this package; one case still performs two acts." },
+      "rationale": "All five test-strength gaps and the reachable branch census remain visible.", "destination": "Add discriminating public-behavior cases and split the mixed case.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-009", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-009"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }], "testRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current source and focused test run", "observed": "Four exists/ENOENT branches remain, including vacuous assert.ok(true) paths; the suite passes while those live targets exist." },
+      "rationale": "Renaming a guarded target can still turn a security gate green over no inspected file.", "destination": "Fail loudly on missing targets through the shared scanner.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-010", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-010"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }, { "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }], "testRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current regex and symbol inspection", "observed": "FORBIDDEN_STATE_FIELDS still omits camelCase accessToken, while the production OAuth result still uses accessToken." },
+      "rationale": "The named state-serialization leak remains lexically invisible.", "destination": "Cover current camelCase and sibling sensitive-field spellings.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-011", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-011"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }, { "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }], "testRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current regex inspection", "observed": "Four message regexes still anchor on new Error rather than Error subclasses, and none of the seven credential regexes has synthetic offender/benign controls." },
+      "rationale": "A natural TypeError or typed-error leak and a broken matcher can still survive.", "destination": "Match Error subclasses and add one discriminating control per regex.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-012", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-012"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }], "testRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current identifier, helper, and target-list inspection", "observed": "PHASE_35_ORCHESTRATOR_FILES, the local stripComments copy, and the hardcoded two-file provider list with an every-provider title all remain." },
+      "rationale": "The three warning-level maintainability and scope-accuracy claims are current.", "destination": "Rename by role, use the shared helper, and derive or accurately title provider coverage.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-013", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-013"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/integration-materialization-gate.test.ts" }, { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }], "testRefs": [{ "path": "tests/architecture/integration-materialization-gate.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current whole-case inspection", "observed": "The sibling sweep still omits hooks and staging/config locations; prepared is still checked by kind only; the title still omits the MCP bytes and parse contract asserted by the case." },
+      "rationale": "All three warning claims remain after the suite's relocation into architecture.", "destination": "Expand the absence object, assert the prepared handle contract, and retitle the case.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-014", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-014"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-lifecycle-default-enabled-read.test.ts" }], "testRefs": [{ "path": "tests/architecture/no-lifecycle-default-enabled-read.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current docstring and case inspection", "observed": "The false suffix/word-boundary rationale remains, while both mandatory targets and both case-sensitive patterns remain otherwise sound." },
+      "rationale": "The historical clean verdict remains valid apart from the documented wording correction.", "destination": "Correct the rationale; retain the gate behavior.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-015", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-015"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/peer-floor.test.ts" }, { "path": "package.json" }, { "path": "package-lock.json" }], "testRefs": [{ "path": "tests/architecture/peer-floor.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current manifests and test inspection", "observed": "The manifests agree today, but peer-floor still checks only pi-coding-agent, leaves pi-subagents ungated, and the second case can compare two undefined ranges; package version synchronization is not asserted here." },
+      "rationale": "All three preventive-test gaps remain despite current values being synchronized.", "destination": "Use independent data-driven peer rows and assert both lockfile version fields.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-016", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-016"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/extension-version-sync.test.ts" }, { "path": "tests/shared/extension-version.test.ts" }], "testRefs": [{ "path": "tests/architecture/extension-version-sync.test.ts" }, { "path": "tests/shared/extension-version.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current paired-test inspection", "observed": "The architecture case still has a compiler-guaranteed typeof check and an end-unanchored shape regex, while the owner test still duplicates the literal 0.18.1." },
+      "rationale": "The weak assertion and duplicate bump surface remain.", "destination": "Shape-check package.json and keep one package-to-export invariant without a second literal.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-017", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-017"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/unit-suite-glob-completeness.test.ts" }, { "path": "package.json" }], "testRefs": [{ "path": "tests/architecture/unit-suite-glob-completeness.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current source plus git replacement history", "observed": "The two independent glob/tree comparisons remain sound. Commit d1c8ec02 added a positive rejection case for a quoted non-test argument, but absent-script and zero-test-glob helper branches remain untested and package.json remains a hidden read." },
+      "rationale": "Positive replacement-plus-rerun evidence narrows, but does not eliminate, the historical branch-coverage claim.", "destination": "Preserve the strong gate and inject script text to cover the two remaining guards.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-018", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-018"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/no-telemetry-deps.test.ts" }, { "path": "package.json" }], "testRefs": [{ "path": "tests/architecture/no-telemetry-deps.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current matcher and manifest inspection", "observed": "FORBIDDEN_DEP_PATTERNS still omits dd-trace, analytics-node, @vercel/otel, and elastic-apm-node, and the includes matcher still has no offender/benign control." },
+      "rationale": "Both the package-name coverage and mutation-resistance claims remain.", "destination": "Expand the catalog and add a pure matcher control.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-019", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-019"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture/reconcile-planner-purity.test.ts" }, { "path": "tests/architecture/manifest-read-seam.test.ts" }, { "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts" }, { "path": "tests/architecture/disabled-state-classification.test.ts" }], "testRefs": [{ "path": "tests/architecture/reconcile-planner-purity.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current source census", "observed": "Five local stripComments implementations remain across architecture tests, and reconcile-planner-purity still has no dynamic-import clauses for node:fs or platform/git." },
+      "rationale": "The understated duplication and additional dynamic-import hole remain current.", "destination": "Adopt the shared helper in one sweep and widen the purity patterns.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-020", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-020"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "tests/architecture" }, { "path": "tests/architecture/source-scan.ts" }], "testRefs": [{ "path": "tests/architecture" }],
+      "validation": { "method": "static-proof", "tool": "current scoped test census", "observed": "The scoped files still contain non-strict equal/deepEqual assertions, largely omit lowercase AAA phases, and source-scan.ts still begins its two JSDoc summaries with imperative Strip and Read." },
+      "rationale": "The three cross-cutting warning classifications remain mechanical and current.", "destination": "Apply the unit-test and TypeScript comment conventions during the fixing phase.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-021", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-021"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" }], "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": { "method": "behavioral-probe", "command": "node --test tests/bridges/mcp/stage.test.ts", "exitCode": 0, "observed": "The owner suite passes, while current getMcpServers still rejects only undefined and arrays; null reaches Object.entries and strings remain enumerable as character entries. The module-level WeakMap also remains." },
+      "rationale": "The shipping malformed-mcpServers defect remains confirmed independently; the WeakMap remains a warning-level design note.", "destination": "Fix malformed value handling before test-only gate improvements.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-022", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-022"], "evidenceStatus": "confirmed", "route": "Phase 2",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }], "testRefs": [{ "path": "tests/persistence/locations.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "current type-test inspection", "observed": "The owner test proves the brand symbol's runtime presence but still contains no @ts-expect-error rejection of a hand-built ScopedLocations literal." },
+      "rationale": "The report's correction to the meta-finding is exact: only the type-level negative is missing.", "destination": "Add one compile-time negative case in the owner test.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-023", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-023"], "evidenceStatus": "confirmed", "route": "deferred backlog",
+      "sourceRefs": [{ "path": "tests/architecture" }, { "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md" }], "testRefs": [{ "path": "tests/architecture/no-shell-out.test.ts" }, { "path": "tests/architecture/no-credential-leak.test.ts" }],
+      "validation": { "method": "static-proof", "tool": "CodeGraph and current architecture-test census", "observed": "The wider source-scanning-gate pattern remains: multiple gates assert an empty offender list without both a visited-file invariant and synthetic matcher controls; new Error anchors and retired-mechanic comments remain additional propagation shapes." },
+      "rationale": "The report's three cross-cutting meta-findings remain actionable beyond this one file set.", "destination": "Retain as a cross-cutting backlog item with explicit planted-violation acceptance criteria.", "duplicateOf": null
+    },
+    {
+      "id": "ABG-024", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md#ABG-024"], "evidenceStatus": "confirmed", "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "tests/architecture/no-lifecycle-default-enabled-read.test.ts" }, { "path": "tests/architecture/unit-suite-glob-completeness.test.ts" }, { "path": "tests/architecture/source-scan.test.ts" }, { "path": "tests/architecture/no-split-01-cast-reads.test.ts" }, { "path": "tests/architecture/import-boundaries.test.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts" }, { "path": "extensions/pi-claude-marketplace/shared/extension-version.ts" }], "testRefs": [{ "path": "tests/architecture" }],
+      "validation": { "method": "behavioral-probe", "command": "node --test tests/architecture/{assigned-gates}.test.ts", "exitCode": 0, "observed": "All 13 focused current gate files passed. The report's explicitly retained strengths remain visible: mandatory lifecycle targets, independent glob/tree derivations, WR-06 missing-target controls, regex offender rows, ledger read failures, and clean parse/version ownership." },
+      "rationale": "Historical positive findings are preserved separately from the live weaknesses and do not erase them.", "destination": "Retain as evidence-only confirmation of the scoped strengths and clean production owners.", "duplicateOf": null
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
