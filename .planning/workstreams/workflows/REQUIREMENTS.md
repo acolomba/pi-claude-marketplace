@@ -1,0 +1,116 @@
+# Requirements: pi-claude-marketplace - Workflows workstream
+
+**Defined:** 2026-08-16
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+**Milestone goal:** Close the three gaps the `workflows` bridge shipped with -- a script shape that installs and then refuses to run with no install-time signal, a population of existing installs that never gains its workflow commands, and a load-bearing runtime claim backed only by a source read.
+
+**Evidence base:** Every claim below was established during the validation audit of phases 101-105 (2026-08-16) by reading the shipped sources and tests, running the suites, and driving the real admission logic against the seven workflow scripts shipped by the two Anthropic-authored plugins that carry a `workflows/` directory (`claude-security`, `code-modernization`). Engine claims were re-measured against `@quintinshaw/pi-dynamic-workflows` 3.10.1 in Spike 027.
+
+## Milestone: workflows-replay (active)
+
+**Goal:** Re-land the shipped `workflows` bridge on a main that has since
+declared `workflows` an *unsupported* kind (#154) and replaced the test
+architecture the bridge was written against (#167).
+
+The requirements the replay re-lands are not restated here. They are the 36
+already written, verified, and archived in
+[`milestones/workflows-REQUIREMENTS.md`](milestones/workflows-REQUIREMENTS.md)
+— WFLW, WBRG, WNAM, WPTH, WLIF, WDEP, WDOC. Phases 110-114 carry those
+unchanged, with one correction: WFLW-03's premise ("`workflows` sits in neither
+list, so a workflow-bearing plugin gets no signal") stopped being true when
+#154 landed. The requirement is already satisfied on main by the opposite
+mechanism, and the replay must keep a signal while changing which one.
+
+Only the requirements below are new, and all of them exist because #154 landed.
+
+### Kind Inversion
+
+<!-- Seams: domain/resolver.ts (UNSUPPORTED_COMPONENT_KINDS, UNSUPPORTED_COMPONENT_CONVENTIONS, both supported tuples), shared/notify-reasons.ts (the REASONS closed set), shared/probe-classifiers.ts (narrowUnsupportedKinds), tests/architecture/notify-closed-set-locks.test.ts, tests/architecture/catalog-uat.test.ts, tests/architecture/compat-01-no-expansion.test.ts, docs/output-catalog.md. -->
+
+- [ ] **WINV-01**: `workflows` leaves `UNSUPPORTED_COMPONENT_KINDS` and its `UNSUPPORTED_COMPONENT_CONVENTIONS` entry, and joins `SUPPORTED_COMPONENT_KINDS` and `SUPPORTED_COMPONENT_PATH_KINDS`. The convention directory `<pluginRoot>/workflows/` keeps the same name and the same probe; only which tuple reads it changes.
+- [ ] **WINV-02**: A plugin that resolved `partially-available {workflows}` before the inversion resolves `installable` after it, and installs its workflow envelopes on a normal install rather than needing `--partial`. This is the user-visible inversion and the one that must not be silent.
+- [ ] **WINV-03**: The dedicated `workflows` member of the `REASONS` closed set is retired together with its `probe-classifiers` arm, or kept with a stated second meaning. It cannot stay as-is: it means "this plugin has workflows and we dropped them", which becomes false. Whichever way it goes, the closed-set counts named in the `notify-reasons.ts` header comment and the byte-pinned catalog states move with it.
+- [ ] **WINV-04**: Every test #154 wrote that locks the unsupported reading is turned rather than deleted. `compat-01-no-expansion`, `catalog-uat`, and `notify-closed-set-locks` each assert the old meaning; each must assert the new one, so the inversion is proved by a red-then-green test and not by an absence.
+- [ ] **WINV-05**: `docs/output-catalog.md` and any `docs/` prose stating that workflow-bearing plugins degrade is corrected in the same phase that changes the behavior, so the published contract never describes the losing side of the inversion.
+
+## Milestone: workflow-hardening (planned)
+
+### v1 Requirements
+
+### Admission-Gate Signal
+
+<!-- Seams: domain/workflow-script.ts (admitWorkflowScript's decision order, the parseScript result the gates read), bridges/workflows/stage.ts (the warnings[] accumulator), docs/workflows-compatibility.md (the admit-versus-run table). Backlog rationale: BACKLOG.md WGATE-01. -->
+
+- [ ] **WGATE-01**: A workflow script whose shape the host engine will refuse at invocation installs with a per-script warning naming the refusing gate, so a plugin author learns at install time instead of at first invocation. The install still succeeds and sibling scripts are unaffected.
+- [ ] **WGATE-02**: The six gate checks read off the acorn parse `admitWorkflowScript` already performs. No second parse, and no vendored engine internal beyond what is needed to name the gate.
+- [ ] **WGATE-03**: A gate warning never refuses a script and never fails a plugin. This is the requirement that keeps the self-correcting error direction: if a later engine relaxes a gate, the cost is one spurious warning rather than a blocked install that only an extension release can clear.
+- [ ] **WGATE-04**: The determinism blocklist keeps its existing refusal behavior. It stays the one replicated gate because it is the one whose failure the engine reports wrongly -- a raw-text screen cannot tell a call from a mention, so a script is refused for a rule its comment merely names.
+- [ ] **WGATE-05**: `docs/workflows-compatibility.md`'s admit-versus-run table restates its "Replicated by this bridge?" column as replicate / warn / neither, so the published contract matches shipped behavior rather than describing the six gates as unhandled.
+
+### Convergence
+
+<!-- Seams: orchestrators/reconcile/ (the supportedSetGrew scan and its early return on cleanly-installed records), tests/orchestrators/reconcile/backfill.test.ts (the three boundary cases that pin the current behavior). -->
+
+- [ ] **WCONV-01**: A user who installed a workflow-bearing plugin before the `workflows` kind was admitted gains its workflow commands on the next load, without running `update` or `reinstall`. Today the scan returns early on any record at `installable: true`, so the population whose install already works is exactly the population that never converges -- and both Anthropic-authored workflow plugins land on that side, because the kind they were missing was invisible rather than unsupported.
+- [ ] **WCONV-02**: The self-heal stays one-time. An equal supported set is not growth, and the extension-version stamp bounds the scan to a single pass -- the same two bounds the `installable: false` arm already relies on, rather than new machinery.
+- [ ] **WCONV-03**: A convergence that materializes artifacts says so on its reconcile row instead of healing silently, so a user can tell why new commands appeared after a reload they did not initiate.
+
+### Evidence
+
+<!-- Seams: tests/live-uat/workflow-storage-canary.mjs (the standing live driver), docs/workflows-compatibility.md (script-semantics section and its evidence-grade labels). -->
+
+- [ ] **WEVID-01**: The live-UAT canary drives the host engine's `agent()` failure path and asserts the observed behavior, with a negative control proving the assertion can fail. This is currently the weakest link in the compatibility chain and the one that matters most: it decides whether a script degrades or dies.
+- [ ] **WEVID-02**: `docs/workflows-compatibility.md` restates the `agent()` divergence at its measured grade, and names the concrete consequence for the upstream `pipeline(...)` + `.filter(Boolean)` pattern -- which six of the seven real Anthropic workflow scripts use, twelve times in total.
+
+### Documentation Hygiene
+
+<!-- Seams: .planning/BACKLOG.md (the trailing <!-- Pruned --> convention), .planning/workstreams/workflows/milestones/workflows-phases/105-*/105-VERIFICATION.md. -->
+
+- [ ] **WDOCS-01**: `WFLW-01` is pruned from `.planning/BACKLOG.md` under the file's existing pruned-footer convention, naming the milestone that closed it, so the backlog stops advertising shipped work as open.
+- [ ] **WDOCS-02**: `105-VERIFICATION.md` no longer contradicts itself. Its evidence table currently records the live canary as `UNRUN` while its own frontmatter and status line record it closed on 2026-08-16; the current record wins and the stale wording goes.
+
+## Future Requirements
+
+Deferred. Tracked but not in this milestone's roadmap.
+
+### Engine Coupling
+
+- **WPIN-01**: A machine-checkable re-read of the vendored `DETERMINISM_BLOCKLIST` and the envelope/storage internals against a newer engine, so an upgrade fails loudly instead of silently disagreeing. Today the doc instructs a human to re-read on every bump.
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Replicating checks 3-9 as install-time refusals | Only makes us stricter than the engine, and the strict direction does not self-correct across engine upgrades. WGATE-03 pins the warn-instead posture deliberately. |
+| Adding `@quintinshaw/pi-dynamic-workflows` as a declared dependency | Would couple `npm run check` to a 0.x package with ~50 releases since May 2026 and no exported contract. The live-UAT route exists precisely to avoid this. |
+| Backfilling records whose supported set did not grow | Equality is not growth. Re-materializing on every load is the failure WCONV-02 exists to prevent. |
+| A first-party Pi workflow API to target instead of the engine | Pi ships none at the pinned version. Nothing to build against. |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| WGATE-01 | Phase 115 | Pending |
+| WGATE-02 | Phase 115 | Pending |
+| WGATE-03 | Phase 115 | Pending |
+| WGATE-04 | Phase 115 | Pending |
+| WGATE-05 | Phase 115 | Pending |
+| WCONV-01 | Phase 116 | Pending |
+| WCONV-02 | Phase 116 | Pending |
+| WCONV-03 | Phase 116 | Pending |
+| WEVID-01 | Phase 117 | Pending |
+| WEVID-02 | Phase 117 | Pending |
+| WDOCS-01 | Phase 115 | Pending |
+| WDOCS-02 | Phase 117 | Pending |
+
+**Coverage:**
+- v1 requirements: 12 total
+- Mapped to phases: 12
+- Unmapped: 0
+
+---
+*Requirements defined: 2026-08-16*
+*Traceability mapped: 2026-08-16 (roadmap, Phases 115-117)*

@@ -888,7 +888,7 @@ Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
 (re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
 command entry point every handler's `ctx` flows through).
 
-## WFLW-01: `workflows` component kind is unrecognized (silent gap)
+## WFLW-01: `workflows` component kind -- mechanical fix shipped, bridge planned
 
 Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace and
 plugins-reference docs (`code.claude.com/docs/en/plugins-reference`) against
@@ -911,11 +911,24 @@ reason token, and no signal at all, unlike `monitors`/`themes`/etc., which
 are all correctly tracked and correctly demote the plugin to
 `partially-available`.
 
-Direction for later: add `workflows` to `UNSUPPORTED_COMPONENT_KINDS` (the
-mechanical fix that restores the closed-set guarantee and produces a
-`{unsupported workflows}` reason) as the immediate fix; a real bridge that
-translates a Claude workflow script into a Pi-native equivalent is a
-separate, larger question with no known Pi analog yet.
+**Half of this is done.** PR #154 (2026-08-29) landed the mechanical fix:
+`workflows` is in `UNSUPPORTED_COMPONENT_KINDS` with a `workflows/` convention
+entry, and a workflow-bearing plugin now resolves `partially-available` and
+reports a dedicated `workflows` reason. The closed-set guarantee is restored and
+the silent gap the paragraph above describes is closed. Read that description as
+history, not as current behavior.
+
+**The other half is scheduled.** A real bridge is no longer "a larger question
+with no known Pi analog" -- the analog was found and measured. Spikes 021-026
+chose `@quintinshaw/pi-dynamic-workflows` as the host on trust grounds, proved a
+hand-planted JSON envelope is discovered by its own directory scan, and
+reproduced its project-key derivation exactly; Spike 027 re-verified all of it
+against engine 3.10.1. The bridge itself was built on `features/workflows-spike`
+(Phases 101-105) and never merged.
+
+It is now the `workflows-replay` milestone, Phases 109-114, in the `workflows`
+workstream. Phase 109 is the inversion of what #154 landed. This entry stays
+open until that milestone ships, and closes with it.
 
 Code seams: `domain/resolver.ts` (`SUPPORTED_COMPONENT_KINDS`,
 `UNSUPPORTED_COMPONENT_KINDS`, `UNSUPPORTED_COMPONENT_CONVENTIONS`),

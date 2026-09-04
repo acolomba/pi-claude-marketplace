@@ -219,3 +219,23 @@ from `extensions/pi-claude-marketplace/` using the same relative-path,
 added as a `package.json` dependency** -- even a favorable verdict (spikes
 010-017, `fallow` v3.16.0) doesn't warrant adding the tool until a real
 adoption decision is made outside the spike process.
+
+**Search third-party ecosystems by contract signature, not by field name:**
+a demand-signal question ("does anyone ship X?") answered by searching the
+manifest field name over-matches badly -- spike 021's
+`"workflows" filename:plugin.json` returned 1248 hits, of which a six-repo
+sample contained **zero** real field declarations (GitHub was matching the
+word inside `description` prose). Searching for the artifact's own contract
+signature instead (`"export const meta" path:workflows`) found the real
+population, and the two answers disagreed on the shape of the fix, not just
+the count. Sample and verify a handful of hits before quoting any
+code-search total.
+
+**Probe a foreign sandbox with a discriminator, not a `typeof`:** spike 022
+first tested realm escape with `Function('return typeof process')()`, which
+returned `"object"` on both engines and proved nothing -- one had the real
+`process`, the other a frozen `{cwd}` stub, and `typeof` cannot tell them
+apart. Pick a probe whose answer differs between the two worlds
+(`process.env` exists on the host and not on the stub), then confirm
+practical capability (`process.binding('fs')`) rather than stopping at
+reachability.
