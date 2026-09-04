@@ -312,6 +312,15 @@ export default tseslint.config(
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-unnecessary-condition": "off",
       "@typescript-eslint/dot-notation": "off",
+      // Tests use `void (expr satisfies T);` as a compile-time-only proof
+      // that a value shape matches a type, with no runtime effect intended.
+      // `no-unused-expressions` doesn't unwrap `TSSatisfiesExpression` the
+      // way it unwraps `as`, so the bare expression alone is already legal
+      // there -- `void` is what stops it being reported here instead, since
+      // typescript-eslint 8.69 tightened `no-meaningless-void-operator` to
+      // flag voiding any non-call expression, which now fires on every one
+      // of these proof statements.
+      "@typescript-eslint/no-meaningless-void-operator": "off",
       "no-restricted-syntax": "off",
       "no-console": "off",
       "sonarjs/cognitive-complexity": "off",
