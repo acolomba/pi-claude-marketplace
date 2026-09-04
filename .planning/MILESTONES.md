@@ -1,5 +1,26 @@
 # Milestones: pi-claude-marketplace
 
+## v1.19 Unit Test Refactor (Shipped: 2026-09-04, no npm release - internal quality milestone)
+
+**Phases completed:** 10 phases (108-117), 220 plans, 317 tasks
+
+**Driver:** Every production TypeScript module should have exactly one mirrored owner test that imports it directly, and each pair should reach complete direct coverage measured in isolation - not as a share of an aggregate run. The milestone started from a 204-module baseline with a HEAD triage of 59 passing, 83 coverage-short, 60 missing and 2 failing. Work moved outward from foundational contracts to the extension entry point, one production source-test pair per executable plan, with no verification-only, foundation-only or migration plans.
+
+**Key accomplishments:**
+
+- **Foundational contracts (Phases 108-110, 54 pairs):** domain, platform, shared and persistence/transaction modules gained owners asserting whole public values rather than shapes - typed errors by class and field, path containment by refusal, atomic writes by resulting bytes. The resolver pair added the `installable: true | false` discriminant while keeping the three-way `state` as secondary detail.
+- **Bridges (Phases 111-112, 62 pairs):** the four non-hook component bridges and the whole hook runtime - routing, payloads, process, timers, lifecycle - moved onto direct owner tests with concern-local guarded fakes replacing generic adapter helpers. Hook partitions are pinned as closed sets in source order, so a new event kind cannot be added silently.
+- **Orchestration (Phases 113-115, 57 pairs):** helpers, classifiers, planners and message producers, then the state-changing lifecycle workflows, then the multi-operation compositions - import, bootstrap, dependency and reconcile - each proven against exact public outcomes and notification bytes rather than against a summary line.
+- **Edge surface and accepted shortfalls (Phase 116, 30 pairs):** the complete command surface kept its grammar, scope, completion, tool and notification behavior under direct owners. Seven modules were measured to fall exactly one branch short and could not be closed without a production rewrite - five compiler-forced by `noUncheckedIndexedAccess`, `Array.prototype.at()` or `useUnknownInCatchVariables`, two structurally unreachable. D-116-01a pins each by identity in its own pair and bans a coverage-exception pragma outright; all seven are filed as ledger entries 15-19, 21 and 22 and stay open by design.
+- **Entry pair and repository gates (Phase 117, 12 plans):** `extensions/pi-claude-marketplace/index.ts` gained its mirrored owner at branches 15/15, functions 3/3, lines 161/161; `tests/helpers/` was dissolved entirely into the tiers that own each module; and the corresponding-test gate went from 7 violations to **zero across 204 pairs** - the first clean reading of the milestone. The phase changed no production file at all. It also named barrel-proxy ownership as its own gate verdict, added planting controls for previously uncontrolled coverage verdicts, and retained the 204-row all-pair result as a regenerable artifact (190 complete / 7 accepted shortfalls / 7 type-only).
+- **The gates now actually run:** a two-iteration code review found that all five gate scripts were declared in `package.json` and invoked by nothing - the same configured-but-inert failure CONVENTIONS.md records for `import-x/no-cycle`. The three fast ones now run inside `npm run check`, and the two nine-minute sweeps have a documented cadence in `CONTRIBUTING.md` rather than a CI job that would be red every night while the seven shortfalls stand.
+
+**Closeout:** override_closeout - all ten phases complete with `verification_status: passed`, 48/48 requirements satisfied, 5/5 integration seams wired, and all ten phases `nyquist_compliant: true` after four validation files were reconciled or reconstructed at close. Phase 117 carries one accepted operator override: `npm run test:coverage:direct:all` exits 1 on a clean tree because the gate refuses the first accepted D-116-01a shortfall, which is the amended D-117-20 working as designed; SC-4 and SUITE-05 predate that amendment and their literal "passes" clause is recorded as superseded. Final gates on both interpreters: `npm test` 5144 tests / 295 suites / 0 fail on Node v22.22.2 **and** v26.8.1, `test:integration` 31/31, typecheck / lint / fallow all clean. Known verification overrides: 17 newly acknowledged, 0 carried forward from a prior close (see STATE.md Deferred Items). An eighteenth could not be suppressed - phase 25's deferred items live in a markdown table the acknowledge writer cannot match - and is disclosed in STATE.md instead of being silently dropped.
+
+---
+
+---
+
 ## defaults-enabled — defaultEnabled Manifest Field (Shipped: 2026-08-15)
 
 **Phases completed:** 5 phases (101-105), 23 plans, 47 tasks
