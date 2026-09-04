@@ -142,9 +142,15 @@
       "path": ".planning/reviews/unit-test-adversarial/README.md",
       "category": "control",
       "assignedPlan": "01-02",
-      "claimIds": [],
-      "reviewStatus": "pending",
-      "outcome": "unreviewed"
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#BACKLOG-TRACKING",
+        ".planning/reviews/unit-test-adversarial/README.md#REVIEWED-TREE-PROVENANCE",
+        ".planning/reviews/unit-test-adversarial/README.md#CORPUS-CONTENTS",
+        ".planning/reviews/unit-test-adversarial/README.md#REPORT-PATH-MAPPING",
+        ".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
     }
   ],
   "sourceClaims": [
@@ -903,6 +909,36 @@
       "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
       "label": "METHOD-NAMED-SUSPICIONS",
       "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#BACKLOG-TRACKING",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "BACKLOG-TRACKING",
+      "findingId": "README-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#REVIEWED-TREE-PROVENANCE",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "REVIEWED-TREE-PROVENANCE",
+      "findingId": "README-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#CORPUS-CONTENTS",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "CORPUS-CONTENTS",
+      "findingId": "README-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#REPORT-PATH-MAPPING",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "REPORT-PATH-MAPPING",
+      "findingId": "README-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "FIXING-PASS-READING-ORDER",
+      "findingId": "README-003"
     }
   ],
   "findings": [
@@ -1388,7 +1424,7 @@
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph plus current git/source census",
-        "observed": "The coverage artifact and excluded suite directories remain present; the corpus itself marks these areas outside the completed sweep and names stale control documents."
+        "observed": "The excluded suite directories remain present, while the historical coverage artifact is absent; the corpus itself marks these areas outside the completed sweep and names stale control documents."
       },
       "rationale": "These limitations survive as explicit deferred audit scope and prevent interpreting this corpus as repository-wide proof.",
       "destination": "Deferred follow-up sweep and control-document regeneration.",
@@ -1424,6 +1460,65 @@
         "observed": "The method claims are supported by the report's linked examples and remain process guidance rather than product behavior."
       },
       "rationale": "Retain as evidence-quality guidance for later shards and implementation verification.",
+      "destination": "Evidence-review protocol guidance.",
+      "duplicateOf": null
+    },
+    {
+      "id": "README-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#BACKLOG-TRACKING",
+        ".planning/reviews/unit-test-adversarial/README.md#REVIEWED-TREE-PROVENANCE"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/BACKLOG.md" }],
+      "testRefs": [{ "path": "N/A", "reason": "Repository provenance and tracking claims do not describe executable test behavior." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "git cat-file plus current planning-state inspection",
+        "observed": "Commit c8417fbc exists locally and TESTQ-01 remains the single historical corpus tracking identity."
+      },
+      "rationale": "The README correctly records the reviewed revision and single-item backlog provenance; those facts are historical locators, not live dispositions.",
+      "destination": "Evidence-only provenance retained.",
+      "duplicateOf": null
+    },
+    {
+      "id": "README-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#CORPUS-CONTENTS",
+        ".planning/reviews/unit-test-adversarial/README.md#REPORT-PATH-MAPPING"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/README.md" }],
+      "testRefs": [{ "path": "N/A", "reason": "Corpus inventory and legacy path mapping are documentary structure claims." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "revalidation inventory and filesystem census",
+        "observed": "The live corpus contains the assigned first-pass, adversarial, and control documents, and internal unit-test-findings paths map to this archived directory."
+      },
+      "rationale": "The contents and path-alias statements remain accurate discovery metadata.",
+      "destination": "Evidence-only corpus navigation.",
+      "duplicateOf": null
+    },
+    {
+      "id": "README-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "Reading order is a review-process prescription." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current corpus cross-reference inspection",
+        "observed": "META-FINDINGS remains the consolidation document and explicitly directs readers to _AUDIT.md and area files for detail."
+      },
+      "rationale": "The prescribed reading order remains useful, while current evidence must still independently revalidate every inherited claim.",
       "destination": "Evidence-review protocol guidance.",
       "duplicateOf": null
     }
