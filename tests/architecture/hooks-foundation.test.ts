@@ -196,10 +196,10 @@ test("HOOK-03: HOOKS_VALIDATOR.Check accepts unknown fields at handler, entry, a
 // Block 4: HOOK-01 -- SUPPORTED includes hooks, UNSUPPORTED excludes hooks.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("HOOK-01: SUPPORTED_COMPONENT_KINDS is the closed 4-tuple [skills,commands,agents,hooks]", () => {
+test("HOOK-01 / WINV-01: SUPPORTED_COMPONENT_KINDS is the closed 5-tuple [skills,commands,agents,hooks,workflows]", () => {
   assert.deepEqual(
     [...SUPPORTED_COMPONENT_KINDS],
-    ["skills", "commands", "agents", "hooks"],
+    ["skills", "commands", "agents", "hooks", "workflows"],
     "SUPPORTED_COMPONENT_KINDS is a public closed-set contract -- shape and order are locked",
   );
 });
@@ -208,6 +208,13 @@ test("HOOK-01: UNSUPPORTED_COMPONENT_KINDS does NOT contain 'hooks'", () => {
   assert.ok(
     !(UNSUPPORTED_COMPONENT_KINDS as readonly string[]).includes("hooks"),
     `UNSUPPORTED_COMPONENT_KINDS must NOT contain "hooks": ${UNSUPPORTED_COMPONENT_KINDS.join(",")}`,
+  );
+});
+
+test("WINV-01: UNSUPPORTED_COMPONENT_KINDS does NOT contain 'workflows'", () => {
+  assert.ok(
+    !(UNSUPPORTED_COMPONENT_KINDS as readonly string[]).includes("workflows"),
+    `UNSUPPORTED_COMPONENT_KINDS must NOT contain "workflows": ${UNSUPPORTED_COMPONENT_KINDS.join(",")}`,
   );
 });
 

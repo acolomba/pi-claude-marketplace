@@ -98,7 +98,6 @@ const unsupportedConventionScenarios = [
   { kind: "themes", relativePath: "themes", stat: "dir" },
   { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
   { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
-  { kind: "workflows", relativePath: "workflows", stat: "dir" },
 ] as const;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1720,6 +1719,45 @@ test("PR-4 implicit-by-convention populates componentPaths.skills when neither e
   }
 });
 
+// WINV-01 / D-109-07: `workflows` is a supported path-bearing kind, so a
+// `workflows/` directory under the plugin root is discovered by the same
+// implicit-by-convention probe every other supported kind uses -- the kind
+// string IS the convention directory name, byte for byte.
+test("WINV-01 strict: implicit-by-convention workflows/ dir -> installable with componentPaths.workflows populated", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./local")]: "dir",
+    [path.join(pathUnderMarketplace("./local"), "workflows")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    // `componentPaths` is keyed by kind name, so the collected paths for one
+    // kind are readable through a kind-keyed view of it.
+    const collected: Readonly<Record<string, readonly string[] | undefined>> =
+      resolvedPlugin.componentPaths;
+
+    assert.deepStrictEqual(
+      collected.workflows,
+      ["workflows"],
+      `componentPaths.workflows: ${JSON.stringify(collected.workflows)}`,
+    );
+    assert.ok(
+      resolvedPlugin.supported.includes("workflows"),
+      `supported: ${resolvedPlugin.supported.join(" / ")}`,
+    );
+  }
+});
+
 // D-07 corollary: entry declares "custom" AND implicit "skills/" exists ->
 // UNION (declared-first ordering), NOT a short-circuit on the declared path.
 test("D-07 entry-declared path UNIONs with implicit-by-convention (was: PR-4 short-circuit)", async () => {
@@ -3095,6 +3133,33 @@ test("HOOK-01 loose: no hooks declared and no hooks/hooks.json -> installable WI
   if (resolvedPlugin.state === "installable") {
     assert.ok(!resolvedPlugin.supported.includes("hooks"));
   }
+});
+
+// WINV-01 / D-109-07: the loose collector takes no context precisely because it
+// never probes disk, so a `workflows/` directory alone yields `installable` with
+// nothing collected. The assertion is the ABSENCE of the contains-note, which is
+// what the pre-inversion unsupported reading emitted.
+test("WINV-01 loose: workflows/ dir on disk -> installable, no workflows contains-note", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local-workflows");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "workflows")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local-workflows" }), context);
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+  assert.ok(
+    !resolvedPlugin.notes.includes("contains workflows"),
+    `notes must not claim workflows is dropped: ${resolvedPlugin.notes.join(" / ")}`,
+  );
 });
 
 for (const scenario of unsupportedConventionScenarios) {
