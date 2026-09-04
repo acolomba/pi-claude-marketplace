@@ -59,9 +59,9 @@ const IDEMPOTENT_REASON_SET: ReadonlySet<Reason> = new Set(IDEMPOTENT_REASONS);
  * the reasons the producer is about to stamp. A skip whose reasons are ALL
  * idempotent no-ops (the resource already matches the requested state) is
  * benign -> `info`; any non-idempotent reason -- or a missing/empty reason set
- * that cannot be PROVEN benign -- is actionable -> `warning`. This is the
- * producer-local replacement for the former centralized benign-reason lookup:
- * the command stamps its own desired-vs-actual judgment at the emit site.
+ * that cannot be PROVEN benign -- is actionable -> `warning`. The judgment is
+ * producer-local: the command stamps its own desired-vs-actual verdict at the
+ * emit site.
  */
 export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "warning" {
   return reasons !== undefined &&

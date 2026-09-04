@@ -349,10 +349,10 @@ test("COMPAT-01: the notify module declares no eighth glyph export", async () =>
   // separate exports with no collection to compare against.
   //
   // WR-07: the pattern anchors on the DECLARATION, not on the spelling that
-  // follows the name. The former `/^export const ICON_[A-Z_]+ = /gm` required
-  // ` = ` immediately after the name and a line start, so an eighth glyph
-  // written `export const ICON_EIGHTH: string = "..."` -- or pushed off the line
-  // start by comment stripping -- slipped past the one clause this file calls
+  // follows the name. Requiring ` = ` immediately after the name and a line
+  // start would let an eighth glyph written
+  // `export const ICON_EIGHTH: string = "..."` -- or pushed off the line start
+  // by comment stripping -- slip past the one clause this file calls
   // load-bearing.
   const expectedCount = 7;
 

@@ -1143,10 +1143,10 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-o
       const { ctx, pi, notifications } = makeCtx();
 
       // Marketplace target with explicit --scope project where mp lives only
-      // in user scope. ATTR-03 / D-47-A: re-attributed from the former raw
-      // `MarketplaceNotFoundError` -> synthetic `(reinstall)` `{not found}` row
-      // to the standalone `MarketplaceNotAddedMessage`. SCOPE-01: the
-      // `[project]` bracket carries the REQUESTED scope. No raw throw escapes.
+      // in user scope. ATTR-03 / D-47-A: the miss is attributed to the
+      // standalone `MarketplaceNotAddedMessage`, not to a synthetic
+      // `(reinstall)` `{not found}` row. SCOPE-01: the `[project]` bracket
+      // carries the REQUESTED scope. No raw throw escapes.
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -1186,9 +1186,8 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
       const { ctx, pi, notifications } = makeCtx();
 
       // Bare form (no --scope): ghost-mp is absent in both scopes.
-      // ATTR-03 / D-47-A: re-attributed from the former raw `Error` ->
-      // `{not found}` to the standalone `{marketplace not added}` with NO bracket
-      // (absent-from-both form).
+      // ATTR-03 / D-47-A: the miss is attributed to the standalone
+      // `{marketplace not added}` with NO bracket (absent-from-both form).
       const outcomes = await reinstallPlugins({
         ctx,
         pi,

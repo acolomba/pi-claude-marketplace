@@ -370,13 +370,13 @@ export async function missIsNotInstalled(opts: {
 /**
  * SCOPE-01 / D-01: the reason set every absent-target lifecycle row carries.
  *
- * Two misses used to render byte-identically. "The marketplace is here and you
- * never installed this plugin" and "the marketplace is one scope over, so
- * nothing of it is installed here" are different situations with different
- * remedies -- install the plugin, versus target the other scope or add the
- * marketplace at the one you named -- and a row that states neither cannot be
- * acted on. The cross-scope arm names the container's actual scope; the
- * in-scope arm stays the bare `{not installed}` it always was.
+ * "The marketplace is here and you never installed this plugin" and "the
+ * marketplace is one scope over, so nothing of it is installed here" are
+ * different situations with different remedies -- install the plugin, versus
+ * target the other scope or add the marketplace at the one you named -- and a
+ * row that states neither cannot be acted on. The cross-scope arm names the
+ * container's actual scope; the in-scope arm carries the bare
+ * `{not installed}`.
  *
  * `notInstalledAt` is `missIsNotInstalled`'s answer: the scope the operator
  * NAMED, returned ONLY when the container is registered in the other one. Both
@@ -804,8 +804,8 @@ export async function resolveInstalledPluginTarget(opts: {
 /**
  * SCOPE-01 / ATTR-02 / D-47-C discriminated `@marketplace` lifecycle target
  * resolution. The NFR-7 discriminated-union precedent applied to the update
- * direct path: the chokepoint distinguishes the three outcomes the former
- * `undefined`/raw-`MarketplaceNotFoundError` return collapsed (M11).
+ * direct path: the chokepoint distinguishes three outcomes that a plain
+ * `undefined` or a raw `MarketplaceNotFoundError` return cannot (M11).
  *
  *   - `resolved`: the marketplace CONTAINER exists in the chosen scope (CMP-5
  *     precedence preserved -- see `resolveInstalledMarketplaceTarget`).

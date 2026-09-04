@@ -507,8 +507,8 @@ function surfaceUpdateDiscoveryWarnings(
  *
  * Three arms:
  *   - ATTR-02 / D-47-A marketplace-not-added: `enumerateMarketplaceTarget`
- *     raised the structural `MarketplaceNotAddedSignal` (instead of the former
- *     raw `Error`/`MarketplaceNotFoundError` -> `{not found}` misattribution).
+ *     raised the structural `MarketplaceNotAddedSignal`, so the row names the
+ *     marketplace rather than misattributing the miss to `{not found}`.
  *     Delegated to the shared `emitMarketplaceNotAddedSignal`, which reinstall
  *     drives with ITS context off the same signal -- one emitter, so the
  *     SCOPE-01 plugin row and the `{marketplace not added}` marketplace row
@@ -3040,8 +3040,8 @@ async function enumerateMarketplaceTarget(
   // downstream `(skipped) {not installed}` preflight. A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
-  // standalone `{marketplace not added}` variant -- instead of the former raw
-  // `Error`/`MarketplaceNotFoundError` -> `{not found}` misattribution (M10/M11).
+  // standalone `{marketplace not added}` variant, so the miss is never
+  // misattributed to `{not found}` (M10/M11).
   const resolved = await resolveUpdateMarketplaceScope(cwd, mpName, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[mpName];

@@ -699,8 +699,8 @@ async function enumerateMarketplaceReinstallTargets(
   // three forms (explicit-scope-plugin, explicit-scope-marketplace, bare).
   // A miss raises `MarketplaceNotAddedSignal` -- caught at the
   // `reinstallPlugins` entrypoint and re-attributed to the standalone
-  // `{marketplace not added}` variant -- instead of the former per-form divergence
-  // (synthesized phantom target / raw `MarketplaceNotFoundError`/`Error`).
+  // `{marketplace not added}` variant, so all three forms attribute the miss
+  // identically.
   const resolved = await resolveMarketplaceReinstallScope(cwd, marketplace, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
@@ -777,11 +777,10 @@ async function resolveMarketplaceReinstallScope(
   if (explicitScope !== undefined) {
     // WR-03: reuse the discriminated `resolveInstalledMarketplaceTarget` (the
     // resolver update.ts uses) so reinstall's explicit-scope cross-scope read
-    // is consistent with update. Byte-neutral for the operator: a `resolved`
-    // arm yields the same (scope, locations) the former inline guard returned;
-    // both the `marketplace-absent` and `other-scope` arms (which carry the
-    // REQUESTED scope) collapse to the same `{marketplace not added} [requestedScope]`
-    // bracket-only emission per resolved Open Question #1.
+    // is consistent with update. A `resolved` arm yields the (scope,
+    // locations) pair; both the `marketplace-absent` and `other-scope` arms
+    // (which carry the REQUESTED scope) collapse to the same
+    // `{marketplace not added} [requestedScope]` bracket-only emission.
     const resolution = await resolveInstalledMarketplaceTarget({
       cwd,
       marketplace,

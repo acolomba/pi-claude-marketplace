@@ -133,11 +133,10 @@ interface AutoupdateFlipRow {
   readonly scope: Scope;
   readonly alreadyMatching: boolean;
   /**
-   * I2 / PR #51: when true, the write-back was silently skipped because no
-   * `source` could be synthesized for a first-time config write. The row
-   * renders as a `(failed) {not found}` mp row instead of the success
-   * marker. Pre-fix these names rendered as silent fresh flips even though
-   * the config never landed.
+   * I2 / PR #51: when true, the write-back was skipped because no `source`
+   * could be synthesized for a first-time config write. The row renders as a
+   * `(failed) {not found}` mp row instead of the success marker, so a name
+   * whose config never landed is not reported as a fresh flip.
    */
   readonly writeBackSkipped?: boolean;
 }
@@ -165,12 +164,13 @@ function missingEverywhere(
  * reason (its message carries the retry hint); anything else falls back to
  * the permissive `not found`.
  *
- * ATTR-05: this row no longer handles the missing-marketplace case -- an
- * explicit-scope `MarketplaceNotFoundError` is routed to the standalone
- * `MarketplaceNotAddedMessage` `{marketplace not added}` variant by `setMarketplaceAutoupdate`
- * BEFORE this helper is reached. This helper now only maps `StateLockHeldError`
- * (-> `lock held`, whose message carries the retry hint) and other non-not-found
- * flip errors (-> the permissive `not found` fallback).
+ * ATTR-05: this row does not carry the missing-marketplace case. An
+ * explicit-scope `MarketplaceNotFoundError` routes to the standalone
+ * `MarketplaceNotAddedMessage` `{marketplace not added}` variant in
+ * `setMarketplaceAutoupdate`, BEFORE this helper is reached, so this helper maps
+ * only `StateLockHeldError` (-> `lock held`, whose message carries the retry
+ * hint) and other non-not-found flip errors (-> the permissive `not found`
+ * fallback).
  */
 function autoupdateFailedRow(name: string, err: Error): PluginFailedMessage {
   const reasons: readonly ContentReason[] =
@@ -338,11 +338,11 @@ async function writeAutoupdateBack(
     const patch = buildAutoupdatePatch(current, state, name, enable);
     const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
     if (!hasConfigSource && patch.source === undefined) {
-      // I2 / PR #51 / WR-06(b): unsynthesizable source. Pre-fix this entry
-      // was silently dropped from the batch -- but the name STAYED in
-      // `finalResult.changed`, so the final notify rendered success for a
-      // flip that was never persisted. We now return the skipped names so
-      // the orchestrator can demote them into an honest failed row.
+      // I2 / PR #51 / WR-06(b): unsynthesizable source. The entry is dropped
+      // from the batch while its name stays in `finalResult.changed`, so the
+      // skipped names are returned here and the orchestrator demotes them into
+      // an honest failed row rather than rendering success for a flip that was
+      // never persisted.
       skipped.push(name);
       continue;
     }
@@ -514,9 +514,8 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     if (first !== undefined) {
       // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
       // iterated scope is a missing-marketplace precondition. Route it to the
-      // standalone MarketplaceNotAddedMessage `(failed) {marketplace not added}` variant
-      // instead of the former reason-LESS bare `(failed)` row.
-      // Scope bracket: an explicit `opts.scope` carries it; the bare form
+      // standalone MarketplaceNotAddedMessage `(failed) {marketplace not added}`
+      // variant. Scope bracket: an explicit `opts.scope` carries it; the bare form
       // carries `first.scope` (the scope where the first not-found was
       // observed), per the RESEARCH recommendation.
       const failureName = opts.name;
@@ -579,12 +578,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     }
 
     if (row.writeBackSkipped === true) {
-      // I2 / PR #51: the config write-back was silently skipped because no
-      // `source` could be synthesized for a first-time write. Pre-fix this
-      // rendered as a `<autoupdate>` fresh-flip success even though nothing
-      // landed in claude-plugins.json. Demote to a failed row using the
-      // closed-set `not found` reason (matches the synthetic-child cascade
-      // form used elsewhere in this orchestrator -- no new tokens).
+      // I2 / PR #51: the config write-back was skipped because no `source`
+      // could be synthesized for a first-time write, so nothing landed in
+      // claude-plugins.json. Demote to a failed row using the closed-set
+      // `not found` reason (matches the synthetic-child cascade form used
+      // elsewhere in this orchestrator -- no new tokens) rather than rendering
+      // a `<autoupdate>` fresh-flip success.
       return {
         name: row.name,
         scope: row.scope,

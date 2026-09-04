@@ -168,10 +168,9 @@ export interface UninstallPluginOptions {
 function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {
     // ATTR-09 / D-47-B: foreign content owned by another process is a
-    // content/ownership mismatch, not a manifest absence. The former
-    // `"not in manifest"` lied that the plugin was gone from the manifest;
-    // `"source mismatch"` is the truthful existing member (no new REASONS
-    // member -- the closed set already covers it).
+    // content/ownership mismatch, not a manifest absence, so the truthful
+    // member is `"source mismatch"` and not `"not in manifest"` (no new
+    // REASONS member -- the closed set already covers it).
     return "source mismatch";
   }
 
@@ -188,9 +187,8 @@ function narrowCascadeFailure(cause: Error): ContentReason {
   }
 
   // ATTR-09 / D-47-B: the unclassified cascade-failure default is genuinely
-  // "we could not read/remove on-disk state", not a manifest claim. The
-  // former `"not in manifest"` was a false assertion; `"unreadable"` is the
-  // truthful existing member.
+  // "we could not read/remove on-disk state", not a manifest claim, so the
+  // truthful member is `"unreadable"` and not `"not in manifest"`.
   return "unreadable";
 }
 

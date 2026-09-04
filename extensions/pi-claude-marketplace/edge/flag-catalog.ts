@@ -68,9 +68,8 @@ export type CatalogVerb =
 // which selects the scope's state tree rather than the file inside it, and it is
 // valid at both scopes.
 //
-// Completion offers it because every one of those six verbs already documents
-// `[--local]` in its `USAGE` string; parse-accepting and documenting a flag while
-// hiding it from completion was an unintended divergence, not a decision.
+// Completion offers it because every one of those six verbs documents
+// `[--local]` in its `USAGE` string.
 const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   name: "--local",
   description:

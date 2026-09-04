@@ -118,12 +118,11 @@ export type RemoveMarketplaceOutcome =
       readonly cause: string;
     }
   // I1 / PR #51: orchestrated partial-cascade arm. A subset of the
-  // marketplace's plugins successfully unstaged AND a subset failed. Pre-fix
-  // the orchestrated path collapsed this to `{ status: "failed", reason }`,
-  // dropping both the unstaged plugin rows AND failures 2..N from the
-  // reconcile cascade. The reconcile caller now renders one row per
-  // `unstaged` plugin (○ uninstalled) AND one row per `failed` plugin (⊘
-  // {reason}), plus a `(failed)` mp header (D-22-02 / CMC-31 PARTIAL).
+  // marketplace's plugins successfully unstaged AND a subset failed. Carrying
+  // both sets keeps every plugin visible in the reconcile cascade: the caller
+  // renders one row per `unstaged` plugin (○ uninstalled) AND one row per
+  // `failed` plugin (⊘ {reason}), plus a `(failed)` mp header (D-22-02 /
+  // CMC-31 PARTIAL).
   | {
       readonly status: "partial";
       readonly name: string;
@@ -242,8 +241,8 @@ function emitPartialFailure(args: {
     // through the typed outcome. The apply cascade caller composes one row
     // per plugin (○ uninstalled for unstaged, ⊘ {reason} for failed) so the
     // reconcile surface honours D-22-02 (no plugin ever disappears
-    // silently). Pre-fix this arm returned `{status:"failed",reason}` --
-    // collapsing N rows to 1.
+    // silently). A single `{status:"failed",reason}` would collapse N rows
+    // to 1.
     return {
       status: "partial",
       name: opts.name,

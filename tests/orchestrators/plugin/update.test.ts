@@ -2190,10 +2190,11 @@ test("WR-01: bulk update where an up-to-date plugin precedes a phase-3a failure 
   //
   // The failing plugin fires its own `notifyDirectFailure` and is withheld from
   // `outcomes`, so the abort path renders a cascade for the already-accumulated
-  // `aaa` outcome. Pre-fix, that all-`unchanged` accumulator passed the no-op
-  // gate (0 updated, 0 error/warning rows in the cascade) and emitted a SECOND
-  // notification reading `Plugin update: nothing to update` -- contradictory,
-  // directly after a failure for the same invocation. The `abortedByFailure`
+  // `aaa` outcome. Without the `abortedByFailure` guard that all-`unchanged`
+  // accumulator passes the no-op gate (0 updated, 0 error/warning rows in the
+  // cascade) and emits a SECOND notification reading `Plugin update: nothing to
+  // update` -- contradictory, directly after a failure for the same
+  // invocation. The `abortedByFailure`
   // flag now suppresses that headline.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-abort-"));
@@ -2667,10 +2668,10 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
 
 // ATTR-02 / SCOPE-01: `@<mp>` form against an absent marketplace with an
 // explicit `--scope` emits the standalone `MarketplaceNotAddedMessage`
-// (`{marketplace not added}` on the marketplace subject) carrying the requested-scope
-// bracket -- NOT the former `(failed) {not found}` synthetic plugin row (M10/M11
-// misattribution). No raw MarketplaceNotFoundError/Error escapes the
-// orchestrator.
+// (`{marketplace not added}` on the marketplace subject) carrying the
+// requested-scope bracket -- NOT a `(failed) {not found}` synthetic plugin row
+// (the M10/M11 misattribution). No raw MarketplaceNotFoundError/Error escapes
+// the orchestrator.
 test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {marketplace not added} [scope] bracket", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-mp-"));

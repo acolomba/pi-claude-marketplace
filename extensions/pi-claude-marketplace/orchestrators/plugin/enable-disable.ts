@@ -1323,9 +1323,8 @@ function composeOutcomeRow(args: {
       };
     case "fresh":
       // UAT-04: the fresh-enable header is the BARE always-marketplace-header
-      // form (no `(added)` token -- that header belongs to `marketplace add`;
-      // the former `(added)` leaked from reusing the install-cascade header
-      // shape with mp.status "added"). UAT-03: the fresh-disable row carries
+      // form. It carries no `(added)` token -- that header belongs to
+      // `marketplace add`. UAT-03: the fresh-disable row carries
       // the closed-set `(disabled)` token -- same glyph + token as the
       // disabled-inventory row, version slot kept -- instead of
       // `(uninstalled)`. RLD-05 / D-07: the reload-hint fires via the

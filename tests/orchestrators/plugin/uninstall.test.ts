@@ -510,8 +510,8 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       // V2 byte form per docs/output-catalog.md `failure-permission-denied`
       // shape. ATTR-09 / D-47-B: the cause is an AgentsUnstageFailureError
       // (foreign content owned by another process), which narrowCascadeFailure
-      // now maps to the truthful `"source mismatch"` member -- the former
-      // `"not in manifest"` lied that the plugin was gone from the manifest.
+      // maps to the truthful `"source mismatch"` member rather than claiming
+      // the plugin is gone from the manifest.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       // UXG-07 (D-29-02/03): the "A plugin operation has failed."
