@@ -129,3 +129,47 @@ it and why that plan could not resolve it.
   sentence read the runtime's wording back from the same failing read. Measured after:
   `npm test` 5142/295/0 on v26.8.1, and the ten suites 411/411 on BOTH v22.22.2 and
   v26.8.1. Five plants confirm the assertions still fire. Ledger entry 28 is closed.
+
+## 6. The direct-coverage sweeps still have no automated control
+
+- **Found during:** code review iteration 2, finding WR-05 of `117-REVIEW-2.md`
+- **File:** `scripts/test-coverage-direct.mjs`, `CONTRIBUTING.md`, `package.json`
+  (`test:coverage:direct`, `test:coverage:direct:all`)
+- **Issue:** both sweeps stop at the first pair short of complete direct
+  coverage, which today is always one of the seven accepted D-116-01a
+  shortfalls. So the exit code carries no information: a contributor who
+  introduces a genuine new gap sees the same rc 1 and the same shape of message
+  as the accepted one. Worse in the other direction,
+  `test:coverage:direct:negative` — the negative control **for** this gate — now
+  runs in `npm run check` on every CI job, while the gate it controls runs
+  nowhere.
+- **Reviewer's remedy:** teach the script an accepted-shortfall list keyed by
+  module path, so a stop on a listed module is reported and skipped and a stop
+  on anything else fails.
+- **Why not fixed here:** **D-117-20 bars it in terms.** The amended decision
+  says COV-05 is met "**not** resolved by a pragma, **not** by a ledger-keyed
+  verdict (which would be D-116-01a's banned pragma wearing a different hat)
+  ... The gate is deliberately unchanged and still refuses a shortfall." Item 4
+  above records the same operator decision. The reviewer did not have D-117-20
+  in view when the finding was written.
+- **Measured anyway, then reverted unshipped**, so the operator can revisit the
+  decision at known cost rather than on an estimate. With the ledger-keyed form
+  in place, `npm run test:coverage:direct` ran **204 pairs at exit 0** — 197
+  passed plus 7 `Accepted shortfall` lines, each naming its ledger entry — where
+  the shipped gate stops at 20 pairs and exits 1. Both self-expiry refusals
+  fired under a plant: a listed module that has become complete, and an entry
+  naming a module no longer in the tree. The seven readings are identical on
+  Node v22.22.2 and v26.8.1, so the counter pin is not runtime-fragile. The
+  whole change was about 80 lines in the gate, 7 entries of data, and 8 states
+  in the negative control.
+- **Mitigated in documentation only:** `CONTRIBUTING.md` now names the seven
+  modules and their exact readings inline, so a contributor can tell an expected
+  stop from a regression without opening `.planning/WINDOWS.md` — a planning
+  artifact that the contributor-facing document should not depend on, and that
+  milestone archival will eventually move.
+- **Suggested owner:** an operator decision. Either revisit D-117-20's ban for
+  the sweep specifically, or accept that the direct-coverage gate has no CI
+  control while the seven shortfalls stand and close this item as intended.
+- **Impact:** no gate weakened and nothing silently accepted. The seven remain
+  pinned by identity in their own pairs, and `npm run check` is unchanged.
+- **Ledger:** recorded as broken-windows entry 30.
