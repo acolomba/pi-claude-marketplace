@@ -1741,15 +1741,10 @@ test("WINV-01 strict: implicit-by-convention workflows/ dir -> installable with 
   );
 
   if (resolvedPlugin.state === "installable") {
-    // `componentPaths` is keyed by kind name, so the collected paths for one
-    // kind are readable through a kind-keyed view of it.
-    const collected: Readonly<Record<string, readonly string[] | undefined>> =
-      resolvedPlugin.componentPaths;
-
     assert.deepStrictEqual(
-      collected.workflows,
+      resolvedPlugin.componentPaths.workflows,
       ["workflows"],
-      `componentPaths.workflows: ${JSON.stringify(collected.workflows)}`,
+      `componentPaths.workflows: ${JSON.stringify(resolvedPlugin.componentPaths.workflows)}`,
     );
     assert.ok(
       resolvedPlugin.supported.includes("workflows"),

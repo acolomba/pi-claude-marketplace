@@ -68,6 +68,7 @@ const ComponentPathsSchema = Type.Object({
   skills: Type.Array(Type.String()),
   commands: Type.Array(Type.String()),
   agents: Type.Array(Type.String()),
+  workflows: Type.Array(Type.String()),
 });
 
 const McpServersFieldSchema = Type.Record(Type.String(), Type.Unknown());
@@ -341,14 +342,21 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * HOOK-01: the PUBLIC closed set of supported component kinds. Downstream
- * consumers (surface renderers, OBS/SURF tests) read this tuple as the
- * authoritative supported-kind list. `hooks` is admitted here even though
- * the path-validation loop iterates a narrower subset
- * (`SUPPORTED_COMPONENT_PATH_KINDS`) -- the hooks-config discovery path
- * is a convention file, not a component-path field.
+ * HOOK-01 / WINV-01: the PUBLIC closed set of supported component kinds.
+ * Downstream consumers (surface renderers, OBS/SURF tests) read this tuple as
+ * the authoritative supported-kind list. `hooks` is the sole member excluded
+ * from the narrower path subset (`SUPPORTED_COMPONENT_PATH_KINDS`) -- its
+ * discovery path is a convention file, not a component-path field.
+ * `workflows` belongs to both tuples: its entry/manifest field is
+ * path-bearing, and its convention directory name is the kind name itself.
  */
-export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"] as const;
+export const SUPPORTED_COMPONENT_KINDS = [
+  "skills",
+  "commands",
+  "agents",
+  "hooks",
+  "workflows",
+] as const;
 /**
  * HOOK-01: the PRIVATE subset of supported kinds that carry per-entry
  * component-path semantics (entry/manifest declares a relative dir; the
@@ -357,7 +365,7 @@ export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks
  * convention file `<pluginRoot>/hooks/hooks.json`, parsed by
  * `parseHooksConfig`, NOT a path-bearing field.
  */
-const SUPPORTED_COMPONENT_PATH_KINDS = ["skills", "commands", "agents"] as const;
+const SUPPORTED_COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
 type SupportedPathKind = (typeof SUPPORTED_COMPONENT_PATH_KINDS)[number];
 
 /**
@@ -385,7 +393,6 @@ export const UNSUPPORTED_COMPONENT_KINDS = [
   "channels",
   "userConfig",
   "settings",
-  "workflows",
 ] as const;
 type UnsupportedKind = (typeof UNSUPPORTED_COMPONENT_KINDS)[number];
 
@@ -400,14 +407,13 @@ const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
   themes: [{ relativePath: "themes", kind: "dir" }],
   outputStyles: [{ relativePath: "output-styles", kind: "dir" }],
   settings: [{ relativePath: "settings.json", kind: "file" }],
-  workflows: [{ relativePath: "workflows", kind: "dir" }],
 };
 
 interface PartialResolution {
   supported: string[];
   unsupported: string[];
   notes: string[];
-  componentPaths: { skills: string[]; commands: string[]; agents: string[] };
+  componentPaths: { skills: string[]; commands: string[]; agents: string[]; workflows: string[] };
   mcpServers: Record<string, unknown>;
   // HOOK-01: relative path of the discovered hooks/hooks.json when the
   // convention probe found a parseable file. Undefined when no file
@@ -435,7 +441,7 @@ function emptyResolution(): PartialResolution {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
   };
 }
