@@ -1,0 +1,936 @@
+{
+  "version": 1,
+  "inventoryMode": "live",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "category": "control",
+      "assignedPlan": "01-02",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/README.md",
+      "category": "control",
+      "assignedPlan": "01-02",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_ADVERSARIAL-BRIEF.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_AREAS.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "category": "control",
+      "assignedPlan": "01-04",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_FIRST-PASS-BRIEF.md",
+      "category": "control",
+      "assignedPlan": "01-04",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-05",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-06",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-catalog-uat-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-06",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-hooks-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-07",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-08",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-state-drift-gates.md",
+      "category": "adversarial",
+      "assignedPlan": "01-08",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "category": "adversarial",
+      "assignedPlan": "01-09",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "category": "adversarial",
+      "assignedPlan": "01-09",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-adapters-state.md",
+      "category": "adversarial",
+      "assignedPlan": "01-10",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-async-rewake.md",
+      "category": "adversarial",
+      "assignedPlan": "01-10",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "category": "adversarial",
+      "assignedPlan": "01-11",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "category": "adversarial",
+      "assignedPlan": "01-12",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "category": "adversarial",
+      "assignedPlan": "01-12",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-payloads.md",
+      "category": "adversarial",
+      "assignedPlan": "01-13",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "category": "adversarial",
+      "assignedPlan": "01-14",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "category": "adversarial",
+      "assignedPlan": "01-14",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-components-hooks.md",
+      "category": "adversarial",
+      "assignedPlan": "01-15",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "category": "adversarial",
+      "assignedPlan": "01-16",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "category": "adversarial",
+      "assignedPlan": "01-16",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-17",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-17",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "category": "adversarial",
+      "assignedPlan": "01-18",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "category": "adversarial",
+      "assignedPlan": "01-18",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "category": "adversarial",
+      "assignedPlan": "01-19",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "category": "adversarial",
+      "assignedPlan": "01-20",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "category": "adversarial",
+      "assignedPlan": "01-20",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "category": "adversarial",
+      "assignedPlan": "01-21",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-21",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-22",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-rest.md",
+      "category": "adversarial",
+      "assignedPlan": "01-23",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-enable-fetch.md",
+      "category": "adversarial",
+      "assignedPlan": "01-23",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-24",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-24",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-info-c.md",
+      "category": "adversarial",
+      "assignedPlan": "01-25",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-26",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-26",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md",
+      "category": "adversarial",
+      "assignedPlan": "01-27",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-list-uninstall-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-27",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-list-uninstall-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-28",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-messaging.md",
+      "category": "adversarial",
+      "assignedPlan": "01-28",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-reinstall-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-29",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-reinstall-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-29",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "category": "adversarial",
+      "assignedPlan": "01-30",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-30",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-31",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md",
+      "category": "adversarial",
+      "assignedPlan": "01-31",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "category": "adversarial",
+      "assignedPlan": "01-32",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "category": "adversarial",
+      "assignedPlan": "01-33",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "category": "adversarial",
+      "assignedPlan": "01-33",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "category": "adversarial",
+      "assignedPlan": "01-34",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "category": "adversarial",
+      "assignedPlan": "01-34",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/root-index.md",
+      "category": "adversarial",
+      "assignedPlan": "01-35",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/shared-concerns.md",
+      "category": "adversarial",
+      "assignedPlan": "01-35",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "category": "adversarial",
+      "assignedPlan": "01-36",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/shared-notify-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-37",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/shared-notify-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-37",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/shared-notify-c.md",
+      "category": "adversarial",
+      "assignedPlan": "01-38",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/transaction.md",
+      "category": "adversarial",
+      "assignedPlan": "01-38",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "category": "first-pass",
+      "assignedPlan": "01-39",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "category": "first-pass",
+      "assignedPlan": "01-40",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "category": "first-pass",
+      "assignedPlan": "01-40",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "category": "first-pass",
+      "assignedPlan": "01-40",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "category": "first-pass",
+      "assignedPlan": "01-41",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "category": "first-pass",
+      "assignedPlan": "01-41",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "category": "first-pass",
+      "assignedPlan": "01-41",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "category": "first-pass",
+      "assignedPlan": "01-42",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "category": "first-pass",
+      "assignedPlan": "01-42",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "category": "first-pass",
+      "assignedPlan": "01-42",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "category": "first-pass",
+      "assignedPlan": "01-43",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "category": "first-pass",
+      "assignedPlan": "01-43",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "category": "first-pass",
+      "assignedPlan": "01-43",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "category": "first-pass",
+      "assignedPlan": "01-44",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "category": "first-pass",
+      "assignedPlan": "01-44",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "category": "first-pass",
+      "assignedPlan": "01-44",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/domain-components.md",
+      "category": "first-pass",
+      "assignedPlan": "01-45",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/domain-core.md",
+      "category": "first-pass",
+      "assignedPlan": "01-45",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/domain-resolver.md",
+      "category": "first-pass",
+      "assignedPlan": "01-45",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-completions.md",
+      "category": "first-pass",
+      "assignedPlan": "01-46",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-handlers-marketplace.md",
+      "category": "first-pass",
+      "assignedPlan": "01-46",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-handlers-plugin.md",
+      "category": "first-pass",
+      "assignedPlan": "01-46",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "category": "first-pass",
+      "assignedPlan": "01-47",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "category": "first-pass",
+      "assignedPlan": "01-47",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "category": "first-pass",
+      "assignedPlan": "01-47",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "category": "first-pass",
+      "assignedPlan": "01-48",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "category": "first-pass",
+      "assignedPlan": "01-48",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "category": "first-pass",
+      "assignedPlan": "01-48",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "category": "first-pass",
+      "assignedPlan": "01-49",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "category": "first-pass",
+      "assignedPlan": "01-49",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "category": "first-pass",
+      "assignedPlan": "01-49",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "category": "first-pass",
+      "assignedPlan": "01-50",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "category": "first-pass",
+      "assignedPlan": "01-50",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "category": "first-pass",
+      "assignedPlan": "01-50",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "category": "first-pass",
+      "assignedPlan": "01-51",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "category": "first-pass",
+      "assignedPlan": "01-51",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "category": "first-pass",
+      "assignedPlan": "01-51",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "category": "first-pass",
+      "assignedPlan": "01-52",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "category": "first-pass",
+      "assignedPlan": "01-52",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/platform.md",
+      "category": "first-pass",
+      "assignedPlan": "01-52",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "category": "first-pass",
+      "assignedPlan": "01-53",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "category": "first-pass",
+      "assignedPlan": "01-53",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "category": "first-pass",
+      "assignedPlan": "01-53",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "category": "first-pass",
+      "assignedPlan": "01-54",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "category": "first-pass",
+      "assignedPlan": "01-54",
+      "claimIds": [],
+      "reviewStatus": "pending",
+      "outcome": "unreviewed"
+    }
+  ],
+  "sourceClaims": [],
+  "findings": [],
+  "decisions": [
+    {
+      "id": "MF-DEC-01",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-02",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-03",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-04",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-05",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-06",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-07",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-08",
+      "status": "pending",
+      "premiseFindingIds": []
+    },
+    {
+      "id": "MF-DEC-09",
+      "status": "pending",
+      "premiseFindingIds": []
+    }
+  ],
+  "scopeChanges": []
+}
