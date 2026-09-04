@@ -331,10 +331,22 @@ export default tseslint.config(
     // directly and they sit outside the typed tree on purpose -- tsconfig.json
     // includes only extensions/**/*.ts and tests/**/*.ts -- so the type-aware
     // presets are switched off for them the way they are for this config file.
-    // Switching the presets off rather than ignoring the directory keeps every
-    // rule that needs no type information, which is the point: these files
-    // carry the correspondence and direct-coverage invariants and used to be
-    // unlinted, unformatted and untypechecked all at once.
+    //
+    // Switching the presets off is not enough on its own. The block carrying
+    // this repository's own rules is scoped `**/*.{js,ts}`, which does not
+    // match `.mjs`, so a gate script would otherwise keep only the tseslint
+    // defaults: measured, a braceless `if` and a `console.log` both passed at
+    // exit 0. The rules below restate that bar for these files, which matters
+    // because they carry the correspondence and direct-coverage invariants and
+    // used to be unlinted, unformatted and untypechecked all at once. Each was
+    // added against a plant and watched to fire.
+    //
+    // What stays off, and why. Everything needing the type service, because
+    // `scripts/` is outside tsconfig.json's `include` on purpose and the
+    // service would refuse the file -- so widening the base block's glob to
+    // `**/*.{js,mjs,ts}` is NOT the fix here. Also
+    // `explicit-module-boundary-types`, because a return-type annotation is not
+    // valid JavaScript.
     //
     // The format half of that repair is in package.json, where `scripts/**/*.mjs`
     // is a SEPARATE glob argument rather than an `mjs` entry in the brace list.
@@ -349,8 +361,47 @@ export default tseslint.config(
         ...globals.node,
       },
     },
+    plugins: {
+      "@stylistic": stylistic,
+      "import-x": importX,
+      sonarjs,
+    },
     rules: {
       ...tseslint.configs.disableTypeChecked.rules,
+      "no-console": "warn",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-empty-function": ["error", { allow: ["arrowFunctions"] }],
+      "import-x/order": [
+        "error",
+        {
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            "parent",
+            "sibling",
+            "index",
+            "object",
+            "type",
+          ],
+          "newlines-between": "always",
+          alphabetize: { order: "asc", caseInsensitive: true },
+        },
+      ],
+      "@stylistic/padding-line-between-statements": [
+        "error",
+        { blankLine: "always", prev: "block-like", next: "*" },
+      ],
+      "prefer-object-has-own": "error",
+      "sonarjs/cognitive-complexity": ["error", 15],
+      "sonarjs/no-identical-functions": "error",
+      "sonarjs/no-inverted-boolean-check": "error",
+      "sonarjs/no-nested-conditional": "error",
+      "sonarjs/no-nested-template-literals": "error",
+      curly: ["error", "all"],
       // `process.stdout.write` is how a command-line gate reports its verdict.
       // The IL-2 ban on it is scoped to extensions/**, which these are not.
       "no-restricted-syntax": "off",
