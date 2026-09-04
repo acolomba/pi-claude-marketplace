@@ -60,7 +60,7 @@ describe("prepareStageSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -117,7 +117,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -199,7 +199,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -262,7 +262,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -348,7 +348,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -418,7 +418,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -481,7 +481,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -536,7 +536,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -598,7 +598,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -663,7 +663,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -709,7 +709,7 @@ describe("commitPreparedSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -760,7 +760,7 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -825,7 +825,7 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -900,7 +900,7 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -974,7 +974,7 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1035,7 +1035,7 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1105,7 +1105,7 @@ describe("abortPreparedSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1148,7 +1148,7 @@ describe("abortPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1193,7 +1193,7 @@ describe("replacePreparedSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1242,7 +1242,7 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1310,7 +1310,7 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1396,7 +1396,7 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1470,7 +1470,7 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1574,7 +1574,7 @@ describe("rollbackSkillsReplacement", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1629,7 +1629,7 @@ describe("rollbackSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1683,7 +1683,7 @@ describe("rollbackSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1732,7 +1732,7 @@ describe("finalizeSkillsReplacement", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1779,7 +1779,7 @@ describe("finalizeSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1834,7 +1834,7 @@ describe("finalizeSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;

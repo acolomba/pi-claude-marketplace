@@ -60,7 +60,7 @@ describe("prepareStagePluginAgents", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -103,7 +103,7 @@ describe("prepareStagePluginAgents", () => {
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -209,7 +209,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -284,7 +284,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -374,7 +374,7 @@ Duplicate body.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -484,7 +484,7 @@ Review files.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -570,7 +570,7 @@ Review files.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -634,7 +634,7 @@ Review files.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -747,7 +747,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -883,7 +883,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -973,7 +973,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1060,7 +1060,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1125,7 +1125,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1191,7 +1191,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1270,7 +1270,7 @@ describe("abortPreparedAgents", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1312,7 +1312,7 @@ describe("abortPreparedAgents", () => {
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1354,7 +1354,7 @@ describe("replacePreparedAgents", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1418,7 +1418,7 @@ describe("replacePreparedAgents", () => {
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1502,7 +1502,7 @@ describe("replacePreparedAgents", () => {
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1620,7 +1620,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1669,7 +1669,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1759,7 +1759,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1808,7 +1808,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1888,7 +1888,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1951,7 +1951,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -2014,7 +2014,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -2086,7 +2086,7 @@ describe("rollbackAgentsReplacement", () => {
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -2135,7 +2135,7 @@ describe("rollbackAgentsReplacement", () => {
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -2209,7 +2209,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -2281,7 +2281,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -2340,7 +2340,7 @@ Current.
       supported: ["agents"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      componentPaths: { skills: [], commands: [], agents: ["agents"], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
