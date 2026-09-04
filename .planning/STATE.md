@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-09-04T22:33:36.928Z"
+stopped_at: Completed 01-16-PLAN.md
+last_updated: "2026-09-04T22:41:48.513Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 9d441ac3ee2a8a002bb2f0803031e1ad4174a23c
+state_head: 3e58a642b7065f37a9b933d3d8da4c0732e8aa60
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 16 of 69
+Plan: 17 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -199,6 +199,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P13 | 12min | 1 tasks | 1 files |
 | Phase 01 P14 | 17min | 2 tasks | 1 files |
 | Phase 01 P15 | 8min | 1 tasks | 1 files |
+| Phase 01 P16 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -438,6 +439,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: [Phase 01-14]: Treat compiler-forced skills prototype surgery and parser-message ownership as operator decisions.
 - [Phase 01]: Treat direct 100% coverage and mutation strength as independent evidence for hooks components.
 - [Phase 01]: Close the unconditional-if deletion claim as stale because the current reject row kills that mutation.
+- [Phase 01]: Retain defensive dispatch-guard, debug seam, clock seam, result-shape, and validator-export questions as operator decisions.
+- [Phase 01]: Route reproduced domain correctness and security gaps before structural test cleanup.
 
 ### Pending Todos
 
@@ -490,7 +493,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-15-PLAN.md
+**Stopped at:** Completed 01-16-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -499,7 +502,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T22:33:36.834Z
+Last session: 2026-09-04T22:41:48.393Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
