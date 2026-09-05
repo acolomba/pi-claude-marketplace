@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 64/69 plans executed
+**Plans:** 65/69 plans executed
 
 **Success Criteria**:
 
@@ -182,7 +182,7 @@ Plans:
 
 **Wave 13** *(blocked on Wave 12 completion)*
 
-- [ ] 01-65-PLAN.md — Resolve MF-DEC-08 as one evidence dossier and blocking checkpoint
+- [x] 01-65-PLAN.md — Resolve MF-DEC-08 as one evidence dossier and blocking checkpoint
 
 **Wave 14** *(blocked on Wave 13 completion)*
 
