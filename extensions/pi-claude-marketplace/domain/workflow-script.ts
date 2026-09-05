@@ -644,13 +644,48 @@ function readMetaString(elements: readonly MetaElement[], key: string): MetaRead
       continue;
     }
 
-    read =
-      element.value.type === "Literal" && typeof element.value.value === "string"
-        ? { kind: "literal", value: element.value.value }
-        : { kind: "no-literal" };
+    const value = literalString(element.value);
+
+    read = value === undefined ? { kind: "no-literal" } : { kind: "literal", value };
   }
 
   return read;
+}
+
+/**
+ * The statically-known text of one `meta` value, or `undefined` when the value
+ * is not statically known.
+ *
+ * These are exactly the two forms the engine's own `evaluateLiteral`
+ * (`@quintinshaw/pi-dynamic-workflows` 3.10.1, `dist/workflow.js`) resolves to a
+ * string without running anything: a string `Literal`, and a `TemplateLiteral`
+ * carrying no substitutions, whose text it joins off the quasis. Both are reads
+ * of text acorn has already parsed, so neither costs this module its security
+ * property -- no value of a non-literal node is resolved, and a template with
+ * even one substitution is refused a name rather than evaluated.
+ *
+ * Leaving the template form out is not the safe direction. The engine reads
+ * `` name: `deploy` `` as "deploy", so treating it as unreadable would stem-name
+ * the command after its file -- silently, and exactly the misnaming WNAM-01
+ * exists to prevent.
+ *
+ * `cooked` and not `raw`: they differ the moment the text carries an escape
+ * (`a\nb` cooks to a newline), and `cooked` is the one the engine reads. Acorn
+ * refuses a bad escape sequence in an UNTAGGED template outright, so such a
+ * script is settled as `unparseable` long before this runs and `cooked` is
+ * always present here; `String` folds the type's unreachable nullish arm without
+ * adding a branch that no input can take.
+ */
+function literalString(node: Property["value"]): string | undefined {
+  if (node.type === "Literal") {
+    return typeof node.value === "string" ? node.value : undefined;
+  }
+
+  if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
+    return node.quasis.map((quasi) => String(quasi.value.cooked)).join("");
+  }
+
+  return undefined;
 }
 
 function unparseableReason(fileName: string): string {

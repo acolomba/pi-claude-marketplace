@@ -155,6 +155,43 @@ return 1;
     assert.deepStrictEqual(admission(verdict), expectedVerdict);
   });
 
+  test("reads a substitution-free template literal, the one non-Literal form the engine resolves", () => {
+    // arrange
+    // `evaluateLiteral` joins the quasis of a template with no substitutions and
+    // throws only when there is at least one, so the engine reads this name.
+    // Stem-naming it would misname a command the engine can already load.
+    const source = `export const meta = { name: \`deploy\`, description: "d" };\n`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "deploy",
+      generatedName: "acme:deploy",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "shipper.workflow.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+  });
+
+  test("cooks the escapes in a template-literal name rather than reading its raw text", () => {
+    // arrange
+    // `cooked` and `raw` diverge the moment an escape appears, and `cooked` is
+    // what the engine reads. A raw read would name the command "a\\tb".
+    const source = `export const meta = { name: \`a\\u002Db\` };\n`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "a-b",
+      generatedName: "acme:a-b",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "shipper.workflow.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+  });
+
   test("reads past a numeric meta key that no static key name can match", () => {
     // arrange
     const source = `export const meta = { 1: "x", name: "ship" };\n`;
@@ -302,9 +339,9 @@ export const meta = { name: 'oops'
       generatedName: "acme:drafter.workflow",
     },
     {
-      shape: "the name is a template literal",
+      shape: "the name is a template literal carrying a substitution",
       fileName: "shipper.js",
-      source: `export const meta = { name: \`never-evaluated\` };\n`,
+      source: `export const meta = { name: \`a\${chosen}b\` };\n`,
       generatedName: "acme:shipper",
     },
     {
