@@ -90752,8 +90752,30 @@
     },
     {
       "id": "MF-DEC-08",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "OPEF-F13",
+        "OPIA-F23",
+        "OPIC-F38"
+      ],
+      "proof": "OPEF-F13, OPIA-F23, and OPIC-F38 are the exact surviving terminal roots for the naming-policy conflict. Current CodeGraph and source/test inspection show that .planning/codebase/CONVENTIONS.md still requires the makeMock* prefix while the active TypeScript unit-testing rule requires doubles to be named only for their production role. The three traced families still contain 16 factory definitions across 10 files: nine makeMockGitOps definitions, four makeMockCredentialOps definitions, and three makeMockDeviceFlowHttp definitions. They construct stateful GitOps, CredentialOps, and DeviceFlowHttp fakes rather than strict interaction mocks, so the historical classification conflict remains live. Four production modules also refer to those test-helper names in comments. The historical approximate nine-file census is superseded by this exact current count, and the CONVENTIONS.md reference to the absent tests/helpers/credential-mock.ts is stale, but neither fact removes the surviving naming conflict. OPEFR-F002 remains a duplicate of OPEF-F13, and MF-009 remains supporting umbrella provenance rather than an additional premise. OMAUB-F08 remains an independent shared-fake correctness issue. The unrelated full-path plugin-install finding whose suffix is OPIA-F23 is not the short-ID OPIA-F23 root and is excluded.",
+      "options": [
+        "Adopt role-only names for covered factories",
+        "Use type-accurate *Fake factory names",
+        "Retain makeMock* as a project exception"
+      ],
+      "selectedOption": "Adopt role-only names for covered factories",
+      "rejectedOptions": [
+        "Use type-accurate *Fake factory names — rejected because it would correct the mock-versus-fake classification but retain kind-bearing factory identifiers as an exception to the active role-only naming rule.",
+        "Retain makeMock* as a project exception — rejected because treating mock as an umbrella term would preserve inaccurate terminology, leave the project convention in conflict with the active unit-testing rule, and perpetuate avoidable naming drift."
+      ],
+      "affectedIds": [
+        "OPEF-F13",
+        "OPIA-F23",
+        "OPIC-F38"
+      ],
+      "recommendation": "Adopt role-only factory names for the three traced families under D-17. This removes the live guideline conflict and misleading mock classification with no behavior or production-design change, while preserving typed, hermetic, fail-closed fakes and all existing observable assertions.",
+      "downstreamConsequences": "Phase 2 must preserve OMAUB-F08 as an independent prerequisite repair: correct the shared fake's function-bearing authentication observation and remove fake-internal state pokes before consolidation or renaming can hide that defect. The remaining assertion, typing, and double-discipline work in OPEF-F13 also retains its independent Phase 2 route, with OPEFR-F002 preserved as its duplicate and MF-009 preserved only as umbrella provenance. Phase 4 TREF-02 and TREF-03 must rename only the 16 traced makeMockGitOps, makeMockCredentialOps, and makeMockDeviceFlowHttp factory definitions across the 10 evidenced files by their production roles; align .planning/codebase/CONVENTIONS.md with the selected role-only policy; and remove test-helper terminology from the production comments in plugin fetch, install, reinstall, and update without changing the collaborator contracts. Preserve all current typings, fresh per-case state, offline and fail-closed remote behavior, function-bearing authentication collaborators, call and state observations, public results, exact state, and exact notification assertions. Update only the naming conclusions in OPIA-F23 and OPIC-F38; their positive allow-list evidence remains valid. Run every affected owner suite, all shared-support dependents, the relevant direct source-test pair gates, the all-pairs direct-coverage gate required for shared support, type checking, and the complete project quality check. This decision authorizes no production test-only export, dead injection seam, network access, or behavior change. makeMockPi and unrelated *Fake families remain outside this exact finding set and receive no rename authorization unless separately traced."
     },
     {
       "id": "MF-DEC-09",
