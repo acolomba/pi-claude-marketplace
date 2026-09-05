@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 112
 current_phase_name: Install and removal lifecycle
-current_plan: 112-02 (not started)
+current_plan: 112-03 (not started)
 status: In progress
-stopped_at: Completed 112-01-PLAN.md
-last_updated: "2026-09-05T17:05:00.000Z"
+stopped_at: Completed 112-02-PLAN.md
+last_updated: "2026-09-05T17:50:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: 112-01 complete - resources.workflows schema, the sixth ledger phase, the closed-set widening
+last_activity_desc: 112-02 complete - the sixth cascade slot, both partial-cascade record folds, removal pinned on all four verbs
 state_head: 740da1cd7958d27ca26eb8a7c291c145e4b57e27
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 14
   percent: 33
 ---
 
@@ -35,15 +35,27 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 112 (Install and removal lifecycle) — IN PROGRESS, 1 of 4 plans done
-Plan: `112-01` complete; `112-02` and `112-03` are the next wave, in parallel
+Phase: 112 (Install and removal lifecycle) — IN PROGRESS, 2 of 4 plans done
+Plan: `112-01` and `112-02` complete; `112-03` is next
 Status: `112-01` landed the tracer in four commits — `a025d5b4` the
 `resources.workflows` record inventory, `d02db74b` the sixth ledger phase,
-`6d01ed99` the rollback evidence, `6f8e1c6a` the closed-set widening. `npm run
-check` is green end to end (unit 5400/0, integration 32/0) and every file the
-plan touched holds at 100% direct coverage. Remaining: `112-02` and `112-03` in
-parallel (the cascade slot with both compile-silent folds; reinstall's bespoke
-re-materialization), then `112-04` (the age-bounded staging sweep).
+`6d01ed99` the rollback evidence, `6f8e1c6a` the closed-set widening. `112-02`
+landed the removal side in three — `edb7007c` the sixth cascade slot and the
+`dropped.workflows` axis on both returns, `246f855c` both partial-cascade record
+folds, `ce4b98f9` removal pinned on all four verbs against real envelopes on
+disk. `npm run check` is green end to end (unit 5413/0, integration 32/0) and
+every file either plan touched holds at 100% direct coverage. Remaining:
+`112-03` (reinstall's bespoke re-materialization), then `112-04` (the
+age-bounded staging sweep).
+
+**What `112-02` settled for `112-03`.** Every removal path clears workflow
+envelopes from one edit to `cascadeUnstagePlugin`, so reinstall re-materializes
+against a directory known to be clean of its own prior envelopes. A DISABLED
+record deliberately RETAINS `resources.workflows` — the enable path reads that
+inventory to displace its own envelopes aside rather than hitting the occupancy
+refusal, and a case pins the asymmetry. `CASCADEAX-01` stays open: both folds
+still read their `dropped` argument structurally and the hand-rolled one still
+omits the hooks axis, so a SEVENTH axis would be dropped in silence again.
 
 **Three facts `112-01` settled that the next plans depend on.** The record
 carries a REQUIRED `resources.workflows` with a migrate default-fill and no
@@ -251,7 +263,7 @@ Phase 112 is what makes the repair actually run; the effect lands at release.
 ## Progress
 
 **Phases Complete:** 3/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started — Phase 112 needs planning.
+**Current Plan:** `112-03` not started — Phase 112 is 2/4 plans done.
 
 ```text
 [===-------] 33%
@@ -262,7 +274,7 @@ Phase 112 is what makes the repair actually run; the effect lands at release.
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
 | 111 | Workflows bridge | In progress (4/4 plans executed, verification pending) |
-| 112 | Install and removal lifecycle | Not started |
+| 112 | Install and removal lifecycle | In progress (2/4 plans executed) |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
 | 115 | Install-time admission-gate warnings | Not started (hardening) |
@@ -369,9 +381,9 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T11:50:00Z
+**Last session:** 2026-09-05T17:50:00Z
 
-**Stopped At:** Phase 111 complete, ready to plan Phase 112
+**Stopped At:** Completed 112-02-PLAN.md
 **Resume File:** None
 **Next Action:** `/gsd-verify-work 111` — all four plans are executed and the
 phase gate is green. `111-04`'s two commits are `b524524c` (the version bump at
@@ -490,6 +502,8 @@ re-persists `harness-worktree` as a side effect.
 | Phase 111 P02 | 62 min | 3 tasks | 7 files |
 | Phase 111 P03 | 35 min | 3 tasks | 4 files |
 | Phase 111 P04 | 34 min | 3 tasks | 8 files |
+| Phase 112 P01 | 70 min | 3 tasks | 51 files |
+| Phase 112 P02 | 40 min | 3 tasks | 8 files |
 
 ## Decisions
 
@@ -528,6 +542,12 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 111]: The fixture's script body was changed from a default export to a named `meta` export. — The real admission rule classifies a default export `skipped`/`no-meta`, so no envelope was written in any phase and the inverted assertion would have been red forever; a negative control restoring the old body confirmed the case goes red.
 - [Phase 111]: The precondition's COMMENT was rewritten while its three assertions stayed byte-identical. — It named an ENOENT assertion the inversion deletes, and the failure mode it described inverts too; the project's comment policy forbids narrating code that no longer exists, and the guard the plan protects is the assertions, not the prose above them.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
+
+- [Phase 112]: Both partial-cascade fold tests were observed RED against the unmodified folds before either filter line landed, then re-proven by deleting the lines again. — Neither site is compile-forced: both read the `dropped` bundle structurally, so a six-axis argument satisfies a five- and a four-axis parameter with no error. A fold test written after its line proves only that it compiles.
+- [Phase 112]: The hand-rolled marketplace fold's pre-existing `hooks` omission was left in place, and the new case asserts the persisted record STILL names the dropped hook. — The divergence predates this work and is filed as `CASCADEAX-01`; pinning it as deliberate is what stops a later reader repairing it silently as an unrelated behavior change.
+- [Phase 112]: The workflows unstage throw is placed AFTER `dropped.workflows` is assigned. — A cascade that fails part-way must still report the envelopes it did remove, and the partial-failure return is the only channel that carries them.
+- [Phase 112]: The planned containment-refusal case for the cascade was dropped rather than written. — `assertSafeName` throws a plain `Error` for a path separator, so such a name lands in the bridge's per-name failure array, not as `PathContainmentError`; the containment class is already pinned at the install ledger where `assertPathInside` is actually reachable.
+- [Phase 112]: `createProjectScope` and `projectCase` relocate `HOME` rather than a new per-case helper being added. — `workflowsSavedDir` is rooted at `os.homedir()` and honors no override, so every cascade test now reaches the real user's saved workflows unless the bundle is built after the assignment.
 
 ## Operator Next Steps
 
