@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 112
 current_phase_name: Install and removal lifecycle
-current_plan: 112-03 (not started)
+current_plan: 112-04 (not started)
 status: In progress
-stopped_at: Completed 112-02-PLAN.md
-last_updated: "2026-09-05T17:50:00.000Z"
+stopped_at: Completed 112-03-PLAN.md
+last_updated: "2026-09-05T18:40:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: 112-02 complete - the sixth cascade slot, both partial-cascade record folds, removal pinned on all four verbs
-state_head: 740da1cd7958d27ca26eb8a7c291c145e4b57e27
+last_activity_desc: 112-03 complete - reinstall re-materializes envelopes, records the placed names, and takes them back on a later failure
+state_head: 8e2c8a54fdbdd396d771dc01513f1e124a3c3abb
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 33
 ---
 
@@ -35,18 +35,35 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 112 (Install and removal lifecycle) — IN PROGRESS, 2 of 4 plans done
-Plan: `112-01` and `112-02` complete; `112-03` is next
+Phase: 112 (Install and removal lifecycle) — IN PROGRESS, 3 of 4 plans done
+Plan: `112-01`, `112-02` and `112-03` complete; `112-04` is next
 Status: `112-01` landed the tracer in four commits — `a025d5b4` the
 `resources.workflows` record inventory, `d02db74b` the sixth ledger phase,
 `6d01ed99` the rollback evidence, `6f8e1c6a` the closed-set widening. `112-02`
 landed the removal side in three — `edb7007c` the sixth cascade slot and the
 `dropped.workflows` axis on both returns, `246f855c` both partial-cascade record
 folds, `ce4b98f9` removal pinned on all four verbs against real envelopes on
-disk. `npm run check` is green end to end (unit 5413/0, integration 32/0) and
-every file either plan touched holds at 100% direct coverage. Remaining:
-`112-03` (reinstall's bespoke re-materialization), then `112-04` (the
-age-bounded staging sweep).
+disk. `112-03` landed reinstall's bespoke re-materialization in three —
+`b6ed30e8` the fifth prepare handle and its abort arm, `c97ca097` the commit
+step, the placed-names thread-through and the never-throwing recovery composer,
+`e785a865` the record and replace semantics pinned. `npm run check` is green end
+to end (unit 5423/0, integration 32/0) and every file any of the three plans
+touched holds at 100% direct coverage. Remaining: `112-04` (the age-bounded
+staging sweep).
+
+**What `112-03` settled for `112-04`.** Everything reachable in-process is now
+cleaned: the workflows commit removes its own staging root on success,
+`abortPreparedWorkflows` removes it when a replace step fails, and a cleanup
+refusal is reported as a bridge warning rather than swallowed. What is left for
+the sweep is genuinely crash-orphaned trees only. Two divergences ride forward.
+`splitStagingWarnings` is UNCHANGED — the workflow prepare's warnings are
+appended at reinstall's `bridgeWarnings` composition site instead, because that
+classifier is shared with the update verb; Phase 113 should fold the append back
+in when it widens it. And `unplaceWorkflows` CONVERTS a `PathContainmentError`
+into a leak string rather than letting it propagate, because it runs inside a
+catch already unwinding a different error; the bridge still raises by class and
+the install ledger still lets it escape, so PI-14 is intact at the ledger
+boundary.
 
 **What `112-02` settled for `112-03`.** Every removal path clears workflow
 envelopes from one edit to `cascadeUnstagePlugin`, so reinstall re-materializes

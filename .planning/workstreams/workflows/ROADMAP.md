@@ -373,7 +373,7 @@ Plans:
   undo, and the three mirrored ledger-phase closed sets (wave 1)
 - [x] 112-02-PLAN.md — the sixth cascade slot, the dropped-axis, both partial-cascade record folds, and
   removal pinned on all four verbs (wave 2)
-- [ ] 112-03-PLAN.md — reinstall re-materializes envelopes and records the names it actually wrote
+- [x] 112-03-PLAN.md — reinstall re-materializes envelopes and records the names it actually wrote
   (wave 2)
 - [ ] 112-04-PLAN.md — the age-bounded orphan staging sweep and the stale bridge-count corrections
   (wave 3)
@@ -539,7 +539,7 @@ Plans:
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
 | 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
 | 111. Workflows bridge | 4/4 | Complete    | 2026-09-05 |
-| 112. Install and removal lifecycle | 2/4 | In Progress|  |
+| 112. Install and removal lifecycle | 3/4 | In Progress|  |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
 | 114. Degradation and documentation | 0/? | Not started | - |
 | 115. Install-time admission-gate warnings | 0/? | Not started | - |
