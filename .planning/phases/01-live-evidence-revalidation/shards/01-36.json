@@ -1,0 +1,1622 @@
+{
+  "plan": "01-36",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "category": "adversarial",
+      "assignedPlan": "01-36",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056",
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-001","findingId":"SHC-F001"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-002","findingId":"SHC-F002"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-003","findingId":"SHC-F003"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-004","findingId":"SHC-F004"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-005","findingId":"SHC-F005"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-006","findingId":"SHC-F006"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-007","findingId":"SHC-F007"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-008","findingId":"SHC-F008"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-009","findingId":"SHC-F009"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-010","findingId":"SHC-F010"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-011","findingId":"SHC-F011"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-012","findingId":"SHC-F012"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-013","findingId":"SHC-F013"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-014","findingId":"SHC-F014"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-015","findingId":"SHC-F015"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-016","findingId":"SHC-F016"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-017","findingId":"SHC-F017"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-018","findingId":"SHC-F018"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-019","findingId":"SHC-F019"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-020","findingId":"SHC-F020"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-021","findingId":"SHC-F021"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-022","findingId":"SHC-F022"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-023","findingId":"SHC-F023"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-024","findingId":"SHC-F024"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-025","findingId":"SHC-F025"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-026","findingId":"SHC-F026"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-027","findingId":"SHC-F027"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-028","findingId":"SHC-F028"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-029","findingId":"SHC-F029"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-030","findingId":"SHC-F030"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-031","findingId":"SHC-F031"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-032","findingId":"SHC-F032"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-033","findingId":"SHC-F033"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-034","findingId":"SHC-F034"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-035","findingId":"SHC-F035"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-036","findingId":"SHC-F036"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-037","findingId":"SHC-F037"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-038","findingId":"SHC-F038"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-039","findingId":"SHC-F039"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-040","findingId":"SHC-F040"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-041","findingId":"SHC-F041"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-042","findingId":"SHC-F042"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-043","findingId":"SHC-F043"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-044","findingId":"SHC-F044"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-045","findingId":"SHC-F045"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-046","findingId":"SHC-F046"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-047","findingId":"SHC-F047"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-048","findingId":"SHC-F048"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-049","findingId":"SHC-F049"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-050","findingId":"SHC-F050"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-051","findingId":"SHC-F051"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-052","findingId":"SHC-F052"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-053","findingId":"SHC-F053"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-054","findingId":"SHC-F054"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-055","findingId":"SHC-F055"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-056","findingId":"SHC-F056"},
+    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-057","findingId":"SHC-F057"}
+  ],
+  "findings": [
+    {
+      "id": "SHC-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --input-type=module -e <redacted hermetic probe>",
+        "exitCode": 1,
+        "observed": "Temporary-root traversal through symlink p/a was accepted and wrote outside p."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Normalize child paths and add the hidden-symlink regression."
+    },
+    {
+      "id": "SHC-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Equal-boundary case does not assert an empty lstat walk; named mutation was not run."
+      },
+      "rationale": "Equal-boundary case does not assert an empty lstat walk; named mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run isolated split mutation, then assert an empty walk if it survives."
+    },
+    {
+      "id": "SHC-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Named fs/promises imports still force syncBuiltinESMExports; fs-utils demonstrates namespace patching."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Adopt the namespace-import pattern."
+    },
+    {
+      "id": "SHC-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/fs-utils.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "isPlainMarkdownFile rejects non-files before lstat; current callers pass matching dirents while the test passes a mismatched directory."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Choose TOCTOU hardening or deletion and correct both comments."
+    },
+    {
+      "id": "SHC-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/fs-utils.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "pathExists uses lstat but has no explicit dangling-symlink case; named mutation was not run."
+      },
+      "rationale": "pathExists uses lstat but has no explicit dangling-symlink case; named mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run isolated mutation and add the dangling-symlink row."
+    },
+    {
+      "id": "SHC-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Three error classes retain caller arrays while siblings freeze copies and tests pin identity."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Choose a consistent defensive-copy policy."
+    },
+    {
+      "id": "SHC-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Non-Error cause coverage centers on a plain object; named hard-coded-tag mutation was not run."
+      },
+      "rationale": "Non-Error cause coverage centers on a plain object; named hard-coded-tag mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run mutation and add null, number, and array rows."
+    },
+    {
+      "id": "SHC-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "causeChainTrailer comment still contrasts identical object-tag text."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Correct the comment."
+    },
+    {
+      "id": "SHC-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors-bridges.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors-bridges.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "AgentOwnershipConflictError copies only the array; nested owner records remain caller-mutable."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Deep-copy/freeze nested records and add a mutation regression."
+    },
+    {
+      "id": "SHC-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors-bridges.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors-bridges.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --input-type=module -e <redacted hermetic probe>",
+        "exitCode": 1,
+        "observed": "Host path.dirname returned dot for a Windows path while path.win32.dirname returned the claimed directory."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Correct the comment or add explicit platform handling."
+    },
+    {
+      "id": "SHC-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/atomic-json.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/atomic-json.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "All payloads remain ASCII; the latin1 mutation was not run."
+      },
+      "rationale": "All payloads remain ASCII; the latin1 mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run mutation and add complete UTF-8 byte comparison."
+    },
+    {
+      "id": "SHC-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/atomic-json.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/atomic-json.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Concurrent-write case remains green; plain-write replacement was not run."
+      },
+      "rationale": "Concurrent-write case remains green; plain-write replacement was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run replacement or narrow the case title."
+    },
+    {
+      "id": "SHC-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Update cardinality accepts single/plural; named hard-code mutation was not run."
+      },
+      "rationale": "Update cardinality accepts single/plural; named hard-code mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run mutation and add a single-cardinality row."
+    },
+    {
+      "id": "SHC-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "dispatchRow still mutates readonly caller data through a cast."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Decide whether to preserve mutation or return a severity floor."
+    },
+    {
+      "id": "SHC-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/probe-classifiers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/probe-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "narrowProbeError guard remains; guard-removal mutation was not run."
+      },
+      "rationale": "narrowProbeError guard remains; guard-removal mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run mutation and add a plain errno-shaped object."
+    },
+    {
+      "id": "SHC-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/git-failure-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "HttpError conjunct remains; conjunct-removal mutation was not run."
+      },
+      "rationale": "HttpError conjunct remains; conjunct-removal mutation was not run. D-11 therefore prevents a terminal verdict.",
+      "destination": "Run mutation and add non-HTTP status-bearing input."
+    },
+    {
+      "id": "SHC-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/markers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/markers-snapshot.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Pair and architecture tests still own overlapping marker literals."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Keep ownership in the pair."
+    },
+    {
+      "id": "SHC-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/extension-version.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/extension-version-sync.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Pair hard-codes version while architecture suite also checks lockstep."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Move lockstep ownership to pair and retire duplication."
+    },
+    {
+      "id": "SHC-F019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Two schema constants remain test-only exports and tests serialize third-party schema output."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Replace snapshots with behavioral rows and privatize schemas."
+    },
+    {
+      "id": "SHC-F020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "Finite-date and undefined-version guards remain behaviorally redundant."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Simplify both branches with behavioral coverage."
+    },
+  
+    {
+      "id": "SHC-F021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "All shared modules remain paired and no unowned export was found beyond named test-only exports."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Close the pairing census."
+    },
+    {
+      "id": "SHC-F022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Poison handling still admits non-empty plugin rows without a named owner case."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Add a non-empty poisoned-cache case."
+    },
+    {
+      "id": "SHC-F023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/fs-utils.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "lstat branch remains unreachable for real matching dirents; other cited defensive branches remain platform/closed-set unreachable."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Resolve defensive code versus deletion without artificial cases."
+    },
+    {
+      "id": "SHC-F024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Cited redundant branches and the compiler-shaped optional-property branch remain as classified."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Preserve the compiler-proof model and avoid artificial coverage."
+    },
+    {
+      "id": "SHC-F025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named full-coverage mutation catalogue was not rerun; 16 current owner tests only establish executability."
+      },
+      "rationale": "Named full-coverage mutation catalogue was not rerun; 16 current owner tests only establish executability. D-11 prevents confirmation from the green suite alone.",
+      "destination": "Treat clean catalogue as pending mutation evidence."
+    },
+    {
+      "id": "SHC-F026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Injected-clock defect remains visible, but no focused failing assertion was authored."
+      },
+      "rationale": "Injected-clock defect remains visible, but no focused failing assertion was authored. D-11 prevents confirmation from the green suite alone.",
+      "destination": "Add the failing behavioral clock probe."
+    },
+    {
+      "id": "SHC-F027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Unlink cases remain negative-only; wrong-error mutation was not run."
+      },
+      "rationale": "Unlink cases remain negative-only; wrong-error mutation was not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "Run mutation and assert injected error identity."
+    },
+    {
+      "id": "SHC-F028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "resetCompletionCache remains test-only and module-global maps remain."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Include all reset callers in factory-state decision."
+    },
+    {
+      "id": "SHC-F029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/markers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/markers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Redundant negative marker assertions and duplicate gate ownership remain."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Consolidate marker assertions."
+    },
+    {
+      "id": "SHC-F030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Four-entrypoint owner remains a grouping outlier among shared siblings."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Group once per export."
+    },
+    {
+      "id": "SHC-F031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/session-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/session-env.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Pure producer and reload shim remain, with sanctioned environment restoration."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Close proposed defaulted live-boundary parameter."
+    },
+    {
+      "id": "SHC-F032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/debug-log.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/debug-log.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Authorized output seam and exact restored environment gate remain."
+      },
+      "rationale": "Current static evidence supports the preserved historical claim.",
+      "destination": "Close proposed defaulted env parameter."
+    },
+    {
+      "id": "SHC-F033",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/session-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/session-env.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named ledger mutations were not run."
+      },
+      "rationale": "Named ledger mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F034",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/vars.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/vars.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named token mutations were not run."
+      },
+      "rationale": "Named token mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F035",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/probe-classifiers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/probe-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named ordering/dedup mutations were not run."
+      },
+      "rationale": "Named ordering/dedup mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F036",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/git-failure-classifiers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named boundary mutations were not run."
+      },
+      "rationale": "Named boundary mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F037",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-reasons.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named truth-table mutations were not run."
+      },
+      "rationale": "Named truth-table mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F038",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named depth/cycle/assertNever mutations were not run."
+      },
+      "rationale": "Named depth/cycle/assertNever mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F039",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors-bridges.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors-bridges.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named bridge-error mutations were not run."
+      },
+      "rationale": "Named bridge-error mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F040",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/fs-utils.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named rollback and errno mutations were not run."
+      },
+      "rationale": "Named rollback and errno mutations were not run. D-11 prevents confirmation from the green suite alone.",
+      "destination": "No change pending mutation evidence."
+    },
+  
+    {
+      "id": "SHC-F041",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named render/frozen-row mutations were not run."
+      },
+      "rationale": "Named render/frozen-row mutations were not run. D-11 prevents confirmation.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F042",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named Scope-union mutation/typecheck was not run."
+      },
+      "rationale": "Named Scope-union mutation/typecheck was not run. D-11 prevents confirmation.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F043",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/debug-log.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/debug-log.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Named formatter/gate mutations were not run."
+      },
+      "rationale": "Named formatter/gate mutations were not run. D-11 prevents confirmation.",
+      "destination": "No change pending mutation evidence."
+    },
+    {
+      "id": "SHC-F044",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Historical scope and method claim has no single code reference."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Historical scope and method claim has no single code reference."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Report explicitly excluded notify and concerns, ran no toolchain, and measured no coverage."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Preserve provenance limitations."
+    },
+    {
+      "id": "SHC-F045",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Builtin-resync pattern remains while fs-utils demonstrates namespace patching."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Audit remaining builtin import shapes."
+    },
+    {
+      "id": "SHC-F046",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 7",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Three completion-cache exports remain test-owned and no production-only export gate is established."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Add planted test-only-export gate."
+    },
+    {
+      "id": "SHC-F047",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 7",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/markers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/markers-snapshot.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Duplicate marker/version assertion ownership remains."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Audit redundant architecture gates."
+    },
+    {
+      "id": "SHC-F048",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-reasons.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Bidirectional extends exactness proof remains."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Propagate exactness idiom."
+    },
+    {
+      "id": "SHC-F049",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Strict SDK mocks remain constructible without casts."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Correct universal cast-cause premise."
+    },
+    {
+      "id": "SHC-F050",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Reset seam still spans multiple test owners and scope-keyed globals."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Include full caller cost in decision."
+    },
+    {
+      "id": "SHC-F051",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --input-type=module -e <redacted hermetic temporary-root probe>",
+        "exitCode": 1,
+        "observed": "Live temporary-root probe reproduced normalization-precondition escape."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Prioritize safety fix."
+    },
+    {
+      "id": "SHC-F052",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "CodeGraph finds no production reset caller; comment names test isolation."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Resolve with module-global-state decision."
+    },
+    {
+      "id": "SHC-F053",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/errors.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Owner test still plants out-of-band assertNever discriminator."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Use as exhaustiveness-test model."
+    },
+    {
+      "id": "SHC-F054",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/fs-utils.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Owner reaches lstat using a dirent/directory combination absent from callers."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Include in unreachable-branch dossier."
+    },
+    {
+      "id": "SHC-F055",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/fs-utils.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Rollback owner retains one cross-collaborator operations log."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Propagate order-proof pattern."
+    },
+    {
+      "id": "SHC-F056",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Sibling drift remains in grouping, builtin import style, and error copying."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Route concrete drift to owners."
+    },
+    {
+      "id": "SHC-F057",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "All 16 focused owner tests passed; this proves executability, not mutation strength."
+      },
+      "rationale": "Current live evidence supports the preserved historical claim.",
+      "destination": "Retain green run as supporting context only."
+    }
+  
+  ]
+}
