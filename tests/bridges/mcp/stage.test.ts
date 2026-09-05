@@ -223,13 +223,26 @@ describe("prepareStageMcpServers", () => {
         }),
       (error: unknown) => {
         assert.strictEqual(error instanceof MalformedMcpServersError, true);
-        assert.deepStrictEqual(error, {
-          constructor: MalformedMcpServersError,
-          name: "MalformedMcpServersError",
-          message: `mcpServers at ${locations.mcpJsonPath} must be an object; received null.`,
-          mcpJsonPath: locations.mcpJsonPath,
-          valueKind: "null",
-        });
+        if (!(error instanceof MalformedMcpServersError)) {
+          return false;
+        }
+
+        assert.deepStrictEqual(
+          {
+            constructor: error.constructor,
+            name: error.name,
+            message: error.message,
+            mcpJsonPath: error.mcpJsonPath,
+            valueKind: error.valueKind,
+          },
+          {
+            constructor: MalformedMcpServersError,
+            name: "MalformedMcpServersError",
+            message: `mcpServers at ${locations.mcpJsonPath} must be an object; received null.`,
+            mcpJsonPath: locations.mcpJsonPath,
+            valueKind: "null",
+          },
+        );
         return true;
       },
     );
