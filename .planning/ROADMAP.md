@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 65/69 plans executed
+**Plans:** 66/69 plans executed
 
 **Success Criteria**:
 
@@ -186,7 +186,7 @@ Plans:
 
 **Wave 14** *(blocked on Wave 13 completion)*
 
-- [ ] 01-66-PLAN.md — Resolve MF-DEC-09 as one evidence dossier and blocking checkpoint
+- [x] 01-66-PLAN.md — Resolve MF-DEC-09 as one evidence dossier and blocking checkpoint
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
@@ -350,7 +350,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 60/69 | In Progress|  |
+| 1. Live Evidence Revalidation | 66/69 | In Progress|  |
 | 2. Containment and Input Safety | 0/0 | Not started | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |

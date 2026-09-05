@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-65-PLAN.md
-last_updated: "2026-09-05T19:36:54.000Z"
+stopped_at: Completed 01-66-PLAN.md
+last_updated: "2026-09-05T20:00:06.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-65 selected role-only factory naming for MF-DEC-08; one decision dossier remains pending
-state_head: ea3896c9af8bbb102ca711994bab32590f90dbfb
+last_activity_desc: Plan 01-66 selected local and CI changed-pair enforcement for MF-DEC-09; all nine decisions are resolved
+state_head: 9a558f3620341421629ca91d1e920b9deaef1c48
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 65
+  completed_plans: 66
   percent: 0
 ---
 
@@ -33,17 +33,17 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 65 of 69
+Plan: 66 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-65 selected role-only factory naming for MF-DEC-08; one decision dossier remains pending
+Last activity: 2026-09-05 — Plan 01-66 selected local and CI changed-pair enforcement for MF-DEC-09; all nine decisions are resolved
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 166
-- Average recorded duration: 12.2 min
-- Total recorded execution time: 33 hr 53 min
+- Total plans completed: 167
+- Average recorded duration: 12.3 min
+- Total recorded execution time: 34 hr 16 min
 
 **By Phase:**
 
@@ -248,6 +248,7 @@ Last activity: 2026-09-05 — Plan 01-65 selected role-only factory naming for M
 | Phase 01 P63 | 16min | 1 tasks | 3 files |
 | Phase 01 P64 | 1h 17m | 1 tasks | 3 files |
 | Phase 01 P65 | 19min | 1 tasks | 3 files |
+| Phase 01 P66 | 23min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -591,6 +592,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Coordinate MF-DEC-07 through Phase 5 TREF-04, Phase 6 TREF-08, and the TREF-09 split sequence without test-only exports, __deps additions, unused defaults, dead seams, or weakened observable assertions.
 - [Phase 01]: Adopt production-role names for the 16 traced makeMockGitOps, makeMockCredentialOps, and makeMockDeviceFlowHttp factories across 10 files while preserving their typed, hermetic, fail-closed behavior.
 - [Phase 01]: Route MF-DEC-08 through Phase 4 TREF-02 and TREF-03, align project conventions and production comments, and require separate terminal trace before renaming makeMockPi or unrelated *Fake families.
+- [Phase 01]: Enforce the strict changed-pair direct-coverage gate through both a scoped local pre-commit hook and a dedicated CI job with shared fail-closed selection.
+- [Phase 01]: Route MF-DEC-09 through GGAT-01, RCOV-01, RCOV-02, RCOV-03, and CLOSE-01. Keep all-pair reports honest and keep assertion-strength evidence independent from numeric coverage.
 
 ### Pending Todos
 
@@ -643,16 +646,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-65-PLAN.md
+**Stopped at:** Completed 01-66-PLAN.md
 
-Phase 01 remains active. MF-DEC-01 through MF-DEC-08 are resolved, and only MF-DEC-09 remains pending.
+Phase 01 remains active. MF-DEC-01 through MF-DEC-09 are resolved, and no decision dossier remains pending.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-65-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-66-SUMMARY.md` and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T19:36:54.000Z
+Last session: 2026-09-05T20:00:06.000Z
 
-**Next:** Execute `01-66-PLAN.md` and evaluate only `MF-DEC-09` from its terminal current
-premises before opening another dossier.
+**Next:** Execute `01-67-PLAN.md` and derive the complete evidence-backed scope-impact
+crosswalk before any planning contract changes.
