@@ -90603,8 +90603,28 @@
     },
     {
       "id": "MF-DEC-05",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "ORA-F03",
+        "ORA-F33"
+      ],
+      "proof": "ORA-F03 and ORA-F33 are confirmed terminal canonical roots with no duplicate links. ORA-F03's bounded behavioral probe reproduced the defect: with recorded marketplace tools, equal-source declared alias alias, and plugin fmt@alias, reconciliation planned no marketplace add but planned installation into nonexistent alias, yielding an impossible target. Current CodeGraph inspection explains the split: diffMarketplaces source-claims the recorded manifest-derived name only in a set, while classifyDeclaredPlugin still checks recorded keys and emits every plugin action under the declared alias. ORA-F33 proves the test blind spot because production distinguishes declared and manifest-derived names while every apply fixture makes them equal. MF-009 remains broad decision provenance rather than a substitute premise; ORA-F04, ORA-F07, and ORA-F13 remain independent supporting findings under their existing routes.",
+      "options": [
+        "Resolve declared plugin keys through the one-to-one source-claim map",
+        "Persist declared alias as state identity",
+        "Reject same-source/different-name aliases"
+      ],
+      "selectedOption": "Resolve declared plugin keys through the one-to-one source-claim map",
+      "rejectedOptions": [
+        "Persist declared alias as state identity — rejected because rekeying manifest-derived records creates migration, collision, and cross-command state-identity blast radius beyond the localized reconcile defect.",
+        "Reject same-source/different-name aliases — rejected because it breaks the existing CR-01 alias configuration contract and may discover remote-source name mismatches only after materialization, requiring late validation and migration behavior."
+      ],
+      "affectedIds": [
+        "ORA-F03",
+        "ORA-F33"
+      ],
+      "recommendation": "Resolve declared plugin keys through the one-to-one source-claim map. This is the safest, least-disruptive current-contract option: preserve CR-01 alias support and the manifest-derived canonical state name, carry the declared-key-to-recorded-name mapping into plugin classification, and require the mapping to be one-to-one and fail closed when missing or ambiguous.",
+      "downstreamConsequences": "Phase 3 PDEF-08 implements the one-to-one declared-key-to-recorded-name mapping across install, enable, disable, and uninstall classification while retaining the manifest-derived canonical state identity. Phase 3 PDEF-01 adds a distinct alias/tools regression with independently authored values: assert exact plan targets, apply the plan twice, and prove fixed-point convergence without repeated failure or network work. Preserve ORA-F04, ORA-F07, and ORA-F13 as independent findings under their existing routes; coordinate their dead-condition, declared-name guard, and differing-name fixture work with this implementation, but do not mark any of them resolved through MF-DEC-05."
     },
     {
       "id": "MF-DEC-06",
