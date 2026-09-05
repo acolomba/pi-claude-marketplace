@@ -2565,7 +2565,7 @@
 
 - `MF-DEC-01` — resolved
 - `MF-DEC-02` — resolved
-- `MF-DEC-03` — pending
+- `MF-DEC-03` — resolved
 - `MF-DEC-04` — resolved
 - `MF-DEC-05` — resolved
 - `MF-DEC-06` — resolved

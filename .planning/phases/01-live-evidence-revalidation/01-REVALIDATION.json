@@ -90615,8 +90615,26 @@
     },
     {
       "id": "MF-DEC-03",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "ORA-F23",
+        "OPS-F20"
+      ],
+      "proof": "ORA-F23 and OPS-F20 are the exact surviving terminal premise roots. Current CodeGraph import and call-path inspection shows that applyReconcile still composes five concrete orchestrators while exposing only the narrow gitOps seam, and bootstrapClaudePlugin still composes addMarketplace and setMarketplaceAutoupdate while likewise exposing only gitOps. Their current owner suites deliberately exercise those real collaborators through case-owned temporary filesystems, fake only the Git/network edge, and enforce observable behavior with exact notification boundaries; apply.test.ts proves public reconcile results and bootstrap.test.ts proves complete state, configuration, and scope-tree outcomes. The focused command node --test tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/plugin/bootstrap.test.ts passed both suites with zero failures, skips, or todos. ORAFP-F006 remains a duplicate of ORA-F23 rather than an additional premise. ORA-F19, ORA-F35, and ORAFP-F001 remain independent positive supporting evidence that the real-orchestrator suites are hermetic and behaviorally strong. ORAFP-F011 is stale because its historical no-execution limitation is superseded by current successful focused and direct-coverage runs, so it is excluded from this decision.",
+      "options": [
+        "Preserve and codify both exceptions as deliberate behavioral composition proofs",
+        "Add narrow dependency bundles while retaining both behavioral proofs"
+      ],
+      "selectedOption": "Preserve and codify both exceptions as deliberate behavioral composition proofs",
+      "rejectedOptions": [
+        "Add narrow dependency bundles while retaining both behavioral proofs — rejected because adding five apply collaborators and two bootstrap collaborators to production dependency surfaces primarily for interaction tests would increase API and maintenance surface, duplicate existing behavioral ownership, and risk weakening the stronger public-result, state, configuration, tree, and notification proofs."
+      ],
+      "affectedIds": [
+        "ORA-F23",
+        "OPS-F20"
+      ],
+      "recommendation": "Preserve and codify only these two demonstrated exceptions under D-17. Their case-owned filesystems, network-edge fake, real behavioral collaborators, and exact observable assertions provide safer and more honest proof than adding production seams solely for tests; introduce no test-only export, dependency-injection seam, dead branch, or interaction-only replacement.",
+      "downstreamConsequences": "Phase 5 TREF-04 must explicitly exempt only the two observed applyReconcile and bootstrapClaudePlugin behavioral composition flows from hidden-dependency remediation; this decision creates no broader exception for other collaborators or owner suites. Later work must preserve apply's public-result assertions, bootstrap's full state, configuration, and scope-tree assertions, and both suites' exact notification assertions. It must not add test-only exports or dependency-injection seams for these two flows and must not replace their behavioral proofs with interaction-only cases. Preserve ORAFP-F006 as a duplicate of ORA-F23; preserve ORA-F19, ORA-F35, and ORAFP-F001 under their independent evidence-only routes; and exclude stale ORAFP-F011 from downstream authorization. This decision authorizes no production or test edit by itself."
     },
     {
       "id": "MF-DEC-04",
