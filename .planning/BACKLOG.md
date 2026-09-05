@@ -2457,6 +2457,50 @@ BLOCKERs -- per-pair coverage is not evidence of assertion strength.
 Code seams: named per-finding throughout the corpus; the two synthesis
 documents carry `file:line` for every claim.
 
+## NAMEFOLD-01: generated-name collision checks compare bytes, filesystems fold
+
+Surfaced by the Phase 110 code review (WR-07, 2026-09-05). Every generated
+resource name in this extension becomes a path basename, and every collision
+gate compares names as exact strings:
+
+| gate | file | becomes on disk |
+| --- | --- | --- |
+| `assertNoAgentCollisions` | `bridges/agents/convert.ts` | `<scopeRoot>/agents/<name>.md` |
+| `assertNoCommandCollisions` | `bridges/commands/stage.ts` | prompt file per command |
+| `assertNoWorkflowNameCollisions` | `domain/workflow-script.ts` | `<savedDir>/<name>.json` (engine, `dist/workflow-saved.js`) |
+
+Two names that differ only by ASCII case, or only by Unicode normalization form,
+pass every one of these gates and then name the SAME file on a case-insensitive
+volume (APFS/HFS+ default, NTFS) or a normalizing one. One artifact silently
+overwrites the other -- the misnaming the collision gates exist to prevent,
+arriving through a door none of them watches.
+
+The review proposed folding the key (`name.normalize("NFC").toLowerCase()`) in
+the workflows gate. That was declined for the workflows gate alone, for two
+reasons worth preserving here:
+
+- **It would make one gate disagree with its four siblings.** The exposure is
+  identical for agents, commands and skills; fixing one leaves a rule that reads
+  as arbitrary at the other four.
+- **Folding refuses installs that work.** On a case-sensitive volume -- Linux,
+  which is the only platform CI runs -- `acme:Ship` and `acme:ship` are two
+  distinct working files. A fold turns that into a hard install failure for the
+  whole plugin.
+
+So the real question is a policy one, and it is repo-wide: does this extension
+promise that an install portable across volumes, or does it promise that an
+install valid on THIS volume succeeds? Candidate directions:
+
+- fold on every gate, accepting the Linux-side refusals (portable-by-default)
+- warn rather than refuse on a fold-only clash, keeping the install (matches the
+  workflow milestone's own never-turn-a-reading-into-a-refusal anchor)
+- probe the target volume's behavior and fold only when it actually folds
+- do nothing and document the exposure
+
+`tests/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
+explicitly NOT colliding, so whichever direction wins has a test to retitle.
+`.planning/WINDOWS.md` is the other document this touches.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
