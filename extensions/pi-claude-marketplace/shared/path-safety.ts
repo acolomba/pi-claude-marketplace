@@ -65,7 +65,7 @@ function isPathInside(parent: string, child: string): boolean {
 }
 
 function hasLexicalTraversal(child: string): boolean {
-  return child.split(path.sep).includes("..");
+  return child.replaceAll(path.sep, "/").split("/").includes("..");
 }
 
 /**

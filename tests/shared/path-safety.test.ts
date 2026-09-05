@@ -116,65 +116,69 @@ test("accepts an existing direct child", async (t) => {
   assert.strictEqual(actualError, undefined);
 });
 
-test("rejects raw lexical traversal before a symlink can redirect it", async (t) => {
-  // arrange
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "path-safety-traversal-"));
-  t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const scopeRoot = path.join(directory, "root");
-  const outsideRoot = path.join(directory, "outside");
-  const outsideNested = path.join(outsideRoot, "nested");
-  await fs.mkdir(scopeRoot);
-  await fs.mkdir(outsideNested, { recursive: true });
-  await fs.writeFile(path.join(outsideRoot, "sentinel.txt"), "outside sentinel\n");
-  await fs.writeFile(path.join(outsideNested, "child.txt"), "outside child\n");
-  await fs.symlink(outsideRoot, path.join(scopeRoot, "a"));
-  const rawChild = `${scopeRoot}${path.sep}a${path.sep}..${path.sep}b`;
-  const normalizedParent = path.resolve(scopeRoot);
-  const normalizedChild = path.resolve(rawChild);
-  const outsideTreeBefore = (await fs.readdir(outsideRoot, { recursive: true })).sort();
-  const outsideSentinelBefore = await fs.readFile(path.join(outsideRoot, "sentinel.txt"));
-  const outsideChildBefore = await fs.readFile(path.join(outsideNested, "child.txt"));
-  const expectedError = {
-    name: "LexicalTraversalError",
-    message: `plugin source contains forbidden lexical traversal (parent: ${normalizedParent}, target: ${normalizedChild}).`,
-    parent: normalizedParent,
-    child: normalizedChild,
-  };
-  let traversalError: unknown;
+const lexicalTraversalSeparators = new Set([path.sep, "/"]);
 
-  // act
-  try {
-    await assertPathInside(scopeRoot, rawChild, "plugin source");
-  } catch (error) {
-    traversalError = error;
-  }
+for (const separator of lexicalTraversalSeparators) {
+  test(`rejects raw lexical traversal spelled with ${JSON.stringify(separator)} separators`, async (t) => {
+    // arrange
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "path-safety-traversal-"));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const scopeRoot = path.join(directory, "root");
+    const outsideRoot = path.join(directory, "outside");
+    const outsideNested = path.join(outsideRoot, "nested");
+    await fs.mkdir(scopeRoot);
+    await fs.mkdir(outsideNested, { recursive: true });
+    await fs.writeFile(path.join(outsideRoot, "sentinel.txt"), "outside sentinel\n");
+    await fs.writeFile(path.join(outsideNested, "child.txt"), "outside child\n");
+    await fs.symlink(outsideRoot, path.join(scopeRoot, "a"));
+    const rawChild = `${scopeRoot}${separator}a${separator}..${separator}b`;
+    const normalizedParent = path.resolve(scopeRoot);
+    const normalizedChild = path.resolve(rawChild);
+    const outsideTreeBefore = (await fs.readdir(outsideRoot, { recursive: true })).sort();
+    const outsideSentinelBefore = await fs.readFile(path.join(outsideRoot, "sentinel.txt"));
+    const outsideChildBefore = await fs.readFile(path.join(outsideNested, "child.txt"));
+    const expectedError = {
+      name: "LexicalTraversalError",
+      message: `plugin source contains forbidden lexical traversal (parent: ${normalizedParent}, target: ${normalizedChild}).`,
+      parent: normalizedParent,
+      child: normalizedChild,
+    };
+    let traversalError: unknown;
 
-  // assert
-  assert.ok(traversalError instanceof LexicalTraversalError);
-  assert.ok(traversalError instanceof PathContainmentError);
-  assert.ok(traversalError instanceof Error);
-  assert.deepStrictEqual(
-    {
-      name: traversalError.name,
-      message: traversalError.message,
-      parent: traversalError.parent,
-      child: traversalError.child,
-    },
-    expectedError,
-  );
-  assert.deepStrictEqual(
-    (await fs.readdir(outsideRoot, { recursive: true })).sort(),
-    outsideTreeBefore,
-  );
-  assert.deepStrictEqual(
-    await fs.readFile(path.join(outsideRoot, "sentinel.txt")),
-    outsideSentinelBefore,
-  );
-  assert.deepStrictEqual(
-    await fs.readFile(path.join(outsideNested, "child.txt")),
-    outsideChildBefore,
-  );
-});
+    // act
+    try {
+      await assertPathInside(scopeRoot, rawChild, "plugin source");
+    } catch (error) {
+      traversalError = error;
+    }
+
+    // assert
+    assert.ok(traversalError instanceof LexicalTraversalError);
+    assert.ok(traversalError instanceof PathContainmentError);
+    assert.ok(traversalError instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: traversalError.name,
+        message: traversalError.message,
+        parent: traversalError.parent,
+        child: traversalError.child,
+      },
+      expectedError,
+    );
+    assert.deepStrictEqual(
+      (await fs.readdir(outsideRoot, { recursive: true })).sort(),
+      outsideTreeBefore,
+    );
+    assert.deepStrictEqual(
+      await fs.readFile(path.join(outsideRoot, "sentinel.txt")),
+      outsideSentinelBefore,
+    );
+    assert.deepStrictEqual(
+      await fs.readFile(path.join(outsideNested, "child.txt")),
+      outsideChildBefore,
+    );
+  });
+}
 
 test("accepts a contained absolute child with redundant dot segments", async (t) => {
   // arrange
