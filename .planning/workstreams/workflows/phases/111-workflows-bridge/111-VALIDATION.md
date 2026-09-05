@@ -51,20 +51,20 @@ Seeded from the research's requirement→test map. The planner fills Task ID / P
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | WBRG-01 | — | envelope bytes are the script verbatim; key order fixed; `description` omitted when absent | unit | `node --test tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | WBRG-02 | V5 | discovery is flat and non-recursive, refuses symlinks, filters dotfiles and suffixes, dedups first-wins | unit | `node --test tests/bridges/workflows/discover.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | WBRG-03 | — | unreadable / non-UTF-8 / skipped / refused each produce a `warnings[]` row and leave the plugin install standing | unit | `node --test tests/bridges/workflows/discover.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | criterion 4 | — | a stem-fallback verdict earns a `warnings[]` row naming the missing literal `name`, **and the envelope is still staged** | unit | `node --test tests/bridges/workflows/discover.test.ts tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | WBRG-04 | — | the envelope lands at the engine's scanned path, and only the commit `rename` ever touches it | unit | `node --test tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | WPTH-01 | — | user scope → `<home>/saved/`; project scope → `<home>/projects/<key>/saved/` | unit | `node --test tests/persistence/locations.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WPTH-04 | V5 containment | `workflowArtifactPath` refuses an unsafe name and any path escaping the new writable root | unit | `node --test tests/persistence/locations.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WPTH-05 | — | staging is independent of `extensionRoot` and `PI_CODING_AGENT_DIR`; the commit rename stays on one device | unit | `node --test tests/persistence/locations.test.ts tests/bridges/workflows/stage.test.ts` | ✏️/❌ | ⬜ pending |
-| TBD | TBD | TBD | WR-06 | V5 | a commit finding foreign content refuses **before its first rename**; `onPlaced` stays empty; the foreign bytes are intact afterward | unit | `node --test tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | WLIF-03 | — | unstage removes by recorded name only, is ENOENT-idempotent, and accumulates `failed[]` | unit | `node --test tests/bridges/workflows/unstage.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | criterion 8 | — | the version constant matches `package.json` across all six sites | unit | `npm test` | ✏️ update literal | ⬜ pending |
-| TBD | TBD | TBD | criterion 9 | — | the envelope **is** materialized — the assertion that used to prove its absence now proves its presence | integration | `npm run test:integration` | ✏️ invert | ⬜ pending |
-| TBD | TBD | TBD | criterion 6 | — | every file under `bridges/workflows/` has a mirrored owner test | gate | `npm run test:corresponding` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | zone config | — | `bridges-workflows` is a declared fallow zone; cross-bridge imports stay forbidden | gate | `npm run fallow` | ✅ | ⬜ pending |
+| 111-03-T2 | 111-03 | 3 | WBRG-01 | — | envelope bytes are the script verbatim; key order fixed; `description` omitted when absent | unit | `node --test tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
+| 111-02-T2 | 111-02 | 2 | WBRG-02 | V5 | discovery is flat and non-recursive, refuses symlinks, filters dotfiles and suffixes, dedups first-wins | unit | `node --test tests/bridges/workflows/discover.test.ts` | ❌ W0 | ⬜ pending |
+| 111-02-T2 | 111-02 | 2 | WBRG-03 | — | unreadable / non-UTF-8 / skipped / refused each produce a `warnings[]` row and leave the plugin install standing | unit | `node --test tests/bridges/workflows/discover.test.ts` | ❌ W0 | ⬜ pending |
+| 111-02-T3 / 111-03-T2 | 111-02 / 111-03 | 2 / 3 | criterion 4 | — | a stem-fallback verdict earns a `warnings[]` row naming the missing literal `name`, **and the envelope is still staged** | unit | `node --test tests/bridges/workflows/discover.test.ts tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
+| 111-03-T3 | 111-03 | 3 | WBRG-04 | — | the envelope lands at the engine's scanned path, and only the commit `rename` ever touches it | unit | `node --test tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
+| 111-01-T1 | 111-01 | 1 | WPTH-01 | — | user scope → `<home>/saved/`; project scope → `<home>/projects/<key>/saved/` | unit | `node --test tests/persistence/locations.test.ts` | ✏️ extend | ⬜ pending |
+| 111-01-T1 | 111-01 | 1 | WPTH-04 | V5 containment | `workflowArtifactPath` refuses an unsafe name and any path escaping the new writable root | unit | `node --test tests/persistence/locations.test.ts` | ✏️ extend | ⬜ pending |
+| 111-01-T1 / 111-03-T3 | 111-01 / 111-03 | 1 / 3 | WPTH-05 | — | staging is independent of `extensionRoot` and `PI_CODING_AGENT_DIR`; the commit rename stays on one device | unit | `node --test tests/persistence/locations.test.ts tests/bridges/workflows/stage.test.ts` | ✏️/❌ | ⬜ pending |
+| 111-03-T3 | 111-03 | 3 | WR-06 | V5 | a commit finding foreign content refuses **before its first rename**; `onPlaced` stays empty; the foreign bytes are intact afterward | unit | `node --test tests/bridges/workflows/stage.test.ts` | ❌ W0 | ⬜ pending |
+| 111-02-T1 | 111-02 | 2 | WLIF-03 | — | unstage removes by recorded name only, is ENOENT-idempotent, and accumulates `failed[]` | unit | `node --test tests/bridges/workflows/unstage.test.ts` | ❌ W0 | ⬜ pending |
+| 111-04-T1 | 111-04 | 4 | criterion 8 | — | the version constant matches `package.json` across all six sites | unit | `npm test` | ✏️ update literal | ⬜ pending |
+| 111-04-T2 | 111-04 | 4 | criterion 9 | — | the envelope **is** materialized — the assertion that used to prove its absence now proves its presence | integration | `npm run test:integration` | ✏️ invert | ⬜ pending |
+| 111-04-T3 | 111-04 | 4 | criterion 6 | — | every file under `bridges/workflows/` has a mirrored owner test | gate | `npm run test:corresponding` | ✅ | ⬜ pending |
+| 111-02-T1 | 111-02 | 2 | zone config | — | `bridges-workflows` is a declared fallow zone; cross-bridge imports stay forbidden | gate | `npm run fallow` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -87,6 +87,26 @@ Seeded from the research's requirement→test map. The planner fills Task ID / P
 ones.** `fallow` runs `production: false`, so `tests/` is in the import graph and
 the owner test is the consumer keeping a Phase-112-only export off the dead-code
 report. Phase 110 measured this directly. No `fallow-ignore`.
+
+**There is no separate Wave 0 in this phase, and no task carries a `MISSING`
+verify sentinel.** Each item above is created by the same task that first needs
+to verify against it, inside the wave that lands the module it mirrors:
+
+| Wave 0 item | Created by |
+|---|---|
+| `tests/persistence/locations.test.ts` extension | 111-01 task 1 |
+| `tests/shared/errors-bridges.test.ts` extension | 111-01 task 2 |
+| `.fallowrc.json` zone triple | 111-02 task 1 |
+| `tests/bridges/workflows/types.test.ts` | 111-02 task 1 |
+| `tests/bridges/workflows/unstage.test.ts` | 111-02 task 1 |
+| `tests/bridges/workflows/discover.test.ts` | 111-02 tasks 2 and 3 |
+| `tests/bridges/workflows/index.test.ts` | 111-03 task 1 |
+| `tests/bridges/workflows/stage.test.ts` | 111-03 tasks 2 and 3 |
+| `tests/shared/extension-version.test.ts` literal | 111-04 task 1 |
+
+The corresponding-test gate forces this pairing anyway: a production module that
+lands without its mirrored owner test fails the whole-tree gate, so a task cannot
+defer its test file to a later wave even if it wanted to.
 
 ---
 
