@@ -3368,6 +3368,33 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // WFLW-04: the `workflows:` line renders LAST among the per-kind lines.
+    // Both entries are admitted arms -- `commit-commands:changelog` names
+    // itself, `commit-commands:release` falls back to its file stem -- and the
+    // renderer emits them in the order the composer supplied.
+    "installed-with-workflows": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog", "commit-commands:release"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
     "state-only-installed-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -5230,14 +5257,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 182 is the number of annotated examples in
+  // Exact count, not a floor: 183 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    182,
-    `Expected exactly 182 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    183,
+    `Expected exactly 183 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

@@ -53,6 +53,29 @@ export interface WorkflowDiscoveryTarget {
   readonly componentPaths: { readonly workflows: readonly string[] };
 }
 
+/**
+ * WR-09: which surface is asking, and therefore which tense every soft-fail
+ * phrase is stated in.
+ *
+ * The staging pass reports what HAPPENED to the user's disk; the read-only
+ * `info` pass reports what WOULD happen if the plugin were installed. One
+ * discovery pass serves both, so the tense cannot be a property of the module
+ * -- a plugin the user has not installed would otherwise be told its scripts
+ * "was not installed", which is a false statement about a disk nothing wrote to.
+ */
+export type WorkflowOutcomeTense = "install" | "preview";
+
+/**
+ * WR-09: the five places a soft-fail phrase is composed.
+ *
+ * `read` and `inspect` are separate members because they are separate CALL
+ * SITES one step apart on the same file: `inspect` is the `lstat` that decides
+ * whether the entry is a plain script, and nothing has been read when it fails.
+ * The three remaining members are verdict arms and carry the decision layer's
+ * own reason verbatim.
+ */
+export type WorkflowOutcomeSite = "skipped" | "refused" | "stem-fallback" | "read" | "inspect";
+
 /** Return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginWorkflowsResult {
   readonly discovered: readonly DiscoveredWorkflow[];

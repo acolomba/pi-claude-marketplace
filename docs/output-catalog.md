@@ -1736,7 +1736,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
-Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
 Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -1769,6 +1769,22 @@ Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitte
     commands: c1, c2
     skills: commit-summary
     dependencies: helper@utils-mp
+```
+
+### Success -- installed with workflows (WFLW-04)
+
+The plugin ships workflow scripts. The `workflows:` line shows them LAST among the per-kind component lines, before any `dependencies:` line, which keeps the alphabetical kind order the other lines follow. Each entry is the generated command name, `<plugin>:<name>`, and not the script's file name. The line shows every ADMITTED script. Thus it shows a script that declares its own `meta.name`, and it also shows a script that has no readable name and takes its name from the file stem, because the install writes a saved-workflow file for both. A script that the command skips or refuses does not show on this line; its own advisory line reports it instead. If no script is admitted, the `workflows:` line does not show at all. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflows -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    commands: c1, c2
+    skills: commit-summary
+    workflows: commit-commands:changelog, commit-commands:release
 ```
 
 ### Success -- installed from the installation record (INFO-09)

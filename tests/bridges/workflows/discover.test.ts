@@ -55,7 +55,11 @@ test("returns no workflows when the plugin declares no workflows paths", async (
   const resolved = resolvedPlugin(pluginRoot, []);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
@@ -67,7 +71,11 @@ test("returns no workflows when a declared workflows directory is absent", async
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
@@ -80,7 +88,11 @@ test("returns no workflows when a declared workflows path is a file", async (t) 
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
@@ -106,7 +118,12 @@ test("rejects a declared workflows directory the process cannot read", async (t)
 
   // act & assert
   await assert.rejects(
-    () => discoverPluginWorkflows({ pluginName: "acme", resolved }),
+    () =>
+      discoverPluginWorkflows({
+        pluginName: "acme",
+        resolved,
+        tense: "install",
+      }),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.strictEqual((error as NodeJS.ErrnoException).code, "EACCES");
@@ -142,7 +159,11 @@ test("records a well-formed script with its declared name, description and verba
   };
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
@@ -160,7 +181,11 @@ test("scans a workflows directory flatly and never descends into a subdirectory"
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -182,7 +207,11 @@ test("silently excludes dotfiles, directories and unadmitted suffixes", async (t
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -214,7 +243,11 @@ test("admits an uppercase script suffix and strips it from the fallback name", a
   ];
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery.discovered, expectedRecords);
@@ -245,7 +278,11 @@ test("refuses a symlinked script without opening the file it points at", async (
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -280,11 +317,17 @@ test("reports an entry whose lstat fails and still records its readable sibling"
   const resolved = resolvedPlugin(pluginRoot, ["locked", "workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
+  // WR-09: the inspection site says "inspected", not "read" -- the `lstat`
+  // failed before anything was opened.
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "hidden.js" in "${lockedDir}" could not be read and was skipped: EACCES: permission denied, lstat '${lockedScript}'`,
+    `workflow script "hidden.js" in "${lockedDir}" could not be inspected and was skipped: EACCES: permission denied, lstat '${lockedScript}'`,
   ]);
   assert.deepStrictEqual(
     discovery.discovered.map((record) => record.scriptFile),
@@ -311,7 +354,11 @@ test("reports an unreadable script and still records its readable sibling", asyn
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery.warnings, [
@@ -334,7 +381,11 @@ test("reports a script whose bytes do not survive a UTF-8 round trip", async (t)
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery.warnings, [
@@ -373,7 +424,11 @@ test("warns about a script that declares no metadata and still records the verdi
   };
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
@@ -407,7 +462,11 @@ test("warns about a refused script and renders the verdict reason unparaphrased"
   };
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
@@ -425,7 +484,11 @@ test("keeps both scripts when two files generate the same workflow name", async 
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -451,7 +514,11 @@ test("discovers a script once when two declared spellings resolve to one directo
   const resolved = resolvedPlugin(pluginRoot, ["workflows", "./workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -495,7 +562,11 @@ test("folds case when deduping declared paths on a case-insensitive platform", a
   const resolved = resolvedPlugin(pluginRoot, ["workflows", "WORKFLOWS"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -515,7 +586,12 @@ test("rejects a declared workflows path that climbs out of the plugin root", asy
 
   // act & assert
   await assert.rejects(
-    () => discoverPluginWorkflows({ pluginName: "acme", resolved: target }),
+    () =>
+      discoverPluginWorkflows({
+        pluginName: "acme",
+        resolved: target,
+        tense: "install",
+      }),
     (error: unknown) => {
       assert.ok(error instanceof PathContainmentError);
       assert.strictEqual(error.parent, pluginRoot);
@@ -535,7 +611,12 @@ test("rejects an absolute declared workflows path", async (t) => {
 
   // act & assert
   await assert.rejects(
-    () => discoverPluginWorkflows({ pluginName: "acme", resolved: target }),
+    () =>
+      discoverPluginWorkflows({
+        pluginName: "acme",
+        resolved: target,
+        tense: "install",
+      }),
     (error: unknown) => {
       assert.ok(error instanceof PathContainmentError);
       assert.strictEqual(error.parent, pluginRoot);
@@ -556,7 +637,11 @@ test("returns records in sorted entry order regardless of write order", async (t
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -581,7 +666,11 @@ test("warns that a script declaring no name was installed but will not run", asy
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery.warnings, [
@@ -617,7 +706,11 @@ test("warns the same way when the declared name is present but not a literal", a
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
 
   // assert
   assert.deepStrictEqual(discovery.warnings, [
@@ -645,7 +738,152 @@ test("leaves a script with a readable literal name unwarned", async (t) => {
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
-  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
+// ---------------------------------------------------------------------------
+// WR-09: the preview tense.
+//
+// One discovery pass serves the staging surface and the read-only `info`
+// surface, so every soft-fail phrase is stated in the tense of the caller that
+// asked. These cases pin the preview half of the pairing table; the install
+// half is pinned by the cases above.
+// ---------------------------------------------------------------------------
+
+test("states a skipped script in the preview tense", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-skipped-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "helper.js"), NO_META);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "helper.js" in "${workflowsDir}" will not be installed: helper.js declares no \`meta\`, so there is nothing to install`,
+  ]);
+});
+
+test("states a refused script in the preview tense", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-refused-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "roll.js"), NONDETERMINISTIC);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "roll.js" in "${workflowsDir}" will be refused: roll.js calls \`Math.random\`, which the workflow engine refuses as nondeterministic`,
+  ]);
+});
+
+test("states a stem-fallback script in the preview tense and keeps its reason", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-stem-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "quiet.js"), STEM_FALLBACK);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "quiet.js" in "${workflowsDir}" would be installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name`,
+  ]);
+});
+
+test("states an unreadable script in the preview tense without claiming a skip", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-read-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "broken.js"), Buffer.from([0xff, 0xfe]));
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "broken.js" in "${workflowsDir}" could not be read: the file is not valid UTF-8, so its bytes cannot be copied verbatim`,
+  ]);
+});
+
+test("states an uninspectable entry in the preview tense as an inspection failure", async (t) => {
+  // arrange
+  const pluginRoot = await mkdtemp(path.join(tmpdir(), "workflow-discover-preview-inspect-"));
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  const lockedScript = path.join(workflowsDir, "hidden.js");
+
+  t.after(async () => {
+    await chmod(workflowsDir, 0o755).catch(() => undefined);
+    await rm(pluginRoot, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await mkdir(workflowsDir);
+  await writeFile(lockedScript, NAMED_SHOUT);
+  await chmod(workflowsDir, 0o444);
+
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "hidden.js" in "${workflowsDir}" could not be inspected: EACCES: permission denied, lstat '${lockedScript}'`,
+  ]);
+});
+
+test("leaves an admitted script unwarned in the preview tense", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-named-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "greet.js"), NAMED_GREET);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
 
   // assert
   assert.deepStrictEqual(discovery.warnings, []);

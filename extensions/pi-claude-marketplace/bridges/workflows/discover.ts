@@ -43,6 +43,8 @@ import type {
   DiscoveredWorkflow,
   DiscoverPluginWorkflowsResult,
   WorkflowDiscoveryTarget,
+  WorkflowOutcomeSite,
+  WorkflowOutcomeTense,
 } from "./types.ts";
 import type { WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type { Dirent } from "node:fs";
@@ -102,8 +104,57 @@ function softFailWarning(
   return `workflow script "${fileName}" in "${workflowsDir}" ${outcome}: ${reason}`;
 }
 
-function readFailureWarning(fileName: string, workflowsDir: string, reason: string): string {
-  return softFailWarning(fileName, workflowsDir, "could not be read and was skipped", reason);
+/**
+ * WR-09: what the `install` surface says happened, one phrase per site.
+ *
+ * Total over the site union, which is the forcing construct: a sixth site
+ * cannot be composed without an entry here AND in the preview table below, so
+ * the two tenses cannot drift apart by omission.
+ */
+const INSTALL_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
+  skipped: "was not installed",
+  refused: "was refused",
+  "stem-fallback": "was installed but will not run",
+  read: "could not be read and was skipped",
+  inspect: "could not be inspected and was skipped",
+};
+
+/**
+ * WR-09: what the read-only `info` surface says WOULD happen, paired 1:1 with
+ * the install phrases above so a reader meeting the same condition on both
+ * surfaces recognizes it.
+ *
+ * The preview phrases state no skip, because a preview skips nothing: the
+ * install-tense phrases each name a disposal ("and was skipped") that the
+ * read-only pass did not carry out.
+ */
+const PREVIEW_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
+  skipped: "will not be installed",
+  refused: "will be refused",
+  "stem-fallback": "would be installed but will not run",
+  read: "could not be read",
+  inspect: "could not be inspected",
+};
+
+function outcomePhrase(tense: WorkflowOutcomeTense, site: WorkflowOutcomeSite): string {
+  return tense === "install" ? INSTALL_OUTCOMES[site] : PREVIEW_OUTCOMES[site];
+}
+
+/**
+ * WBRG-03 / WR-09: an IO failure on one candidate, attributed to the call site
+ * that raised it.
+ *
+ * `inspect` and `read` land on the same file one step apart, so a shared phrase
+ * claimed a read at the site where the `lstat` had not opened anything.
+ */
+function readFailureWarning(
+  fileName: string,
+  workflowsDir: string,
+  reason: string,
+  tense: WorkflowOutcomeTense,
+  site: Extract<WorkflowOutcomeSite, "read" | "inspect">,
+): string {
+  return softFailWarning(fileName, workflowsDir, outcomePhrase(tense, site), reason);
 }
 
 /**
@@ -154,14 +205,6 @@ async function readScriptSource(
   return { ok: true, source };
 }
 
-function skippedWarning(fileName: string, workflowsDir: string, reason: string): string {
-  return softFailWarning(fileName, workflowsDir, "was not installed", reason);
-}
-
-function refusedWarning(fileName: string, workflowsDir: string, reason: string): string {
-  return softFailWarning(fileName, workflowsDir, "was refused", reason);
-}
-
 /**
  * WVAL-02: the one outcome phrase that states an ADMITTED fact before its
  * caveat. The envelope IS written, so a phrase shaped like the three soft-fails
@@ -173,11 +216,15 @@ function refusedWarning(fileName: string, workflowsDir: string, reason: string):
  * declares one, so claiming it absent would make the row a false statement
  * about the file.
  */
-function unrunnableWarning(fileName: string, workflowsDir: string): string {
+function unrunnableWarning(
+  fileName: string,
+  workflowsDir: string,
+  tense: WorkflowOutcomeTense,
+): string {
   return softFailWarning(
     fileName,
     workflowsDir,
-    "was installed but will not run",
+    outcomePhrase(tense, "stem-fallback"),
     "the engine loads a command only from a literal `meta.name` with a non-empty " +
       "`meta.description`, and this script declares no readable name",
   );
@@ -200,17 +247,22 @@ function unrunnableWarning(fileName: string, workflowsDir: string): string {
  * it exists to remove -- a mention reported as a call claims a rule the script
  * did not violate.
  */
-function verdictWarning(verdict: WorkflowVerdict, workflowsDir: string): string | undefined {
-  if (verdict.outcome === "skipped") {
-    return skippedWarning(verdict.fileName, workflowsDir, verdict.reason);
-  }
-
-  if (verdict.outcome === "refused") {
-    return refusedWarning(verdict.fileName, workflowsDir, verdict.reason);
+function verdictWarning(
+  verdict: WorkflowVerdict,
+  workflowsDir: string,
+  tense: WorkflowOutcomeTense,
+): string | undefined {
+  if (verdict.outcome === "skipped" || verdict.outcome === "refused") {
+    return softFailWarning(
+      verdict.fileName,
+      workflowsDir,
+      outcomePhrase(tense, verdict.outcome),
+      verdict.reason,
+    );
   }
 
   if (verdict.outcome === "stem-fallback") {
-    return unrunnableWarning(verdict.fileName, workflowsDir);
+    return unrunnableWarning(verdict.fileName, workflowsDir, tense);
   }
 
   return undefined;
@@ -251,6 +303,12 @@ function verdictWarning(verdict: WorkflowVerdict, workflowsDir: string): string 
 export async function discoverPluginWorkflows(input: {
   pluginName: string;
   resolved: WorkflowDiscoveryTarget;
+  /**
+   * WR-09: REQUIRED, deliberately. An optional tense defaulting to `install`
+   * would let a read-only caller inherit the staging surface's wording by
+   * saying nothing, which is the defect this parameter exists to remove.
+   */
+  tense: WorkflowOutcomeTense;
 }): Promise<DiscoverPluginWorkflowsResult> {
   const discovered: DiscoveredWorkflow[] = [];
   const warnings: string[] = [];
@@ -274,6 +332,7 @@ export async function discoverPluginWorkflows(input: {
       pluginName: input.pluginName,
       workflowsDir,
       seenPaths,
+      tense: input.tense,
     });
 
     discovered.push(...scan.discovered);
@@ -291,8 +350,9 @@ async function scanWorkflowsDirectory(input: {
   pluginName: string;
   workflowsDir: string;
   seenPaths: Set<string>;
+  tense: WorkflowOutcomeTense;
 }): Promise<{ discovered: DiscoveredWorkflow[]; warnings: string[] }> {
-  const { pluginName, workflowsDir, seenPaths } = input;
+  const { pluginName, workflowsDir, seenPaths, tense } = input;
 
   const discovered: DiscoveredWorkflow[] = [];
   const warnings: string[] = [];
@@ -305,7 +365,9 @@ async function scanWorkflowsDirectory(input: {
     const candidate = await isWorkflowScriptFile(workflowsDir, entry);
 
     if (!candidate.ok) {
-      warnings.push(readFailureWarning(entry.name, workflowsDir, candidate.reason));
+      warnings.push(
+        readFailureWarning(entry.name, workflowsDir, candidate.reason, tense, "inspect"),
+      );
       continue;
     }
 
@@ -325,13 +387,13 @@ async function scanWorkflowsDirectory(input: {
     const read = await readScriptSource(full);
 
     if (!read.ok) {
-      warnings.push(readFailureWarning(entry.name, workflowsDir, read.reason));
+      warnings.push(readFailureWarning(entry.name, workflowsDir, read.reason, tense, "read"));
       continue;
     }
 
     const source = read.source;
     const verdict = admitWorkflowScript(pluginName, entry.name, source);
-    const warning = verdictWarning(verdict, workflowsDir);
+    const warning = verdictWarning(verdict, workflowsDir, tense);
 
     if (warning !== undefined) {
       warnings.push(warning);

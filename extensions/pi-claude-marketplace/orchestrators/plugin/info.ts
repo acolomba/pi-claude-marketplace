@@ -28,6 +28,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -641,10 +642,15 @@ function parseLenientHooksJson(raw: string): unknown {
  * arrays return `undefined` so the renderer omits the line (the
  * renderer assumes pre-sorted input and does not sort defensively).
  *
+ * WFLW-04: `workflows` is the one kind whose names cannot be read off the
+ * directory listing -- each command is named by its script's own `meta.name`,
+ * so the discovery pass that reads the bodies is the only producer. It runs in
+ * the `preview` tense here: nothing on this surface writes to disk.
+ *
  * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
- * `["agents", "commands", "hooks", "mcp", "skills"]` ordering. Source
- * placement matches the alphabetical order for readability.
+ * `["agents", "commands", "hooks", "mcp", "skills", "workflows"]` ordering.
+ * Source placement matches the alphabetical order for readability.
  */
 async function composeResolvedComponents(
   pluginRoot: string,
@@ -653,16 +659,24 @@ async function composeResolvedComponents(
       readonly skills: readonly string[];
       readonly commands: readonly string[];
       readonly agents: readonly string[];
+      /**
+       * WFLW-04: REQUIRED, so every producer of this shape -- including the
+       * two lenient maps this surface re-derives for the arms the resolver
+       * could not resolve -- is compile-forced to answer for the kind.
+       */
+      readonly workflows: readonly string[];
     };
     readonly mcpServers: Record<string, unknown>;
     readonly hooksConfigPath?: string;
   },
+  pluginName: string,
 ): Promise<{
   readonly agents?: readonly string[];
   readonly commands?: readonly string[];
   readonly hooks?: readonly HookSummaryEntry[];
   readonly mcp?: readonly string[];
   readonly skills?: readonly string[];
+  readonly workflows?: readonly string[];
 }> {
   const agents = await discoverComponentNames(pluginRoot, resolved.componentPaths.agents, "agents");
   const commands = await discoverComponentNames(
@@ -692,13 +706,57 @@ async function composeResolvedComponents(
       ? await readLenientHookSummary(pluginRoot)
       : await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath);
 
+  const workflows = await previewWorkflowNames(pluginRoot, resolved.componentPaths.workflows, {
+    pluginName,
+  });
+
   return {
     ...(agents.length > 0 && { agents }),
     ...(commands.length > 0 && { commands }),
     ...(hooks !== undefined && hooks.length > 0 && { hooks }),
     ...(mcp.length > 0 && { mcp }),
     ...(skills.length > 0 && { skills }),
+    ...(workflows.length > 0 && { workflows }),
   };
+}
+
+/**
+ * WFLW-04: the generated `<plugin>:<name>` of every ADMITTED script under the
+ * declared workflows directories, sorted.
+ *
+ * BOTH admitted arms are listed. `stem-fallback` is admitted -- an envelope is
+ * written for it -- so omitting it would make this surface disagree with what
+ * install puts on disk. The caveat that the engine will not load it rides its
+ * own discovery warning and is not repeated on the name.
+ *
+ * The names are taken off the verdict rather than recomposed: the generated
+ * name has one composer (`domain/workflow-script.ts`), which owns the
+ * engine-parity clauses, and a second one here would drift from it. Nothing is
+ * enumerated from the saved directory either -- that directory is shared with
+ * the user's own workflows and with every other plugin.
+ *
+ * NFR-10: a declared path that escapes the plugin root raises out of the
+ * discovery pass, which is what the row builders' existing catch turns into
+ * the not-resolved marker rather than a listing of somewhere else's contents.
+ */
+async function previewWorkflowNames(
+  pluginRoot: string,
+  declared: readonly string[],
+  opts: { readonly pluginName: string },
+): Promise<readonly string[]> {
+  const { discovered } = await discoverPluginWorkflows({
+    pluginName: opts.pluginName,
+    resolved: { pluginRoot, componentPaths: { workflows: declared } },
+    // WR-09: a read-only surface states what WOULD happen, never what did.
+    tense: "preview",
+  });
+
+  return sortComponentNames(
+    discovered
+      .map((record) => record.verdict)
+      .filter((verdict) => verdict.outcome === "named" || verdict.outcome === "stem-fallback")
+      .map((verdict) => verdict.generatedName),
+  );
 }
 
 /**
@@ -1256,6 +1314,7 @@ function sortComponentNames(names: readonly string[]): readonly string[] {
  *     source with unsupported manifest fields / unsupported hooks).
  */
 async function buildNotInstallablePathRowFields(
+  pluginName: string,
   resolved: Parameters<typeof composeResolvedComponents>[1],
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
@@ -1280,7 +1339,7 @@ async function buildNotInstallablePathRowFields(
   // unmasked to the caller; classifying them as IO probe failures
   // would mis-route a path-escape as a transient disk error.
   try {
-    const components = await composeResolvedComponents(pluginRoot, resolved);
+    const components = await composeResolvedComponents(pluginRoot, resolved, pluginName);
     return {
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
       componentsResolved: true,
@@ -1299,23 +1358,25 @@ async function buildNotInstallablePathRowFields(
  * arm, which (unlike `installable` / `partially-available`) does not carry
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
- * `<pluginRoot>/{skills,commands,agents}` locations; `composeResolvedComponents`
- * tolerates missing directories (ENOENT -> empty), so a declared-but-absent
- * or convention-absent directory contributes nothing. This keeps the
- * `(unavailable)`/`(installed)` path-source rows enumerating on-disk
- * components without reading the arm's stripped fields (NFR-7).
+ * `<pluginRoot>/{skills,commands,agents,workflows}` locations;
+ * `composeResolvedComponents` tolerates missing directories (ENOENT -> empty),
+ * so a declared-but-absent or convention-absent directory contributes nothing.
+ * This keeps the `(unavailable)`/`(installed)` path-source rows enumerating
+ * on-disk components without reading the arm's stripped fields (NFR-7).
  */
 function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][number]): {
   skills: string[];
   commands: string[];
   agents: string[];
+  workflows: string[];
 } {
   const out = {
     skills: ["skills"],
     commands: ["commands"],
     agents: ["agents"],
+    workflows: ["workflows"],
   };
-  for (const kind of ["skills", "commands", "agents"] as const) {
+  for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
     for (const d of asDeclaredList((entry as Record<string, unknown>)[kind])) {
       if (typeof d === "string" && !out[kind].includes(d)) {
         out[kind].push(d);
@@ -1351,6 +1412,7 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  * path via `narrowResolverNotes`.
  */
 function buildNonInstallableRowFields(
+  pluginName: string,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
@@ -1361,6 +1423,7 @@ function buildNonInstallableRowFields(
   switch (resolved.state) {
     case "partially-available":
       return buildNotInstallablePathRowFields(
+        pluginName,
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
         marketplaceRoot,
@@ -1368,6 +1431,7 @@ function buildNonInstallableRowFields(
       );
     case "unavailable":
       return buildNotInstallablePathRowFields(
+        pluginName,
         {
           componentPaths: deriveLenientComponentPaths(entry),
           mcpServers: {},
@@ -1549,7 +1613,7 @@ async function buildInstalledGitRow(opts: {
           ...(version !== undefined && { version }),
           ...(description !== undefined && { description }),
           componentsResolved: true,
-          components: await composeResolvedComponents(presence.pluginRoot, resolved),
+          components: await composeResolvedComponents(presence.pluginRoot, resolved, pluginName),
           ...(dependencies !== undefined && { dependencies }),
         };
       }
@@ -1641,7 +1705,7 @@ async function buildInstalledRow(opts: {
         ...(version !== undefined && { version }),
         ...(description !== undefined && { description }),
         componentsResolved: true,
-        components: await composeResolvedComponents(resolved.pluginRoot, resolved),
+        components: await composeResolvedComponents(resolved.pluginRoot, resolved, pluginName),
         ...(dependencies !== undefined && { dependencies }),
       };
     }
@@ -1659,6 +1723,7 @@ async function buildInstalledRow(opts: {
     // `partially-available` reads its component payload directly; `unavailable`
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
+      pluginName,
       resolved,
       entry,
       mpRecord.marketplaceRoot,
@@ -1721,6 +1786,7 @@ async function buildNotInstalledPathRow(
   const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   try {
     const fields = await buildNonInstallableRowFields(
+      pluginName,
       resolved,
       entry,
       mpRecord.marketplaceRoot,
@@ -1892,17 +1958,23 @@ async function buildWarmGitNonInstallableRow(
       ? narrowUnsupportedKinds(resolved.unsupported)
       : narrowResolverNotes(resolved.notes);
   // The `unavailable` arm carries no `componentPaths` (NFR-7); enumerate from
-  // the conventional `<pluginRoot>/{skills,commands,agents}` locations so the
-  // warm tree still lists on-disk components (mirrors `deriveLenientComponentPaths`).
+  // the conventional `<pluginRoot>/{skills,commands,agents,workflows}` locations
+  // so the warm tree still lists on-disk components (mirrors
+  // `deriveLenientComponentPaths`).
   const forComponents =
     resolved.state === "partially-available"
       ? resolved
       : {
-          componentPaths: { skills: ["skills"], commands: ["commands"], agents: ["agents"] },
+          componentPaths: {
+            skills: ["skills"],
+            commands: ["commands"],
+            agents: ["agents"],
+            workflows: ["workflows"],
+          },
           mcpServers: {},
         };
   try {
-    const components = await composeResolvedComponents(pluginRoot, forComponents);
+    const components = await composeResolvedComponents(pluginRoot, forComponents, pluginName);
     return {
       status,
       name: pluginName,
@@ -2079,7 +2151,11 @@ async function buildAvailableRow(opts: {
   const { pluginName, version, description, dependencies } = opts;
 
   try {
-    const components = await composeResolvedComponents(opts.pluginRoot, opts.resolvedForComponents);
+    const components = await composeResolvedComponents(
+      opts.pluginRoot,
+      opts.resolvedForComponents,
+      pluginName,
+    );
     return {
       status: "available",
       name: pluginName,

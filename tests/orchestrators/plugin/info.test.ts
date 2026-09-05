@@ -3829,7 +3829,7 @@ test("D-100-08 / ENBL-17: bare info (no --scope) with a disabled record in one s
 // SURF-01 / D-63-04 / D-63-07: `info <plugin>` for an installable plugin
 // with `hooks/hooks.json` renders the multi-line `hooks:` block. The
 // block slots alphabetically between `commands` and `mcp` (driven by
-// the 5-tuple `COMPONENT_KINDS`). Tool events render as
+// the `COMPONENT_KINDS` tuple). Tool events render as
 // `<event>(<matcher>)`; non-tool events render as bare `<event>`.
 // Declaration order from the parsed file is preserved.
 //
@@ -6979,5 +6979,119 @@ test("an available path plugin renders sorted dependencies after its inventory",
           "    dependencies: bravo@mp, zulu@mp",
       },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFLW-04: the `workflows:` line on the resolved component arm.
+//
+// The names are the generated `<plugin>:<name>` of every ADMITTED script, read
+// out of the script bodies by the discovery pass rather than off a directory
+// listing -- a workflow command is named by its own `meta.name`.
+// ---------------------------------------------------------------------------
+
+const WORKFLOW_NAMED_ZETA = 'export const meta = { name: "zeta", description: "zetas" };\n';
+const WORKFLOW_STEM_FALLBACK = 'export const meta = { description: "quiet" };\n';
+const WORKFLOW_NO_META = "export function help() {\n  return 1;\n}\n";
+
+async function seedWorkflowScripts(
+  mpRoot: string,
+  pluginDir: string,
+  scripts: Record<string, string>,
+): Promise<void> {
+  const workflowsDir = path.join(mpRoot, pluginDir, "workflows");
+  await mkdir(workflowsDir, { recursive: true });
+  for (const [fileName, source] of Object.entries(scripts)) {
+    await writeFile(path.join(workflowsDir, fileName), source, "utf8");
+  }
+}
+
+test("WFLW-04: an installed plugin lists both admitted workflow arms, sorted, after its skills", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    // `quiet.js` declares no readable name, so the stem names its command. The
+    // envelope IS written for it, which is why the line lists it beside the
+    // named arm.
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+      "quiet.js": WORKFLOW_STEM_FALLBACK,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ● foo v1.2.3 (installed)\n" +
+          "    Foo plugin\n" +
+          "    agents: a1\n" +
+          "    commands: c1\n" +
+          "    skills: s1\n" +
+          "    workflows: foo:quiet, foo:zeta",
+      },
+    ]);
+  });
+});
+
+test("WFLW-04: a plugin whose workflow scripts are all unadmitted renders no workflows line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "helper.js": WORKFLOW_NO_META });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- byte-identical to the same plugin with no workflows directory.
+    assert.deepEqual(notifications, [{ message: EXPECTED_FOO_INSTALLED_INFO }]);
+  });
+});
+
+test("NFR-10: a declared workflows path escaping the plugin root folds to the not-resolved marker", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the escaping `workflows` string makes the resolver report the
+    // plugin structurally unavailable, so the row re-derives its component paths
+    // leniently from the raw manifest strings. That string survives the
+    // re-derivation, and the containment assertion inside discovery refuses it
+    // a second time rather than walking out of the plugin root.
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            workflows: "../../escape",
+          },
+        ],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert -- the command reports the refusal on the row; it does not throw,
+    // and it lists nothing from outside the plugin root.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [user] <no autoupdate>\n" +
+        "  ⊘ alpha v1.0.0 (unavailable) {unsupported source, unreadable}\n" +
+        "    components: not resolved",
+    );
   });
 });

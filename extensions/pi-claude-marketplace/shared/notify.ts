@@ -1499,9 +1499,14 @@ export interface PluginInfoRowBase {
 
 /**
  * `componentsResolved: true` arm. The renderer emits per-kind component
- * lists in alphabetical order (`agents`, `commands`, `mcp`, `skills`)
- * followed by an optional `dependencies:` line in
+ * lists in alphabetical order (`agents`, `commands`, `hooks`, `mcp`,
+ * `skills`, `workflows`) followed by an optional `dependencies:` line in
  * `<plugin>@<marketplace>` form.
+ *
+ * WFLW-04: `workflows` carries the generated `<plugin>:<name>` of every
+ * ADMITTED script -- both the named arm and the stem-fallback arm, because an
+ * envelope is written for both and listing only the named arm would make this
+ * surface disagree with what install puts on disk.
  *
  * PRECONDITION: per-kind arrays and the `dependencies` array MUST be
  * pre-sorted alphabetically at construction time. The renderer assumes
@@ -1516,6 +1521,7 @@ export interface PluginInfoComponentsResolved {
     readonly hooks?: readonly HookSummaryEntry[];
     readonly mcp?: readonly string[];
     readonly skills?: readonly string[];
+    readonly workflows?: readonly string[];
   };
   readonly dependencies?: readonly string[];
 }
@@ -3511,27 +3517,34 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
   }
 }
 
-// Derive the tuple's element type from the interface so the two
-// declarations cannot drift. The tuple is sized exactly (5 entries):
-// adding a 6th key to `PluginInfoComponentsResolved.components` without
-// extending this tuple breaks the typecheck here -- TS rejects the
-// literal because `ComponentKind` would no longer cover every keyof
-// the interface. Without the explicit tuple length, the renderer
-// would silently omit the new kind from output.
 type ComponentKind = keyof PluginInfoComponentsResolved["components"];
-const COMPONENT_KINDS: readonly [
-  ComponentKind,
-  ComponentKind,
-  ComponentKind,
-  ComponentKind,
-  ComponentKind,
-] = ["agents", "commands", "hooks", "mcp", "skills"];
+
+// The renderer emits one line per member of this tuple, so a kind the
+// interface declares but this tuple omits renders nowhere. `as const` is what
+// keeps each member's LITERAL type, and the coverage proof below is what turns
+// an omission into a build failure; `satisfies` catches the other direction, a
+// member that is not a kind at all. Annotating the tuple with `ComponentKind`
+// slots instead would erase the literals and make the proof vacuous -- every
+// slot would report the whole union and `Exclude` would always answer `never`.
+const COMPONENT_KINDS = [
+  "agents",
+  "commands",
+  "hooks",
+  "mcp",
+  "skills",
+  "workflows",
+] as const satisfies readonly ComponentKind[];
+
+type _AssertNever<T extends never> = T;
+type _UncoveredComponentKind = Exclude<ComponentKind, (typeof COMPONENT_KINDS)[number]>;
+// fallow-ignore-next-line unused-type, private-type-leak -- INFO-02 / WFLW-04 completeness proof; a non-never result is a TS2344 build failure naming the uncovered kind, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredComponentKind` are the proof's own internals, meaningless to a caller.
+export type _ComponentKindsCoverageProof = _AssertNever<_UncoveredComponentKind>;
 
 /**
  * Append the per-kind component lines + optional dependencies line
  * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
- * (`agents`, `commands`, `hooks`, `mcp`, `skills`); within each kind,
- * names render in the caller-supplied order. The orchestrator pre-sorts;
+ * (`agents`, `commands`, `hooks`, `mcp`, `skills`, `workflows`); within each
+ * kind, names render in the caller-supplied order. The orchestrator pre-sorts;
  * the renderer does not.
  *
  * SURF-02 / D-63-04: the `hooks` kind is the only multi-line member;

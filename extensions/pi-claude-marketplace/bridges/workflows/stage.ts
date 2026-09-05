@@ -132,6 +132,9 @@ export async function prepareStageWorkflows(
   const { discovered, warnings: discoverWarnings } = await discoverPluginWorkflows({
     pluginName,
     resolved,
+    // WR-09: this pass writes to the user's disk, so its soft-fail phrases
+    // report what happened rather than what would.
+    tense: "install",
   });
 
   assertNoWorkflowNameCollisions(discovered.map((d) => d.verdict));
