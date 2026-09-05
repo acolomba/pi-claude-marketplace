@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7787,6 +7787,329 @@ test("WLIF-01: a reinstall of a plugin with no workflows touches neither workflo
       assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
     } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-01: the workflows commit -- the LAST step of the replace sequence, the
+// placed names threaded out of it, and the outer recovery path that is the
+// only thing able to take those envelopes back.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * A foreign envelope in the shared saved directory. Nothing this extension
+ * placed and nothing any record names, so every case that removes envelopes
+ * can assert its bytes survived.
+ */
+async function seedForeignEnvelope(savedDir: string): Promise<{
+  readonly path: string;
+  readonly bytes: string;
+}> {
+  await mkdir(savedDir, { recursive: true });
+  const foreignPath = path.join(savedDir, "someone-else:thing.json");
+  const bytes = '{ "name": "someone-else:thing" }\n';
+  await writeFile(foreignPath, bytes, "utf8");
+  return { path: foreignPath, bytes };
+}
+
+test("WLIF-01: a reinstall re-materializes the envelope over the recorded one", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-replace-"));
+    try {
+      // arrange -- install once so both a record and an envelope exist, then
+      // change the workflow's description so the re-materialized bytes are
+      // distinguishable from the ones already at the target. The old record
+      // naming the envelope is what puts the commit on its displace path
+      // rather than into the occupancy refusal.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [
+          {
+            sourceName: "greet",
+            body: 'export const meta = { name: "greet", description: "greets again" };\n',
+          },
+        ],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+        name: "hello:greet",
+        description: "greets again",
+        script: 'export const meta = { name: "greet", description: "greets again" };\n',
+      });
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:greet",
+      ]);
+      // The commit's staging root is removed on success, so nothing is left
+      // behind under the staging directory.
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a failure after the commit removes exactly the envelopes it placed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-unplace-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act -- the transaction save is the last of the three post-commit steps
+      // and the simplest to sabotage; the workflows step sits outside the
+      // replacement ledger, so only the outer catch can reach the envelope.
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        __deps: {
+          stateTransaction: {
+            saveState: () => Promise.reject(new Error("save-failure")),
+          },
+        },
+      });
+
+      // assert -- the recovery removed the envelope cleanly, so there is no
+      // leak and therefore no manual-recovery promotion: a clean take-back is
+      // not a condition the user has to repair by hand.
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, undefined);
+      assert.ok(
+        outcome.notes?.some((note) => note.includes("save-failure")),
+        `expected the primary failure in the notes: ${JSON.stringify(outcome.notes)}`,
+      );
+      await assert.rejects(() => readFile(envelopePath, "utf8"), { code: "ENOENT" });
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("T-112-14: a containment refusal during recovery becomes a leak, not the surfaced error", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-refusal-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const decoyPath = path.join(cwd, "decoy.json");
+      await writeFile(decoyPath, "{}\n", "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act -- the sabotage replaces the just-placed envelope with a symlink
+      // BEFORE it throws, so the recovery's own path chokepoint refuses the
+      // leaf it composed (SymlinkRefusedError extends PathContainmentError).
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        __deps: {
+          stateTransaction: {
+            saveState: async () => {
+              await rm(envelopePath, { force: true });
+              await symlink(decoyPath, envelopePath);
+              throw new Error("save-failure");
+            },
+          },
+        },
+      });
+
+      // assert -- the ORIGINAL error survives. A refusal allowed to propagate
+      // out of the recovery composer would replace it and discard every leak
+      // string already collected.
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, "manual-recovery");
+      assert.ok(
+        outcome.notes?.some((note) => note.includes("save-failure")),
+        `expected the primary failure in the notes: ${JSON.stringify(outcome.notes)}`,
+      );
+      assert.ok(
+        !outcome.notes?.some((note) => note.includes("symlink")),
+        `the containment refusal must not become the surfaced error: ${JSON.stringify(
+          outcome.notes,
+        )}`,
+      );
+      // The refused name is still on disk -- that is the leak the composer
+      // recorded rather than raised.
+      assert.equal(await pathExists(envelopePath), true);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a workflows staging-cleanup leak reaches the reinstall bridge warnings", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-leak-"));
+    const originalRm = retryFs.rm.bind(retryFs);
+    let rmMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      let leakedRoot: string | undefined;
+      rmMock = t.mock.method(retryFs, "rm", async (...args: Parameters<typeof retryFs.rm>) => {
+        const target = String(args[0]);
+        if (target.startsWith(`${locations.workflowsStagingDir}${path.sep}`)) {
+          leakedRoot = target;
+          throw new Error("staging cleanup denied");
+        }
+
+        return originalRm(...args);
+      });
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act -- `render: "none"` is the cascade surface, the only one that
+      // carries the hygiene (bridge) warnings out as notes per D-19-01.
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.ok(leakedRoot !== undefined);
+      assert.ok(
+        outcome.notes?.includes(
+          `warning: failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+        ),
+        `expected the staging leak in the notes: ${JSON.stringify(outcome.notes)}`,
+      );
+    } finally {
+      rmMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-03: an unremovable placed envelope becomes a manual-recovery leak", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-unremovable-"));
+    const originalUnlink = retryFs.unlink.bind(retryFs);
+    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      // The bridge binds `unlink` through a static ESM import, so the CJS view
+      // has to be re-synced for the mock to be visible to it.
+      unlinkMock = t.mock.method(
+        retryFs,
+        "unlink",
+        async (...args: Parameters<typeof retryFs.unlink>) => {
+          if (String(args[0]) === envelopePath) {
+            throw Object.assign(new Error("unlink denied"), { code: "EPERM" });
+          }
+
+          return originalUnlink(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        __deps: {
+          stateTransaction: {
+            saveState: () => Promise.reject(new Error("save-failure")),
+          },
+        },
+      });
+
+      // assert -- a per-name removal failure is a leak, so the failure is
+      // promoted to manual recovery and the envelope is still on disk.
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, "manual-recovery");
+      unlinkMock.mock.restore();
+      syncBuiltinESMExports();
+      assert.equal(await pathExists(envelopePath), true);
+    } finally {
+      unlinkMock?.mock.restore();
+      syncBuiltinESMExports();
       await rm(cwd, { force: true, recursive: true });
     }
   });

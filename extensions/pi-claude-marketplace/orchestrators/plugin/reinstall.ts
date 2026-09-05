@@ -86,7 +86,12 @@ import {
   replacePreparedSkills,
   rollbackSkillsReplacement,
 } from "../../bridges/skills/index.ts";
-import { abortPreparedWorkflows, prepareStageWorkflows } from "../../bridges/workflows/index.ts";
+import {
+  abortPreparedWorkflows,
+  commitPreparedWorkflows,
+  prepareStageWorkflows,
+  unstagePluginWorkflows,
+} from "../../bridges/workflows/index.ts";
 import { pluginMirrorKey } from "../../domain/clone-key.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -960,12 +965,10 @@ async function runLockedReinstall(
     oldRecord: oldSnapshot,
     agentsSourceDir: generated.agentsSourceDir,
   });
-  const { replacements, hookEntries } = await replaceAll(handles, {
-    locations,
-    cwd,
-    plugin,
-    installable,
-  });
+  const { replacements, hookEntries, placedWorkflowNames, workflowsCommitLeaks } = await replaceAll(
+    handles,
+    { locations, cwd, plugin, installable },
+  );
 
   let invalidConfigWriteBack: boolean;
   try {
@@ -977,6 +980,7 @@ async function runLockedReinstall(
       installable,
       handles,
       hookEntries,
+      placedWorkflowNames,
     );
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05
@@ -1036,11 +1040,28 @@ async function runLockedReinstall(
 
     rebuildRoutingTables();
   } catch (err) {
-    throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
+    throw errorWithManualRecovery(err, [
+      ...(await rollbackReplacements(replacements)),
+      // WLIF-01 / T-112-13: the workflows step is outside `replacements[]`, so
+      // the walk above cannot reach it. This is the ONLY place a failure after
+      // the commit can take the placed envelopes back.
+      ...(await unplaceWorkflows(locations, placedWorkflowNames)),
+    ]);
   }
 
   const staging = splitHandleWarnings(handles);
-  const bridgeWarnings = [...staging.bridge, ...(await finalizeReplacements(replacements))];
+  const bridgeWarnings = [
+    ...staging.bridge,
+    // WLIF-01: the workflow prepare's warnings are appended HERE rather than
+    // through `splitStagingWarnings`. That classifier is shared with the update
+    // verb, so a required new member on it would change a file this work does
+    // not otherwise touch. The array mixes per-file soft-fails with discovery
+    // warnings and is not separable at this site, so it rides the bridge half
+    // -- the same choice the install ledger makes.
+    ...handles.workflows.result.warnings,
+    ...workflowsCommitLeaks,
+    ...(await finalizeReplacements(replacements)),
+  ];
   return {
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
     discoveryWarnings: staging.discovery,
@@ -1273,9 +1294,16 @@ async function prepareAllHandles(input: {
 }
 
 /**
- * D-100-01 / ENBL-10: returns the rollback ledger AND the hook entries
- * `commitHooks` wrote, because the record composition needs a description of
- * the hooks it materialized and the hooks slot is the only step that has one.
+ * D-100-01 / ENBL-10 / WLIF-01: returns the rollback ledger AND the two values
+ * only a step outside that ledger can report -- the hook entries `commitHooks`
+ * wrote, and the workflow names `commitPreparedWorkflows` placed. Both exist
+ * for the same reason: the record composition needs a description of what the
+ * step materialized, and neither step has a `ReplacementEntry` to carry it.
+ *
+ * `placedWorkflowNames` is additionally the REMOVAL payload for a failure
+ * after this function returns. Because the workflows step is deliberately
+ * absent from `replacements[]`, `rollbackReplacements` cannot reach it, so the
+ * caller's catch is the only thing that can take those envelopes back.
  */
 async function replaceAll(
   handles: PreparedHandles,
@@ -1283,9 +1311,14 @@ async function replaceAll(
 ): Promise<{
   readonly replacements: readonly ReplacementEntry[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+  readonly placedWorkflowNames: readonly string[];
+  /** The workflows commit's staging-cleanup leak, empty when it cleaned up. */
+  readonly workflowsCommitLeaks: readonly string[];
 }> {
   const replacements: ReplacementEntry[] = [];
   let hookEntries: readonly HookSummaryEntry[] | undefined;
+  let placedWorkflowNames: readonly string[] = [];
+  const workflowsCommitLeaks: string[] = [];
   try {
     const skills = await replacePreparedSkills(handles.skills);
     replacements.push({ phase: "skills", handle: skills });
@@ -1324,12 +1357,83 @@ async function replaceAll(
     hookEntries = await commitHooks(hooks);
     const mcp = await replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
+    // WLIF-01: the LAST step, mirroring the install ledger's ordering. The
+    // workflows bridge has no `replacePrepared*` twin and needs none -- the
+    // prepare plus commit pair IS the replace shape: the commit displaces the
+    // previously-recorded targets aside, renames the new envelopes in, and
+    // restores on failure. Nothing is pushed onto `replacements[]`, because
+    // the commit cleans up its own staging on success and there is no handle
+    // left to roll back through; the hooks slot above is the established
+    // precedent for a step deliberately outside the ledger.
+    //
+    // Being last has a useful consequence: nothing inside this function can
+    // fail after it, so this catch never has to undo it. The only later
+    // failures -- the state write, the config write-back, the transaction save
+    // -- are all in the caller's recovery path, which is what
+    // `placedWorkflowNames` is threaded out for.
+    const workflowsLeak = await commitPreparedWorkflows(handles.workflows, {
+      // The whole body is one assignment that cannot throw. The commit invokes
+      // this callback on its failure paths too, so anything that could raise
+      // here would mask the real failure.
+      onPlaced: (names) => {
+        placedWorkflowNames = names;
+      },
+    });
+    if (workflowsLeak !== undefined) {
+      workflowsCommitLeaks.push(workflowsLeak);
+    }
   } catch (err) {
     const leaks = [...(await rollbackReplacements(replacements)), ...(await abortHandles(handles))];
     throw errorWithManualRecovery(err, leaks);
   }
 
-  return { replacements: Object.freeze(replacements), hookEntries };
+  return {
+    replacements: Object.freeze(replacements),
+    hookEntries,
+    placedWorkflowNames,
+    workflowsCommitLeaks: Object.freeze(workflowsCommitLeaks),
+  };
+}
+
+/**
+ * WLIF-01 / T-112-12 / T-112-13: remove the workflow envelopes the replace
+ * step's commit REPORTED placing, after a step that ran later failed.
+ *
+ * The payload is `onPlaced`'s array and never the prepared staged names: a
+ * refusal places nothing, so does a failed occupancy check, and so does a
+ * mid-sequence failure whose reversal fully succeeded. Unlinking a name this
+ * commit did not place deletes either a foreign file or a previous envelope
+ * the commit's own restore just put back.
+ *
+ * NEVER throws. It runs inside a catch that is already unwinding a DIFFERENT
+ * error and composing a manual-recovery hint out of leak strings, so a throw
+ * here would replace that error and discard every leak already collected. A
+ * containment refusal is therefore recorded as a leak line -- still loud, and
+ * still user-visible -- rather than propagated. The bridge's own contract is
+ * unchanged: `unstagePluginWorkflows` still raises the refusal by class, and
+ * the install ledger still lets it escape (PI-14). Only this recovery composer
+ * converts it, for the same reason `rollbackReplacements` beside it collects
+ * leaks and never throws.
+ */
+async function unplaceWorkflows(
+  locations: ScopedLocations,
+  placedWorkflowNames: readonly string[],
+): Promise<readonly string[]> {
+  if (placedWorkflowNames.length === 0) {
+    return Object.freeze<string[]>([]);
+  }
+
+  try {
+    const result = await unstagePluginWorkflows({
+      locations,
+      previousWorkflowNames: placedWorkflowNames,
+    });
+    return Object.freeze(
+      result.failed.map((failure) => `workflows: ${failure.name}: ${failure.reason}`),
+    );
+  } catch (err) {
+    return Object.freeze([`workflows: ${errorMessage(err)}`]);
+  }
 }
 
 interface HooksReplaceArgs {
@@ -1390,6 +1494,7 @@ function updateStateRecord(
   installable: MaterializablePlugin,
   handles: PreparedHandles,
   hookEntries: readonly HookSummaryEntry[] | undefined,
+  placedWorkflowNames: readonly string[],
 ): void {
   const mp = state.marketplaces[marketplace];
   if (mp?.plugins[plugin] === undefined) {
@@ -1420,7 +1525,7 @@ function updateStateRecord(
       supported: [...installable.supported],
       unsupported: [...installable.unsupported],
     },
-    resources: resourcesFromHandles(handles, plugin, installable),
+    resources: resourcesFromHandles(handles, plugin, installable, placedWorkflowNames),
     // D-100-01 / ENBL-10: describe the hooks this re-materialize wrote. Top
     // level, so it does not belong in `resourcesFromHandles`. Omitted when the
     // resolved plugin declares no hooks -- that branch removed the subtree.
@@ -1435,6 +1540,7 @@ function resourcesFromHandles(
   handles: PreparedHandles,
   plugin?: string,
   installable?: MaterializablePlugin,
+  placedWorkflowNames: readonly string[] = [],
 ): PluginInstallRecord["resources"] {
   return {
     skills: handles.skills.result.recorded.map((r) => r.generatedName),
@@ -1451,9 +1557,14 @@ function resourcesFromHandles(
     // `plugin` / `installable` args and the hooks inventory stays empty
     // for that path (no state write occurs there either).
     hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
-    // WLIF-01: the workflow envelope inventory. Empty here until reinstall
-    // gains a workflows handle to read placed names from.
-    workflows: [],
+    // WLIF-01 / T-112-15: the envelope names the workflows commit REPORTED
+    // placing, never the prepared staged names -- a commit can stage three and
+    // place two, and a record that overstates what is on disk is what the next
+    // removal walks. The `successOutcome` caller omits the extra arguments and
+    // its projection therefore carries an empty array, the same discipline the
+    // hooks member above follows and correct because no state write occurs on
+    // that path.
+    workflows: [...placedWorkflowNames],
   };
 }
 
