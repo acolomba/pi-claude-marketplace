@@ -38,7 +38,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -118,9 +118,9 @@ const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: 
  *
  * Each of the three named ordinals has its own case, and each case asserts an
  * observable only its own stage produces -- otherwise the ordinal is decoration
- * and the case's title is a claim about a stage it is not pinned to. The fourth
- * read has no case: the resource aggregation is the one stage outside a try, so
- * refusing it is a throw out of the handler rather than an NFR-2 containment.
+ * and the case's title is a claim about a stage it is not pinned to. The aggregate
+ * discovery case counts all four reads across two calls while a real filesystem
+ * fault targets the fourth stage without a synthetic event refusal.
  */
 const CWD_READ_DEFERRED_HYDRATE = 1;
 const CWD_READ_RECONCILE = 2;
@@ -381,6 +381,27 @@ interface CwdRefusal {
   readonly readCount: () => number;
 }
 
+interface CountedDiscoverEvent {
+  readonly event: ResourcesDiscoverEvent;
+  readonly readCount: () => number;
+}
+
+/** A discover event that exposes how often the callback reads its working directory. */
+function countedDiscoverEvent(event: ResourcesDiscoverEvent): CountedDiscoverEvent {
+  let reads = 0;
+  const proxy = new Proxy(event, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd") {
+        reads += 1;
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  return { event: proxy, readCount: () => reads };
+}
+
 function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRefusal {
   let reads = 0;
   let refused = false;
@@ -608,6 +629,96 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   // assert
   assert.deepStrictEqual(process.env.PATH, expectedPath);
   assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+  verifyBoundary();
+});
+
+test("contains one aggregate discovery failure and recovers through the same callback", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "discovery-recovery");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  const binDir = path.join(resolvedSource, "bin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  const promptPath = await seedPrompt(scope.cwd, "recovered.md");
+  const skillPath = path.join(
+    scope.cwd,
+    ".pi",
+    "pi-claude-marketplace",
+    "resources",
+    "skills",
+    "recovered-skill",
+  );
+  await mkdir(skillPath, { recursive: true });
+  await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
+  t.after(() => chmod(skillPath, 0o755).catch(() => undefined));
+  await chmod(skillPath, 0o000);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+  const counted = countedDiscoverEvent(discoverEvent(scope.cwd));
+  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+  const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
+  const expectedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: { kind: "path", raw: path.join(scope.cwd, "mp-src") },
+        addedFromCwd: scope.cwd,
+        manifestPath: path.join(scope.cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: path.join(scope.cwd, "mp-src"),
+        plugins: {
+          plug: {
+            version: "1.0.0",
+            resolvedSource,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            enabled: true,
+            installedAt: "2026-08-03T00:00:00.000Z",
+            updatedAt: "2026-08-03T00:00:00.000Z",
+          },
+        },
+      },
+    },
+    lastReconciledExtensionVersion: "0.18.1",
+  };
+  const expectedConfig = {
+    schemaVersion: 1,
+    marketplaces: { mp: { source: path.join(scope.cwd, "mp-src") } },
+    plugins: { "plug@mp": {} },
+  };
+  const expectedPath = `/usr/bin${path.delimiter}${binDir}`;
+  const expectedDiscovery: ResourcesDiscoverResult = {
+    skillPaths: [skillPath],
+    promptPaths: [promptPath],
+  };
+
+  // act
+  const failedDiscovery = await discover(counted.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(failedDiscovery, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(JSON.parse(await readFile(statePath, "utf8")), expectedState);
+  assert.deepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), expectedConfig);
+  assert.deepStrictEqual(process.env.PATH, expectedPath);
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+  assert.deepStrictEqual(counted.readCount(), CWD_READS_PER_DISCOVER);
+  assert.deepStrictEqual(notifications, []);
+  const stateBytesAfterFailure = await readFile(statePath, "utf8");
+  const configBytesAfterFailure = await readFile(configPath, "utf8");
+  await chmod(skillPath, 0o755);
+
+  // act
+  const recoveredDiscovery = await discover(counted.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(recoveredDiscovery, expectedDiscovery);
+  assert.deepStrictEqual(await readFile(statePath, "utf8"), stateBytesAfterFailure);
+  assert.deepStrictEqual(await readFile(configPath, "utf8"), configBytesAfterFailure);
+  assert.deepStrictEqual(process.env.PATH, expectedPath);
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+  assert.deepStrictEqual(counted.readCount(), CWD_READS_PER_DISCOVER * 2);
+  assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
 
