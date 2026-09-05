@@ -1189,6 +1189,17 @@ async function runInstallLedgerBody(
       // not the array.
       c.workflowsPrep = prep;
       c.stagedWorkflowNames = [];
+      // The bridge's array mixes per-file soft-fails with discovery warnings
+      // and is not separable at this site, so it rides `bridgeWarnings` (the
+      // agents-bridge shape) rather than `discoveryWarnings`.
+      //
+      // WR-04: recorded BEFORE the commit. These describe what the prepare
+      // already observed about the source -- refused scripts, unreadable
+      // files, skipped directories -- and a commit throw must not discard
+      // them, because a failed run is exactly when the operator most needs
+      // them. Reinstall reads the same warnings off the handle independently
+      // of the commit's outcome.
+      c.bridgeWarnings.push(...prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit
         // invokes this callback on the failure paths too, so anything that
@@ -1197,10 +1208,6 @@ async function runInstallLedgerBody(
           c.stagedWorkflowNames = placedNames;
         },
       });
-      // The bridge's array mixes per-file soft-fails with discovery warnings
-      // and is not separable at this site, so it rides `bridgeWarnings` (the
-      // agents-bridge shape) rather than `discoveryWarnings`.
-      c.bridgeWarnings.push(...prep.result.warnings);
       if (leak !== undefined) {
         c.bridgeWarnings.push(leak);
       }
