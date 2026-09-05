@@ -2571,7 +2571,7 @@
 - `MF-DEC-06` — resolved
 - `MF-DEC-07` — resolved
 - `MF-DEC-08` — resolved
-- `MF-DEC-09` — pending
+- `MF-DEC-09` — resolved
 
 ## Scope Changes
 

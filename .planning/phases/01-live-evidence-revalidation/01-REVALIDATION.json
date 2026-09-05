@@ -90779,8 +90779,28 @@
     },
     {
       "id": "MF-DEC-09",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "ORR-F028",
+        "TXA-F022"
+      ],
+      "proof": "ORR-F028 and TXA-F022 are the exact surviving terminal roots for the direct-coverage enforcement gap, and neither has a duplicate or alias chain. Current CodeGraph and scripts/configuration inspection show that scripts/test-coverage-direct.mjs inventories 204 current source-test pairs, runs each owner test in isolation, and rejects any function, line, or branch counter for which hit differs from found. package.json exposes changed-pair, strict all-pair, negative-control, and non-gating report commands, but npm run check invokes only test:coverage:direct:negative. The current CI workflow invokes npm run check, and .pre-commit-config.yaml contains no positive direct-coverage hook, so the positive gate remains manual despite CONTRIBUTING.md requesting changed-pair runs before a pull request and a whole-tree sweep at milestone boundaries. Seven current shortfalls make the strict all-pair command intentionally red; MF-DEC-01 routes two removable dense-index guards to honest production rewrites and preserves evidence for five genuinely compiler-forced shortfalls without authorizing a coverage exception. MF-005 and AUDIT-005 remain supporting composite gate-audit records whose other observations stay independent, and MF-009 remains umbrella decision provenance rather than a premise substitute. AUDIT-010 remains stale because the historical retained all-pair report is absent; Phase 8 must regenerate a current baseline. Historical claims that direct coverage was never measured are also excluded as stale after current focused measurements. The positive changed-pair gate, strict all-pair gate, non-gating report, and negative control remain distinct artifacts and must not be conflated.",
+      "options": [
+        "Enforce changed pairs locally and in CI",
+        "Enforce changed pairs in CI only",
+        "Enforce changed pairs in pre-commit only"
+      ],
+      "selectedOption": "Enforce changed pairs locally and in CI",
+      "rejectedOptions": [
+        "Enforce changed pairs in CI only — rejected because authoritative enforcement would remain, but contributors would lose the earliest feedback and discover direct-pair ownership failures only after pushing.",
+        "Enforce changed pairs in pre-commit only — rejected because local hooks can be skipped and cannot provide the authoritative repository enforcement required by RCOV-03."
+      ],
+      "affectedIds": [
+        "ORR-F028",
+        "TXA-F022"
+      ],
+      "recommendation": "Enforce the same strict changed-pair gate through both a scoped local pre-commit hook and a dedicated authoritative CI job under D-17. Keep selection fail-closed and preserve exact coverage semantics without allowlists, ignore pragmas, exclusions, or any claim that numeric reachability proves assertion strength.",
+      "downstreamConsequences": "Carry ORR-F028 forward with TXA-F022 rather than wiring a duplicate Phase 2 fix. Phase 7 GGAT-01 must give changed-pair discovery and CI base selection explicit target-visitation evidence plus synthetic-offender, benign-control, and zero-selection cases. Phase 8 RCOV-01 must regenerate the complete 204-pair baseline from the milestone branch, and RCOV-02 must first complete the selected honest rewrites and current-evidence reclassification of all seven carried shortfalls. Phase 8 RCOV-03 must then add a source/test-scoped local pre-commit hook and a separate dedicated CI job that both invoke the same changed-pair gate; do not bury the slow positive gate inside npm run check. CI must fetch or otherwise resolve the pull-request base deterministically, enumerate the expected changed source-test pairs, report the selected pair count, and fail closed when the base cannot be resolved or when relevant changed paths produce zero selected pairs. Preserve strict hit-equals-found enforcement with no accepted-shortfall allowlist, ledger-keyed pass, coverage ignore pragma, blanket exclusion, or other flattering suppression. A retained-shortfall pair touched by a change must continue to fail until its production shape is honestly corrected or the operator explicitly revisits its policy. Keep the full all-pair report as complete milestone evidence and state its refused rows honestly; do not describe the strict all-pair command as green while retained shortfalls remain, and do not convert the non-gating report into a false pass. Coverage remains reachability evidence only: current surviving-mutation findings, exact public-result and state assertions, byte-for-byte output proofs, ordering checks, and other assertion-strength requirements remain independently required. Preserve MF-005 and AUDIT-005 under their broader independent routes, MF-009 as umbrella provenance, and AUDIT-010 as stale evidence-only closure. Phase 9 CLOSE-01 must verify the selected local and CI controls, their negative and visitation controls, the regenerated baseline, honest all-pair reporting, and the complete project quality suite."
     }
   ],
   "scopeChanges": []
