@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-41-PLAN.md
-last_updated: "2026-09-05T01:51:21.552Z"
+stopped_at: Completed 01-42-PLAN.md
+last_updated: "2026-09-05T02:02:00.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: e1b5ed0f2473dea919535a6830a4448a1a570b06
+state_head: 7f3b137220eaef5b37d038af61b4ba8e710f071a
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 41
+  completed_plans: 42
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 42 of 69
+Plan: 43 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -41,9 +41,9 @@ Last activity: 2026-09-04 — Phase 01 execution started
 
 **Velocity:**
 
-- Total plans completed: 154
+- Total plans completed: 155
 - Average recorded duration: 11.8 min
-- Total recorded execution time: 30 hr 16 min
+- Total recorded execution time: 30 hr 24 min
 
 **By Phase:**
 
@@ -225,6 +225,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01-live-evidence-revalidation P39 | 15min | 1 tasks | 1 files |
 | Phase 01-live-evidence-revalidation P40 | 18min | 3 tasks | 2 files |
 | Phase 01 P41 | 12min | 3 tasks | 5 files |
+| Phase 01 P42 | 8min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -512,6 +513,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route live configSource and manifest-read gate-strength gaps to Phase 2 and retain the command rollback-pair gap under its Phase 3 canonical finding.
 - [Phase 01]: Close historical agents no-op and force/foreign blockers as stale only after positive current-suite proof.
 - [Phase 01]: Keep structural cleanup and language-operator branch decisions separate from evidence status while retaining sound gates as evidence-only closures.
+- [Phase 01]: Preserve all 55 first-pass hook-bridge claims while linking 39 overlaps directly to earlier canonical adversarial findings.
+- [Phase 01]: Route the reproduced PID-table pre-await snapshot defect to Phase 2 while retaining shared-state, double, and structure work in Phase 3 or the deferred backlog.
+- [Phase 01]: Keep the routing-state reset-export question under the existing operator decision and close only historical run-status or review-boundary claims with positive current evidence.
 
 ### Pending Todos
 
@@ -564,7 +568,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-41-PLAN.md
+**Stopped at:** Completed 01-42-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -573,7 +577,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T01:51:21.435Z
+Last session: 2026-09-05T02:02:00.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
