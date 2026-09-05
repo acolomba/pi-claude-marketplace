@@ -425,7 +425,27 @@ Plans:
    appears, and one it removed stays installed and runnable. No row, reason
    token or warning marks it. Nothing outside this branch is exposed, because
    the kind is not fully shipped until Phase 114.
-7. `npm run check` is green.
+7. **A retained workflows staging tree becomes discoverable.** Carried from the
+   Phase 112 code review (WR-06). The sweeper deliberately keeps any aged
+   staging root whose `.previous/` still holds displaced envelopes, because
+   those bytes are the only surviving copy of the user's previous workflow
+   scripts. Nothing then removes that tree, and nothing names it: it sits
+   outside every scope root so uninstall and `/reload` cannot reach it, and both
+   sweeper call sites discard the return inside a bare `catch {}` under D-19-01.
+   The operator's only notice is the one-shot leak line inside the failure that
+   caused the retention — and on the crash path there is no failure and
+   therefore no line at all, so a kill signal between the displacement and the
+   rename loop leaves the targets empty, the only copies inside `.previous/`,
+   and no surface that mentions either. Retaining beats the alternative Phase
+   112 replaced (a silent 24-hour expiry on the recovery copy), but "kept
+   forever, undiscoverable" is not the finished state. Phase 112 did not build
+   the read surface because this phase builds the surfaces that would render it:
+   criterion 4 above is what gives `info` a `workflows:` line. The shape is a
+   second channel off the sweep — `{ leaks, retained }`, with `retained`
+   carrying the staging path and the envelope count — rendered once from `info`
+   or `pending`. Returning it before a renderer exists would add a member both
+   call sites discard.
+8. `npm run check` is green.
 
 **Plans**: TBD
 
