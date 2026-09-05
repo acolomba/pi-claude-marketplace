@@ -5,8 +5,8 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-34-PLAN.md
-last_updated: "2026-09-05T00:42:25.000Z"
+stopped_at: Completed 01-35-PLAN.md
+last_updated: "2026-09-05T00:50:19.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
 state_head: 1504afa4ce401cceaea98b25fb2f7af7c9e4c977
@@ -14,7 +14,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 34
+  completed_plans: 35
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 35 of 69
+Plan: 36 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -218,6 +218,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P32 | 14min | 1 tasks | 1 files |
 | Phase 01 P33 | 10min | 2 tasks | 1 files |
 | Phase 01 P34 | 10min | 2 tasks | 2 files |
+| Phase 01 P35 | 14min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -493,6 +494,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: [Phase 01-33]: Preserve structural, stale, clean-evidence, and cross-cutting corpus claims as separate identities.
 - [Phase 01]: [Phase 01-34]: Keep persistence and platform test-strength claims inconclusive without isolated surviving mutations.
 - [Phase 01]: [Phase 01-34]: Preserve structural, positive, and cross-cutting evidence separately from remediation routing.
+- [Phase 01]: [Phase 01-35]: Use isolated surviving mutations to terminally confirm assertion-strength gaps despite green direct coverage.
+- [Phase 01]: [Phase 01-35]: Keep evidence status independent from remediation routing for root-index and shared-concern claims.
 
 ### Pending Todos
 
@@ -545,7 +548,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-34-PLAN.md
+**Stopped at:** Completed 01-35-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -554,7 +557,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T00:42:25.000Z
+Last session: 2026-09-05T00:50:19.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded

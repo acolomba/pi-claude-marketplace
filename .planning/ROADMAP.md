@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 34/69 plans executed
+**Plans:** 35/69 plans executed
 
 **Success Criteria**:
 
@@ -119,7 +119,7 @@ Plans:
 - [x] 01-32-PLAN.md — Individually revalidate corpus path 054 into one bounded exclusive shard
 - [x] 01-33-PLAN.md — Individually revalidate corpus paths 055-056 into one bounded exclusive shard
 - [x] 01-34-PLAN.md — Individually revalidate corpus paths 057-058 into one bounded exclusive shard
-- [ ] 01-35-PLAN.md — Individually revalidate corpus paths 059-060 into one bounded exclusive shard
+- [x] 01-35-PLAN.md — Individually revalidate corpus paths 059-060 into one bounded exclusive shard
 - [ ] 01-36-PLAN.md — Individually revalidate corpus path 061 into one bounded exclusive shard
 - [ ] 01-37-PLAN.md — Individually revalidate corpus paths 062-063 into one bounded exclusive shard
 - [ ] 01-38-PLAN.md — Individually revalidate corpus paths 064-065 into one bounded exclusive shard
