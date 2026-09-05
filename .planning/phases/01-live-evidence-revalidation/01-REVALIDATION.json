@@ -56487,7 +56487,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -56501,12 +56501,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: enableRowDependencies lacks single-flag cases, so swapped or dropped guards may survive. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/plugin/shared.test.ts",
+        "exitCode": 0,
+        "observed": "After explicit operator authorization, a case-owned repository copy changed the stagedMcpServers guard to stagedAgents. The owner test still exited 0, so the swapped guard survived. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated mutation proves the owner test cannot distinguish the MCP flag from the agents flag.",
+      "destination": "Phase 2 should add independent agents-only and MCP-only cases for enableRowDependencies."
     },
     {
       "id": "OPS-F02",
@@ -56670,7 +56671,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -56684,19 +56685,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: clone-cache re-export test checks a function name instead of binding identity. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/plugin/clone-cache.test.ts",
+        "exitCode": 0,
+        "observed": "After explicit operator authorization, a case-owned repository copy replaced the resolveGitSubdirRoot re-export with a same-named delegating wrapper. The owner test still exited 0, so broken binding identity survived. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated mutation proves the owner test checks a function name but does not protect the re-export's binding identity.",
+      "destination": "Phase 2 should compare canonicalCloneUrl and resolveGitSubdirRoot with their source bindings by strict identity."
     },
     {
       "id": "OPS-F09",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-009"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -56710,19 +56712,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: clone-cache uses fragment assertions where exact clone paths are computable. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='PURL-02/04: materializePluginClone clones into staging, checks out the pin, returns a plugin-clones path' <case-owned-copy>/tests/orchestrators/plugin/clone-cache.test.ts",
+        "exitCode": 0,
+        "observed": "After explicit operator authorization, a case-owned repository copy keyed materializePluginClone with the suffixed network URL instead of the canonical clone URL. The cited fragment-assertion case still exited 0, so the wrong cache key survived. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated mutation proves the cited case accepts a path fragment under plugin-clones without proving that the exact canonical clone URL and pin produced the cache key.",
+      "destination": "Phase 2 should compare cloneRoot with the exact locations.pluginCloneDir(pluginCloneKey(canonicalUrl, pin)) result."
     },
     {
       "id": "OPS-F10",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -56736,19 +56739,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: clone-cache warm-mirror cases use loose positive and negative call assertions. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubClone rather than short-circuiting' <case-owned-copy>/tests/orchestrators/plugin/clone-cache.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy duplicated the warm-mirror refreshGitHubClone call. The cited case still exited 0, so its positive fetch-count assertion did not reject the extra refresh. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated mutation proves the warm-mirror case permits multiple refresh fetches where exactly one additional refresh is expected.",
+      "destination": "Phase 2 should replace the loose positive fetch-count assertion with an exact hand-written fetch call log."
     },
     {
       "id": "OPS-F11",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-011"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -56762,12 +56766,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: same-repository seed case does not prove once-only behavior or manifest order. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='SEED-01/03: same-repository git source kinds seed once in manifest order and unrelated kinds stay cold' <case-owned-copy>/tests/orchestrators/plugin/clone-cache.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy removed seedOnePluginMirror's warm-cache short-circuit. The cited same-repository seed case still exited 0, so it did not prove once-only seeding. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated mutation proves the case's filesystem end-state assertions do not detect repeated same-repository seed attempts.",
+      "destination": "Phase 2 should inject recording Git operations or another explicit call-order seam and assert the exact once-only manifest-order behavior."
     },
     {
       "id": "OPS-F12",
@@ -57249,7 +57254,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -57263,19 +57268,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: swapState-version-advanced fixture cannot reach an update and its assertions do not discriminate the named behavior. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='swapState-version-advanced: version advanced during fetch -> update runs against newer fromVersion' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy changed the fetch-side-effect fixture to keep hello at 0.0.9 instead of advancing it to 0.0.10. The case still exited 0, proving its assertions do not establish the version-advance behavior named by the test. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated fixture mutation proves the case passes when its defining state transition never occurs, consistent with the missing plugin tree causing a baseline candidate decline.",
+      "destination": "Phase 2 should create a real installable plugin tree and assert the exact updated row plus the persisted 1.0.0 version."
     },
     {
       "id": "OPU-F02",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -57289,12 +57295,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: swapState-mp-gone does not distinguish marketplace removal from the fixture baseline skip. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> graceful skipped outcome' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy removed the fetch-side-effect write that deleted the marketplace. The named marketplace-gone case still exited 0 against the fixture's baseline non-installable skip, so its assertions do not distinguish the removal path. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "The isolated fixture mutation proves the test passes when the marketplace is never removed.",
+      "destination": "Phase 2 should byte-pin the not-in-manifest row and warning severity so the removal path differs from the fixture's no-longer-installable baseline."
     },
     {
       "id": "OPU-F03",
@@ -57353,7 +57360,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-005"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -57367,12 +57374,14 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: notifyDirectFailure subject names are not pinned for sync-clone and phase-2 arms. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "tool": "Node.js test runner against a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='syncClone-fail|classifies .* marketplace refresh|manifest-load-fail|a later marketplace removed during an earlier refresh aborts before its own sync' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Swapping the direct-failure subject inputs (sync-clone pluginName from marketplace to plugin, and phase-2 pluginName from plugin to marketplace) survived all cited sync-clone, generated marketplace-refresh, manifest-load, and later-marketplace-removal cases. The focused runner exited 0."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "A bounded mutation of the two direct-failure subject inputs survived the cited owner cases, confirming that those assertions do not discriminate the expected subject name.",
+      "destination": "Phase 2 should pin the expected notifyDirectFailure subject for the sync-clone and phase-2 failure arms."
     },
     {
       "id": "OPU-F06",
@@ -57665,9 +57674,9 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-017"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "duplicate",
       "route": "Phase 2",
-      "duplicateOf": null,
+      "duplicateOf": "OPU-B-F18",
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
@@ -57679,12 +57688,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion arrangement for: dropCache-fail assertions do not discriminate completion-cache invalidation. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='dropCache-fail: cache path is a directory -> notifyWarning emitted after successful update' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "This first-pass claim is the same dropPluginCompletionCache deletion weakness independently recorded by OPU-B-F18. Under standing operator authorization, OPU-B-F18's case-owned-copy deletion probe exited 0 against this exact named test, so no second identical mutation run was needed."
       },
-      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
-      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+      "rationale": "This independently enumerated claim has the same current source, test, mutation, and repair as OPU-B-F18.",
+      "destination": "Apply the OPU-B-F18 repair."
     },
     {
       "id": "OPU-F18",
@@ -58081,7 +58091,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58095,19 +58105,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The --local write-back case never reads the local file and cannot distinguish a missing write-back. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='WB-01: --local update targets the local file; base file untouched' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy hardcoded finalizeUpdateRecord's write-back target to the base config by replacing local: args.local === true with local: false. The cited --local case still exited 0, so it did not detect the missing local-file write-back. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The --local write-back case never reads the local file and cannot distinguish a missing write-back.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the case's base-file immutability assertion does not establish that --local created or updated the local config file.",
+      "destination": "Phase 2 should read claude-plugins.local.json after the update and compare its complete parsed content with a hand-written expected object."
     },
     {
       "id": "OPU-B-F02",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58121,19 +58132,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Both clone-GC swallow cases cannot distinguish a swallowed post-commit failure from the outer direct-failure notification. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='a post-commit clone cleanup failure preserves the successful update|a disabled pin refresh swallows post-commit clone cleanup failure' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy removed both post-commit clone-GC catch blocks, allowing cleanup failures to reach the outer direct-failure notifier. Both cited names completed with exit 0, so their count-only notification assertions did not distinguish swallowed cleanup failures from direct failures. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Both clone-GC swallow cases cannot distinguish a swallowed post-commit failure from the outer direct-failure notification.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves both cleanup-failure cases observe the committed state and notification count but not whether cleanup was swallowed.",
+      "destination": "Phase 2 should assert the complete success notification body and severity in both clone-GC failure cases."
     },
     {
       "id": "OPU-B-F03",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-003"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58147,19 +58159,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The LIFE-01 trio does not assert state-record hook resources or hookEntries. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='LIFE-01 (update): version A->B (both ship hooks)|LIFE-01 (update): version A (with hooks) -> version B (no hooks)|LIFE-01 (update): version A (no hooks) -> version B (with hooks)' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy forced sRecord.resources.hooks to retain the plugin even when the updated version declared no hooks. All three cited LIFE-01 names completed with exit 0, so their file assertions did not detect the wrong persisted hook-resource state. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The LIFE-01 trio does not assert state-record hook resources or hookEntries.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the LIFE-01 update cases observe hooks files but not the corresponding persisted resource record.",
+      "destination": "Phase 2 should reload state.json and assert exact resources.hooks and hookEntries values for all three hooks lifecycle transitions."
     },
     {
       "id": "OPU-B-F04",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-004"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58173,19 +58186,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The LIFE-01 removal case does not prove that the routing cache was emptied. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes the stale hooks file' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy guarded removePluginConfigFromCache behind hooksConfigPath being present, leaving stale routing state when hooks disappeared. The cited removal case still exited 0, so it did not prove that routing state was emptied. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The LIFE-01 removal case does not prove that the routing cache was emptied.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the hooks-file removal assertion does not observe the module-global routing cache's stale entry.",
+      "destination": "Phase 2 should seed the prior hook routing entry and assert the exact empty routing bucket after an update drops hooks."
     },
     {
       "id": "OPU-B-F05",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-005"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58199,19 +58213,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The S5 invalid-config pair does not pin notification count, order, or severity. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='S5: update success + invalid (base|local) config write-back names only its basename' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy changed the invalid-config notification severity from error to warning. Both generated S5 cases completed with exit 0, so their joined-message and lower-bound-count assertions did not pin notification severity. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The S5 invalid-config pair does not pin notification count, order, or severity.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the S5 pair does not observe a contract-significant notification attribute while also using only a lower-bound count and order-insensitive joined text.",
+      "destination": "Phase 2 should assert exactly two notifications and compare each notification's ordered message and severity independently."
     },
     {
       "id": "OPU-B-F06",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-006"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58225,19 +58240,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: FORCE-04 can pass vacuously when no notification is emitted. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='FORCE-04: the force-degrade update path emits no warning severity and no `Warning:` summary' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy removed the direct update cascade notification call. FORCE-04 still exited 0 with no notification emitted, confirming that its negative assertions pass vacuously. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: FORCE-04 can pass vacuously when no notification is emitted.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves FORCE-04 does not establish that the expected success notification exists.",
+      "destination": "Phase 2 should assert exactly one notification before checking its severity and message."
     },
     {
       "id": "OPU-B-F07",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58251,19 +58267,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: WR-08 omits the positive up-to-date row assertion carried by WR-02. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lists' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy changed the unchanged-row reason from up-to-date to already disabled. WR-08 still exited 0 because it asserted only one notification and the absence of lock-held or failed text. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: WR-08 omits the positive up-to-date row assertion carried by WR-02.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves WR-08 does not establish the positive up-to-date row contract.",
+      "destination": "Phase 2 should add the sibling's positive up-to-date row assertion to WR-08."
     },
     {
       "id": "OPU-B-F08",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58277,19 +58294,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Two resolvedSource assertions use a substring although the exact path is computable. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='D-UPD: update on a disabled plugin refreshes version pin BUT keeps resources empty|ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stages nothing' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy persisted a resolvedSource under a deliberately wrong marketplace directory while retaining the plugin name. Both cited disabled-update cases completed with exit 0, so their includes(\"hello\") checks accepted the wrong exact path. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Two resolvedSource assertions use a substring although the exact path is computable.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves both substring checks fail to establish the exact refreshed plugin root.",
+      "destination": "Phase 2 should compare resolvedSource with path.join(seeded.marketplaceRoot, \"plugins\", \"hello\") in both cases."
     },
     {
       "id": "OPU-B-F09",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-009"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58303,19 +58321,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Four degraded compatibility assertions check only a nonzero unsupported length. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='WR-04: a targeted update with NO partial flag reaches the disabled-record short-circuit and refreshes the pin|WR-01: an explicit --partial on the same clean disabled record consents to the degrade and re-pins it|ENBL-09: the disabled-record refresh derives compatibility.installable from the resolution -- degraded stays degraded|D-99-05a: an unsupported kind gained under an unchanged version degrades the refreshed record' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy duplicated every unsupported compatibility entry during disabled-record refresh. All four cited degraded cases completed with exit 0, so their nonzero-length checks accepted an incorrect list. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Four degraded compatibility assertions check only a nonzero unsupported length.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the four degraded-arm assertions establish only non-emptiness, not exact compatibility content or order.",
+      "destination": "Phase 2 should replace all four length checks with exact deep comparisons against the expected unsupported-kind sequence."
     },
     {
       "id": "OPU-B-F10",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58329,19 +58348,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Six git-source and force cases use unanchored message fragments instead of whole stable output. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='XSURF-03 / FORCE-03|UGRM-02 / SEV-01|UGRM-02 / FSTAT-07|MIRR-01 / NFR-3 vanished repo|PURL-03 pinned git-subdir update whose declared path is ABSENT|MIRR-01 unpinned git-subdir update whose declared path is ABSENT' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy corrupted rendered marketplace labels in both cascade and direct-failure messages. All six cited names completed with exit 0, confirming their message fragments do not pin the complete stable output. A preliminary duplicate-emission mutant exited 1 because FORCE-03 now pins notification count, so that narrower historical subclaim is not retained. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Six git-source and force cases use unanchored message fragments instead of whole stable output.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation confirms the six cases accept corrupted full messages, while the killed preliminary mutant narrows the finding by showing FORCE-03 already pins count and severity.",
+      "destination": "Phase 2 should replace the six fragment-based message checks with exact ordered notification comparisons, preserving existing count and severity assertions where present."
     },
     {
       "id": "OPU-B-F11",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-011"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58355,12 +58375,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: One clone-GC assertion uses oldCloneRoot ?? empty string without first proving the root exists. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy stopped the test fixture from returning its created oldCloneRoot. The cited case still exited 0 because pathExists(seeded.oldCloneRoot ?? \"\") treated the missing value as an absent path. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: One clone-GC assertion uses oldCloneRoot ?? empty string without first proving the root exists.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated fixture-rot mutation proves the old-clone assertion can pass without checking any old clone path.",
+      "destination": "Phase 2 should assert oldCloneRoot is defined before asserting that the path no longer exists."
     },
     {
       "id": "OPU-B-F12",
@@ -58394,7 +58415,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-013"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58408,12 +58429,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The pinned-auth case observes clone auth but not the stated pin-resolution auth contract. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='plugin update authentication: a pinned provider update threads auth to the clone' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy removed auth from probePinned's resolvePluginPin call while retaining auth on materializePluginClone. The cited pinned-provider case still exited 0, so it did not observe the stated pin-resolution auth contract. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The pinned-auth case observes clone auth but not the stated pin-resolution auth contract.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the case pins only clone authorization even though the production comment states that authorization reaches both operations.",
+      "destination": "Phase 2 should assert the captured resolvePluginPin authorization bundle or narrow the production contract if that argument is intentionally inert."
     },
     {
       "id": "OPU-B-F14",
@@ -58525,7 +58547,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-018",
         ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C006"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58539,12 +58561,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The dropCache-fail case does not discriminate deletion of the completion-cache drop call. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='dropCache-fail: cache path is a directory -> notifyWarning emitted after successful update' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy deleted the completion-cache drop call from the successful update path. The cited dropCache-fail case still exited 0, so its assertions did not establish that completion-cache cleanup was attempted. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The dropCache-fail case does not discriminate deletion of the completion-cache drop call.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the named cleanup-failure case is insensitive to removal of the feature it names.",
+      "destination": "Phase 2 should rename the case to the actual silent-swallow contract, assert exact notifications, and observe that completion-cache cleanup was attempted through a narrow seam."
     },
     {
       "id": "OPU-B-F19",
@@ -58552,7 +58575,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-019",
         ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58566,12 +58589,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: abortHandles and abortPartialHandles are asserted only through state consequences, not staging cleanup. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='prepare-handles-fail: MCP collision|ST-9: a version that advanced under an in-flight update aborts on the intent-mark|ST-9: a record uninstalled under an in-flight update aborts instead of resurrecting it' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy replaced both abortPartialHandles and abortHandles with no-op empty-result implementations. All three cited failure and stale-intent cases completed with exit 0, so their state assertions did not detect leaked staging trees. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: abortHandles and abortPartialHandles are asserted only through state consequences, not staging cleanup.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the only cited abort-helper cases observe state outcomes but not the helpers' filesystem cleanup contract.",
+      "destination": "Phase 2 should add one explicit staging-directory cleanup assertion for abortPartialHandles and one for abortHandles."
     },
     {
       "id": "OPU-B-F20",
@@ -58579,12 +58603,15 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-020",
         ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
         }
       ],
       "testRefs": [
@@ -58593,12 +58620,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The warm SHA-pinned cache case observes cloneCalls only and weakly accepts two rendered outcomes. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy added a spurious gitOps.fetch call to materializePluginClone's warm-cache return path without adding a clone. The cited pinned-unchanged case still exited 0 because it observed cloneCalls only. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The warm SHA-pinned cache case observes cloneCalls only and weakly accepts two rendered outcomes.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the case does not establish that the warm SHA-pinned path makes zero Git operations beyond clone.",
+      "destination": "Phase 2 should assert the complete Git operation log is empty and replace the disjunctive message regex with one exact notification value."
     },
     {
       "id": "OPU-B-F21",
@@ -58767,7 +58795,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-b.md#CLAIM-027"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58781,12 +58809,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: nextDisabledPin's resolvedSha fallback for a disabled git-to-path transition has no discriminating case. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy replaced nextDisabledPin's resolvedSha ?? shaFallback projection with bare resolvedSha. The complete update owner suite exited 0, confirming that no current case discriminates the disabled git-to-path fallback behavior. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: nextDisabledPin's resolvedSha fallback for a disabled git-to-path transition has no discriminating case.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The complete owner suite surviving the isolated mutation proves the fallback branch lacks a discriminating case.",
+      "destination": "Phase 2 should seed a disabled record carrying a prior git resolvedSha over a current path entry and assert that an unchanged projection does not rewrite state."
     },
     {
       "id": "OPU-B-F28",
@@ -58978,7 +59007,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -58992,19 +59021,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The disabled-pin acceptance race asserts notification count but not success severity/body or unchanged updatedAt. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='a disabled update accepts a concurrent writer that already stored the next pin' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy removed refreshDisabledRecord's projection-equality early return, forcing an unnecessary identical rewrite after the concurrent writer had already stored the next pin. The cited race case still exited 0 because it did not assert updatedAt or the exact success row. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The disabled-pin acceptance race asserts notification count but not success severity/body or unchanged updatedAt.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the acceptance-race case does not distinguish an idempotent acceptance from an unnecessary post-race rewrite.",
+      "destination": "Phase 2 should assert the exact success notification and prove updatedAt and state bytes remain unchanged after the competing writer wins."
     },
     {
       "id": "OPU-C-F02",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59018,19 +59048,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Both enumerate-failure scope fallbacks are tested only on their default side. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='WR-05: a bare-form update whose scope state is unreadable|a marketplace target with unreadable state reports its marketplace identity|a plugin target with unreadable state reports its plugin identity' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy hardcoded handleEnumerateFailure to project scope and notifyBareFormEnumerateFailure to user scope, deleting both explicit-scope pass-throughs. All three cited enumerate-failure cases completed with exit 0 because they exercise only those default-equivalent values. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Both enumerate-failure scope fallbacks are tested only on their default side.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves neither emitter has a case that distinguishes its explicit non-default scope from its fallback.",
+      "destination": "Phase 2 should add a user-scoped targeted enumerate failure and a project-scoped bare-form enumerate failure."
     },
     {
       "id": "OPU-C-F03",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-003"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59044,19 +59075,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Two WR-12 sibling cases omit the notification-count assertion. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='WR-12: an update whose new source command will not parse|WR-12: an update that degrades BOTH kinds' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy duplicated the direct update cascade notification. Both cited WR-12 siblings completed with exit 0 because they inspect only notifications[0] and never pin the array length. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Two WR-12 sibling cases omit the notification-count assertion.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the two WR-12 siblings allow a second spurious notification.",
+      "destination": "Phase 2 should add the first sibling's exact notification-count assertion to both cases."
     },
     {
       "id": "OPU-C-F04",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-004"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59070,24 +59102,28 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The D-03 fail-continue case omits count, error severity, and rollback-partial token assertions. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='D-03 fail-continue: a hooks write that cannot land is aggregated, not thrown past the other bridges' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy replaced the phase-3 aggregate's rollback partial reason override with permission denied. The cited D-03 case still exited 0, so its fragments did not pin the rollback-partial token. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The D-03 fail-continue case omits count, error severity, and rollback-partial token assertions.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated mutation proves the D-03 fail-continue case does not establish the reason token used for the aggregated rollback failure.",
+      "destination": "Phase 2 should add exact notification count, error severity, and rollback-partial row assertions matching the direct-path siblings."
     },
     {
       "id": "OPU-C-F05",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-005"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
         }
       ],
       "testRefs": [
@@ -59096,21 +59132,22 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: Rare failure and race cases use independent unanchored fragments instead of a stable full prefix. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='WR-05: a bare-form update whose scope state is unreadable|a marketplace target with unreadable state|a plugin target with unreadable state|D-03 fail-continue|ST-9: a version that advanced|ST-9: a record uninstalled|a marketplace removed under an in-flight update|a disabled update does not recreate a concurrently removed marketplace|a disabled update does not recreate a concurrently removed plugin' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy reversed each cascade block's stable marketplace-header and plugin-row order. Every cited rare-failure and race case completed with exit 0, confirming their independent fragments do not pin the stable prefix order. A preliminary row-name corruption mutant was killed by several cases and was discarded before this narrower probe. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: Rare failure and race cases use independent unanchored fragments instead of a stable full prefix.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "The isolated order mutation proves the cases accept structurally garbled output even where individual row fragments are present.",
+      "destination": "Phase 2 should pin each stable header-and-row prefix and reserve regex matching only for Node-version-dependent cause tails."
     },
     {
       "id": "OPU-C-F06",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-006"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "duplicate",
       "route": "Phase 2",
-      "duplicateOf": null,
+      "duplicateOf": "OPU-B-F18",
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
@@ -59122,21 +59159,22 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The dropCache-fail case does not discriminate deletion of the completion-cache drop call. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='dropCache-fail: cache path is a directory -> notifyWarning emitted after successful update' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "The current claim is the same dropPluginCompletionCache deletion weakness independently recorded by OPU-B-F18. Under standing operator authorization, OPU-B-F18's case-owned-copy deletion probe exited 0 against this exact named test, so no second identical mutation run was needed."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The dropCache-fail case does not discriminate deletion of the completion-cache drop call.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "This independently enumerated claim has the same current source, test, mutation, and repair as OPU-B-F18.",
+      "destination": "Apply the OPU-B-F18 repair."
     },
     {
       "id": "OPU-C-F07",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "duplicate",
       "route": "Phase 2",
-      "duplicateOf": null,
+      "duplicateOf": "OPU-B-F19",
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
@@ -59148,24 +59186,28 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: abortHandles and abortPartialHandles are not observed through staging-directory cleanup. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='a marketplace removed under an in-flight update is not resurrected' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "Under standing operator authorization, a case-owned repository copy replaced abortHandles with a no-op and the fourth case identified by this report still exited 0. Together with OPU-B-F19's no-op probes for the other abort cases, this confirms the same staging-cleanup observation gap. The copy was removed and live source and test files remained unchanged."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: abortHandles and abortPartialHandles are not observed through staging-directory cleanup.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "This independently enumerated claim has the same abort-helper cleanup root cause and repair as OPU-B-F19 while adding a fourth surviving case.",
+      "destination": "Apply the OPU-B-F19 staging-cleanup assertion repair, including the fourth marketplace-removal case as coverage evidence."
     },
     {
       "id": "OPU-C-F08",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-c.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "duplicate",
       "route": "Phase 2",
-      "duplicateOf": null,
+      "duplicateOf": "OPU-B-F20",
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
         }
       ],
       "testRefs": [
@@ -59174,12 +59216,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Current inspection retains the cited assertion or seam shape: The warm SHA-pinned cache proof observes cloneCalls only. D-11 requires an isolated surviving mutation for terminal confirmation; no live-tree mutation was performed, so the claim remains explicitly inconclusive."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded' <case-owned-copy>/tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "The current claim is the same warm-cache Git-call gap independently recorded by OPU-B-F20. Under standing operator authorization, OPU-B-F20's case-owned-copy spurious-fetch mutation exited 0 against this exact named test, so no second identical mutation run was needed."
       },
-      "rationale": "The historical test-strength claim remains plausible and traceable, but static inspection alone cannot satisfy D-11: The warm SHA-pinned cache proof observes cloneCalls only.",
-      "destination": "Phase 2 should run the report's proposed mutation in an isolated repository-local copy before accepting or rejecting the test change."
+      "rationale": "This independently enumerated claim has the same current source, test, mutation, and repair as OPU-B-F20.",
+      "destination": "Apply the OPU-B-F20 complete Git-call-log repair."
     },
     {
       "id": "OPU-C-F09",
@@ -59498,7 +59541,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59512,19 +59555,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "The two Pick arms and absent widening negatives remain; D-11 requires an isolated surviving compile mutation for terminal test-strength proof."
+        "method": "surviving-mutation",
+        "command": "<case-owned-copy>/node_modules/.bin/tsc --noEmit --allowImportingTsExtensions --exactOptionalPropertyTypes --module NodeNext --moduleResolution NodeNext --noUncheckedIndexedAccess --strict --target ES2022 --skipLibCheck --ignoreConfig tests/orchestrators/reconcile/apply-outcomes.test.ts",
+        "exitCode": 0,
+        "observed": "Widening PluginInstalledOutcome and PluginBackfilledOutcome from their two-member Pick types to the full EnableDegradationSignals type produced no diagnostics. The focused type-check exited 0."
       },
-      "rationale": "The historical widening gap remains plausible but static inspection cannot terminally confirm a test-strength claim.",
-      "destination": "Phase 2 should run the two isolated widening mutations, then add negatives if they survive."
+      "rationale": "The surviving compile mutation confirms that the type tests do not pin the two Pick arms against widening.",
+      "destination": "Phase 2 should add negative type assertions for the excluded degradation signals."
     },
     {
       "id": "ORA-F02",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59538,19 +59582,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current type-test inspection",
-        "observed": "PerEntryOutcome still has sixteen members with only per-variant checks and one unknown-kind negative; no isolated membership mutation was run."
+        "method": "surviving-mutation",
+        "command": "<case-owned-copy>/node_modules/.bin/tsc --noEmit --allowImportingTsExtensions --exactOptionalPropertyTypes --module NodeNext --moduleResolution NodeNext --noUncheckedIndexedAccess --strict --target ES2022 --skipLibCheck --ignoreConfig tests/orchestrators/reconcile/apply-outcomes.test.ts",
+        "exitCode": 0,
+        "observed": "Two isolated variants both produced no diagnostics: adding mutation-extra to PerEntryOutcome, and removing InvalidBlockOutcome. The focused type-check exited 0 for each variant."
       },
-      "rationale": "D-11 requires a surviving mutation before the claimed closed-union weakness is terminal.",
-      "destination": "Phase 2 should mutate membership in an isolated copy and add a complete Record pin if it survives."
+      "rationale": "Both membership mutations survived, confirming that the type tests do not close the PerEntryOutcome union in either direction.",
+      "destination": "Phase 2 should add a complete Record pin for PerEntryOutcome membership."
     },
     {
       "id": "ORA-F03",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-003"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59570,11 +59615,12 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph call-path and current source/test inspection",
-        "observed": "Marketplace source claiming still operates only at the marketplace tier; plugin classification still uses declared keys versus recorded manifest names, and no differing-name plugin fixture exists. A failing behavioral probe was not run, so D-11 keeps the production-defect verdict inconclusive."
+        "method": "behavioral-probe",
+        "command": "node --input-type=module -e '<alias-plan invariant probe>'",
+        "exitCode": 1,
+        "observed": "With a recorded marketplace named tools, an equal-source declared alias named alias, and declared plugin fmt@alias, planReconcile produced marketplacesToAdd=[], pluginsToInstall=[{scope:\"project\",plugin:\"fmt\",marketplace:\"alias\",configSource:\"base\"}], and impossibleTargets=[\"alias\"]. The planned install targets a marketplace that is neither recorded nor planned for add."
       },
-      "rationale": "The alias/plugin dead-end premise survives current inspection, but its resolution changes product behavior and requires the planned operator choice.",
+      "rationale": "The bounded invariant probe reproduces the alias/plugin dead end. Its resolution changes product behavior and retains the operator-decision route.",
       "destination": "Decide whether plugin keys resolve through claims, records use declared keys, or aliases are rejected before Phase 2."
     },
     {
@@ -59660,7 +59706,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59674,19 +59720,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current case and guard inspection",
-        "observed": "The cited case still conflates declared-name and different-source skip reasons; D-11 requires the isolated deletion mutation for terminal proof."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/plan.test.ts",
+        "exitCode": 0,
+        "observed": "Removing declared[name] !== undefined from the source-claim guard survived the complete plan owner suite, which exited 0."
       },
-      "rationale": "The case premise remains weak, but no current surviving mutation was executed.",
-      "destination": "Phase 2 should run the guard-deletion mutation and add the differing declared-name case if it survives."
+      "rationale": "The surviving guard deletion confirms that the planner tests do not discriminate the declared-name half of the source-claim rule.",
+      "destination": "Phase 2 should add the differing declared-name case."
     },
     {
       "id": "ORA-F08",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59700,19 +59747,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current fast-path and test inspection",
-        "observed": "Disable appears only beside enable in the present planner cases, but D-11 requires an isolated totalDisables mutation for terminal proof."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/plan.test.ts",
+        "exitCode": 0,
+        "observed": "Removing totalDisables === 0 from the empty-plan conjunction survived the complete plan owner suite, which exited 0."
       },
-      "rationale": "The isolated-disable coverage gap remains plausible rather than terminally proven.",
-      "destination": "Phase 2 should mutate the fast-path conjunct and add a disable-only plan case on survival."
+      "rationale": "The surviving fast-path mutation confirms that a disable-only plan is not discriminated.",
+      "destination": "Phase 2 should add a disable-only plan case."
     },
     {
       "id": "ORA-F09",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-009"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59726,19 +59774,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current source/test inspection",
-        "observed": "No current case combines marketplace and plugin diagnostics; an isolated spread-order mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/plan.test.ts",
+        "exitCode": 0,
+        "observed": "Reversing diagnostic concatenation to place plugin diagnostics before marketplace mismatches survived the complete plan owner suite, which exited 0."
       },
-      "rationale": "D-11 leaves this ordering test-strength claim inconclusive without a surviving mutation.",
-      "destination": "Phase 2 should first establish whether planner array order is contractual, then mutate and test it."
+      "rationale": "The surviving order reversal confirms that combined diagnostic order is not discriminated.",
+      "destination": "Phase 2 should establish whether planner diagnostic order is contractual and pin it if so."
     },
     {
       "id": "ORA-F10",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59752,12 +59801,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current push-site and fixture inspection",
-        "observed": "Only marketplace-add has a focused user-scope case; the omnibus remains project scope. No isolated scope-hardcoding mutation was run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/plan.test.ts",
+        "exitCode": 0,
+        "observed": "Hardcoding project scope at every non-add bucket push—remove, mismatch/dangling, install, uninstall, enable, and disable—survived the complete plan owner suite, which exited 0."
       },
-      "rationale": "The six-bucket scope weakness requires surviving mutations under D-11.",
-      "destination": "Phase 2 should run isolated scope mutations and use one user-scope omnibus only for survivors."
+      "rationale": "The surviving scope mutations confirm that the six non-add planner buckets are not pinned for user scope.",
+      "destination": "Phase 2 should add a user-scope omnibus that discriminates all six non-add buckets."
     },
     {
       "id": "ORA-F11",
@@ -59793,12 +59843,15 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-012"
       ],
-      "evidenceStatus": "inconclusive",
-      "route": "Phase 2",
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts"
         }
       ],
       "testRefs": [
@@ -59807,19 +59860,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current assertion inspection",
-        "observed": "The WR-06 assertion still applies Object.keys to optional plugins with ?? {}, so absence and an empty map compare equally; no isolated state-deletion mutation was run."
+        "method": "behavioral-probe",
+        "command": "node <case-owned-copy>/tests/orchestrators/reconcile/apply.test.ts",
+        "exitCode": 1,
+        "observed": "The exact last-plugin marketplace-deletion mutant was killed. After removing the last plugin, the probe conditionally deleted state.marketplaces[marketplace]. Only WR-06 failed: its second apply attempted an unexpected notification and threw TypeError: ctx.ui.notify is not a function at test line 1111."
       },
-      "rationale": "The vacuity is visible, but D-11 requires a surviving mutation for terminal test-strength proof.",
-      "destination": "Phase 2 should mutate last-plugin removal in isolation and replace the assertion with whole marketplace state proof if it survives."
+      "rationale": "Although the local ?? {} assertion is vacuous, WR-06's second-pass silence check detects the marketplace loss, so the historical test-strength claim is stale.",
+      "destination": "Close as stale; no remediation is required for the asserted gap."
     },
     {
       "id": "ORA-F13",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-013"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59833,19 +59887,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current add outcome and fixture inspection",
-        "observed": "All marketplace-add fixtures still make declared and manifest-derived names equal; no isolated result.name-to-op.marketplace mutation was run."
+        "method": "surviving-mutation",
+        "command": "node <case-owned-copy>/tests/orchestrators/reconcile/apply.test.ts",
+        "exitCode": 0,
+        "observed": "Changing the successful marketplace-add outcome from result.name to op.marketplace survived the complete apply owner suite, which exited 0."
       },
-      "rationale": "The CR-01 argument-threading test gap requires a surviving mutation under D-11.",
-      "destination": "Phase 2 should execute the mutation and add a differing-name convergence fixture if it survives."
+      "rationale": "The surviving argument-thread mutation confirms that equal-name fixtures conceal which marketplace name is recorded.",
+      "destination": "Phase 2 should add a differing-name convergence fixture."
     },
     {
       "id": "ORA-F14",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-014"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -59859,12 +59914,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current toggle-loop and race-case inspection",
-        "observed": "The skipped toggle result is still intentionally dropped and no case drives that branch; no isolated mutation was run."
+        "method": "surviving-mutation",
+        "command": "node <case-owned-copy>/tests/orchestrators/reconcile/apply.test.ts",
+        "exitCode": 0,
+        "observed": "Routing every non-success toggle status, including skipped, through the failed branch survived the complete apply owner suite; no case exercised the skipped arm."
       },
-      "rationale": "D-11 requires a surviving mutation before terminally calling the reachable branch untested.",
-      "destination": "Phase 2 should add a narrow state-read seam or isolated competitor case after mutation proof."
+      "rationale": "The surviving branch mutation confirms that the reachable skipped-toggle result is unowned.",
+      "destination": "Phase 2 should add a narrow state-read seam or isolated competitor case for the skipped toggle arm."
     },
     {
       "id": "ORA-F15",
@@ -60193,7 +60249,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-026"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60207,12 +60263,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "Current pristine-gate fixture inspection",
-        "observed": "No focused case establishes a local config without a base config at the pristine scope gate; no isolated right-disjunct mutation was run."
+        "method": "surviving-mutation",
+        "command": "node <case-owned-copy>/tests/orchestrators/reconcile/apply.test.ts",
+        "exitCode": 0,
+        "observed": "Replacing the local-config half of the pristine gate with false survived the complete apply owner suite, which exited 0."
       },
-      "rationale": "This low-value test-strength observation remains plausible but non-terminal under D-11.",
-      "destination": "Phase 2 may close it by adjusting an existing arrange after a surviving mutation."
+      "rationale": "The surviving gate mutation confirms that a local config without a base config is not discriminated.",
+      "destination": "Phase 2 should adjust an existing arrange to pin the local-only pristine gate."
     },
     {
       "id": "ORA-F27",
@@ -60481,7 +60538,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60495,19 +60552,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Will-enable/disable scope brackets are not discriminated by current cases"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/reconcile.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "Removing renderScopeBracket from the pending enable and disable renderers survived the complete messaging owner suite, which exited 0."
       },
-      "rationale": "Will-enable/disable scope brackets are not discriminated by current cases; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving renderer mutation confirms that pending enable/disable scope brackets are not discriminated.",
+      "destination": "Phase 2 should pin both pending scope brackets."
     },
     {
       "id": "ORN-F002",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60521,12 +60579,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Soft-dependency independence titles exceed what their fixtures discriminate"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/reconcile.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "Swapping the agents and MCP dependency predicates in installedLikeRow survived the complete messaging owner suite, which exited 0."
       },
-      "rationale": "Soft-dependency independence titles exceed what their fixtures discriminate; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving predicate swap confirms that the soft-dependency fixtures do not discriminate independent agents and MCP rendering.",
+      "destination": "Phase 2 should add asymmetric dependency fixtures."
     },
     {
       "id": "ORN-F003",
@@ -60585,7 +60644,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-005"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60599,12 +60658,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "recordedMarketplaces scope-key behavior lacks a discriminating cross-scope case"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/pending.test.ts",
+        "exitCode": 0,
+        "observed": "Removing scope from recordedMarketplaces set and get keys survived the complete pending owner suite, which exited 0."
       },
-      "rationale": "recordedMarketplaces scope-key behavior lacks a discriminating cross-scope case; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving key mutation confirms that recorded marketplace identity is not pinned across scopes.",
+      "destination": "Phase 2 should add a cross-scope recorded-marketplace case."
     },
     {
       "id": "ORN-F006",
@@ -60665,7 +60725,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60679,12 +60739,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "resolvePendingForceInstalls multi-plan and multi-install accumulation is not mutation-proven"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/reconcile/notify.test.ts",
+        "exitCode": 0,
+        "observed": "Restricting resolution to plans.slice(0, 1) and pluginsToInstall.slice(0, 1) survived the complete notify owner suite, which exited 0."
       },
-      "rationale": "resolvePendingForceInstalls multi-plan and multi-install accumulation is not mutation-proven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving truncation confirms that multi-plan and multi-install accumulation is not discriminated.",
+      "destination": "Phase 2 should add accumulation cases spanning multiple plans and installs."
     },
     {
       "id": "ORN-F009",
@@ -60717,7 +60778,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60731,12 +60792,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Frozen-array immutability is not asserted"
+        "method": "surviving-mutation",
+        "command": "node <case-owned-copy>/tests/orchestrators/reconcile/notify.test.ts",
+        "exitCode": 0,
+        "observed": "Replacing all three Object.freeze calls with identity returns survived the complete notify owner suite; all 77 tests across four suites passed."
       },
-      "rationale": "Frozen-array immutability is not asserted; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving freeze removals confirm that the promised array immutability is not asserted.",
+      "destination": "Phase 2 should assert the three returned arrays are frozen."
     },
     {
       "id": "ORN-F011",
@@ -60850,7 +60912,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-015",
         ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -60864,12 +60926,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "The unavailable backfill verdict remains reachable without a focused benign-skip proof"
+        "method": "surviving-mutation",
+        "command": "node <case-owned-copy>/tests/orchestrators/reconcile/backfill.test.ts",
+        "exitCode": 0,
+        "observed": "Splitting the combined unresolved guard, retaining false for resolved undefined, and returning true only for unavailable state survived the complete backfill owner suite; all 28 tests passed."
       },
-      "rationale": "The unavailable backfill verdict remains reachable without a focused benign-skip proof; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The isolated unavailable-arm mutation confirms that the benign unavailable backfill verdict lacks focused proof.",
+      "destination": "Phase 2 should add a focused unavailable-state benign-skip case."
     },
     {
       "id": "ORN-F016",
@@ -61338,7 +61401,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61352,19 +61415,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Explicit user-only scope fanout is not discriminated"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/scope-fanout.test.ts",
+        "exitCode": 0,
+        "observed": "Changing explicit-scope fanout to always use project scope survived the complete owner suite, which exited 0."
       },
-      "rationale": "Explicit user-only scope fanout is not discriminated; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving scope mutation confirms that explicit user-only fanout is not discriminated.",
+      "destination": "Phase 2 should add an explicit user-only fanout case."
     },
     {
       "id": "ORR-F002",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61378,12 +61442,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "loadStateForScope verbatim error propagation lacks a focused case"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/edge-deps.test.ts",
+        "exitCode": 0,
+        "observed": "Catching loadState rejection and returning an empty schema-2 state survived the complete edge-deps owner suite, which exited 0."
       },
-      "rationale": "loadStateForScope verbatim error propagation lacks a focused case; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving fallback mutation confirms that verbatim loadStateForScope error propagation is not pinned.",
+      "destination": "Phase 2 should add a focused loadState rejection case."
     },
     {
       "id": "ORR-F003",
@@ -61416,7 +61481,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-004"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61430,12 +61495,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Installed entries without a manifest version are not mutation-proven"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/edge-deps.test.ts",
+        "exitCode": 0,
+        "observed": "Loosening the upgrade guard from a defined manifest version to any defined manifest entry survived the complete edge-deps owner suite, which exited 0."
       },
-      "rationale": "Installed entries without a manifest version are not mutation-proven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving guard mutation confirms that installed entries without a manifest version are not discriminated.",
+      "destination": "Phase 2 should add a manifest-entry-without-version case."
     },
     {
       "id": "ORR-F005",
@@ -61494,7 +61560,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61508,19 +61574,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Discover single-failure aggregation threshold is not mutation-proven"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/discover.test.ts",
+        "exitCode": 0,
+        "observed": "Changing the discovery failure threshold from greater than zero to greater than three survived the complete discover owner suite, which exited 0."
       },
-      "rationale": "Discover single-failure aggregation threshold is not mutation-proven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving threshold mutation confirms that single-failure aggregation is not pinned.",
+      "destination": "Phase 2 should add a single-discovery-failure aggregation case."
     },
     {
       "id": "ORR-F008",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61534,12 +61601,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Discover sort fixture does not discriminate locale from codepoint order"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/discover.test.ts",
+        "exitCode": 0,
+        "observed": "Replacing localeCompare with raw codepoint comparison survived the complete discover owner suite, which exited 0."
       },
-      "rationale": "Discover sort fixture does not discriminate locale from codepoint order; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving comparator mutation confirms that the sort fixture does not distinguish locale order from codepoint order.",
+      "destination": "Phase 2 should add a locale-discriminating sort fixture."
     },
     {
       "id": "ORR-F009",
@@ -61573,7 +61641,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61587,12 +61655,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "DEFAULT_CREDENTIAL_OPS runtime re-export lacks an identity case"
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/orchestrators/auth-host.test.ts",
+        "exitCode": 0,
+        "observed": "Re-exporting a spread copy of DEFAULT_CREDENTIAL_OPS, preserving shape but changing identity, survived the complete auth-host owner suite, which exited 0."
       },
-      "rationale": "DEFAULT_CREDENTIAL_OPS runtime re-export lacks an identity case; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving identity mutation confirms that the runtime re-export identity is not pinned.",
+      "destination": "Phase 2 should add an identity assertion for DEFAULT_CREDENTIAL_OPS."
     },
     {
       "id": "ORR-F011",
@@ -61730,7 +61799,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-016"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61744,19 +61813,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Two WR-01 never pins remain unproven"
+        "method": "surviving-mutation",
+        "command": "<case-owned-copy>/node_modules/.bin/tsc --noEmit --allowImportingTsExtensions --exactOptionalPropertyTypes --module NodeNext --moduleResolution NodeNext --noUncheckedIndexedAccess --strict --target ES2022 --skipLibCheck --ignoreConfig tests/orchestrators/types.test.ts",
+        "exitCode": 0,
+        "observed": "Widening stagedAgents?: never and stagedMcpServers?: never to optional booleans produced no diagnostics. The focused type-check exited 0."
       },
-      "rationale": "Two WR-01 never pins remain unproven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "The surviving widening confirms that the two WR-01 never pins are not enforced by the type tests.",
+      "destination": "Phase 2 should add negative type assertions for stagedAgents and stagedMcpServers."
     },
     {
       "id": "ORR-F017",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-017"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -61770,12 +61840,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "partialDegrade atomicity and ReinstallSkippedOutcome notes requiredness are incompletely pinned"
+        "method": "surviving-mutation",
+        "command": "<case-owned-copy>/node_modules/.bin/tsc --noEmit --allowImportingTsExtensions --exactOptionalPropertyTypes --module NodeNext --moduleResolution NodeNext --noUncheckedIndexedAccess --strict --target ES2022 --skipLibCheck --ignoreConfig tests/orchestrators/types.test.ts",
+        "exitCode": 0,
+        "observed": "Two isolated variants produced no diagnostics: making partialDegrade.kinds optional, and making ReinstallSkippedOutcome.notes optional. The focused type-check exited 0 for each variant."
       },
-      "rationale": "partialDegrade atomicity and ReinstallSkippedOutcome notes requiredness are incompletely pinned; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
-      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+      "rationale": "Both requiredness mutations survived, confirming incomplete type-test pins for partial degradation and skipped reinstall notes.",
+      "destination": "Phase 2 should add negative type assertions for both required properties."
     },
     {
       "id": "ORR-F018",
@@ -62168,25 +62239,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/config-write-back.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/config-write-back.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "All five config write-back helpers lack a discriminating schemaVersion pin case"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/config-write-back.test.ts",
+        "exitCode": 0,
+        "observed": "Removing all five schemaVersion pins survived the complete config-write-back owner suite; mutation_count=5 and the suite exited 0."
       },
-      "rationale": "All five config write-back helpers lack a discriminating schemaVersion pin case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The five surviving deletions confirm that config write-back schemaVersion output is not pinned.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62194,25 +62267,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/config-write-back.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/config-write-back.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Config write-back tests do not assert caller input remains unmodified"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/config-write-back.test.ts",
+        "exitCode": 0,
+        "observed": "Mutating writeMarketplaceConfigEntry to modify current.marketplaces survived the complete config-write-back owner suite, which exited 0."
       },
-      "rationale": "Config write-back tests do not assert caller input remains unmodified; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving input mutation confirms that caller input immutability is not asserted.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62220,25 +62295,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-003"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/config-write-back.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/config-write-back.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "deletePluginConfigEntry lacks the absent plugins-map case"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/config-write-back.test.ts",
+        "exitCode": 0,
+        "observed": "Changing deletePluginConfigEntry to reject an absent plugins map survived the complete config-write-back owner suite, which exited 0."
       },
-      "rationale": "deletePluginConfigEntry lacks the absent plugins-map case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving guard mutation confirms that the absent plugins-map contract is not discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62246,25 +62323,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-004"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/migrate-config.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/migrate-config.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "migrateFirstRunConfig entryCount does not discriminate the plugin-count term"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/migrate-config.test.ts",
+        "exitCode": 0,
+        "observed": "Removing plugins.length from entryCount survived the complete migrate-config owner suite, which exited 0."
       },
-      "rationale": "migrateFirstRunConfig entryCount does not discriminate the plugin-count term; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving term deletion confirms that the plugin-count contribution is not discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62298,25 +62377,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-006"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/migrate.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/migrate.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Migration tests do not discriminate independent manifestPath and marketplaceRoot fills"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/migrate.test.ts",
+        "exitCode": 0,
+        "observed": "Skipping manifestPath fill whenever marketplaceRoot exists survived the complete migrate owner suite, which exited 0."
       },
-      "rationale": "Migration tests do not discriminate independent manifestPath and marketplaceRoot fills; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving fill mutation confirms that manifestPath and marketplaceRoot migration are not independently discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62324,25 +62405,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/migrate.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/migrate.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Migration tests do not discriminate cross-marketplace mutated accumulation"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/migrate.test.ts",
+        "exitCode": 0,
+        "observed": "Resetting mutated at each marketplace iteration survived the complete migrate owner suite, which exited 0."
       },
-      "rationale": "Migration tests do not discriminate cross-marketplace mutated accumulation; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving reset confirms that cross-marketplace mutation accumulation is not discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62350,25 +62433,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/migrate.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/migrate.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Migration object-guard null and array arms lack discriminating cases"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/migrate.test.ts",
+        "exitCode": 0,
+        "observed": "Removing the mpRaw === null guard survived the complete migrate owner suite, which exited 0."
       },
-      "rationale": "Migration object-guard null and array arms lack discriminating cases; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving guard deletion confirms that the null arm of the migration object guard is not discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62376,25 +62461,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-009"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/agents-index-schema.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/agents-index-schema.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Agents-index entry required fields and string-array element types are incompletely pinned"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/agents-index-schema.test.ts",
+        "exitCode": 0,
+        "observed": "Making the agents-index plugin field optional survived the complete agents-index-schema owner suite, which exited 0."
       },
-      "rationale": "Agents-index entry required fields and string-array element types are incompletely pinned; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving requiredness mutation confirms incomplete entry-field type pins.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62402,25 +62489,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/agents-index-schema.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/agents-index-schema.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Agents-index envelope required fields are not independently pinned"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/agents-index-schema.test.ts",
+        "exitCode": 0,
+        "observed": "Making the envelope schemaVersion optional survived the complete agents-index-schema owner suite, which exited 0."
       },
-      "rationale": "Agents-index envelope required fields are not independently pinned; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving requiredness mutation confirms that the envelope schemaVersion field is not independently pinned.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62454,7 +62543,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-012"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -62468,11 +62557,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "clonePluginRecord non-aliasing is not discriminated for every nested array"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/state-io.test.ts",
+        "exitCode": 0,
+        "observed": "Aliasing resources.prompts in clonePluginRecord survived the complete state-io owner suite, which exited 0."
       },
-      "rationale": "clonePluginRecord non-aliasing is not discriminated for every nested array; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving alias mutation confirms that non-aliasing is not discriminated for every nested resource array.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62480,7 +62571,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-013"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
       "sourceRefs": [
@@ -62494,11 +62585,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "loadState fixed-point no-write behavior has no deterministic injected seam"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/state-io.test.ts",
+        "exitCode": 0,
+        "observed": "Persisting every load while ignoring the mutated flag survived the complete state-io owner suite, which exited 0."
       },
-      "rationale": "loadState fixed-point no-write behavior has no deterministic injected seam; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving persistence mutation confirms that fixed-point no-write behavior is not discriminated; the production-seam choice remains an operator decision.",
       "destination": "Resolve the named design or policy choice before implementation."
     },
     {
@@ -62506,25 +62599,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-014"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/locations.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "pluginDataDir marketplace-name validation lacks a discriminating unsafe marketplace case"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/locations.test.ts",
+        "exitCode": 0,
+        "observed": "Removing the marketplace assertSafeName check from pluginDataDir survived the complete locations owner suite, which exited 0."
       },
-      "rationale": "pluginDataDir marketplace-name validation lacks a discriminating unsafe marketplace case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving validation deletion confirms that unsafe marketplace names are not discriminated at pluginDataDir.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62690,25 +62785,30 @@
         ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-004",
         ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/config-io.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/config-io.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "config-io containment error identity remains weaker than a class-and-fields assertion"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/config-io.test.ts",
+        "exitCode": 0,
+        "observed": "Throwing a plain Error with matching name and fields instead of PathContainmentError survived the complete config-io owner suite, which exited 0."
       },
-      "rationale": "config-io containment error identity remains weaker than a class-and-fields assertion; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving class substitution confirms that containment error identity is weaker than a class-and-fields assertion.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62717,25 +62817,30 @@
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-022",
         ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/locations.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "locations containment rows do not fully assert error class and structured fields"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/locations.test.ts",
+        "exitCode": 0,
+        "observed": "Throwing a plain Error with matching name and message but no structured fields survived the complete locations owner suite, which exited 0."
       },
-      "rationale": "locations containment rows do not fully assert error class and structured fields; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving error substitution confirms that the locations rows do not fully assert error class and structured fields.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62745,25 +62850,27 @@
         ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-005",
         ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-009"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/locations.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "ScopedLocations compile-time negative guarantee is not pinned by the owner test"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "npm run typecheck",
+        "exitCode": 0,
+        "observed": "Making the ScopedLocations brand optional survived the repository typecheck, which exited 0."
       },
-      "rationale": "ScopedLocations compile-time negative guarantee is not pinned by the owner test; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving brand weakening confirms that the compile-time negative guarantee is not pinned.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62772,10 +62879,13 @@
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-024",
         ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/atomic-json.ts"
+        },
         {
           "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
         }
@@ -62787,10 +62897,12 @@
       ],
       "validation": {
         "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Two state-io expected byte values are derived with the production serializer formula"
+        "tool": "Current formula inspection corroborated by a coupled mutation in a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='<two cited byte-expectation cases>' tests/persistence/state-io.test.ts",
+        "exitCode": 0,
+        "observed": "The two expected byte values remain derived with the production serializer formula. Changing JSON indentation from 2 to 4 in atomic-json and in both formula-derived expectations left the two named cases passing, corroborating structural oracle coupling rather than a production-only surviving mutation."
       },
-      "rationale": "Two state-io expected byte values are derived with the production serializer formula; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "Direct inspection establishes formula coupling; the coupled mutation corroborates that the expectations reproduce rather than independently pin the byte contract.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62798,25 +62910,30 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-025"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/agents-index-io.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/persistence/state-io.test.ts"
+          "path": "tests/persistence/agents-index-io.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Agents-index I/O tests hand-derive the index path instead of asserting the location bundle path"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/persistence/agents-index-io.test.ts",
+        "exitCode": 0,
+        "observed": "Changing only the locations.agentsIndexPath filename survived the complete agents-index-io owner suite, which exited 0."
       },
-      "rationale": "Agents-index I/O tests hand-derive the index path instead of asserting the location bundle path; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving location-bundle mutation confirms that the I/O tests hand-derive the index path instead of asserting the provided path.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -62990,25 +63107,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-001"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-credential.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "credentialFill exit-code and null-code normalization cases remain over-determined by empty stdout"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git-credential.test.ts",
+        "exitCode": 0,
+        "observed": "Removing the credentialFill nonzero-code guard survived the complete git-credential owner suite, which exited 0."
       },
-      "rationale": "credentialFill exit-code and null-code normalization cases remain over-determined by empty stdout; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving guard deletion confirms that exit-code handling is over-determined by empty stdout.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63016,25 +63135,30 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
+        },
+        {
+          "path": "tests/platform/credential-process-fake.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-credential.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Credential process fake failInput still no-ops when no stdin error listener exists"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git-credential.test.ts",
+        "exitCode": 0,
+        "observed": "Removing the child.stdin error listener survived the complete git-credential owner suite, which exited 0."
       },
-      "rationale": "Credential process fake failInput still no-ops when no stdin error listener exists; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving listener deletion confirms that the failInput fake path does not prove stdin error handling.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63042,25 +63166,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-003"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-credential.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "The default credential timeout has no discriminating owner case"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git-credential.test.ts",
+        "exitCode": 0,
+        "observed": "Changing the default credential timeout from 5000 to 6000 survived the complete git-credential owner suite, which exited 0."
       },
-      "rationale": "The default credential timeout has no discriminating owner case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving default mutation confirms that the default timeout has no discriminating owner case.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63068,25 +63194,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-004"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-credential.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Partial credential attribute emission lacks independent username-only and password-only cases"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git-credential.test.ts",
+        "exitCode": 0,
+        "observed": "Gating password emission on username presence survived the complete git-credential owner suite, which exited 0."
       },
-      "rationale": "Partial credential attribute emission lacks independent username-only and password-only cases; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving gate mutation confirms that password-only emission is not independently discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63094,25 +63222,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-005"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-credential.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "DEFAULT_CREDENTIAL_OPS has no explicit owner case"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git-credential.test.ts",
+        "exitCode": 0,
+        "observed": "Replacing DEFAULT_CREDENTIAL_OPS with an empty cast object survived the complete git-credential owner suite, which exited 0."
       },
-      "rationale": "DEFAULT_CREDENTIAL_OPS has no explicit owner case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving replacement confirms that DEFAULT_CREDENTIAL_OPS has no explicit owner case.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63120,7 +63250,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-006"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -63134,11 +63264,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Clone ref and singleBranch forwarding remain unproven by the discovery-failure fixture"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git.test.ts",
+        "exitCode": 0,
+        "observed": "Removing clone ref and singleBranch forwarding survived the complete git owner suite; mutation_count=2 and the suite exited 0."
       },
-      "rationale": "Clone ref and singleBranch forwarding remain unproven by the discovery-failure fixture; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "Both forwarding deletions survived, confirming that clone ref and singleBranch are not discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63146,7 +63278,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
       "sourceRefs": [
@@ -63160,11 +63292,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Checkout noCheckout behavior remains unobservable and has no production caller"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git.test.ts",
+        "exitCode": 0,
+        "observed": "Removing checkout noCheckout forwarding survived the complete git owner suite, which exited 0."
       },
-      "rationale": "Checkout noCheckout behavior remains unobservable and has no production caller; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving deletion confirms that checkout noCheckout forwarding is unobservable in the current suite; its unsupported production contract remains an operator decision.",
       "destination": "Resolve the named design or policy choice before implementation."
     },
     {
@@ -63198,25 +63332,33 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-009"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
           "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
         }
       ],
       "testRefs": [
         {
           "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-credential.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Git and credential exported option types remain incompletely pinned"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "npm run typecheck",
+        "exitCode": 0,
+        "observed": "Making CloneOptions.url optional with an empty fallback survived the repository typecheck, which exited 0."
       },
-      "rationale": "Git and credential exported option types remain incompletely pinned; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving weakening confirms that the exported CloneOptions URL requirement is not pinned.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63224,25 +63366,27 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-010"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "tests/platform/git-ops-fake.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-ops-fake.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Git fake boundary guards lack owner cases and one negative control remains outside describe"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git-ops-fake.test.ts",
+        "exitCode": 0,
+        "observed": "Removing the createGitOpsFake memory-boundary guard survived the complete fake owner suite, which exited 0."
       },
-      "rationale": "Git fake boundary guards lack owner cases and one negative control remains outside describe; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving guard deletion confirms that the fake's memory boundary is not discriminated.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63276,25 +63420,30 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-012"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 4",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "tests/platform/git-ops-contract.ts"
         }
       ],
       "testRefs": [
         {
           "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "No executable gate proves each real adapter remains registered with its shared contract"
+        "method": "surviving-mutation",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test tests/platform/git.test.ts tests/platform/git-ops-fake.test.ts",
+        "exitCode": 0,
+        "observed": "Deleting the real GitOps contract registration left both suites passing while real-adapter contract coverage disappeared undetected. The combined runner exited 0."
       },
-      "rationale": "No executable gate proves each real adapter remains registered with its shared contract; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The surviving registration deletion confirms there is no executable gate that keeps the real adapter registered with its shared contract.",
       "destination": "Carry the focused remediation into Phase 4."
     },
     {
@@ -63518,25 +63667,27 @@
         ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-007",
         ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-014"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "tests/platform/git-ops-contract.ts"
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-ops-contract.ts"
         }
       ],
       "validation": {
         "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Git contract validation category remains neither covered nor explicitly recorded"
+        "tool": "Disposable static scan of the GitOps contract category block",
+        "command": "<case-owned-copy-static-scan>",
+        "exitCode": 0,
+        "observed": "The static scan reported validation_documented=false in the contract category block. Git contract validation remains neither covered nor explicitly recorded."
       },
-      "rationale": "Git contract validation category remains neither covered nor explicitly recorded; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The current contract category block directly establishes the missing validation record.",
       "destination": "Carry the focused remediation into Phase 2."
     },
     {
@@ -63546,25 +63697,28 @@
         ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-008",
         ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-015"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 4",
       "duplicateOf": null,
       "sourceRefs": [
         {
-          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+          "path": "N/A",
+          "reason": "The finding concerns coupling inside the GitOps fake owner test rather than production source."
         }
       ],
       "testRefs": [
         {
-          "path": "tests/platform/git.test.ts"
+          "path": "tests/platform/git-ops-fake.test.ts"
         }
       ],
       "validation": {
         "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
-        "observed": "Git fake negative control and inventory derive expectations from one source"
+        "tool": "Disposable static scan of the GitOps fake owner test",
+        "command": "<case-owned-copy-static-scan>",
+        "exitCode": 0,
+        "observed": "The static scan reported combined_inventory_negative_control=true: the inventory and negative-control assertions remain combined in one test and derive expectations from one source."
       },
-      "rationale": "Git fake negative control and inventory derive expectations from one source; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "rationale": "The current combined assertion structure directly establishes the oracle-coupling warning.",
       "destination": "Carry the focused remediation into Phase 4."
     },
     {
@@ -65509,7 +65663,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65523,12 +65677,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "Equal-boundary case does not assert an empty lstat walk; named mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='accepts a parent as its own child boundary' <case-owned-copy>/tests/shared/path-safety.test.ts",
+        "exitCode": 0,
+        "observed": "Changing the equal-boundary segment expression from an explicit empty array to relative.split(path.sep) made the walk lstat the trusted parent itself. The named equal-boundary case still exited 0."
       },
-      "rationale": "Equal-boundary case does not assert an empty lstat walk; named mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run isolated split mutation, then assert an empty walk if it survives."
+      "rationale": "The surviving split mutation confirms that the equal-boundary case does not pin an empty lstat walk.",
+      "destination": "Phase 2 should add an lstat path recorder and assert an empty walk."
     },
     {
       "id": "SHC-F003",
@@ -65587,7 +65742,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65601,12 +65756,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "pathExists uses lstat but has no explicit dangling-symlink case; named mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/shared/fs-utils.test.ts",
+        "exitCode": 0,
+        "observed": "After the existing lstat, the mutation added fs.stat before returning true, changing a dangling symlink from present to false while preserving the existing lstat error seam. The full owner suite exited 0. A preliminary direct lstat-to-stat replacement was killed only by the lstat-specific error case and was refined to isolate dangling-link semantics."
       },
-      "rationale": "pathExists uses lstat but has no explicit dangling-symlink case; named mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run isolated mutation and add the dangling-symlink row."
+      "rationale": "The isolated follow-stat mutation survived, confirming that no owner case discriminates the documented dangling-symlink behavior.",
+      "destination": "Phase 2 should add a dangling symbolic link row that expects true."
     },
     {
       "id": "SHC-F006",
@@ -65639,7 +65795,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65653,12 +65809,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "Non-Error cause coverage centers on a plain object; named hard-coded-tag mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/shared/errors.test.ts",
+        "exitCode": 0,
+        "observed": "Replacing Object.prototype.toString.call(c) with the hard-coded literal [object Object] survived the complete errors owner suite, which exited 0."
       },
-      "rationale": "Non-Error cause coverage centers on a plain object; named hard-coded-tag mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run mutation and add null, number, and array rows."
+      "rationale": "The hard-coded tag survived, confirming that non-Error cause coverage only discriminates the plain-object rendering.",
+      "destination": "Phase 2 should add null, number, and array cause rows."
     },
     {
       "id": "SHC-F008",
@@ -65744,7 +65901,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65758,20 +65915,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "All payloads remain ASCII; the latin1 mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/shared/atomic-json.test.ts",
+        "exitCode": 0,
+        "observed": "Changing write-file-atomic encoding from utf8 to latin1 survived the complete atomic-json owner suite, which exited 0."
       },
-      "rationale": "All payloads remain ASCII; the latin1 mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run mutation and add complete UTF-8 byte comparison."
+      "rationale": "The surviving encoding mutation confirms that the ASCII-only payloads do not discriminate UTF-8 bytes.",
+      "destination": "Phase 2 should add a complete non-ASCII UTF-8 byte comparison."
     },
     {
       "id": "SHC-F012",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012"
       ],
-      "evidenceStatus": "inconclusive",
-      "route": "Phase 2",
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -65784,19 +65942,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "Concurrent-write case remains green; plain-write replacement was not run."
+        "method": "behavioral-probe",
+        "command": "node --test --test-name-pattern='keeps every concurrent same-path observation as one complete document' <case-owned-copy>/tests/shared/atomic-json.test.ts",
+        "exitCode": 1,
+        "observed": "Replacing writeFileAtomic with node:fs/promises.writeFile was killed by the named concurrency case. All three observed-document membership checks became false instead of true, so the current case discriminates the plain-write replacement."
       },
-      "rationale": "Concurrent-write case remains green; plain-write replacement was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run replacement or narrow the case title."
+      "rationale": "The exact historical replacement no longer survives the current owner case, so the claimed title/behavior mismatch is stale.",
+      "destination": "Close as stale; retain the current concurrent-observation case."
     },
     {
       "id": "SHC-F013",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65810,12 +65969,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "Update cardinality accepts single/plural; named hard-code mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/shared/notify-context.test.ts",
+        "exitCode": 0,
+        "observed": "Hard-coding cardinality: plural inside notifyUpdateWithContext survived the complete notify-context owner suite, which exited 0."
       },
-      "rationale": "Update cardinality accepts single/plural; named hard-code mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run mutation and add a single-cardinality row."
+      "rationale": "The surviving hard-code confirms that the cardinality parameter is not discriminated for the single form.",
+      "destination": "Phase 2 should add a single-cardinality update row."
     },
     {
       "id": "SHC-F014",
@@ -65848,7 +66008,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65862,19 +66022,20 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "narrowProbeError guard remains; guard-removal mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/shared/probe-classifiers.test.ts",
+        "exitCode": 0,
+        "observed": "Removing the Error-instance guard while retaining null-safe code access made plain errno-shaped objects classify by code. The complete probe-classifiers owner suite exited 0."
       },
-      "rationale": "narrowProbeError guard remains; guard-removal mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run mutation and add a plain errno-shaped object."
+      "rationale": "The surviving guard removal confirms that no test protects a plain object carrying an errno code from classification.",
+      "destination": "Phase 2 should add a plain errno-shaped object row."
     },
     {
       "id": "SHC-F016",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -65888,12 +66049,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test inspection",
-        "observed": "HttpError conjunct remains; conjunct-removal mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test <case-owned-copy>/tests/shared/git-failure-classifiers.test.ts",
+        "exitCode": 0,
+        "observed": "Removing code === HttpError from the 401/403 status classification survived the complete git-failure-classifiers owner suite, which exited 0."
       },
-      "rationale": "HttpError conjunct remains; conjunct-removal mutation was not run. D-11 therefore prevents a terminal verdict.",
-      "destination": "Run mutation and add non-HTTP status-bearing input."
+      "rationale": "The surviving conjunct deletion confirms that no case supplies an HTTP-like status on a non-HttpError value.",
+      "destination": "Phase 2 should add a non-HTTP status-bearing input row."
     },
     {
       "id": "SHC-F017",
@@ -66109,7 +66271,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66123,12 +66285,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named full-coverage mutation catalogue was not rerun; 16 current owner tests only establish executability."
+        "method": "behavioral-probe",
+        "command": "node --test-name-pattern='one millisecond beyond the TTL|rebuilds a file cache one millisecond beyond the TTL' <case-owned-copy>/tests/shared/completion-cache.test.ts",
+        "exitCode": 1,
+        "observed": "Increasing PLUGIN_INDEX_TTL_MS by one millisecond was killed by both the memory and file one-millisecond-beyond cases: 0 passed and 2 failed. Together with the current killed mutants recorded for session-env (SHC-F033), git HTTP boundaries (SHC-F036), and notify-reasons (SHC-F037), plus static inspection that atomic-json is branchless, the named positive coverage catalogue now has current discriminating evidence."
       },
-      "rationale": "Named full-coverage mutation catalogue was not rerun; 16 current owner tests only establish executability. D-11 prevents confirmation from the green suite alone.",
-      "destination": "Treat clean catalogue as pending mutation evidence."
+      "rationale": "The aggregate clean catalogue is supported by current per-module killed mutations rather than a green owner-suite baseline alone.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F026",
@@ -66138,7 +66301,7 @@
         ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-011",
         ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-021"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66152,12 +66315,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Injected-clock defect remains visible, but no focused failing assertion was authored."
+        "method": "behavioral-probe",
+        "command": "node --test-name-pattern='probe: .* rebuild persists the injected clock' <case-owned-copy>/tests/shared/completion-cache.test.ts",
+        "exitCode": 1,
+        "observed": "Two focused temporary cases injected 2001-02-03T04:05:06.789Z. The cold rebuild persisted 2026-09-05T15:15:50.044Z and the poison rebuild persisted 2026-09-05T15:15:50.067Z; both assertions failed, proving both paths use the wall clock instead of the injected clock."
       },
-      "rationale": "Injected-clock defect remains visible, but no focused failing assertion was authored. D-11 prevents confirmation from the green suite alone.",
-      "destination": "Add the failing behavioral clock probe."
+      "rationale": "The two failing behavioral assertions reproduce the injected-clock defect on both persisted rebuild paths.",
+      "destination": "Phase 2 should use new Date(now()).toISOString() on both cold and poison writes and retain the focused clock cases."
     },
     {
       "id": "SHC-F027",
@@ -66166,7 +66330,7 @@
         ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-012",
         ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-013"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66180,12 +66344,13 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Unlink cases remain negative-only; wrong-error mutation was not run."
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='propagates a non-ENOENT .* unlink error' <case-owned-copy>/tests/shared/completion-cache.test.ts",
+        "exitCode": 0,
+        "observed": "Replacing each propagated unlink error with a new unrelated Error survived both named non-ENOENT cases. The focused runner exited 0."
       },
-      "rationale": "Unlink cases remain negative-only; wrong-error mutation was not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "Run mutation and assert injected error identity."
+      "rationale": "The wrong-error substitutions survived, confirming that both unlink cases assert only a negative code property rather than error identity.",
+      "destination": "Phase 2 should inject deterministic unlink errors and assert their identity."
     },
     {
       "id": "SHC-F028",
@@ -66335,7 +66500,7 @@
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66349,19 +66514,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named ledger mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='removes owned entries and appends fresh entries in stable order' tests/shared/session-env.test.ts",
+        "exitCode": 1,
+        "observed": "Reversing final PATH assembly to appended-before-base was killed by the named stable-order case: 0 passed and 1 failed."
       },
-      "rationale": "Named ledger mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case rejects prepending ledger directories and positively pins the assembly order.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F034",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66375,19 +66542,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named token mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='maps all supported tokens to their matching fields from left to right' tests/shared/vars.test.ts",
+        "exitCode": 1,
+        "observed": "Remapping CLAUDE_PLUGIN_ROOT from pluginRoot to pluginData was killed by the named token-mapping case: 0 passed and 1 failed."
       },
-      "rationale": "Named token mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins the supported token-to-field mapping.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F035",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66401,19 +66570,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named ordering/dedup mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='prefers a malformed MCP prefix over an embedded lspServers token' tests/shared/probe-classifiers.test.ts",
+        "exitCode": 1,
+        "observed": "Moving the broad lspServers check before the malformed-MCP prefix was killed by the named precedence case: 0 passed and 1 failed."
       },
-      "rationale": "Named ordering/dedup mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins classifier precedence.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F036",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66427,19 +66598,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named boundary mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='classifies source-access HTTP 600 as unclassified' tests/shared/git-failure-classifiers.test.ts",
+        "exitCode": 1,
+        "observed": "Widening the server-status upper boundary from less than 600 to less than or equal to 600 was killed by the named HTTP 600 case: 0 passed and 1 failed."
       },
-      "rationale": "Named boundary mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins the HTTP status upper boundary.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F037",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66453,19 +66626,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named truth-table mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='warns when only agents are declared and neither companion is loaded' tests/shared/notify-reasons.test.ts",
+        "exitCode": 1,
+        "observed": "Changing the two companion-severity OR operators to AND was killed by the named agents-only case: 0 passed and 1 failed."
       },
-      "rationale": "Named truth-table mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current truth-table case pins independent companion declarations.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F038",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66479,19 +66654,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named depth/cycle/assertNever mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='renders exactly five links without a truncation marker' tests/shared/errors.test.ts",
+        "exitCode": 1,
+        "observed": "Changing CAUSE_CHAIN_MAX_DEPTH from 5 to 4 was killed by the named five-link case: 0 passed and 1 failed."
       },
-      "rationale": "Named depth/cycle/assertNever mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins the cause-chain depth bound.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F039",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66505,19 +66682,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named bridge-error mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='exposes the complete foreign-content refusal' tests/shared/errors-bridges.test.ts",
+        "exitCode": 1,
+        "observed": "Changing AgentForeignContentError.name to PathContainmentError was killed by the named complete-refusal case: 0 passed and 1 failed."
       },
-      "rationale": "Named bridge-error mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins the bridge error identity.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F040",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66531,19 +66710,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named rollback and errno mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='uses stable reverse input order for equal-name items' tests/shared/fs-utils.test.ts",
+        "exitCode": 1,
+        "observed": "Removing reverse from the rollback loop was killed by the named stable-order case: 0 passed and 1 failed."
       },
-      "rationale": "Named rollback and errno mutations were not run. D-11 prevents confirmation from the green suite alone.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins reverse rollback order for equal-name items.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F041",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66557,19 +66738,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named render/frozen-row mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='the reconcile wrapper dispatches rows with its label and plural cardinality' tests/shared/notify-context.test.ts",
+        "exitCode": 1,
+        "observed": "Substituting a wrong literal label was killed by the named reconcile-wrapper case: 0 passed and 1 failed."
       },
-      "rationale": "Named render/frozen-row mutations were not run. D-11 prevents confirmation.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins the wrapper label and plural cardinality message.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F042",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66583,19 +66766,21 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named Scope-union mutation/typecheck was not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "./node_modules/.bin/tsc --noEmit --allowImportingTsExtensions --exactOptionalPropertyTypes --module NodeNext --moduleResolution NodeNext --noUncheckedIndexedAccess --strict --target ES2022 --skipLibCheck --types node --ignoreConfig tests/shared/types.test.ts",
+        "exitCode": 2,
+        "observed": "Adding local to Scope was killed by the focused type-check. Its only diagnostic was TS2578 for the now-unused @ts-expect-error at tests/shared/types.test.ts:8."
       },
-      "rationale": "Named Scope-union mutation/typecheck was not run. D-11 prevents confirmation.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused compile failure confirms that the owner type test closes the Scope union against the added literal.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F043",
       "claimIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043"
       ],
-      "evidenceStatus": "inconclusive",
+      "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
@@ -66609,12 +66794,14 @@
         }
       ],
       "validation": {
-        "method": "static-proof",
-        "tool": "CodeGraph explore plus current source/test/config inspection",
-        "observed": "Named formatter/gate mutations were not run."
+        "method": "behavioral-probe",
+        "tool": "Executed with cwd set to a case-owned disposable repository copy",
+        "command": "node --test --test-name-pattern='stays silent when the debug gate is \"true\"' tests/shared/debug-log.test.ts",
+        "exitCode": 1,
+        "observed": "Replacing the exact debug-gate equality with a truthiness check was killed by the named gate case: 0 passed and 1 failed."
       },
-      "rationale": "Named formatter/gate mutations were not run. D-11 prevents confirmation.",
-      "destination": "No change pending mutation evidence."
+      "rationale": "The focused failure confirms that the current case pins the exact debug-gate token.",
+      "destination": "Retain as positive current evidence; no implementation work."
     },
     {
       "id": "SHC-F044",
