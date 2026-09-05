@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -112,6 +112,13 @@ interface ResourceSet {
    * cache+rebuild pattern.
    */
   readonly hooksJson?: object;
+  /**
+   * WLIF-01: each entry becomes `<pluginRoot>/workflows/<sourceName>.js`. The
+   * default body carries a NAMED `meta` export on purpose -- a default-export
+   * body classifies as SKIPPED and stages nothing, so a case relying on the
+   * default would pass for the wrong reason.
+   */
+  readonly workflows?: readonly { readonly sourceName: string; readonly body?: string }[];
 }
 
 async function seedMarketplace(opts: {
@@ -239,6 +246,42 @@ async function writePluginTree(
     const hooksDir = path.join(pluginRoot, "hooks");
     await mkdir(hooksDir, { recursive: true });
     await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(resources.hooksJson));
+  }
+
+  await writeWorkflowScripts(pluginRoot, resources.workflows ?? []);
+}
+
+/**
+ * WLIF-01: write `<pluginRoot>/workflows/<sourceName>.js` per entry.
+ *
+ * Its own function rather than a sixth branch inside `writePluginTree`, which
+ * sits near the cognitive-complexity ceiling with five.
+ */
+async function writeWorkflowScripts(
+  pluginRoot: string,
+  workflows: readonly { readonly sourceName: string; readonly body?: string }[],
+): Promise<void> {
+  if (workflows.length === 0) {
+    return;
+  }
+
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir, { recursive: true });
+  for (const workflow of workflows) {
+    await writeFile(
+      path.join(workflowsDir, `${workflow.sourceName}.js`),
+      workflow.body ??
+        `export const meta = { name: "${workflow.sourceName}", description: "does ${workflow.sourceName}" };\n`,
+    );
+  }
+}
+
+/** Directory entries, or `[]` when the directory was never created. */
+async function entriesOf(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).sort();
+  } catch {
+    return [];
   }
 }
 
@@ -7645,6 +7688,104 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         finalState.marketplaces["mp"]?.plugins["beta"]?.installedAt,
         betaRecordBefore?.installedAt,
       );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-01: the workflows handle -- reinstall's fifth prepare and its abort arm.
+//
+// `locationsFor` is called INSIDE the `withHermeticHome` closure in every case
+// below: the helper sets `process.env.HOME`, which is what the workflow home
+// derivation reads, so a call outside the closure would point
+// `workflowsSavedDir` at the developer's real home.
+//
+// Envelope paths are composed with a plain `path.join`, NOT with the async
+// artifact-path composer: a forgotten await there yields a leaf named after a
+// promise instead of throwing.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WLIF-01: a replace-step failure leaves no workflows staging tree behind", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-abort-"));
+    const originalRename = retryFs.rename.bind(retryFs);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const envelopeBefore = await readFile(envelopePath, "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      // The skills replace is the FIRST step of the replace sequence, so its
+      // failure reaches `abortHandles` with all five prepared handles -- the
+      // only path on which the workflows abort arm can fire, because workflows
+      // is prepared last and no later prepare exists to fail after it.
+      renameMock = t.mock.method(
+        retryFs,
+        "rename",
+        async (...args: Parameters<typeof retryFs.rename>) => {
+          if (String(args[1]).startsWith(locations.skillsTargetDir)) {
+            throw new Error("skills replace denied");
+          }
+
+          return originalRename(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      // The failure landed BEFORE the workflows step, so the envelope the
+      // install placed is untouched rather than removed or rewritten.
+      assert.equal(await readFile(envelopePath, "utf8"), envelopeBefore);
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a reinstall of a plugin with no workflows touches neither workflow directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-none-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- the prepare short-circuits on the noop branch, so no staging
+      // root is created and the engine's storage root is not brought into
+      // existence for a plugin that ships no workflows (WPTH-05).
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }

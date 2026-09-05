@@ -86,6 +86,7 @@ import {
   replacePreparedSkills,
   rollbackSkillsReplacement,
 } from "../../bridges/skills/index.ts";
+import { abortPreparedWorkflows, prepareStageWorkflows } from "../../bridges/workflows/index.ts";
 import { pluginMirrorKey } from "../../domain/clone-key.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -142,6 +143,7 @@ import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/age
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
+import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
@@ -168,7 +170,7 @@ import type {
 
 export type { ReinstallPluginOutcome } from "../types.ts";
 
-type BridgePhase = "skills" | "commands" | "agents" | "mcp";
+type BridgePhase = "skills" | "commands" | "agents" | "mcp" | "workflows";
 export type RemoveDataDirFn = (
   path: string,
   options: { recursive: true; force: true },
@@ -265,6 +267,12 @@ interface PreparedHandles {
   readonly commands: PreparedCommandsStaging;
   readonly agents: PreparedAgentsStaging;
   readonly mcp: PreparedMcpStaging;
+  /**
+   * WLIF-01: the workflows bridge has no `replacePrepared*` twin, and needs
+   * none -- the prepare plus commit pair IS the replace shape. See `replaceAll`
+   * for why that keeps `ReplacementEntry` four-armed.
+   */
+  readonly workflows: PreparedWorkflowsStaging;
 }
 
 interface PartialPreparedHandles {
@@ -272,6 +280,7 @@ interface PartialPreparedHandles {
   commands?: PreparedCommandsStaging;
   agents?: PreparedAgentsStaging;
   mcp?: PreparedMcpStaging;
+  workflows?: PreparedWorkflowsStaging;
 }
 
 type ReplacementEntry =
@@ -1244,6 +1253,18 @@ async function prepareAllHandles(input: {
       pluginData: input.pluginDataDir,
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
     });
+    // WLIF-01: fifth and LAST, mirroring the install ledger's ordering. The
+    // previous names come from the OLD record's inventory -- the same slot the
+    // skills and commands prepares above read theirs from -- so the commit
+    // displaces this plugin's own envelopes aside instead of refusing the
+    // occupied target. Spread conditionally: `exactOptionalPropertyTypes`
+    // rejects an explicit `undefined` on the bridge's optional field.
+    handles.workflows = await prepareStageWorkflows({
+      locations: input.locations,
+      pluginName: input.plugin,
+      resolved: input.installable,
+      previousWorkflowNames: input.oldRecord.resources.workflows,
+    });
   } catch (err) {
     throw errorWithManualRecovery(err, await abortPartialHandles(handles));
   }
@@ -1506,6 +1527,15 @@ function splitHandleWarnings(handles: PreparedHandles): {
 
 async function abortPartialHandles(handles: PartialPreparedHandles): Promise<readonly string[]> {
   const leaks: string[] = [];
+  // WLIF-01: FIRST, because this helper unwinds in reverse preparation order
+  // and workflows is prepared last. `abortPreparedWorkflows` is a
+  // `cleanupStaging` call, which swallows ENOENT -- so it tolerates being
+  // reached from `replaceAll`'s catch after a successful commit already
+  // removed the staging root.
+  if (handles.workflows !== undefined) {
+    pushLeak(leaks, "workflows", await abortPreparedWorkflows(handles.workflows));
+  }
+
   if (handles.mcp !== undefined) {
     abortPreparedMcp(handles.mcp);
   }
