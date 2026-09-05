@@ -7755,9 +7755,11 @@ test("WLIF-01: a replace-step failure leaves no workflows staging tree behind", 
         workflows: [{ sourceName: "greet" }],
       });
       // The skills replace is the FIRST step of the replace sequence, so its
-      // failure reaches `abortHandles` with all five prepared handles -- the
-      // only path on which the workflows abort arm can fire, because workflows
-      // is prepared last and no later prepare exists to fail after it.
+      // failure reaches `abortHandles` with all five prepared handles and the
+      // workflows commit never runs. That is what makes the abort arm the right
+      // owner of the staging root HERE. The other path into the same catch is
+      // the workflows commit throwing part way, and there the commit owns its
+      // own staging lifecycle -- covered by the two cases below.
       renameMock = t.mock.method(
         retryFs,
         "rename",
@@ -7781,6 +7783,141 @@ test("WLIF-01: a replace-step failure leaves no workflows staging tree behind", 
       // The failure landed BEFORE the workflows step, so the envelope the
       // install placed is untouched rather than removed or rewritten.
       assert.equal(await readFile(envelopePath, "utf8"), envelopeBefore);
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("CR-01: a partially failed workflows commit unplaces what it stranded", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stranded-"));
+    const originalRename = retryFs.rename.bind(retryFs);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      // The old install ships NO workflows, so both envelopes below are names
+      // the old record does not carry. A stranded one is therefore an orphan:
+      // `unstagePluginWorkflows` removes strictly by recorded name and the
+      // shared saved directory is never enumerated, so nothing would ever find
+      // it again (WLIF-03).
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      const greetPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const wavePath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+      // Place `greet`, refuse `wave`, then refuse the reversal of `greet`. That
+      // is the shape that produces a non-empty `stranded` set: a rename the
+      // commit completed and could not take back, with no restore reclaiming
+      // its target.
+      renameMock = t.mock.method(
+        retryFs,
+        "rename",
+        async (...args: Parameters<typeof retryFs.rename>) => {
+          if (String(args[1]) === wavePath) {
+            throw new Error("wave placement denied");
+          }
+
+          if (String(args[0]) === greetPath) {
+            throw new Error("greet reversal denied");
+          }
+
+          return originalRename(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      // The catch built its removal payload from the commit's `onPlaced`
+      // report, so the stranded envelope is gone rather than orphaned.
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("CR-02: a failed restore keeps the staging root holding the only copy", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-retained-"));
+    const originalRename = retryFs.rename.bind(retryFs);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      // The old install DOES ship `greet`, so the commit displaces that
+      // envelope into `<stagingRoot>/.previous/` instead of unlinking it.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const envelopeBefore = await readFile(envelopePath, "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      const wavePath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+      // Refuse `wave`, then refuse the restore out of `.previous/`. The commit
+      // then reports it could not put the previous envelope back and KEEPS the
+      // staging root, because that directory now holds the only copy.
+      renameMock = t.mock.method(
+        retryFs,
+        "rename",
+        async (...args: Parameters<typeof retryFs.rename>) => {
+          if (String(args[1]) === wavePath) {
+            throw new Error("wave placement denied");
+          }
+
+          if (String(args[0]).includes(`${path.sep}.previous${path.sep}`)) {
+            throw new Error("previous envelope restore denied");
+          }
+
+          return originalRename(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      // The abort arm must NOT have run: `cleanupStaging` is a recursive rm and
+      // `.previous/` is inside the root, so aborting here would destroy the
+      // bytes the leak text just told the operator to move back by hand.
+      const staging = await entriesOf(locations.workflowsStagingDir);
+      assert.equal(staging.length, 1);
+      const retainedPrevious = path.join(
+        locations.workflowsStagingDir,
+        staging[0] ?? "",
+        ".previous",
+      );
+      assert.deepStrictEqual(await entriesOf(retainedPrevious), ["hello:greet.json"]);
+      assert.equal(
+        await readFile(path.join(retainedPrevious, "hello:greet.json"), "utf8"),
+        envelopeBefore,
+      );
     } finally {
       renameMock?.mock.restore();
       syncBuiltinESMExports();

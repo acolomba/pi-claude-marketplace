@@ -1300,10 +1300,12 @@ async function prepareAllHandles(input: {
  * for the same reason: the record composition needs a description of what the
  * step materialized, and neither step has a `ReplacementEntry` to carry it.
  *
- * `placedWorkflowNames` is additionally the REMOVAL payload for a failure
- * after this function returns. Because the workflows step is deliberately
- * absent from `replacements[]`, `rollbackReplacements` cannot reach it, so the
- * caller's catch is the only thing that can take those envelopes back.
+ * `placedWorkflowNames` is additionally the REMOVAL payload for a failure, on
+ * both sides of the return. Because the workflows step is deliberately absent
+ * from `replacements[]`, `rollbackReplacements` cannot reach it: this
+ * function's own catch takes back what a PARTIALLY failed commit stranded, and
+ * the caller's catch takes back a fully successful commit after a later step
+ * fails.
  */
 async function replaceAll(
   handles: PreparedHandles,
@@ -1318,6 +1320,7 @@ async function replaceAll(
   const replacements: ReplacementEntry[] = [];
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   let placedWorkflowNames: readonly string[] = [];
+  let workflowsCommitEntered = false;
   const workflowsCommitLeaks: string[] = [];
   try {
     const skills = await replacePreparedSkills(handles.skills);
@@ -1366,11 +1369,19 @@ async function replaceAll(
     // left to roll back through; the hooks slot above is the established
     // precedent for a step deliberately outside the ledger.
     //
-    // Being last has a useful consequence: nothing inside this function can
-    // fail after it, so this catch never has to undo it. The only later
-    // failures -- the state write, the config write-back, the transaction save
-    // -- are all in the caller's recovery path, which is what
-    // `placedWorkflowNames` is threaded out for.
+    // Being last means no LATER step in this function can fail -- but the
+    // commit itself can fail PART WAY, and then it has placed envelopes that
+    // this catch must take back. The bridge reports exactly that set through
+    // `onPlaced` on its throw path for exactly this reason, so the catch below
+    // unplaces it. The failures that land after this function returns -- the
+    // state write, the config write-back, the transaction save -- are handled
+    // in the caller's recovery path, which is what `placedWorkflowNames` is
+    // threaded out for.
+    //
+    // Set BEFORE the call: from here on the commit owns its own staging
+    // lifecycle on BOTH its paths, so the catch must not abort it (see
+    // `abortPartialHandles`).
+    workflowsCommitEntered = true;
     const workflowsLeak = await commitPreparedWorkflows(handles.workflows, {
       // The whole body is one assignment that cannot throw. The commit invokes
       // this callback on its failure paths too, so anything that could raise
@@ -1383,7 +1394,20 @@ async function replaceAll(
       workflowsCommitLeaks.push(workflowsLeak);
     }
   } catch (err) {
-    const leaks = [...(await rollbackReplacements(replacements)), ...(await abortHandles(handles))];
+    const leaks = [
+      ...(await rollbackReplacements(replacements)),
+      // WLIF-01: the commit reports what it left at its targets on the throw
+      // path too, and that report -- not the class of the thrown error -- is
+      // the removal payload. Empty unless the commit ran and stranded
+      // something, so this is a no-op on every earlier step's failure.
+      ...(await unplaceWorkflows(hooks.locations, placedWorkflowNames)),
+      // The commit owns its staging root on BOTH its paths, and DELIBERATELY
+      // retains it when it holds the only copy of a displaced previous
+      // envelope (stage.ts's failed-restore path). Aborting it here would
+      // recursively delete `.previous/` -- the bytes the leak text just told
+      // the operator to move back by hand.
+      ...(await abortHandles(handles, { skipWorkflows: workflowsCommitEntered })),
+    ];
     throw errorWithManualRecovery(err, leaks);
   }
 
@@ -1525,7 +1549,7 @@ function updateStateRecord(
       supported: [...installable.supported],
       unsupported: [...installable.unsupported],
     },
-    resources: resourcesFromHandles(handles, plugin, installable, placedWorkflowNames),
+    resources: resourcesFromHandles(handles, placedWorkflowNames, plugin, installable),
     // D-100-01 / ENBL-10: describe the hooks this re-materialize wrote. Top
     // level, so it does not belong in `resourcesFromHandles`. Omitted when the
     // resolved plugin declares no hooks -- that branch removed the subtree.
@@ -1538,9 +1562,9 @@ function updateStateRecord(
 
 function resourcesFromHandles(
   handles: PreparedHandles,
+  placedWorkflowNames: readonly string[],
   plugin?: string,
   installable?: MaterializablePlugin,
-  placedWorkflowNames: readonly string[] = [],
 ): PluginInstallRecord["resources"] {
   return {
     skills: handles.skills.result.recorded.map((r) => r.generatedName),
@@ -1560,10 +1584,14 @@ function resourcesFromHandles(
     // WLIF-01 / T-112-15: the envelope names the workflows commit REPORTED
     // placing, never the prepared staged names -- a commit can stage three and
     // place two, and a record that overstates what is on disk is what the next
-    // removal walks. The `successOutcome` caller omits the extra arguments and
-    // its projection therefore carries an empty array, the same discipline the
-    // hooks member above follows and correct because no state write occurs on
-    // that path.
+    // removal walks.
+    //
+    // WR-06: REQUIRED, unlike the `plugin` / `installable` optionals above, so
+    // every construction site is compile-forced to answer for it. This axis
+    // cannot be recovered from disk -- the saved directory is shared and is
+    // never enumerated -- so a site that silently defaulted to `[]` would
+    // record an empty inventory for envelopes that exist, which is the
+    // record/disk divergence this phase guards against.
     workflows: [...placedWorkflowNames],
   };
 }
@@ -1575,7 +1603,11 @@ function successOutcome(
   oldRecord: PluginInstallRecord,
   handles: PreparedHandles,
 ): ReinstallReinstalledOutcome {
-  const resources = resourcesFromHandles(handles);
+  // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
+  // makes it safe is local to this site: this projection feeds the rendered row
+  // and reads only its `agents` / `mcpServers` members, and no state write
+  // happens on this path -- so an empty workflow inventory is never persisted.
+  const resources = resourcesFromHandles(handles, []);
   // WARN-01 / WR-04 / D-86-03: the same per-kind degrade collection
   // `install.ts` makes off its ledger context, read here off the prepared
   // handles the bridges returned. Skill before command by collection order,
@@ -1636,14 +1668,23 @@ function splitHandleWarnings(handles: PreparedHandles): {
   });
 }
 
-async function abortPartialHandles(handles: PartialPreparedHandles): Promise<readonly string[]> {
+async function abortPartialHandles(
+  handles: PartialPreparedHandles,
+  opts?: AbortHandlesOptions,
+): Promise<readonly string[]> {
   const leaks: string[] = [];
   // WLIF-01: FIRST, because this helper unwinds in reverse preparation order
   // and workflows is prepared last. `abortPreparedWorkflows` is a
   // `cleanupStaging` call, which swallows ENOENT -- so it tolerates being
-  // reached from `replaceAll`'s catch after a successful commit already
-  // removed the staging root.
-  if (handles.workflows !== undefined) {
+  // reached after a successful commit already removed the staging root.
+  //
+  // `skipWorkflows` is set once the commit has been ENTERED, because from that
+  // point the commit owns the staging root on both its paths: it cleans up
+  // after a success, and after a failed restore it keeps the root on purpose
+  // because `.previous/` inside it holds the ONLY copy of a displaced previous
+  // envelope. `cleanupStaging` is a recursive rm, so aborting a commit that
+  // already ran would destroy exactly those bytes.
+  if (handles.workflows !== undefined && opts?.skipWorkflows !== true) {
     pushLeak(leaks, "workflows", await abortPreparedWorkflows(handles.workflows));
   }
 
@@ -1666,8 +1707,16 @@ async function abortPartialHandles(handles: PartialPreparedHandles): Promise<rea
   return Object.freeze(leaks);
 }
 
-async function abortHandles(handles: PreparedHandles): Promise<readonly string[]> {
-  return abortPartialHandles(handles);
+/** WLIF-01: see `abortPartialHandles` for why the workflows arm is skippable. */
+interface AbortHandlesOptions {
+  readonly skipWorkflows?: boolean;
+}
+
+async function abortHandles(
+  handles: PreparedHandles,
+  opts?: AbortHandlesOptions,
+): Promise<readonly string[]> {
+  return abortPartialHandles(handles, opts);
 }
 
 async function rollbackReplacements(
