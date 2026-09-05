@@ -332,6 +332,12 @@ async function cascadePluginsInPlace(args: {
       plugin.resources.mcpServers = plugin.resources.mcpServers.filter(
         (n) => !dropped.mcpServers.includes(n),
       );
+      // WLIF-03: workflow envelopes live outside every scope root, so a row
+      // still naming one the cascade deleted would drive the NEXT removal at a
+      // name it no longer owns.
+      plugin.resources.workflows = plugin.resources.workflows.filter(
+        (n) => !dropped.workflows.includes(n),
+      );
     }
 
     failedPlugins.push({ name: pluginName, cause });

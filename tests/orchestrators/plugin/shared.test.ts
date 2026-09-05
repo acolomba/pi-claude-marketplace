@@ -1625,6 +1625,7 @@ describe("applyPartialCascadeFold", () => {
       agents: ["drop-agent", "missing-agent"],
       hooks: ["drop-hook", "missing-hook"],
       mcpServers: ["drop-mcp", "missing-mcp"],
+      workflows: [],
     };
 
     // act
@@ -1647,6 +1648,47 @@ describe("applyPartialCascadeFold", () => {
       agents: ["drop-agent", "missing-agent"],
       hooks: ["drop-hook", "missing-hook"],
       mcpServers: ["drop-mcp", "missing-mcp"],
+      workflows: [],
+    });
+  });
+
+  test("subtracts the dropped workflow envelope and leaves the other four axes alone", () => {
+    // arrange -- the workflows axis is NOT compile-forced here: `dropped` is a
+    // structural parameter, so an argument carrying an extra axis satisfies a
+    // narrower shape and the filter can go missing in silence. This case is
+    // what fails when the filter line is absent.
+    const installed = {
+      resources: {
+        skills: ["keep-skill"],
+        prompts: ["keep-command"],
+        agents: ["keep-agent"],
+        mcpServers: ["keep-mcp"],
+        hooks: ["keep-hook"],
+        workflows: ["sample:drop", "sample:keep"],
+      },
+    };
+    const dropped = {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: [],
+      mcpServers: [],
+      workflows: ["sample:drop", "sample:never-recorded"],
+    };
+
+    // act
+    applyPartialCascadeFold(installed, dropped);
+
+    // assert
+    assert.deepStrictEqual(installed, {
+      resources: {
+        skills: ["keep-skill"],
+        prompts: ["keep-command"],
+        agents: ["keep-agent"],
+        mcpServers: ["keep-mcp"],
+        hooks: ["keep-hook"],
+        workflows: ["sample:keep"],
+      },
     });
   });
 });

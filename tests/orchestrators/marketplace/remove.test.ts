@@ -102,7 +102,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
       mcpServers: resources.mcpServers ?? [],
       prompts: resources.prompts ?? [],
       skills: resources.skills ?? [],
-      workflows: [],
+      workflows: resources.workflows ?? [],
     },
     enabled: true,
     installedAt: "2026-08-01T00:00:00.000Z",
@@ -1111,6 +1111,63 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   assert.strictEqual(await pathExists(cloneDir), false);
   firstNotification.verifyInteractions();
   retryNotification.verifyInteractions();
+});
+
+test("subtracts a dropped workflow envelope from the persisted row and leaves hooks alone", async (testContext) => {
+  // arrange -- the per-plugin fold in this loop is hand-rolled and reads
+  // `outcome.dropped` structurally, so a six-axis argument satisfies it with no
+  // compile error. This case fails when the workflows filter line is absent.
+  //
+  // Its hooks half is the other direction: this filter omits the hooks axis and
+  // that omission predates this work (CASCADEAX-01 in .planning/BACKLOG.md), so
+  // the record is asserted to STILL name the hook the cascade dropped.
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "workflow-partial";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./workflow-partial"),
+    plugins: {
+      beta: pluginRecord({
+        hooks: ["beta"],
+        skills: ["beta-skill"],
+        workflows: ["beta:greet", "beta:farewell"],
+      }),
+    },
+  });
+  const cascade: typeof cascadeUnstagePlugin = () =>
+    Promise.resolve({
+      ok: false,
+      dropped: {
+        agents: [],
+        commands: [],
+        hooks: ["beta"],
+        mcpServers: [],
+        skills: ["beta-skill"],
+        workflows: ["beta:greet"],
+      },
+      cause: Object.assign(new Error("mcp write denied"), { code: "EACCES" }),
+    });
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeMarketplace({
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    cascade,
+  });
+
+  // assert
+  const persisted = await loadState(locations.extensionRoot);
+  const resources = persisted.marketplaces[marketplace]?.plugins["beta"]?.resources;
+  assert.ok(resources, "expected the failed plugin row to survive");
+  assert.deepStrictEqual(resources.workflows, ["beta:farewell"]);
+  assert.deepStrictEqual(resources.skills, []);
+  assert.deepStrictEqual(resources.hooks, ["beta"]);
+  notification.verifyInteractions();
 });
 
 test("returns every orchestrated partial row and preserves agent-conflict resources", async (testContext) => {

@@ -1193,6 +1193,7 @@ export function applyPartialCascadeFold(
       agents: string[];
       mcpServers: string[];
       hooks: string[];
+      workflows: string[];
     };
   },
   dropped: {
@@ -1201,6 +1202,7 @@ export function applyPartialCascadeFold(
     readonly agents: readonly string[];
     readonly hooks: readonly string[];
     readonly mcpServers: readonly string[];
+    readonly workflows: readonly string[];
   },
 ): void {
   installed.resources.skills = installed.resources.skills.filter(
@@ -1220,6 +1222,14 @@ export function applyPartialCascadeFold(
   // must subtract them so a disable / uninstall partial-cascade failure
   // does not leave a stale hooks entry in the in-memory record.
   installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
+  // WLIF-03: name-identical, unlike the commands-to-prompts mapping. The
+  // parameter shapes are structural, so nothing here is compile-forced -- a
+  // caller passing a wider bundle satisfies a narrower parameter and this
+  // subtraction can go missing in silence. The behavioral case in the owner
+  // test is what holds it in place.
+  installed.resources.workflows = installed.resources.workflows.filter(
+    (n) => !dropped.workflows.includes(n),
+  );
 }
 
 /**
