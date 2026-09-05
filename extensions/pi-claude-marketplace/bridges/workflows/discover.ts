@@ -31,11 +31,12 @@
 // and renders strings taken out of them, so an uncontained directory is a
 // disclosure of arbitrary file contents rather than a listing of names.
 
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { admitWorkflowScript, WORKFLOW_SCRIPT_EXTENSIONS } from "../../domain/workflow-script.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type {
@@ -45,20 +46,6 @@ import type {
 } from "./types.ts";
 import type { WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type { Dirent } from "node:fs";
-
-async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true });
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return [];
-    }
-
-    throw err;
-  }
-}
 
 /**
  * WBRG-02: the suffix test runs against the LOWERCASED entry name, because a
@@ -309,7 +296,7 @@ async function scanWorkflowsDirectory(input: {
 
   const discovered: DiscoveredWorkflow[] = [];
   const warnings: string[] = [];
-  const entries = await readEntriesGracefully(workflowsDir);
+  const entries = await readDirEntriesTolerant(workflowsDir);
 
   // Deterministic ordering for stable warning messages and test assertions.
   const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
