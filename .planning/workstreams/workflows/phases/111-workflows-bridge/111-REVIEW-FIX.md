@@ -1,15 +1,19 @@
 ---
 phase: 111-workflows-bridge
-fixed_at: 2026-09-05T13:00:00Z
+fixed_at: 2026-09-05T15:00:00Z
 review_path: .planning/workstreams/workflows/phases/111-workflows-bridge/111-REVIEW.md
-iteration: 1
-findings_in_scope: 11
-fixed: 8
-skipped: 3
-status: partial
+iteration: 2
+findings_in_scope: 3
+fixed: 3
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 111: Code Review Fix Report
+
+Two fix passes are recorded here in order. Everything down to the iteration-1
+footer is that pass, unedited. The iteration-2 pass is appended below it, and
+the frontmatter above counts iteration 2 only.
 
 **Fixed at:** 2026-09-05
 **Source review:** `.planning/workstreams/workflows/phases/111-workflows-bridge/111-REVIEW.md`
@@ -358,3 +362,254 @@ was checked after each commit for prettier-hook rewrites; none were left behind.
 _Fixed: 2026-09-05_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+---
+
+# Phase 111: Code Review Fix Report (iteration 2)
+
+**Fixed at:** 2026-09-05
+**Source review:** `.planning/workstreams/workflows/phases/111-workflows-bridge/111-REVIEW.md` (iteration 2)
+**Iteration:** 2
+**Scope:** critical + warning (WR-10, WR-11, WR-12). IN-06 is Info and out of scope.
+
+**Summary:**
+
+- Findings in scope: 3
+- Fixed: 3 (WR-10, WR-11, WR-12)
+- Skipped: 0
+
+Each fix was **reproduced red-first** before the source was touched, and one of
+the three (WR-12) was reproduced through a standalone probe as well as through
+its test, because the escape it describes is a filesystem outcome rather than a
+return value.
+
+**Gate:** `npm run check` exits 0 — typecheck, lint, fallow, format:check,
+test:corresponding, test:corresponding:negative, test:coverage:direct:negative,
+test (unit), test:integration. `node --test tests/bridges/workflows/` is 62 pass
+/ 0 fail (61 before, plus the WR-12 case).
+
+**Verification ran in the main checkout**, not in an isolated worktree:
+`workflow.use_worktrees` is `false` in `.planning/config.json`, so this pass
+edited and committed on `features/workflow` directly. The numbers below are
+reproducible from the tree as it stands.
+
+**Direct coverage held at 100% on every touched pair** (`hit === found`),
+measured after the last change:
+
+| Module | Branches | Functions | Lines |
+| --- | --- | --- | --- |
+| `bridges/workflows/unstage.ts` | 11/11 | 1/1 | 100/100 |
+| `bridges/workflows/stage.ts` | 62/62 | 14/14 | 456/456 |
+| `bridges/workflows/discover.ts` (untouched) | 51/51 | 13/13 | 344/344 |
+
+Branch counts rose (7 → 11, 59 → 62) because both fixes added real arms; every
+one is reached by a case. No suppression, no `node:coverage ignore`, no
+threshold override was added.
+
+---
+
+## Fixed Issues
+
+### WR-10: `unstagePluginWorkflows` swallowed `PathContainmentError`
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/workflows/unstage.ts`,
+`extensions/pi-claude-marketplace/bridges/workflows/types.ts`,
+`tests/bridges/workflows/unstage.test.ts`
+**Commit:** `4964b398`
+**Status:** fixed, verified by a red-first regression test
+
+The finding is correct and it is mine: the WR-01 fix moved the composer inside a
+catch that filtered only on `code !== "ENOENT"`, which made this the one
+accumulator in the extension that softens a class documenting the opposite
+policy on itself.
+
+**I did not take the suggested remedy, and the divergence is the substance of
+this fix.** The review proposed tagging the row `kind: "containment" | "io"`.
+That records the class but does not restore PI-14: both ledger sites
+(`phase-ledger.ts:89,125`) bypass on `instanceof` applied to a **thrown** error,
+so a tagged row still returns a clean undo and Phase 112 would have to invent a
+translation from `failed[].kind` back into a throw for the bypass to fire. It
+also adds a discriminant nothing reads yet, for a caller that does not exist.
+
+The refusal is now **raised**, which is what the existing machinery already
+knows how to handle with no Phase 112 coordination at all.
+
+**The two policies are not in tension, so nothing was traded away.** The loop
+still runs to completion; the refusal is remembered and thrown after it. So the
+envelopes recorded after a refused name are still removed — the whole point of
+WR-01 — and the class still reaches the caller. The split is by error class,
+not by position:
+
+- ordinary per-name failure → `failed[]`, loop continues (WLIF-03)
+- containment refusal → recorded, loop continues, raised at the end (PI-14)
+- ENOENT → idempotent skip (NFR-3)
+
+This also restores what the phase contract actually said. `111-02-SUMMARY.md:142`
+describes the unstage as accumulating `failed[]` **and** "delegat[ing] its
+containment refusal to the sole composer", and the threat row that motivates the
+accumulation (`111-02-PLAN.md`, T-111-13) is scoped to "an unlink failure". A
+composer refusal was never the thing `failed[]` was built to carry.
+
+**The first refusal is the one raised**, not the last: every later one is
+reached only by the decision to continue past the first, so raising a later one
+would report a refusal that the recovery policy itself caused.
+
+**It is thrown bare.** `appendLeaks` and `appendLeakToError` both return a plain
+`Error` wrapping the original as `cause`, which would carry the text and destroy
+the class — the one thing the caller narrows on. The `failed[]` rows collected
+before a refusal are therefore lost on that path; that is the correct trade,
+because the alternative loses the bypass.
+
+**Reproduced before fixing.** The pre-existing symlink case asserted the row, so
+it was rewritten into the case that would have caught this, and it fails against
+the unfixed module on `assert.ok(error instanceof SymlinkRefusedError)`. It uses
+**two** refused names followed by a removable one, which is the shape one refused
+name cannot expose: it pins the first-wins choice and the continue-anyway
+contract in the same case.
+
+The separator case (`../escape`) is untouched and still asserts a `failed[]`
+row — `assertSafeName` throws a plain `Error`, not a `PathContainmentError`, so
+the two arms are distinguished by class and both are covered.
+
+`types.ts` records the narrowed contract on `failed` itself, so a reader meets
+it where the field is declared rather than only in the loop.
+
+### WR-11: the rollback leak text contradicted the placement report
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/workflows/stage.ts`,
+`tests/bridges/workflows/stage.test.ts`
+**Commit:** `3b16b169`
+**Status:** fixed, verified by a red-first regression test
+
+Confirmed exactly as described. Against the unfixed module the new assertion
+prints the two contradictory statements in one error object:
+
+```text
+... rename '.../absent.json' -> '.../saved/acme:shout.json'
+  (additionally: failed to roll back workflow rename
+   .../saved/acme:greet.json -> .../rollback-blocker: EISDIR: ...)
+```
+
+while `onPlaced` reported `[]` and `acme:greet.json` held the restored previous
+envelope.
+
+**Fixed by unifying, not by duplicating the predicate.** The reversal failure's
+reason now travels with its pair, and both channels are built from one
+`stranded` list after the restore loop:
+
+- `reportPlaced(stranded.map(...))` — the structured removal payload
+- `stranded.map(...)` → `rollbackLeaks` — the human-readable recovery text
+
+Two independent filters on one condition is how the halves came apart in the
+first place, so there is now one place to change if the condition ever moves.
+The leak strings are the manual-recovery instructions — the sibling restore leak
+says to move a file back by hand — so the two channels must not be able to
+disagree.
+
+The leak text is byte-identical for a genuinely stranded pair; the existing
+`"reports the still-placed names in discovery order"` case still passes
+unchanged, including its `assert.match` on the leak prefix. The only difference
+is leak ordering (discovery order now, unwind order before), which no case
+asserts and which matches the order the report already used.
+
+### WR-12: the `.previous` join was anchored on itself
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/workflows/stage.ts`,
+`tests/bridges/workflows/stage.test.ts`
+**Commit:** `ede9459e`
+**Status:** fixed, verified by a red-first regression test and a standalone probe
+
+**Verified rather than pasted, as asked.** I planted `.previous` as a link to an
+outside directory between prepare and commit and ran the real commit:
+
+```text
+commit error    : none (commit succeeded)
+outside dir now : [ 'acme:greet.json' ]
+  contents      : acme:greet.json "PREVIOUS ENVELOPE\n"
+```
+
+With the anchor raised to `prepared.stagingRoot` the same probe returns
+`SymlinkRefusedError: displaced previous workflow file contains symlink
+.../.previous -> /tmp/...`, the outside directory stays empty, and all 61
+pre-existing workflow cases stay green — confirming the reviewer's note that no
+current case discriminates the anchor, which is why a new one was added.
+
+**The severity judgment is left where the reviewer put it.** The capability
+needed is a same-user concurrent process with write access inside the staging
+tree during the prepare→commit window, which `path-safety.ts:70-76` accepts as
+residual TOCTOU risk, and which is not reachable from plugin-authored input. I
+found no evidence to move it in either direction, so WARNING stands.
+
+**I did not add a second check before the `mkdir`.** The staging-root comment
+eight lines up justifies its pre-`mkdir` position by saying a recursive `mkdir`
+follows a symlinked parent, so I checked whether a **dangling** `.previous` link
+would let `mkdir` create a directory outside the tree before the refusal fires.
+It does not:
+
+```text
+commit error : Error: ENOENT: no such file or directory, mkdir '.../.previous'
+outside dir  : []
+```
+
+Node's recursive `mkdir` refuses to build through a dangling link, so there is
+no residual for a second check to close and the one-identifier fix is complete.
+Recorded here so the question is not re-derived from the asymmetry with the
+staging-root join.
+
+The new case plants a file inside the outside directory as well, so it asserts
+two things rather than one: nothing was written through the link, and the
+staging cleanup that follows the refusal removed the **link** rather than what
+it points at.
+
+---
+
+## Out of scope this pass
+
+**IN-06** (a throwing `onPlaced` destroys the original error and every rollback
+leak) is Info, and this pass ran `--fix` without `--all`. Untouched. The WR-11
+fix did not make it worse: `reportPlaced` is still one call in the same
+position, and the expression it is handed is now shorter than before.
+
+The iteration-1 dispositions are unchanged and were not re-opened: WR-06
+(rejected with reasoning), WR-08 and WR-09 (carried as numbered Phase 112 / 113
+ROADMAP success criteria), IN-01..IN-05 (Info).
+
+## Scope boundaries observed
+
+- `orchestrators/` — not touched. No `"bridges-workflows"` entry was added to
+  the `orchestrators` zone's `allow` array in `.fallowrc.json`.
+- `EXTENSION_VERSION` and the other five bump sites — not touched; still
+  `0.19.0`.
+- Phase 109's five inverted files (`domain/resolver.ts`,
+  `domain/components/plugin.ts`, `shared/notify.ts`, `shared/notify-reasons.ts`,
+  `shared/probe-classifiers.ts`) — not touched.
+- `.planning/WINDOWS.md` — not touched.
+- WR-08 and WR-09 — left on their ROADMAP carriers.
+- No test-only export, module-global setter, reset hook or production seam was
+  added. No new production or test file was created.
+- Comment policy (`.claude/rules/typescript-comments.md`): no `Phase NN`,
+  `Plan NN`, `Wave N` or bare `Pitfall N` token was introduced. Requirement and
+  decision IDs (`PI-14`, `WLIF-03`, `WPTH-04`, `NFR-3`, `CR-02`) are used as the
+  durable anchors the policy permits.
+
+## Commits
+
+| Finding | Commit | Kind |
+| --- | --- | --- |
+| WR-10 | `4964b398` | `fix(workflows): raise a containment refusal the ledger can bypass on` |
+| WR-11 | `3b16b169` | `fix(workflows): withhold the leak text for a reclaimed rollback target` |
+| WR-12 | `ede9459e` | `fix(workflows): lstat the displaced directory segment before using it` |
+
+Every commit ran `pre-commit run --files <changed paths>` clean apart from the
+structural `trufflehog` git-mode failure this checkout always produces (`.git`
+is a file), which was cleared each time by a filesystem scan
+(`--results=verified,unknown --fail`, 0 verified and 0 unverified secrets)
+before committing with `SKIP=trufflehog`. No `--no-verify`, no `--amend`.
+`git status` was checked after each commit for prettier-hook rewrites; none were
+left behind.
+
+---
+
+_Fixed: 2026-09-05_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
