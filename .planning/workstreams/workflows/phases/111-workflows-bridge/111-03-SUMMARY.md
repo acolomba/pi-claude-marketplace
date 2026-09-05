@@ -306,6 +306,18 @@ None - no external service configuration required.
 - **Nothing consumes the bridge yet.** No orchestrator imports it, and the `orchestrators` fallow allow-list still omits `"bridges-workflows"` — see the note above; that entry belongs to the change that first imports the bridge.
 - **Two seams the next phases will want:** `commitPreparedWorkflows`'s `onPlaced` is the caller's removal payload on every path including each throw, and its return value is a leak string rather than a throw when only the staging cleanup failed. A caller that derives removal work from the thrown error's type instead will unlink either a foreign file or a previous envelope the rollback just restored.
 
+## Self-Check: PASSED
+
+- All four `key-files.created` paths exist on disk.
+- `git log --oneline --all | grep 6981b2b4` returns the production commit.
+- Every task's `<acceptance_criteria>` was re-run after the last edit; all pass.
+- The plan-level `<verification>` was re-run: typecheck 0 errors, `npm run lint`
+  exit 0, `npm run fallow` exit 0 (true exit captured, not a pipeline's),
+  `npm run format:check` exit 0, both corresponding-test gates pass, `npm test`
+  5378/5378, `npm run test:integration` 32/32, all five bridge pairs at their
+  expected direct coverage, the five inverted files clean, and the commit
+  carrying exactly the four planned paths.
+
 ---
 *Phase: 111-workflows-bridge*
 *Completed: 2026-09-05*
