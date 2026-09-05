@@ -21,7 +21,7 @@
     {
       "number": "112",
       "name": "Install and removal lifecycle",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "113",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 112)",
-    "reason": "Phase 112 of 9 — needs a plan"
+    "label": "Advance to the next step (plan phase 113)",
+    "reason": "Phase 113 of 9 — needs a plan"
   },
-  "updated_at": "2026-09-05T15:05:21.881Z"
+  "updated_at": "2026-09-05T21:32:21.997Z"
 }

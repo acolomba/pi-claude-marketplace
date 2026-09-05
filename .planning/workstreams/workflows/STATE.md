@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 112
-current_phase_name: Install and removal lifecycle
-current_plan: 112-04 (complete)
-status: In progress
-stopped_at: Completed 112-04-PLAN.md
-last_updated: "2026-09-05T19:20:00.000Z"
+current_phase: 113
+current_phase_name: Update, enable/disable, reconcile
+current_plan: Not started
+status: planning
+stopped_at: Phase 112 complete, ready to plan Phase 113
+last_updated: "2026-09-05T21:32:21.955Z"
 last_activity: 2026-09-05
-last_activity_desc: 112-04 complete - orphaned workflow staging trees are swept under a 24-hour age bound from both lifecycle sides
-state_head: 8e2c8a54fdbdd396d771dc01513f1e124a3c3abb
+last_activity_desc: Phase 112 complete, transitioned to Phase 113
+state_head: d568bf498e7ad607a519d5ba49a890416d236eb9
 progress:
   total_phases: 9
   completed_phases: 4
@@ -35,9 +35,27 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 112 (Install and removal lifecycle) — ALL 4 PLANS EXECUTED, verification pending
-Plan: `112-01` through `112-04` complete; the phase is ready for `/gsd-verify-work 112`
-Status: `112-04` closed the phase in three commits — `27af6664` the age-bounded
+Phase: 113 — Update, enable/disable, reconcile
+Plan: none yet — Phase 113 is not planned
+Status: Ready to plan Phase 113. Phase 112 is complete and verified 7/7 against
+the ROADMAP's seven success criteria. The install ledger now carries a sixth
+workflows phase that unwinds with the rest, all four removal verbs take the
+envelopes away again, and an age-bounded sweeper reclaims orphaned staging trees.
+
+The review loop ran two iterations and found two data-loss blockers, both in
+reinstall's `replaceAll` catch and both descended from one false comment — that
+nothing after the commit can fail, when a commit can fail *partially*. One
+discarded the stranded-envelope report, orphaning executables in the shared
+saved directory; the other deleted the staging root the commit deliberately
+preserved as the only copy of the user's displaced envelopes. Iteration 2 then
+found the new retention predicate swallowed every errno (a transient EIO would
+hand the tree to `rm -rf`) and probed through an unvalidated path before the
+containment check. All fixed, each proven non-vacuous by reverting the fix and
+observing red.
+
+Four items are carried rather than closed: ROADMAP Phase 113 criteria 6 and 7
+(update never re-stages workflows; retained trees are never enumerated), and
+`WARN-01` and `CASCADEAX-01` in `.planning/BACKLOG.md`.
 staging sweeper with its mirrored owner test, `b2c2b4af` the install-side and
 removal-side call sites, `85b0692b` the stale ledger and kind-count corrections.
 `npm run check` is green end to end (unit 5504/0, integration 32/0) and
@@ -263,8 +281,8 @@ explicitly declines that mechanism, and main has since taught
 `generatedCommandName` nested-path and empty-head rules a flat workflow caller
 can never produce.
 
-Last activity: 2026-09-05 — Phase 111 verified 9/9 and marked complete; the
-next step is `/gsd-plan-phase 112`
+Last activity: 2026-09-05 — Phase 112 verified 7/7 and marked complete; the
+next step is `/gsd-plan-phase 113`
 
 **The D-109-06 window is CLOSED.** Phase 111 landed `bridges/workflows/` and
 bumped `EXTENSION_VERSION` to `0.19.0`, discharging both obligations Phase 109
@@ -294,8 +312,8 @@ Phase 112 is what makes the repair actually run; the effect lands at release.
 
 ## Progress
 
-**Phases Complete:** 4/9 executed (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** none — Phase 112 is 4/4 plans done.
+**Phases Complete:** 4/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started
 
 ```text
 [====------] 44%
@@ -415,7 +433,7 @@ implementation.
 
 **Last session:** 2026-09-05T19:20:00Z
 
-**Stopped At:** Completed 112-04-PLAN.md
+**Stopped At:** Phase 112 complete, ready to plan Phase 113
 **Resume File:** None
 **Next Action:** `/gsd-verify-work 112` — all four plans are executed and the
 phase gate is green. Three stale "five kinds" statements survive OUTSIDE the six

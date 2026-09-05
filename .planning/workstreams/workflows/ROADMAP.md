@@ -574,7 +574,7 @@ Plans:
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
 | 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
 | 111. Workflows bridge | 4/4 | Complete    | 2026-09-05 |
-| 112. Install and removal lifecycle | 4/4 | Complete | 2026-09-05 |
+| 112. Install and removal lifecycle | 4/4 | Complete    | 2026-09-05 |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
 | 114. Degradation and documentation | 0/? | Not started | - |
 | 115. Install-time admission-gate warnings | 0/? | Not started | - |
