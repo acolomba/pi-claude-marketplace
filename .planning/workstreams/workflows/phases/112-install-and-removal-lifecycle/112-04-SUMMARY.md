@@ -308,3 +308,7 @@ What Phase 113 inherits:
 ---
 *Phase: 112-install-and-removal-lifecycle*
 *Completed: 2026-09-05*
+
+## Self-Check: PASSED
+
+Both created files exist on disk. All four commits (`27af6664`, `b2c2b4af`, `85b0692b`, `388b97c1`) are present in the log. Every task-level `<acceptance_criteria>` was re-run at its task boundary; the one arithmetically impossible criterion is documented above with its direct verification. The plan-level `<verification>` commands were re-run in full: `npm run check` exits 0, all three direct-coverage reports read `hit === found`, the corresponding-test gate names no missing test, and `git status` is clean after every commit.
