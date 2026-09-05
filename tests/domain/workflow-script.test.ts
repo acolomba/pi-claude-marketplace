@@ -224,6 +224,44 @@ return 1;
     assert.deepStrictEqual(admission(verdict), expectedVerdict);
   });
 
+  test("lets the last of two meta declarators win, because that is the one the module keeps", () => {
+    // arrange
+    // `var` redeclaration is legal at module top level and the second binding is
+    // the surviving one, so reporting "first" would name a command the evaluated
+    // script never carries.
+    const source = `var meta = { name: "first" };
+var meta = { name: "second" };
+`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "second",
+      generatedName: "acme:second",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.workflow.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+  });
+
+  test("lets a later non-object meta declarator supersede an earlier object literal", () => {
+    // arrange
+    const source = `var meta = { name: "first" };
+var meta = makeMeta();
+`;
+    const expectedVerdict = {
+      outcome: "skipped",
+      cause: "meta-not-object-literal",
+    } satisfies NonAdmission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.workflow.js", source);
+
+    // assert
+    assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+  });
+
   test("lets a literal name that follows a spread win, because the read is last-wins", () => {
     // arrange
     const source = `const extra = {};

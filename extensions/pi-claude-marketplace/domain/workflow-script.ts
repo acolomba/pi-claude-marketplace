@@ -556,7 +556,19 @@ type MetaLookup =
  */
 type MetaElement = Property | SpreadElement;
 
+/**
+ * The `meta` declarator the evaluated module would end up with -- in order, LAST
+ * WINS, the same rule `readMetaString` applies one level down to the properties
+ * inside it.
+ *
+ * `var meta = ...` twice at the top level is legal in a module and the second
+ * binding is the one that survives, so stopping at the first would report a name
+ * the evaluated script never carries. That is the argument `readMetaString`
+ * already makes for properties, and it does not stop being true one level up.
+ */
 function findMetaObject(ast: Program): MetaLookup {
+  let found: MetaLookup = { kind: "no-meta" };
+
   for (const node of ast.body) {
     const decl = node.type === "ExportNamedDeclaration" ? node.declaration : node;
 
@@ -564,20 +576,19 @@ function findMetaObject(ast: Program): MetaLookup {
       continue;
     }
 
-    for (const d of decl.declarations) {
-      if (d.id.type !== "Identifier" || d.id.name !== "meta") {
+    for (const declarator of decl.declarations) {
+      if (declarator.id.type !== "Identifier" || declarator.id.name !== "meta") {
         continue;
       }
 
-      if (d.init?.type !== "ObjectExpression") {
-        return { kind: "meta-not-object-literal" };
-      }
-
-      return { kind: "object-literal", elements: d.init.properties };
+      found =
+        declarator.init?.type === "ObjectExpression"
+          ? { kind: "object-literal", elements: declarator.init.properties }
+          : { kind: "meta-not-object-literal" };
     }
   }
 
-  return { kind: "no-meta" };
+  return found;
 }
 
 /**
