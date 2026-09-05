@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-59-PLAN.md
-last_updated: "2026-09-05T16:34:11.000Z"
+stopped_at: Completed 01-60-PLAN.md
+last_updated: "2026-09-05T16:55:07.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-59 closed stale MF-DEC-04 evidence-only; seven decision dossiers remain pending
-state_head: ffefe623b2d7ed52838e5d6bfc05a914e101c04e
+last_activity_desc: Plan 01-60 selected one-to-one alias mapping for MF-DEC-05; six decision dossiers remain pending
+state_head: 97ef96da91e0ac062ae89060032e85030a58e30c
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 59
+  completed_plans: 60
   percent: 0
 ---
 
@@ -33,9 +33,9 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 59 of 69
+Plan: 60 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-59 closed stale MF-DEC-04 evidence-only; seven decision dossiers remain pending
+Last activity: 2026-09-05 — Plan 01-60 selected one-to-one alias mapping for MF-DEC-05; six decision dossiers remain pending
 
 ## Performance Metrics
 
@@ -242,6 +242,7 @@ Last activity: 2026-09-05 — Plan 01-59 closed stale MF-DEC-04 evidence-only; s
 | Phase 01 P57 | 1h 43m | 1 tasks | 3 files |
 | Phase 01 P58 | 58min | 1 tasks | 5 files |
 | Phase 01 P59 | 3min | 1 tasks | 3 files |
+| Phase 01 P60 | 18min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -573,6 +574,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route MF-DEC-01 through PDEF-01/PDEF-07, TREF-03, TREF-06, TREF-08, and RCOV-02; pid-table source context authorizes no change without a dedicated terminal finding.
 - [Phase 01]: Close MF-DEC-04 without an operator choice because its sole specific premise SNC-F001 is stale and current install/update/reinstall cascade paths disprove the historical 18-of-19 census.
 - [Phase 01]: MF-DEC-04 authorizes no global renderer change; preserve SNA-F010, SNC-F002, OPM-F04, and SNC-F019 in Phase 2 and OPM-F05 in Phase 6 under their existing destinations.
+- [Phase 01]: Resolve declared plugin marketplace aliases through a one-to-one source-claim map while preserving manifest-derived canonical state identity; fail closed on a missing or ambiguous mapping.
+- [Phase 01]: Route MF-DEC-05 implementation through Phase 3 PDEF-08 and its distinct alias/tools fixed-point regression through PDEF-01; preserve ORA-F04, ORA-F07, and ORA-F13 independently.
 
 ### Pending Todos
 
@@ -625,16 +628,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-59-PLAN.md
+**Stopped at:** Completed 01-60-PLAN.md
 
-Phase 01 remains active. MF-DEC-01 and MF-DEC-04 are resolved, and seven decision dossiers remain pending.
+Phase 01 remains active. MF-DEC-01, MF-DEC-04, and MF-DEC-05 are resolved, and six decision dossiers remain pending.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-59-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-60-SUMMARY.md` and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T16:34:11.000Z
+Last session: 2026-09-05T16:55:07.000Z
 
-**Next:** Execute `01-60-PLAN.md` and evaluate only `MF-DEC-05` from its terminal current
+**Next:** Execute `01-61-PLAN.md` and evaluate only `MF-DEC-06` from its terminal current
 premises before opening another dossier.
