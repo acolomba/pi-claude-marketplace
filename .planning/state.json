@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Live Evidence Revalidation",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "2",
@@ -50,9 +50,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 1 of 9 · 0% · executing"
+    "command": "/gsd:autonomous --from 2",
+    "label": "Discuss and plan Phase 2 autonomously",
+    "reason": "Phase 1 of 9 complete · 69/69 plans · Phase 2 is ready for discussion and planning"
   },
-  "updated_at": "2026-09-05T20:24:03.000Z"
+  "updated_at": "2026-09-05T20:56:46.000Z"
 }
