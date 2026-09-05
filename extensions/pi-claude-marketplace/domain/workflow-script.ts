@@ -276,8 +276,8 @@ function namedVerdict(
  * declines for the good reason that an engine upgrade may drop them; and the
  * `description` half cannot be judged from `meta.name` alone anyway. Telling the
  * user belongs to the bridge that writes the envelope, which owns the
- * `warnings[]` channel for a script staged with a caveat. Carried as a Phase 111
- * success criterion so the arm does not stay a silent dead-command factory.
+ * `warnings[]` channel for a script staged with a caveat. Tracked there as a
+ * roadmap criterion so the arm does not stay a silent dead-command factory.
  */
 function stemFallbackVerdict(
   pluginName: string,
