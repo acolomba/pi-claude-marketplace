@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-62-PLAN.md
-last_updated: "2026-09-05T17:41:20.000Z"
+stopped_at: Completed 01-63-PLAN.md
+last_updated: "2026-09-05T18:00:05.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-62 selected the complete sequenced module-split program for MF-DEC-02; four decision dossiers remain pending
-state_head: dee2c72534fbc9d37fede003bc0087d03c8c3853
+last_activity_desc: Plan 01-63 preserved two deliberate behavioral-composition proofs for MF-DEC-03; three decision dossiers remain pending
+state_head: 6eaee8a73b02e100344e4c4199179f8009dc4966
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 62
+  completed_plans: 63
   percent: 0
 ---
 
@@ -33,17 +33,17 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 62 of 69
+Plan: 63 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-62 selected the complete sequenced module-split program for MF-DEC-02; four decision dossiers remain pending
+Last activity: 2026-09-05 — Plan 01-63 preserved two deliberate behavioral-composition proofs for MF-DEC-03; three decision dossiers remain pending
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 163
+- Total plans completed: 164
 - Average recorded duration: 11.8 min
-- Total recorded execution time: 32 hr 01 min
+- Total recorded execution time: 32 hr 17 min
 
 **By Phase:**
 
@@ -245,6 +245,7 @@ Last activity: 2026-09-05 — Plan 01-62 selected the complete sequenced module-
 | Phase 01 P60 | 18min | 1 tasks | 3 files |
 | Phase 01 P61 | 17min | 1 tasks | 3 files |
 | Phase 01 P62 | 24min | 1 tasks | 3 files |
+| Phase 01 P63 | 16min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -582,6 +583,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route MF-DEC-06 through Phase 3 PDEF-01 and Phase 6 TREF-07; named autoupdate is single, a bare sweep is plural, and plural list bare headers still produce no tally.
 - [Phase 01]: Execute the complete resolver, notify, install, update, reinstall, list, and catalog split program only after its correctness and test-strength prerequisites; file size alone never authorizes extraction.
 - [Phase 01]: Route approved splits through Phase 6 TREF-09 with mirrored owner tests, one end-to-end proof per flow, no test-only exports, direct-pair coverage, and mandatory gate, documentation, ownership, and completeness repointing; keep info deferred and uninstall unsplit.
+- [Phase 01]: Preserve applyReconcile and bootstrapClaudePlugin as the only two demonstrated behavioral-composition exceptions instead of adding production dependency seams solely for interaction tests.
+- [Phase 01]: Phase 5 TREF-04 must exempt only those observed flows while preserving their public-result, full state/configuration/tree, and exact-notification assertions; add no test-only exports or injection seams for them.
 
 ### Pending Todos
 
@@ -634,16 +637,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-62-PLAN.md
+**Stopped at:** Completed 01-63-PLAN.md
 
-Phase 01 remains active. MF-DEC-01, MF-DEC-02, MF-DEC-04, MF-DEC-05, and MF-DEC-06 are resolved, and four decision dossiers remain pending.
+Phase 01 remains active. MF-DEC-01 through MF-DEC-06 are resolved, and three decision dossiers remain pending.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-62-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-63-SUMMARY.md` and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T17:41:20.000Z
+Last session: 2026-09-05T18:00:05.000Z
 
-**Next:** Execute `01-63-PLAN.md` and evaluate only `MF-DEC-03` from its terminal current
+**Next:** Execute `01-64-PLAN.md` and evaluate only `MF-DEC-07` from its terminal current
 premises before opening another dossier.
