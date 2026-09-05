@@ -450,7 +450,7 @@ wave 2.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
-| 110. Domain and platform modules | 0/3 | Planned | - |
+| 110. Domain and platform modules | 1/3 | In Progress | - |
 | 111. Workflows bridge | 0/? | Not started | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |

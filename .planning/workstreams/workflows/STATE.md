@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 110
 current_phase_name: Domain and platform modules
-current_plan: 110-01 (not started)
-status: Ready to execute
-stopped_at: Phase 110 planned (3 plans), ready to execute
-last_updated: "2026-09-05T04:16:48.275Z"
+current_plan: 110-02 (not started)
+status: In progress
+stopped_at: Completed 110-01-PLAN.md
+last_updated: "2026-09-05T04:42:19Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 110 planned - 3 plans, checker clean
+last_activity_desc: Phase 110 plan 01 executed - storage root and project key landed
 state_head: 8c880217892c9ddb182e55dd5ab4a910796be9c8
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 11
 ---
 
@@ -35,18 +35,33 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 110 (Domain and platform modules) — READY TO EXECUTE
-Plan: 3 plans, none started
-Status: Ready to execute. Phase 110 is planned and the plans passed the checker
-with 0 blockers and 2 warnings, both since closed or accepted. The three plans
-run serially — `110-01` (the tracer: `platform/workflow-home.ts` and
-`domain/workflow-project-key.ts` with their owner tests), `110-02`
-(`domain/name.ts` and `shared/errors.ts` with their owner tests extended), and
-`110-03` (`acorn`, `domain/workflow-script.ts` and its owner test as one atomic
-commit). They are serialized on the *gate*, not on the code: `use_worktrees` is
-false and `typecheck`/`fallow`/`format:check`/`npm test` all scan the whole
-tree, so a half-finished sibling makes a green run read red. `110-03` also
-carries a real import dependency on `110-02`.
+Phase: 110 (Domain and platform modules) — IN PROGRESS
+Plan: 1 of 3 complete (`110-01`), `110-02` next
+Status: In progress. `110-01` landed the tracer: `platform/workflow-home.ts`
+with its relocation seam deleted, `domain/workflow-project-key.ts` unedited,
+and both owner tests, in two commits (`df7b9be8`, `ed756b8f`). The whole gate
+chain is green and Phase 109's five inverted files are provably untouched.
+Remaining: `110-02` (`domain/name.ts` and `shared/errors.ts` with their owner
+tests extended) and `110-03` (`acorn`, `domain/workflow-script.ts` and its
+owner test as one atomic commit). They are serialized on the *gate*, not on the
+code: `use_worktrees` is false and `typecheck`/`fallow`/`format:check`/`npm
+test` all scan the whole tree, so a half-finished sibling makes a green run read
+red. `110-03` also carries a real import dependency on `110-02`.
+
+**The phase mechanism is proved and reusable.** `110-01` ran it end to end:
+path-scoped `git checkout features/workflow-port-wip -- <one file>` (never a
+directory, never `extensions/`), the five-file blast-radius assertion
+immediately after, an owner test that imports every export by name so
+`fallow dead-code` stays clean without a suppression marker, 100% direct
+coverage per pair, and the full chain before each commit.
+
+**WPTH-02 does not close in this phase.** `110-01` proved only its provable
+half — the storage root is home-derived, reads no `cwd` and reads no
+environment override. The "legacy project path is never written" guarantee is a
+Phase 111 property of `persistence/locations.ts` and
+`bridges/workflows/stage.ts`. `110-01-SUMMARY.md` §WPTH-02 carry-forward has
+the detail; the requirement should be re-scoped or split rather than marked
+satisfied on Phase 110's evidence.
 
 Phase 109 remains complete and verified 12/12; the inversion is live, the whole
 test tree agrees with it, and `npm run check` was green end to end at its close.
@@ -97,7 +112,7 @@ that way permanently.
 ## Progress
 
 **Phases Complete:** 1/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started
+**Current Plan:** 110-02, not started (110-01 complete)
 
 ```text
 [=---------] 11%
@@ -106,7 +121,7 @@ that way permanently.
 | Phase | Name | Status |
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
-| 110 | Domain and platform modules | Not started |
+| 110 | Domain and platform modules | In progress (1/3 plans) |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
@@ -144,8 +159,10 @@ What is on this branch right now, so a later session does not read the archived
   `features/workflows-spike`, not here.
 - **Spike evidence:** ported and renumbered 021-026 (008-013 collided with this
   branch's existing spikes). Re-verified against engine 3.10.1 in Spike 027.
-- **Production code:** none of it. No `bridges/workflows/`, no
-  `domain/workflow-*.ts`, no `platform/workflow-home.ts`, no `acorn`
+- **Production code:** two leaf modules so far, both landed by `110-01` —
+  `platform/workflow-home.ts` (seam-free) and `domain/workflow-project-key.ts`
+  (unedited). Still absent: `bridges/workflows/`, `domain/workflow-script.ts`,
+  the `domain/name.ts` and `shared/errors.ts` additions, and the `acorn`
   dependency.
 - **Behavior today:** Phase 109 inverted it. A workflow-bearing plugin now
   resolves `installable`, installs with no `--partial`, and renders a clean
@@ -213,15 +230,24 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T02:14:05.944Z
+**Last session:** 2026-09-05T04:42:19Z
 
-**Stopped At:** Phase 109 complete, ready to plan Phase 110
+**Stopped At:** Completed 110-01-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-plan-phase 110`. Phase 109 is verified 12/12 and marked
-complete in ROADMAP.md; `109-VERIFICATION.md` carries the evidence. The phase's
-two manual-only obligations were answered in `109-05-SUMMARY.md` §*Human-check
-answers* — the Success-Criterion-4 observation sequence and the WINV-05 prose
-read — and the verifier confirmed both against the tree.
+**Next Action:** `/gsd-execute-phase 110` to run `110-02`. `110-01` is complete
+and its SUMMARY is on disk; the two production commits are `df7b9be8` (storage
+root) and `ed756b8f` (project key). Reuse `110-01`'s proved mechanism verbatim:
+path-scoped checkout naming individual files, the five-file blast-radius
+assertion immediately after, an owner test that imports every export by name,
+and the full gate chain before each commit. `110-03` must land `acorn`,
+`domain/workflow-script.ts` and its owner test in **one** commit or
+`fallow dead-code` reports an unused dependency.
+
+Phase 109 remains verified 12/12 and marked complete in ROADMAP.md;
+`109-VERIFICATION.md` carries the evidence. The phase's two manual-only
+obligations were answered in `109-05-SUMMARY.md` §*Human-check answers* — the
+Success-Criterion-4 observation sequence and the WINV-05 prose read — and the
+verifier confirmed both against the tree.
 
 **Two obligations ride into Phase 111, and both now live in ROADMAP.md**
 §Phase 111 Success Criteria items 7-8 rather than only in phase-109 artifacts:
@@ -302,6 +328,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 109 P03 | 12 min | 2 tasks | 8 files |
 | Phase 109 P04 | 14 min | 3 tasks | 5 files |
 | Phase 109 P05 | 15 min | 2 tasks | 1 file |
+| Phase 110 P01 | 21 min | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -309,12 +336,16 @@ _Recorded per phase as the milestone proceeds._
 
 - [Phase 109]: The closed-set move is one commit, never two. T-02-25 warns that a kind in neither closed set is silently ignored, so the removal from `UNSUPPORTED_COMPONENT_KINDS` and the additions to both supported tuples landed together in `f23d964d`. — A tidier two-commit split would have published an intermediate tree carrying the exact defect the security note exists to prevent.
 - [Phase 109]: The install-level window test composes the host engine's storage root by hand (`path.join(HOME, ".pi", "workflows")`) rather than adding a `locations` getter for it. — That getter is Phase 110's deliverable; adding it here would be an unused export `fallow dead-code` would flag, and a boundary widening the assertion does not need.
+- [Phase 110]: The relocation seam was deleted outright rather than reshaped into a `homeDir` parameter. — `os.homedir()` re-reads `HOME` on every call and caches nothing, so `HOME` plus `t.after()` restoration is a working replacement; threading a home directory through every Phase 111 call site that does not otherwise need one would be a worse contract for a hazard the research measured absent.
+- [Phase 110]: The header sentence defending the seam was replaced, not merely orphaned. — A comment arguing for a mechanism you just deleted, from a premise measured false, is worse than no comment.
+- [Phase 110]: The relative-path parity case pins the working directory with `process.chdir("/")` instead of taking the spike's split pin. — The split pin computes half its expectation with production code; a pinned cwd makes the same row a transcribed literal that is deterministic on any machine.
+- [Phase 110]: WPTH-02 is recorded as carried forward rather than completed. — Phase 110 writes nothing, so it can prove only the home-derivation negative; the "never written" guarantee belongs to the Phase 111 modules that write.
 - [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps
 
-- Plan the next phase with `/gsd-plan-phase 110`
+- Continue Phase 110 with `/gsd-execute-phase 110` — `110-02` is next
 - Phase 109 is complete and verified 12/12; 110-114 run in order, each
   depending on the one before it
 - The hardening phases 115, 116 and 117 are mutually independent; the order
