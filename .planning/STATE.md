@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-32-PLAN.md
-last_updated: "2026-09-05T00:43:04.000Z"
+stopped_at: Completed 01-33-PLAN.md
+last_updated: "2026-09-05T00:37:59.500Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: fbd1b2cd370a45d0b90e802551030cc79c22510c
+state_head: 1504afa4ce401cceaea98b25fb2f7af7c9e4c977
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 32
+  completed_plans: 33
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 33 of 69
+Plan: 34 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -216,6 +216,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P30 | 8min | 2 tasks | 1 files |
 | Phase 01 P31 | 12min | 2 tasks | 1 files |
 | Phase 01 P32 | 14min | 1 tasks | 1 files |
+| Phase 01 P33 | 10min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -487,6 +488,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Plan 01-31 keeps D-11 test-strength claims inconclusive until an isolated surviving mutation supplies terminal proof.
 - [Phase 01]: Plan 01-32 routes source-claimed marketplace plugin behavior, exhaustiveness fallbacks, the test-only export, and the state-read seam through operator decisions.
 - [Phase 01]: Plan 01-32 preserves positive behavioral-test patterns separately from live remediation findings.
+- [Phase 01]: [Phase 01-33]: Keep fourteen test-strength claims inconclusive because no isolated surviving mutation was run.
+- [Phase 01]: [Phase 01-33]: Preserve structural, stale, clean-evidence, and cross-cutting corpus claims as separate identities.
 
 ### Pending Todos
 
@@ -539,7 +542,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-32-PLAN.md
+**Stopped at:** Completed 01-33-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -548,7 +551,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T00:27:14.311Z
+Last session: 2026-09-05T00:37:59.388Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
