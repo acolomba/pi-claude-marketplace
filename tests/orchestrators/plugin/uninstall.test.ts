@@ -118,7 +118,7 @@ function cascadeFailure(cause: Error): typeof cascadeUnstagePlugin {
   return () =>
     Promise.resolve({
       ok: false,
-      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
       cause,
     });
 }
@@ -817,7 +817,14 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -980,7 +987,14 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -1082,6 +1096,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
             agents: [],
             hooks: [],
             mcpServers: [],
+            workflows: [],
           },
           cause: err,
         });
@@ -1195,6 +1210,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
             agents: [],
             hooks: [],
             mcpServers: [],
+            workflows: [],
           },
           cause: err,
         });
@@ -1352,7 +1368,14 @@ test("cascade failure without a cause uses the exported fallback error", async (
       const noCauseCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
         });
       const { ctx, pi, notifications } = makeCtx();
 

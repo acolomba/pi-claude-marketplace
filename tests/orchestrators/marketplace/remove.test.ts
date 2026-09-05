@@ -111,7 +111,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
 }
 
 function emptyDropped(): CascadeDropped {
-  return { agents: [], commands: [], hooks: [], mcpServers: [], skills: [] };
+  return { agents: [], commands: [], hooks: [], mcpServers: [], skills: [], workflows: [] };
 }
 
 function marketplaceState(args: {
@@ -999,6 +999,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
           hooks: [],
           mcpServers: [],
           skills: ["skill-a"],
+          workflows: [],
         },
         cause: betaFailure,
       });
