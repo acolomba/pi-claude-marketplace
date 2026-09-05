@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 36/69 plans executed
+**Plans:** 37/69 plans executed
 
 **Success Criteria**:
 
@@ -121,7 +121,7 @@ Plans:
 - [x] 01-34-PLAN.md — Individually revalidate corpus paths 057-058 into one bounded exclusive shard
 - [x] 01-35-PLAN.md — Individually revalidate corpus paths 059-060 into one bounded exclusive shard
 - [x] 01-36-PLAN.md — Individually revalidate corpus path 061 into one bounded exclusive shard
-- [ ] 01-37-PLAN.md — Individually revalidate corpus paths 062-063 into one bounded exclusive shard
+- [x] 01-37-PLAN.md — Individually revalidate corpus paths 062-063 into one bounded exclusive shard
 - [ ] 01-38-PLAN.md — Individually revalidate corpus paths 064-065 into one bounded exclusive shard
 - [ ] 01-39-PLAN.md — Individually revalidate corpus path 066 into one bounded exclusive shard
 - [ ] 01-40-PLAN.md — Individually revalidate corpus paths 067-069 into one bounded exclusive shard
@@ -350,7 +350,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 36/69 | In Progress|  |
+| 1. Live Evidence Revalidation | 37/69 | In Progress|  |
 | 2. Containment and Input Safety | 0/0 | Not started | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |

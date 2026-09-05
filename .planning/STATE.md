@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-36-PLAN.md
-last_updated: "2026-09-05T00:58:52.239Z"
+stopped_at: Completed 01-37-PLAN.md
+last_updated: "2026-09-05T01:11:49.893Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 2fd767d8f3ccaeca9c832e5ad875844b32cb1f77
+state_head: 96df18ca8a57d2f72135dfcf4bf94da0cd149cce
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 36
+  completed_plans: 37
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 37 of 69
+Plan: 38 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -220,6 +220,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P34 | 10min | 2 tasks | 2 files |
 | Phase 01 P35 | 14min | 2 tasks | 2 files |
 | Phase 01 P36 | 5min | 1 tasks | 2 files |
+| Phase 01-live-evidence-revalidation P37 | 10min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -499,6 +500,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: [Phase 01-35]: Keep evidence status independent from remediation routing for root-index and shared-concern claims.
 - [Phase 01]: Treat green owner tests as executability evidence only, never as confirmation of named mutation strength.
 - [Phase 01]: Keep mutation-dependent claims inconclusive when no isolated mutation was run, while confirming structural claims from current live evidence.
+- [Phase 01]: Preserve shared-notify report-local claims in one exclusive validated shard with isolated mutation evidence.
 
 ### Pending Todos
 
@@ -551,7 +553,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-36-PLAN.md
+**Stopped at:** Completed 01-37-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -560,7 +562,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T00:58:52.129Z
+Last session: 2026-09-05T01:11:49.766Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
