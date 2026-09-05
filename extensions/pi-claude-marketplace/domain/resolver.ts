@@ -25,8 +25,9 @@
 // (D-64-07): a plugin that is both structurally broken AND declares
 // unsupported component kinds resolves `unavailable`.
 //
-// HOOK-01: `hooks` is admitted alongside `skills` / `commands` / `agents` /
-// `mcpServers`. The supported-kind tuple is the PUBLIC closed set; the
+// HOOK-01 / WINV-01: `hooks` is admitted alongside `skills` / `commands` /
+// `agents` / `workflows` / `mcpServers`.
+// The supported-kind tuple is the PUBLIC closed set; the
 // path-validation loop iterates a PRIVATE subset (`SUPPORTED_COMPONENT_PATH_KINDS`)
 // because `hooks` carries no per-entry component-path semantics -- the
 // discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
@@ -1584,10 +1585,11 @@ async function resolveWithMode(
  * short-circuited, which is what the original `(await stage()) || dirty` chain
  * did too.
  *
- * HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
- * NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
- * per-entry component-path semantics. The hooks-config probe in step 8b owns
- * the discovery + admission of the `hooks` supported kind.
+ * HOOK-01 / WINV-01: iterates SUPPORTED_COMPONENT_PATH_KINDS
+ * (skills/commands/agents/workflows), NOT the full SUPPORTED_COMPONENT_KINDS
+ * tuple, because `hooks` carries no per-entry component-path semantics. The
+ * hooks-config probe in step 8b owns the discovery + admission of the `hooks`
+ * supported kind.
  */
 async function runStructuralStages(args: {
   readonly entry: PluginEntry;
