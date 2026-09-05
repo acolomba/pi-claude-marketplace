@@ -6,16 +6,16 @@ current_phase: 109
 current_phase_name: kind-inversion
 current_plan: 05
 status: in_progress
-stopped_at: Completed 109-04-PLAN.md
-last_updated: "2026-09-05T00:02:00.000Z"
-last_activity: 2026-09-04
-last_activity_desc: Phase 109 Plan 04 executed — the eight invisible payloads widened, the three catalog fixtures turned, the classifier test turned; typecheck and npm test both green tree-wide
-state_head: 0b15f0ee
+stopped_at: Completed 109-05-PLAN.md
+last_updated: "2026-09-05T00:20:00.000Z"
+last_activity: 2026-09-05
+last_activity_desc: Phase 109 Plan 05 executed — the install-level window test pins both halves, the WINV-05 sweep is confirmed a no-op, and the whole npm run check chain is green
+state_head: e5ae373f
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -35,30 +35,43 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 109 (kind-inversion) — IN PROGRESS
-Plan: 4/5 complete (109-01, 109-02, 109-03, 109-04 done; 109-05 is next, Wave 4)
-Status: The inversion is live in production code and the whole test tree agrees
-with it. `workflows` sits in both supported tuples and in neither unsupported
-structure, `componentPaths.workflows` exists, and the dedicated `{workflows}`
-reason is retired from all four declaration sites. `npm run typecheck` reports
-**0** errors and `npm test` reports **5195 pass / 0 fail** tree-wide. The
-`catalog-uat` byte gate is green, closing the three byte mismatches `109-01`
-captured as its red half. What remains for `109-05` is the new integration test
-file `tests/integration/workflow-kind-inversion.test.ts`.
-Last activity: 2026-09-04 — 109-04 executed; three commits, the eight invisible
-`deepStrictEqual` payloads, the three catalog fixtures, then the classifier test
+Phase: 109 (kind-inversion) — ALL PLANS EXECUTED, awaiting verification
+Plan: 5/5 complete (109-01 through 109-05 done)
+Status: The inversion is live in production code, the whole test tree agrees with
+it, the published contract states the post-inversion meaning, and both halves of
+the intermediate window are pinned by an assertion. `workflows` sits in both
+supported tuples and in neither unsupported structure,
+`componentPaths.workflows` exists, and the dedicated `{workflows}` reason is
+retired from all four declaration sites. `tests/integration/workflow-kind-inversion.test.ts`
+drives a real `installPlugin` and asserts the clean `(installed)` row with no
+`--partial`, then asserts `<HOME>/.pi/workflows` does not exist. The whole
+`npm run check` chain is green: typecheck **0** errors, all three fallow
+sub-gates, Prettier, both corresponding-test gates, the direct-coverage negative
+gate, `npm test` at **5195 pass / 0 fail**, `npm run test:integration` at
+**32 pass / 0 fail**, and ESLint exit 0. `pre-commit run --all-files` passes with
+no file left modified. Next is `/gsd-verify-work 109`.
+Last activity: 2026-09-05 — 109-05 executed; one test commit plus the metadata
+commit, and the phase taken through the full gate chain
 
-**The D-109-06 window is now open.** Until Phase 111 lands, a workflow-bearing
-plugin resolves `installable`, renders `● (installed)` with no brace, and
-materializes zero workflow commands. Cut no release from this branch, and do NOT
-bump `EXTENSION_VERSION` before Phase 111 (A-03: a bump would fire the
-`supportedSetGrew` backfill convergence while no bridge exists to materialize
-anything).
+**The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
+workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
+brace, and materializes zero workflow commands.
+`tests/integration/workflow-kind-inversion.test.ts` asserts both halves, so the
+window is a fact under test rather than an undocumented gap. Cut no release from
+this branch, and do NOT bump `EXTENSION_VERSION` before Phase 111 (A-03: a bump
+would fire the `supportedSetGrew` backfill convergence while no bridge exists to
+materialize anything).
+
+**Phase 111 must invert the no-artifact half** of that test — the single
+`assert.rejects(stat(<HOME>/.pi/workflows), { code: "ENOENT" })` line becomes an
+assertion that the envelopes ARE written. An assertion that quietly stays green
+while meaning the opposite is worse than no assertion. Recorded in
+`109-CONTEXT.md` §Deferred Ideas and `109-05-SUMMARY.md`.
 
 ## Progress
 
 **Phases Complete:** 0/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 109-05 (4 of 5 complete)
+**Current Plan:** 109-05 (5 of 5 complete; phase awaiting verification)
 
 ```text
 [----------] 0%
@@ -66,7 +79,7 @@ anything).
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 109 | Kind inversion | In progress (4/5 plans) |
+| 109 | Kind inversion | Executed (5/5 plans), awaiting verification |
 | 110 | Domain and platform modules | Not started |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
@@ -170,14 +183,21 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T00:02:00.000Z
+**Last session:** 2026-09-05T00:20:00.000Z
 
-**Stopped At:** Completed 109-04-PLAN.md
+**Stopped At:** Completed 109-05-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 109` — `109-05`, the last plan of the
-phase, which adds `tests/integration/workflow-kind-inversion.test.ts`. The
-whole-tree `npm run typecheck` and `npm test` are both green as of `109-04`, so
-`109-05` starts from a clean baseline and any red it sees is its own.
+**Next Action:** `/gsd-verify-work 109`. All five plans of Phase 109 are
+executed and the whole `npm run check` chain is green, so the phase is ready for
+verification. Two of the phase's obligations are manual-only and their answers
+are already recorded in `109-05-SUMMARY.md` §*Human-check answers* — the
+Success-Criterion-4 observation sequence and the WINV-05 prose read. After
+verification, plan Phase 110 with `/gsd-plan-phase 110`.
+
+**One gate note for the verifier:** `roadmap.update-plan-progress 109` wrote
+`5/5` but left the phase row `In Progress`, which is the tool's own behavior
+while phase verification has not run. It flips to `Complete` at verification;
+do not hand-edit the row.
 
 **Where the work lives:** the worktree
 `/home/acolomba/pi-claude-marketplace-workflows` on branch `features/workflow`.
@@ -251,12 +271,15 @@ re-persists `harness-worktree` as a side effect.
 | Phase 109 P02 | 11 min | 2 tasks | 6 files |
 | Phase 109 P03 | 12 min | 2 tasks | 8 files |
 | Phase 109 P04 | 14 min | 3 tasks | 5 files |
+| Phase 109 P05 | 15 min | 2 tasks | 1 file |
 
 ## Decisions
 
 _Recorded per phase as the milestone proceeds._
 
 - [Phase 109]: The closed-set move is one commit, never two. T-02-25 warns that a kind in neither closed set is silently ignored, so the removal from `UNSUPPORTED_COMPONENT_KINDS` and the additions to both supported tuples landed together in `f23d964d`. — A tidier two-commit split would have published an intermediate tree carrying the exact defect the security note exists to prevent.
+- [Phase 109]: The install-level window test composes the host engine's storage root by hand (`path.join(HOME, ".pi", "workflows")`) rather than adding a `locations` getter for it. — That getter is Phase 110's deliverable; adding it here would be an unused export `fallow dead-code` would flag, and a boundary widening the assertion does not need.
+- [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps

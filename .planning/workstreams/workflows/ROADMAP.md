@@ -175,7 +175,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
    workflow-bearing plugins degrade is corrected in this phase, not a later one.
 6. `npm run check` is green.
 
-**Plans**: 4/5 plans executed in 4 waves
+**Plans**: 5/5 plans executed in 4 waves
 **Wave 1**
 
 - [x] 109-01-PLAN.md — Turn the five locking gates and the published catalog contract, and observe each one RED
@@ -191,7 +191,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 109-05-PLAN.md — Pin the 109-111 window at install level and take the phase through `npm run check`
+- [x] 109-05-PLAN.md — Pin the 109-111 window at install level and take the phase through `npm run check`
 
 ### Phase 110: Domain and platform modules
 
@@ -396,7 +396,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 109. Kind inversion | 4/5 | In Progress|  |
+| 109. Kind inversion | 5/5 | In Progress|  |
 | 110. Domain and platform modules | 0/? | Not started | - |
 | 111. Workflows bridge | 0/? | Not started | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
