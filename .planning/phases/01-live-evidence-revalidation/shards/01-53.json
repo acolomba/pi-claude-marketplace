@@ -1,0 +1,1041 @@
+{
+  "plan": "01-53",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "category": "first-pass",
+      "assignedPlan": "01-53",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-017"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "category": "first-pass",
+      "assignedPlan": "01-53",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-016"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "category": "first-pass",
+      "assignedPlan": "01-53",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-025"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The report reviews extensions/pi-claude-marketplace/index.ts and its mirrored tests/index.test.ts owner.",
+      "findingId": "RIFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The entry-point owner suite is one of the strongest suites in the historical sweep.",
+      "findingId": "RIFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The suite proves the documented NFR-2 containment routes with throwing cwd and notification collaborators, including both notification-failure levels.",
+      "findingId": "RIFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "Registration is checked with exact strong-mock expectations for event, command, and tool names and explicit per-case verification.",
+      "findingId": "RIFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The registration cases contain no It.isAny, anyTimes, or hidden verification.",
+      "findingId": "RIFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "Hydrate, reconcile, recompute, and aggregate order is behaviorally discriminated by ordered cwd reads and stage-specific side effects.",
+      "findingId": "RIFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The only remaining entry-point issues are two type-safety/documentation gaps rather than behavioral defects.",
+      "findingId": "RIFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "index.ts creates a double-cast placeholder ExtensionContext solely for registerHooksBridge's over-broad options type.",
+      "findingId": "RIFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "registerHooksBridge does not consume opts.ctx and should drop or narrow that field so the placeholder can be removed.",
+      "findingId": "RIFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The resources_discover registration retains an unexplained as unknown as bind cast and should use the direct overload or document the concrete type-system obstacle.",
+      "findingId": "RIFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The default extension factory documentation explains await ordering but not what registrations the factory installs.",
+      "findingId": "RIFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The factory documentation should add a leading what-clause while retaining its DISP-01 rationale.",
+      "findingId": "RIFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "tests/index.test.ts was historically classified clean.",
+      "findingId": "RIFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "All other index.ts behavior, including catch discipline, aggregation spread safety, and session-start handling, was historically classified clean.",
+      "findingId": "RIFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The historical report ran no typecheck, lint, test, or coverage command.",
+      "findingId": "RIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "The historical resources_discover cast finding was explicitly unverified without a typecheck rerun.",
+      "findingId": "RIFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/root-index.md",
+      "label": "tests/edge/notification-boundary.ts was used as context but not reviewed as its own target.",
+      "findingId": "RIFP-F010"
+    },
+
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "The report reviews the two shared concern modules and their two mirrored owner tests.",
+      "findingId": "SCOFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "Both shared concern pairs were historically classified clean, with soft-dep called exemplary.",
+      "findingId": "SCOFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "soft-dep.test.ts runs the complete 2x2x2x2 runtime truth table as sixteen sibling cases.",
+      "findingId": "SCOFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "Every soft-dependency row has a matching descriptive title and whole-array handwritten expectation.",
+      "findingId": "SCOFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "hooks.test.ts covers each appendHooksBlock union arm and distinguishes absent from empty lenient matchers.",
+      "findingId": "SCOFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "softDepMarkers is hermetic because SoftDepStatus is an explicit plain-data input and no node_modules probe runs in the pair.",
+      "findingId": "SCOFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "The global npm-root integration-test risk belongs to platform/pi-api and not to shared/concerns/soft-dep.ts.",
+      "findingId": "SCOFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "shared/concerns/hooks.ts is distinct from the hooks bridge and its other references do not replace owner behavior coverage.",
+      "findingId": "SCOFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "Only two minor production-style findings remained in hooks.ts.",
+      "findingId": "SCOFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "Both shared-concern owner tests were historically listed as clean.",
+      "findingId": "SCOFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "appendHooksBlock uses an explicit union-with-undefined parameter where an optional parameter was preferred.",
+      "findingId": "SCOFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "Changing appendHooksBlock entries to an optional parameter preserves explicit undefined calls and requires no caller changes.",
+      "findingId": "SCOFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "ClaudeHookEvent and HookSummaryEntry semantics are documented in a detached implementation-note block rather than adjacent JSDoc.",
+      "findingId": "SCOFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "The public hook type documentation should be split into adjacent JSDoc blocks while retaining its rationale.",
+      "findingId": "SCOFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "soft-dep.ts was historically classified clean because it is pure, explicitly injected, documented, and contains no unsafe assertions.",
+      "findingId": "SCOFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-concerns.md",
+      "label": "The historical review did not cover the platform/pi-api soft-dependency probe implementation.",
+      "findingId": "SCOFP-F006"
+    },
+
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The report reviews sixteen shared production modules and their sixteen mirrored owner tests, excluding notify and concerns.",
+      "findingId": "SHCFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The shared-core area was historically classified as the cleanest area in the sweep.",
+      "findingId": "SHCFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "Error classes and path errors are asserted by class identity, structured fields, cause-depth bounds, and cycle behavior.",
+      "findingId": "SHCFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "atomic-json tests compare complete bytes in case-owned temporary directories.",
+      "findingId": "SHCFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The classifier owner tests use exhaustive one-row-one-case tables.",
+      "findingId": "SHCFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "path-safety.test.ts exercises parent escapes, symlink positions, unreadable fallback, and traversal order with real temporary filesystems.",
+      "findingId": "SHCFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "completion-cache.ts exposes a test-only reset over module-scope mutable Maps and should be converted to factory-owned state.",
+      "findingId": "SHCFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "session-env.ts and debug-log.ts contain process-global dependencies, while getPluginIndex inconsistently bypasses its clock seam.",
+      "findingId": "SHCFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "A fixing pass should prioritize factory-owned completion-cache state before the smaller clock and environment items.",
+      "findingId": "SHCFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The cold plugin-index case uses a timestamp-format regex that would accept a wrong but well-formed instant.",
+      "findingId": "SHCFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "getPluginIndex should use its injected now function for persisted timestamps so the owner can assert an exact independently derived instant.",
+      "findingId": "SHCFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "Two completion-cache unlink-error cases assert only Error identity and code-not-ENOENT rather than the exact error code.",
+      "findingId": "SHCFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The unlink-error cases should assert the exact deterministic failure identity or code rather than a negative condition.",
+      "findingId": "SHCFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "After factory ownership replaces resetCompletionCache, its owner case should prove isolation between two cache instances.",
+      "findingId": "SHCFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "markers.test.ts repeats negative truncation and padding assertions after exact equality already proves the complete constants.",
+      "findingId": "SHCFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The redundant marker negative assertions should be removed.",
+      "findingId": "SHCFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "notify-context.test.ts tests four exported entrypoints as flat cases instead of one describe group per entrypoint.",
+      "findingId": "SHCFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The notify-context owner cases should be grouped once per exported function for readability.",
+      "findingId": "SHCFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "resetCompletionCache has no production caller, explicitly exists for tests, and clears two module-level Maps shared across cases.",
+      "findingId": "SHCFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "Completion-cache state should move behind a factory object threaded from composition, after which the reset export should be deleted.",
+      "findingId": "SHCFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "getPluginIndex uses new Date instead of its existing injected now function at both persisted timestamp writes.",
+      "findingId": "SHCFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "applySessionEnv mutates process.env and the historical report proposed a defaulted environment parameter for tests.",
+      "findingId": "SHCFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "hookDebugLog reads process.env internally and the historical report proposed a defaulted environment parameter for tests.",
+      "findingId": "SHCFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The remaining thirteen shared-core owner pairs were historically classified clean.",
+      "findingId": "SHCFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-core.md",
+      "label": "The historical report excluded notify and concerns and ran no test, lint, typecheck, or coverage command.",
+      "findingId": "SHCFP-F011"
+    }
+  ],
+  "findings": [
+    {
+      "id": "RIFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F013",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/index.ts" }],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/index.test.ts",
+        "exitCode": 0,
+        "observed": "The current mirrored owner suite passed, and CodeGraph confirmed the default factory-to-owner pairing."
+      },
+      "rationale": "The current pairing is already represented by RID-F013.",
+      "destination": "Retain the owner-pair evidence under RID-F013."
+    },
+    {
+      "id": "RIFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-003"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F017",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/index.ts" }],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/index.test.ts",
+        "exitCode": 0,
+        "observed": "The focused suite passed all named containment cases; RID-F008 separately preserves the uncovered aggregate rejection."
+      },
+      "rationale": "RID-F017 retains the currently proven entry-point branches without letting broad praise erase the narrower live gaps.",
+      "destination": "Keep the positive cases as evidence only and remediate RID-F008 independently."
+    },
+    {
+      "id": "RIFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-005"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F013",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/index.ts" }],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph registration-path inspection plus current owner-test inspection",
+        "observed": "Current registrations retain exact strong-mock expectations and explicit verifyBoundary calls without wildcard expectations."
+      },
+      "rationale": "RID-F013 already records exact ownership of the default export registrations.",
+      "destination": "Retain the exact-registration pattern as evidence-only guidance."
+    },
+    {
+      "id": "RIFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F019",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/index.ts" }],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/index.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner still uses four ordered cwd reads and stage-specific exact results, and the suite passes."
+      },
+      "rationale": "RID-F019 is the canonical current order-proof finding.",
+      "destination": "Preserve the order-proof pattern as evidence only."
+    },
+    {
+      "id": "RIFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F028",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/index.ts" }],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and canonical adversarial mutation evidence",
+        "observed": "Seven narrower current gaps survive despite a green 100/100/100 owner pair, so the historical broad clean classification is superseded at claim level."
+      },
+      "rationale": "RID-F028 already preserves and corrects the broad historical clean verdict.",
+      "destination": "Keep the clean verdict as historical context; route each narrow live finding independently."
+    },
+    {
+      "id": "RIFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "RID-F010",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/index.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }
+      ],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph caller and field-use analysis",
+        "observed": "index.ts still double-casts placeholderCtx while registerHooksBridge requires opts.ctx and never reads it."
+      },
+      "rationale": "RID-F010 already owns this live over-wide-context decision.",
+      "destination": "Resolve removal or narrowing under the RID-F010 operator decision."
+    },
+    {
+      "id": "RIFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "RID-F011",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/index.ts" },
+        { "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }
+      ],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph overload and current cast inspection",
+        "observed": "The current factory still routes resources_discover through pi.on.bind(pi) as unknown as a local listener signature."
+      },
+      "rationale": "RID-F011 terminally revalidated the formerly unverified cast premise.",
+      "destination": "Resolve direct overload use versus a documented workaround under RID-F011."
+    },
+    {
+      "id": "RIFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "RID-F012",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/index.ts" }],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "The default export comment still begins with DISP-01 ordering rationale and does not summarize the registered command, tools, or listeners."
+      },
+      "rationale": "RID-F012 already records the surviving documentation gap.",
+      "destination": "Add the what-clause during Phase 8 documentation cleanup."
+    },
+    {
+      "id": "RIFP-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F028",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Historical review-method statement has no production source reference."
+        }
+      ],
+      "testRefs": [{ "path": "tests/index.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/index.test.ts",
+        "exitCode": 0,
+        "observed": "The historical report explicitly records an unrun toolchain; the current focused owner rerun passes but does not override mutation-backed gaps."
+      },
+      "rationale": "RID-F028 already preserves the distinction between historical read-only review and current executable evidence.",
+      "destination": "Close the provenance claim as evidence only."
+    },
+    {
+      "id": "RIFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/root-index.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "RID-F021",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim describes historical review scope, not production behavior."
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/index.test.ts" },
+        { "path": "tests/edge/notification-boundary.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph notification-boundary use inspection",
+        "observed": "The helper remains test support used by the index owner; RID-F021 owns the current notification behavior evidence."
+      },
+      "rationale": "The historical ownership boundary remains traceable without creating a separate remediation item.",
+      "destination": "Retain notification behavior under RID-F021."
+    },
+
+    {
+      "id": "SCOFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SCN-F009",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/shared/concerns/hooks.test.ts" },
+        { "path": "tests/shared/concerns/soft-dep.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/concerns/hooks.test.ts tests/shared/concerns/soft-dep.test.ts",
+        "exitCode": 0,
+        "observed": "Both mirrored owners pass and CodeGraph confirms each current export is referenced by its owner."
+      },
+      "rationale": "SCN-F009 is the canonical ownership record for the concern exports.",
+      "destination": "Retain the pair inventory as evidence only."
+    },
+    {
+      "id": "SCOFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-010"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/shared/concerns/hooks.test.ts" },
+        { "path": "tests/shared/concerns/soft-dep.test.ts" }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test <repository-local-isolated-copy>/tests/shared/concerns/hooks.test.ts",
+        "exitCode": 0,
+        "observed": "Canonical SCN-F002 records a surviving strict empty-matcher mutation, and SCN-F001 through SCN-F008 preserve additional current type and ownership gaps."
+      },
+      "rationale": "The broad historical clean classification cannot remain authoritative after narrower current mutation and static evidence.",
+      "destination": "Preserve the historical verdict only as superseded evidence and route canonical findings independently."
+    },
+    {
+      "id": "SCOFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-004"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SCN-F010",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts" }],
+      "testRefs": [{ "path": "tests/shared/concerns/soft-dep.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/concerns/soft-dep.test.ts",
+        "exitCode": 0,
+        "observed": "All sixteen current sibling cases pass with literal full-array expectations and behavior-specific titles."
+      },
+      "rationale": "SCN-F010 and SCN-F016 already preserve the exhaustive runtime-table evidence.",
+      "destination": "Keep the runtime truth table as positive evidence; closed-set type gaps remain separate."
+    },
+    {
+      "id": "SCOFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SCN-F011",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts" }],
+      "testRefs": [{ "path": "tests/shared/concerns/hooks.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test <repository-local-isolated-copy>/tests/shared/concerns/hooks.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner proves absent versus empty lenient matcher, while canonical SCN-F011 records that the equivalent strict empty-matcher mutation survives."
+      },
+      "rationale": "SCN-F011 qualifies the historical full-branch praise with current value-level mutation evidence.",
+      "destination": "Add the strict empty-matcher case in Phase 2 without weakening the existing lenient case."
+    },
+    {
+      "id": "SCOFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SCN-F017",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts" }],
+      "testRefs": [{ "path": "tests/shared/concerns/soft-dep.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency inspection plus focused owner rerun",
+        "observed": "softDepMarkers still depends only on three explicit values, and its owner uses literal SoftDepStatus values with no live probe."
+      },
+      "rationale": "SCN-F017 is the canonical current purity and hermeticity finding.",
+      "destination": "Preserve the explicit-input design."
+    },
+    {
+      "id": "SCOFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SCN-F014",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/platform/pi-api.test.ts",
+        "exitCode": 0,
+        "observed": "SCN-F014 positively located the current platform owner; the old not-covered note remains a valid historical scope statement but not a current coverage gap."
+      },
+      "rationale": "SCN-F014 is the positive replacement proof required by D-12.",
+      "destination": "Close the old scope caveat as stale evidence."
+    },
+    {
+      "id": "SCOFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "SCN-F012",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts" }],
+      "testRefs": [{ "path": "tests/shared/concerns/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph signature and call-site inspection",
+        "observed": "appendHooksBlock still declares entries as readonly HookSummaryEntry[] | undefined; current same-shape siblings use both conventions."
+      },
+      "rationale": "SCN-F012 already classifies this as repository-wide convention debt rather than a correctness defect.",
+      "destination": "Retain in the deferred backlog for a consistent convention pass."
+    },
+    {
+      "id": "SCOFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/shared-concerns.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "SCN-F013",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts" }],
+      "testRefs": [{ "path": "tests/shared/concerns/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "ClaudeHookEvent and HookSummaryEntry remain beneath a large detached line-comment block while ToolEvent has adjacent JSDoc."
+      },
+      "rationale": "SCN-F013 already owns the current public-type documentation gap.",
+      "destination": "Split and retain the rationale in Phase 8."
+    },
+
+    {
+      "id": "SHCFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SHC-F021",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared" }],
+      "testRefs": [{ "path": "tests/shared" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current owner-pair census",
+        "observed": "The sixteen shared-core modules remain mirrored under tests/shared, with notify and concerns retained as separate ownership areas."
+      },
+      "rationale": "SHC-F021 already records the current shared pairing census.",
+      "destination": "Close the historical inventory as evidence only."
+    },
+    {
+      "id": "SHCFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-024"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SHC-F057",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared" }],
+      "testRefs": [{ "path": "tests/shared" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/{completion-cache,markers,notify-context,session-env,debug-log}.test.ts tests/shared/concerns/{hooks,soft-dep}.test.ts",
+        "exitCode": 0,
+        "observed": "All eight focused owners selected for the current claims passed; this establishes executability, while SHC-F025 and narrow canonical findings retain mutation-strength limits."
+      },
+      "rationale": "SHC-F057 preserves the green baseline without letting it erase narrow current findings.",
+      "destination": "Retain positive behavior as evidence only and route narrow gaps separately."
+    },
+    {
+      "id": "SHCFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-020"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "SHC-F028",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts" }],
+      "testRefs": [
+        { "path": "tests/shared/completion-cache.test.ts" },
+        { "path": "tests/architecture/flag-catalog-drift.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph resetCompletionCache caller census and current source inspection",
+        "observed": "resetCompletionCache still clears two module-scope Maps, its comment names test isolation, and CodeGraph finds test callers but no production caller."
+      },
+      "rationale": "SHC-F028 is the canonical live module-global-state and reset-export finding.",
+      "destination": "Resolve cache ownership and complete caller migration under the existing operator decision."
+    },
+    {
+      "id": "SHCFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-008"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/session-env.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/debug-log.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/shared/completion-cache.test.ts" },
+        { "path": "tests/shared/session-env.test.ts" },
+        { "path": "tests/shared/debug-log.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency inspection and canonical finding comparison",
+        "observed": "The three mechanisms remain in source, but SHC-F026 keeps the clock proof inconclusive while SHC-F031 and SHC-F032 close the proposed default-live-boundary parameters as intentional composition seams."
+      },
+      "rationale": "The bundled historical diagnosis mixed three premises that now have different statuses and routes.",
+      "destination": "Use SHC-F026, SHC-F031, and SHC-F032 as the independent canonical records."
+    },
+    {
+      "id": "SHCFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SHC-F026",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts" }],
+      "testRefs": [{ "path": "tests/shared/completion-cache.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current clock and assertion inspection",
+        "observed": "getPluginIndex still uses new Date() at both write sites while the cold-index owner case still accepts any ISO-formatted lastRefreshedAt."
+      },
+      "rationale": "SHC-F026 already preserves this claim as inconclusive because no focused failing behavioral clock probe has yet established a production defect under D-11.",
+      "destination": "Run the canonical failing clock probe before authorizing the Phase 2 change."
+    },
+    {
+      "id": "SHCFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SHC-F027",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts" }],
+      "testRefs": [{ "path": "tests/shared/completion-cache.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current owner assertion inspection",
+        "observed": "Both current unlink cases still assert instanceof Error and code !== ENOENT; no isolated wrong-error mutation is recorded beyond canonical SHC-F027."
+      },
+      "rationale": "SHC-F027 already preserves the claim as inconclusive under D-11 until a wrong-error mutation survives.",
+      "destination": "Run the canonical mutation and then assert an injected exact error identity."
+    },
+    {
+      "id": "SHCFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SHC-F029",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/markers.ts" }],
+      "testRefs": [{ "path": "tests/shared/markers.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assertion inspection",
+        "observed": "Each marker case still follows exact strict equality with negative truncated and padded comparisons that add no discrimination."
+      },
+      "rationale": "SHC-F029 is the canonical current redundant-assertion finding.",
+      "destination": "Consolidate marker assertions in Phase 2."
+    },
+    {
+      "id": "SHCFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SHC-F030",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify-context.ts" }],
+      "testRefs": [{ "path": "tests/shared/notify-context.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph exported-entrypoint and current test-structure inspection",
+        "observed": "The four-entrypoint owner remains flat except for data-driven loops and has no per-entrypoint describe groups."
+      },
+      "rationale": "SHC-F030 already owns this readability-only grouping finding.",
+      "destination": "Group once per export during Phase 2 cleanup."
+    },
+    {
+      "id": "SHCFP-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-022"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SHC-F031",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/session-env.ts" }],
+      "testRefs": [{ "path": "tests/shared/session-env.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/session-env.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passed and registers t.after restoration before mutating the exact three process keys; the live process environment is the production behavior of this composition shim."
+      },
+      "rationale": "SHC-F031 already closes the proposed defaulted live-boundary parameter while preserving the pure claudeSessionEnvFor producer.",
+      "destination": "Keep the intentional composition mutation and its exact restoration gate."
+    },
+    {
+      "id": "SHCFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-023"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SHC-F032",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/debug-log.ts" }],
+      "testRefs": [{ "path": "tests/shared/debug-log.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/debug-log.test.ts",
+        "exitCode": 0,
+        "observed": "The authorized output seam passed exact enabled and disabled environment-gate cases, with t.after restoration registered before each mutation."
+      },
+      "rationale": "SHC-F032 already closes the proposed defaulted env parameter as an unnecessary live-boundary default.",
+      "destination": "Preserve the explicit runtime debug seam and hermetic restoration discipline."
+    },
+    {
+      "id": "SHCFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-core.md#CLAIM-025"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SHC-F044",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Historical scope and method statement has no single production reference."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Historical scope and method statement has no single owner test."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Full corpus-record inspection",
+        "observed": "The report explicitly excludes notify and concerns and states that no toolchain commands were run."
+      },
+      "rationale": "SHC-F044 already owns this historical provenance statement.",
+      "destination": "Retain the scope limitation as evidence only."
+    }
+  ]
+}
