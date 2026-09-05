@@ -9966,3 +9966,275 @@ test("WLIF-03: an undo that cannot remove a placed envelope raises the typed fai
     }
   });
 });
+
+test("T-112-01: an envelope this install did not place survives the undo byte-unchanged", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-foreign-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [{ sourceName: "greet" }],
+      });
+      // A file the user (or another plugin) owns, sitting in the SHARED saved
+      // directory. Nothing this install places is named this.
+      await mkdir(locations.workflowsSavedDir, { recursive: true });
+      const foreignPath = path.join(locations.workflowsSavedDir, "other:thing.json");
+      const foreignBytes = '{"name":"other:thing","description":"not ours","script":"//\\n"}';
+      await writeFile(foreignPath, foreignBytes);
+      const state = await loadState(locations.extensionRoot);
+      raceRecordAtStateCommit(state, "mp", "hello");
+      const { ctx } = makeCtx();
+
+      // act
+      await assert.rejects(
+        runInstallLedger(state, locations, {
+          ctx,
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          scope: "project",
+        }),
+        { name: "ConcurrentInstallError" },
+      );
+
+      // assert -- this is the assertion that fails if the undo ever unlinks
+      // the PREPARED names, or enumerates the shared directory, instead of
+      // removing only the names the commit reported.
+      assert.strictEqual(
+        await pathExists(path.join(locations.workflowsSavedDir, "hello:greet.json")),
+        false,
+      );
+      assert.strictEqual(await readFile(foreignPath, "utf8"), foreignBytes);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), ["other:thing.json"]);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-03: an unremovable envelope does not abort the rest of the removal", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-partial-undo-"));
+    const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange -- three envelopes, the MIDDLE one unremovable. A loop that
+      // aborts on the first failure leaves the remainder on disk.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }, { sourceName: "gamma" }],
+      });
+      const stuckPath = path.join(locations.workflowsSavedDir, "hello:beta.json");
+      unlinkMock = t.mock.method(
+        filesystemPromises,
+        "unlink",
+        async (...args: Parameters<typeof filesystemPromises.unlink>) => {
+          if (String(args[0]) === stuckPath) {
+            throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+          }
+
+          return originalUnlink(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const state = await loadState(locations.extensionRoot);
+      raceRecordAtStateCommit(state, "mp", "hello");
+      const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+      const { ctx } = makeCtx();
+
+      // act
+      await assert.rejects(
+        runInstallLedger(
+          state,
+          locations,
+          { ctx, cwd, marketplace: "mp", plugin: "hello", scope: "project" },
+          capture,
+        ),
+        { name: "ConcurrentInstallError" },
+      );
+
+      // assert
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), ["hello:beta.json"]);
+      const partial = capture.rollbackPartials[0];
+      assert.strictEqual(partial?.phase, "workflows");
+      assert.strictEqual(partial.cause?.name, "WorkflowsUnstageFailureError");
+      assert.match(partial.cause.message, /^hello:beta: /);
+    } finally {
+      unlinkMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-03: a failed workflows removal renders a rollback-partial child naming the phase", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-rp-row-"));
+    const originalRename = filesystemPromises.rename.bind(filesystemPromises);
+    const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange -- the workflows phase is the LAST bridge slot, so the only
+      // vehicle that reaches its undo through `installPlugin` (rather than
+      // through the ledger body a test can hand a proxied state) is a commit
+      // that throws mid-sequence: `runPhases` invokes the failing phase's own
+      // undo first.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
+      });
+      const alphaPath = path.join(locations.workflowsSavedDir, "hello:alpha.json");
+      let placedOne = false;
+      renameMock = t.mock.method(
+        filesystemPromises,
+        "rename",
+        async (...args: Parameters<typeof filesystemPromises.rename>) => {
+          const involvesSaved = [args[0], args[1]].some((operand) =>
+            String(operand).startsWith(`${locations.workflowsSavedDir}${path.sep}`),
+          );
+          if (involvesSaved && placedOne) {
+            // Fails the SECOND placement and every reversal after it, so the
+            // first envelope is stranded at its target and is what `onPlaced`
+            // reports as this commit's removal payload.
+            throw new Error("workflow rename denied");
+          }
+
+          await originalRename(...args);
+          if (involvesSaved) {
+            placedOne = true;
+          }
+        },
+      );
+      unlinkMock = t.mock.method(
+        filesystemPromises,
+        "unlink",
+        async (...args: Parameters<typeof filesystemPromises.unlink>) => {
+          if (String(args[0]) === alphaPath) {
+            throw new Error("workflow unlink denied");
+          }
+
+          return originalUnlink(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert -- the child-row phrasing is the one `docs/output-catalog.md`
+      // states for `rollbackPartial` children: `[<phase>] (rollback failed)`
+      // at 4-space indent with a 6-space cause trailer.
+      assert.strictEqual(outcome.status, "failed");
+      const rendered = notifications.map((notification) => notification.message).join("\n");
+      assert.ok(rendered.includes("{rollback partial}"), rendered);
+      assert.ok(rendered.includes("    [workflows] (rollback failed)"), rendered);
+      assert.ok(rendered.includes("hello:alpha: workflow unlink denied"), rendered);
+      assert.strictEqual(await pathExists(alphaPath), true);
+    } finally {
+      renameMock?.mock.restore();
+      unlinkMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("PI-14: a containment refusal from the workflows undo propagates verbatim", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-containment-"));
+    const originalRename = filesystemPromises.rename.bind(filesystemPromises);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange -- same mid-sequence-commit vehicle, but the stranded target is
+      // swapped for a SYMLINK before the throw, so the undo's per-name path
+      // composition refuses instead of unlinking.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
+      });
+      const alphaPath = path.join(locations.workflowsSavedDir, "hello:alpha.json");
+      const decoyPath = path.join(cwd, "decoy.json");
+      await writeFile(decoyPath, "{}");
+      let placedOne = false;
+      renameMock = t.mock.method(
+        filesystemPromises,
+        "rename",
+        async (...args: Parameters<typeof filesystemPromises.rename>) => {
+          const involvesSaved = [args[0], args[1]].some((operand) =>
+            String(operand).startsWith(`${locations.workflowsSavedDir}${path.sep}`),
+          );
+          if (involvesSaved && placedOne) {
+            if (await pathExists(alphaPath)) {
+              await filesystemPromises.unlink(alphaPath);
+              await symlink(decoyPath, alphaPath);
+            }
+
+            throw new Error("workflow rename denied");
+          }
+
+          await originalRename(...args);
+          if (involvesSaved) {
+            placedOne = true;
+          }
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert -- PI-14, and this case exists so a later reader does not
+      // "repair" it. The refusal is re-thrown BY CLASS out of `runPhases`, so
+      // it never reaches the block that assigns `capture.rollbackPartials` and
+      // `capture.version`: the row therefore carries NO rollback-partial
+      // marker and NO version. That is the documented trade of keeping the
+      // containment class a throw rather than folding it into `failed[]`.
+      assert.strictEqual(outcome.status, "failed");
+      const rendered = notifications.map((notification) => notification.message).join("\n");
+      assert.ok(!rendered.includes("{rollback partial}"), rendered);
+      assert.ok(!rendered.includes("(rollback failed)"), rendered);
+      assert.ok(rendered.includes("workflowArtifactPath(hello:alpha) contains symlink"), rendered);
+      // No version on the row: `ctxLocal.version` is only copied into the
+      // capture in the block the re-thrown refusal skipped.
+      assert.ok(rendered.includes("\u2298 hello (failed)\n"), rendered);
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
