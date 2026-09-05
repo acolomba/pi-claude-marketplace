@@ -218,7 +218,20 @@ Plans:
 **Goal:** Correct confirmed defects in path containment, MCP input, and lifecycle recovery.
 **Depends on:** Phase 1
 **Requirements:** PDEF-02, PDEF-03, PDEF-04
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Make malformed MCP field classification truthful, shared, typed, and fail-closed
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — Normalize shared path containment and prove affected live consumers
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-03-PLAN.md — Contain discovery failures, preserve progress, and prove reload recovery
 
 **Success Criteria**:
 

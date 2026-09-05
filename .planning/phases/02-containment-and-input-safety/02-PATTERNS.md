@@ -93,7 +93,7 @@ The current code only checks `undefined` and arrays. With truthful `unknown`, th
 
 **Owner:** `extensions/pi-claude-marketplace/shared/path-safety.ts:9-39,46-101,103-146`
 
-Preserve `PathContainmentError` and `SymlinkRefusedError`, including their exact observable fields. Normalize the parent and child before both the lexical comparison and the component walk. The same normalized values must drive `path.relative`, error fields, segment construction, and traversal.
+Preserve `PathContainmentError` and `SymlinkRefusedError`, including their exact observable fields. Add a production-used `LexicalTraversalError extends PathContainmentError` for raw child components exactly equal to `..`; keep normalized parent/child fields but override the inherited escape message with exact traversal-forbidden wording. Decide refusal from raw segments before normalization or filesystem inspection, then normalize refused operands only for diagnostics and throw without containment/walking. For accepted spellings, the same normalized parent and child values must drive `path.relative`, error fields, segment construction, and traversal.
 
 Current core shape (`path-safety.ts:77-100`):
 
@@ -128,7 +128,7 @@ Copy these patterns:
 - real `fs.symlink` fixtures for first, intermediate, and final walked segments;
 - explicit lstat walk-order checks for existing paths and stop-at-first-missing behavior.
 
-Add normalization-precondition cases whose raw spellings contain `..` or redundant segments. Assert the normalized error/result and prove the external target remains unread/unwritten.
+Add a real `root/a` symlink plus raw `root/a/../b` case that asserts the complete LexicalTraversalError class/name/message/normalized fields and proves the outside bytes/tree unchanged. Keep a separate redundant-`.` acceptance case and normalized outside-path cases. Treat pre-normalization/pre-filesystem ordering as a source-review invariant: without global patching this real-filesystem test cannot claim to observe zero lstat/read calls. Do not claim the resolved component walk can detect the erased `a` segment.
 
 **Live consumers to verify, not fork:**
 

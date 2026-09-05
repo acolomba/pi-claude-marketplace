@@ -50,9 +50,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:autonomous --from 2",
-    "label": "Discuss and plan Phase 2 autonomously",
-    "reason": "Phase 1 of 9 complete · 69/69 plans · Phase 2 is ready for discussion and planning"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 2 of 9 · 0% · executing"
   },
-  "updated_at": "2026-09-05T20:56:46.000Z"
+  "updated_at": "2026-09-05T21:47:30.477Z"
 }
