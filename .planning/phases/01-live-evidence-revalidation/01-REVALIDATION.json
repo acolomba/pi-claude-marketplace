@@ -90570,8 +90570,48 @@
     },
     {
       "id": "MF-DEC-02",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "ACUB-019",
+        "DCH-034",
+        "DRA-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F24",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md#OPIB-F24",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md#OPIC-F17",
+        "OPINFP-F010",
+        "OPLU-A-F16",
+        "OPLUFP-F003",
+        "OPR-B-F22",
+        "OPU-B-F28",
+        "SNA-F021"
+      ],
+      "proof": "All 12 premise findings are confirmed terminal canonical roots. Current CodeGraph and source inspection show responsibility seams that survive the refactor: catalog-uat.test.ts is 5,442 lines and still combines a Markdown scanner, an approximately 4,750-line fixture map with 20 sections, and the driver; resolver.ts is 1,757 lines and resolver.test.ts 3,949 lines across source/manifest validation, component paths, MCP, hooks, default policy, and orchestration/gates; notify.ts is 4,217 lines and notify.test.ts 6,659 lines across grammar, severity, info, cascade composition, and dispatch; install.ts is 2,460 lines and install.test.ts 9,431 lines across declared enablement, disable cascades, outcome rows, orchestration, and the coherent clone-probe/version seam; update.ts is 3,156 lines and update.test.ts 8,502 lines across preflight, disabled-record refresh, Git/swap, commit/finalization, cascade, and enumeration; reinstall.ts is 1,613 lines and reinstall.test.ts 7,628 lines across enumeration, clone/resolve/prepare/replace, hooks/state/outcomes, and abort/rollback; list.ts is 1,575 lines and list.test.ts 4,414 lines across loading/probing, row construction, filtering/sorting, and emission. These current responsibility and ownership seams, not file size alone, support the decision. The required duplicate chains resolve to terminal roots DRA-028, OPR-B-F22, OPU-B-F28, and SNA-F021. DC-032 and the procedural DRFP-F020, DRFP-F021, OPIFP-F011, SNFP-F014, and SNFP-F015 limitations are stale or superseded and supply no premise. ANG-038 is a supporting restatement, while ACF-F006, ACUA-024, SNB-F022, SNA-F018, SNC-F020, OPIA-F37, and OPIFP-F009 retain independent evidence-only or deferred routes. In particular, the confirmed info split remains deferred and is not authorized by this decision; plugin list is included because OPLU-A-F16 and OPLUFP-F003 explicitly route its live list-only split here, while uninstall remains cohesive and excluded.",
+      "options": [
+        "Complete sequenced split program",
+        "Prerequisite-gated leaf-first splits, then re-evaluate broader decomposition",
+        "Defer all module splits this milestone"
+      ],
+      "selectedOption": "Complete sequenced split program",
+      "rejectedOptions": [
+        "Prerequisite-gated leaf-first splits, then re-evaluate broader decomposition — rejected because it would leave confirmed operator-routed resolver, notify, and list ownership seams unresolved and require a second boundary migration after the named leaf extractions, despite offering a smaller initial blast radius.",
+        "Defer all module splits this milestone — rejected because it would preserve the confirmed multi-responsibility ownership seams and postpone the paired-test and gate-ownership corrections that the sequenced program can perform safely after its prerequisites."
+      ],
+      "affectedIds": [
+        "ACUB-019",
+        "DCH-034",
+        "DRA-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F24",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md#OPIB-F24",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md#OPIC-F17",
+        "OPINFP-F010",
+        "OPLU-A-F16",
+        "OPLUFP-F003",
+        "OPR-B-F22",
+        "OPU-B-F28",
+        "SNA-F021"
+      ],
+      "recommendation": "Execute the selected complete sequenced split program only after its behavior and test-strength prerequisites. Split at coherent production responsibility seams, preserve one end-to-end wiring proof for each command flow, give every new production module exactly one mirrored owner test with direct-pair coverage, and add no test-only exports. File length is inventory evidence only and never independently justifies extraction.",
+      "downstreamConsequences": "Phase 2 and Phase 3 prerequisite work must land before any affected boundary moves: ACUA-001 establishes the catalog section-to-production-emitter contract and lands atomically with the catalog split; DRA-001, DRA-002, and DRA-003 add the resolver name, agents, and unsupported closed-set proofs; .planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md#OPIB-F23 converts weak install assertions to the strongest current whole-outcome and exact-byte form; OPR-B-F20 and OPR-B-F06 consolidate the seven reinstall duplicate pairs; and .planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md#OPIC-F17 fixes install-clone-probe.ts as the makeInstallCloneProbe plus deriveInstallVersion extraction seam while retaining one end-to-end install wiring proof. Phase 3 PDEF-01 owns confirmed production behavior repairs, including the catalog emitter path, before extraction. Phase 5 TREF-06 ensures moved exports remain genuine public contracts and removes or privatizes test-only surfaces. Phase 6 TREF-07 completes prerequisite assertion and duplicate-case cleanup. Phase 6 TREF-09 then executes all approved resolver, notify, install, update, reinstall, list, and catalog splits at coherent named seams, with exactly one mirrored paired test per new production module, one end-to-end proof per command flow, no test-only exports, and direct source-test pair coverage. Every split must also perform the mandatory four-part checklist: repoint every source-scanning gate naming the old path; repoint every documentation comment describing a moved literal; move test ownership for every moved export; and repoint every completeness invariant on which a cast in the old file depends. Phase 7 GGAT-01 and GGAT-04 verify that relocated scanning, closed-set, and delegated-contract gates exercise their real production consumers. Phase 8 RCOV-01 and RCOV-03 regenerate and enforce the direct-pair baseline for every new owner pair. Preserve DRFP-F007 and DRFP-F014 through DRFP-F019 as duplicates of DRA-028, OPRFP-F007 as a duplicate of OPR-B-F22, OPUFP-F008 as a duplicate of OPU-B-F28, and SNFP-F013 as a duplicate of SNA-F021. Preserve OPIFP-F009 and its supporting info records as independent deferred work; this decision authorizes no info split. Uninstall remains excluded because current evidence classifies it as a cohesive transactional workflow."
     },
     {
       "id": "MF-DEC-03",
