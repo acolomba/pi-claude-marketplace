@@ -120,3 +120,22 @@ export class CommandNameError extends Error {
     this.commandsDir = commandsDir;
   }
 }
+
+/**
+ * WR-06: a workflow commit found content at a target path this plugin does not
+ * own. The engine's saved directory is shared with the user's own hand-saved
+ * workflows and with every other plugin, and the `<plugin>:` prefix namespaces
+ * a name without granting ownership of it.
+ *
+ * Typed rather than a bare `Error` because the refusal names a path the
+ * operator must inspect: the commit raises it BEFORE its first rename, and the
+ * file at that path belongs to somebody else.
+ */
+export class WorkflowTargetOccupiedError extends Error {
+  readonly targetPath: string;
+  constructor(targetPath: string) {
+    super(`Cannot replace workflow target with non-previous content at ${targetPath}`);
+    this.name = "WorkflowTargetOccupiedError";
+    this.targetPath = targetPath;
+  }
+}

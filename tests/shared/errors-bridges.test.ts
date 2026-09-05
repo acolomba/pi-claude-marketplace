@@ -7,6 +7,7 @@ import {
   BridgeStagingError,
   CommandNameError,
   McpServerCollisionError,
+  WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
@@ -483,5 +484,78 @@ describe("CommandNameError", () => {
         },
       ],
     );
+  });
+});
+
+describe("WorkflowTargetOccupiedError", () => {
+  test("exposes the complete occupied-target refusal", () => {
+    // arrange
+    const targetPath = "/home/dev/.pi/workflows/saved/acme:deploy.json";
+
+    // act
+    const error = new WorkflowTargetOccupiedError(targetPath);
+
+    // assert
+    // Two rungs only: this refusal is a plain Error, not a containment error.
+    assert.ok(error instanceof WorkflowTargetOccupiedError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        targetPath: error.targetPath,
+        cause: error.cause,
+      },
+      {
+        name: "WorkflowTargetOccupiedError",
+        message:
+          "Cannot replace workflow target with non-previous content at /home/dev/.pi/workflows/saved/acme:deploy.json",
+        targetPath: "/home/dev/.pi/workflows/saved/acme:deploy.json",
+        cause: undefined,
+      },
+    );
+  });
+
+  test("keeps adjacent target paths distinct", () => {
+    // arrange
+    const firstTargetPath = "/home/dev/.pi/workflows/saved/a.json";
+    const secondTargetPath = "/home/dev/.pi/workflows/saved/aa.json";
+
+    // act
+    const firstError = new WorkflowTargetOccupiedError(firstTargetPath);
+    const secondError = new WorkflowTargetOccupiedError(secondTargetPath);
+
+    // assert
+    assert.deepStrictEqual(
+      [
+        { message: firstError.message, targetPath: firstError.targetPath },
+        { message: secondError.message, targetPath: secondError.targetPath },
+      ],
+      [
+        {
+          message:
+            "Cannot replace workflow target with non-previous content at /home/dev/.pi/workflows/saved/a.json",
+          targetPath: "/home/dev/.pi/workflows/saved/a.json",
+        },
+        {
+          message:
+            "Cannot replace workflow target with non-previous content at /home/dev/.pi/workflows/saved/aa.json",
+          targetPath: "/home/dev/.pi/workflows/saved/aa.json",
+        },
+      ],
+    );
+  });
+
+  test("exposes the target path as a field rather than as message text to parse", () => {
+    // arrange
+    // The path repeats the message's own " at " separator, so a consumer that
+    // recovered the path by splitting the message would keep the wrong half.
+    const targetPath = "/home/dev/.pi/workflows/saved/acme:deploy at once.json";
+
+    // act
+    const error = new WorkflowTargetOccupiedError(targetPath);
+
+    // assert
+    assert.strictEqual(error.targetPath, targetPath);
   });
 });
