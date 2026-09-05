@@ -90808,6 +90808,8 @@
       "id": "SCOPE-REQ-AUTH-01",
       "requirementId": "AUTH-01",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: AUTH-01 — all auth paths provide host-specific no-provider guidance and expose the authentication collaborator",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: AUTH-01 — terminal tests cover hostile-host rejection, optional collaborator behavior, and realistic authentication-failure propagation",
       "findingIds": [
         "DCORE-001",
         "ORR-F011",
@@ -90820,6 +90822,8 @@
       "id": "SCOPE-REQ-CLOSE-01",
       "requirementId": "CLOSE-01",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Closure :: CLOSE-01 — complete project quality suite passes after confirmed work",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Closure :: CLOSE-01 — complete suite passes after terminal work, selected controls, owner tests, and independent assertion-strength requirements",
       "findingIds": [
         "MF-002",
         "MF-005",
@@ -90834,6 +90838,8 @@
       "id": "SCOPE-REQ-CLOSE-02",
       "requirementId": "CLOSE-02",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Closure :: CLOSE-02 — TESTQ-01 and every bundled backlog item record shipped, stale, or deferred status",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Closure :: CLOSE-02 — terminal TESTQ-01/FLOW-09/REASON-01/FLOW-07 routes ship while COV-01/AGCOL-01/unused-member/GAUTH-01 retain explicit history",
       "findingIds": [
         "ABG-004",
         "AHG-014",
@@ -90855,6 +90861,8 @@
       "id": "SCOPE-REQ-GGAT-01",
       "requirementId": "GGAT-01",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-01 — every confirmed scanning gate proves visitation with offender and benign controls",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-01 — terminal scanning gaps prove visitation and controls, including deterministic changed-pair base selection and fail-closed zero selection",
       "findingIds": [
         "DCORE-030",
         "MF-005",
@@ -90871,6 +90879,8 @@
       "id": "SCOPE-REQ-GGAT-02",
       "requirementId": "GGAT-02",
       "action": "move-to-evidence",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-02 — active agents-collision gate removal-or-retention work in Phase 7",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Evidence and History :: GGAT-02 — AGCOL-01 history retained, no active work without a dedicated terminal finding",
       "findingIds": [
         "AUDIT-004",
         "MF-001"
@@ -90882,6 +90892,8 @@
       "id": "SCOPE-REQ-GGAT-03",
       "requirementId": "GGAT-03",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-03 — FLOW-07 edge-by-edge ESLint/Fallow matrix comparison",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-03 — terminal effective-config and broad-override gaps vary inputs and prove visitation",
       "findingIds": [
         "ABG-004",
         "AHG-014"
@@ -90893,6 +90905,8 @@
       "id": "SCOPE-REQ-GGAT-04",
       "requirementId": "GGAT-04",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-04 — closed/delegated gates cover consumers rather than configuration",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Gate Integrity :: GGAT-04 — terminal gates cover real consumers and approved-split public seams with visitation/offender/benign controls",
       "findingIds": [
         "MF-005",
         "SCN-F025"
@@ -90906,6 +90920,8 @@
       "id": "SCOPE-REQ-PDEF-01",
       "requirementId": "PDEF-01",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-01 — every confirmed production defect receives a regression and fix",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-01 — each terminal Phase 3 defect receives a direct owner regression and correction; stale/evidence-only claims authorize none",
       "findingIds": [
         "MF-002",
         "MF-007"
@@ -90922,6 +90938,8 @@
       "id": "SCOPE-REQ-PDEF-02",
       "requirementId": "PDEF-02",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-02 — manifest/state paths cannot escape owning roots",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-02 — terminal path flows preserve allowed roots and reject traversal, symlink, and lenient-read escape",
       "findingIds": [
         "AUDIT-007",
         "MF-003",
@@ -90935,6 +90953,8 @@
       "id": "SCOPE-REQ-PDEF-03",
       "requirementId": "PDEF-03",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-03 — malformed MCP structures fail cleanly without throws or corrupt writes",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-03 — terminal malformed-MCP input returns its typed stable failure without unexpected throw or write",
       "findingIds": [
         "ABG-021"
       ],
@@ -90945,6 +90965,8 @@
       "id": "SCOPE-REQ-PDEF-04",
       "requirementId": "PDEF-04",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-04 — lifecycle callbacks contain failures and recover through reload",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-04 — terminal resource-discovery/lifecycle failures preserve partial state and recover through reload",
       "findingIds": [
         "MF-002",
         "RID-F004",
@@ -90957,6 +90979,8 @@
       "id": "SCOPE-REQ-PDEF-05",
       "requirementId": "PDEF-05",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-05 — typed reasons replace substring matching including REASON-01",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-05 — terminal lock, sibling-sweep, and malformed-input reasons use explicit typed classifications",
       "findingIds": [
         "OPLU-B-F01",
         "OPU-F15",
@@ -90969,6 +90993,8 @@
       "id": "SCOPE-REQ-PDEF-06",
       "requirementId": "PDEF-06",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-06 — cleanup leaks, warning data, and diagnostics are not discarded",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-06 — terminal update paths preserve primary error and cleanup context with no persistent artifact",
       "findingIds": [
         "MF-002",
         "OPU-F14",
@@ -90981,6 +91007,8 @@
       "id": "SCOPE-REQ-PDEF-07",
       "requirementId": "PDEF-07",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-07 — dynamic lookups, predicates, and closed unions reject unsupported values",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-07 — terminal dynamic lookups reject safely and unreachable test-shaped branches leave without weakening guards",
       "findingIds": [
         "DC-029",
         "MF-002"
@@ -90994,6 +91022,8 @@
       "id": "SCOPE-REQ-PDEF-08",
       "requirementId": "PDEF-08",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-08 — agent, alias, compact, and rollback defects resolve according to live behavior",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Production Correctness :: PDEF-08 — one-to-one fail-closed alias mapping preserves canonical identity and other terminal behaviors keep independent routes",
       "findingIds": [
         "BA-015",
         "BHP-001",
@@ -91010,6 +91040,8 @@
       "id": "SCOPE-REQ-RCOV-01",
       "requirementId": "RCOV-01",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate per-pair baseline from milestone branch",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate one honest baseline for all 204 current pairs and record every refusal",
       "findingIds": [
         "AUDIT-010",
         "TXA-F022"
@@ -91023,6 +91055,8 @@
       "id": "SCOPE-REQ-RCOV-02",
       "requirementId": "RCOV-02",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-02 — reclassify seven shortfalls and rewrite removable branches",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-02 — rewrite two dense-index guards and retain current evidence for five compiler-forced cases without allowlists",
       "findingIds": [
         "AUDIT-011",
         "BC-004",
@@ -91038,6 +91072,8 @@
       "id": "SCOPE-REQ-RCOV-03",
       "requirementId": "RCOV-03",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-03 — enforce direct coverage at an approved cadence without assertion-strength overclaim",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-03 — run one fail-closed changed-pair gate in scoped pre-commit and dedicated CI; coverage remains reachability only",
       "findingIds": [
         "ORR-F028",
         "TXA-F022"
@@ -91051,6 +91087,8 @@
       "id": "SCOPE-REQ-RCOV-04",
       "requirementId": "RCOV-04",
       "action": "move-to-evidence",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-04 — active standalone remeasurement of two COV-01 orchestrators in Phase 8",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Evidence and History :: RCOV-04 — stable COV-01 history retained and both pairs included by RCOV-01, with no standalone task",
       "findingIds": [
         "AUDIT-010",
         "OIR-F001",
@@ -91066,6 +91104,8 @@
       "id": "SCOPE-REQ-RVAL-01",
       "requirementId": "RVAL-01",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-01 — individually inspect all 110 corpus files",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-01 — individually inspect all 110 corpus files (unchanged, complete)",
       "findingIds": [
         "AUDIT-001",
         "README-001"
@@ -91077,6 +91117,8 @@
       "id": "SCOPE-REQ-RVAL-02",
       "requirementId": "RVAL-02",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-02 — 110/110 manifest with current disposition and evidence",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-02 — 110/110 manifest with current disposition and evidence (unchanged, complete)",
       "findingIds": [
         "AUDIT-003",
         "AUDIT-004",
@@ -91089,6 +91131,8 @@
       "id": "SCOPE-REQ-RVAL-03",
       "requirementId": "RVAL-03",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-03 — nine decisions resolve only after premise revalidation",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-03 — nine decisions resolve only after premise revalidation (unchanged, complete)",
       "findingIds": [
         "MF-009"
       ],
@@ -91109,6 +91153,8 @@
       "id": "SCOPE-REQ-RVAL-04",
       "requirementId": "RVAL-04",
       "action": "keep",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-04 — stale and bundled claims leave active scope with evidence before planning",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Live Revalidation :: RVAL-04 — stale and bundled claims leave active scope with evidence before planning (unchanged, complete)",
       "findingIds": [
         "AUDIT-010",
         "AUDIT-011",
@@ -91132,6 +91178,8 @@
       "id": "SCOPE-REQ-TREF-01",
       "requirementId": "TREF-01",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-01 — tests never access developer home, Pi agent directory, or MCP configuration",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-01 — terminal gaps use case-owned temporary state and cannot access developer host configuration",
       "findingIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F02",
         "AUDIT-007",
@@ -91145,6 +91193,8 @@
       "id": "SCOPE-REQ-TREF-02",
       "requirementId": "TREF-02",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-02 — shared fakes preserve function-bearing collaborators",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-02 — external-failure doubles preserve function-bearing collaborators with production-faithful behavior",
       "findingIds": [
         "OPEF-F13",
         "PLT-F020"
@@ -91158,6 +91208,8 @@
       "id": "SCOPE-REQ-TREF-03",
       "requirementId": "TREF-03",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-03 — typed values and exact doubles without broad casts",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-03 — typed domain values and role-named doubles with no broad casts or production test-helper terminology",
       "findingIds": [
         "MF-004",
         "OMAUB-F15",
@@ -91173,6 +91225,8 @@
       "id": "SCOPE-REQ-TREF-04",
       "requirementId": "TREF-04",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-04 — every confirmed hidden dependency gets an explicit injection seam",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-04 — classify each dependency, default to real temp state, use narrow ports only when irreproducible, preserve two composition exceptions",
       "findingIds": [
         "MF-004",
         "OPS-F20",
@@ -91189,6 +91243,8 @@
       "id": "SCOPE-REQ-TREF-05",
       "requirementId": "TREF-05",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-05 — confirmed module-global state becomes factory-owned",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-05 — terminal mutable state moves to legitimate lifecycle or factory ownership without test-only reset exports",
       "findingIds": [
         "HHD-023",
         "SHC-F028"
@@ -91200,6 +91256,8 @@
       "id": "SCOPE-REQ-TREF-06",
       "requirementId": "TREF-06",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-06 — public contracts and revalidated FLOW-09 disposition",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-06 — public contracts replace terminal test-only exports, reset hooks, and test-shaped branches",
       "findingIds": [
         "AUDIT-009",
         "EHP-001",
@@ -91215,6 +91273,8 @@
       "id": "SCOPE-REQ-TREF-07",
       "requirementId": "TREF-07",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-07 — replace drifting fragment assertions while preserving three caveats",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-07 — complete exact outcomes include structural cardinality and visible plural tallies while preserving caveats",
       "findingIds": [
         "MF-004",
         "OMR-F02"
@@ -91228,6 +91288,8 @@
       "id": "SCOPE-REQ-TREF-08",
       "requirementId": "TREF-08",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-08 — remove prototype and builtin patching where a case-owned seam works",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-08 — remove global patches and dishonest dense-index cases through real state or narrow production ports",
       "findingIds": [
         "BC-004",
         "SHC-F003"
@@ -91242,6 +91304,8 @@
       "id": "SCOPE-REQ-TREF-09",
       "requirementId": "TREF-09",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-09 — module splits follow prerequisites and update four artifact classes",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Test Architecture :: TREF-09 — approved seven-flow split program follows Phase 2/3 prerequisites and four-part repointing; uninstall/info excluded",
       "findingIds": [
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F24",
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md#OPIB-F24",
@@ -91267,6 +91331,8 @@
       "id": "SCOPE-ROUTE-PHASE-02",
       "requirementId": "PHASE-02",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-02 / Phase 2 Containment and Input Safety :: PDEF-02/PDEF-03/PDEF-04 with broad path, MCP, and lifecycle criteria",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-02 / Phase 2 Containment and Input Safety :: same stable requirements narrowed to terminal path, malformed-MCP, and recoverable partial-state cases",
       "findingIds": [
         "ABG-021",
         "MF-002",
@@ -91284,6 +91350,8 @@
       "id": "SCOPE-ROUTE-PHASE-03",
       "requirementId": "PHASE-03",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-03 / Phase 3 Production Defect Corrections :: PDEF-01/PDEF-05/PDEF-06/PDEF-07/PDEF-08 broad confirmed-defect criteria",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-03 / Phase 3 Production Defect Corrections :: same stable requirements restricted to terminal owner regressions, exact typed/diagnostic/lookup behavior, and selected alias contract",
       "findingIds": [
         "DC-029",
         "MF-004",
@@ -91304,6 +91372,8 @@
       "id": "SCOPE-ROUTE-PHASE-04",
       "requirementId": "PHASE-04",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-04 / Phase 4 Hermetic Test Infrastructure :: AUTH-01/TREF-01/TREF-02/TREF-03 broad isolation and double criteria",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-04 / Phase 4 Hermetic Test Infrastructure :: same stable requirements narrowed to terminal host-state, auth, collaborator, typed-value, and 16-factory naming evidence",
       "findingIds": [
         "MF-005",
         "OPEF-F13",
@@ -91318,6 +91388,8 @@
       "id": "SCOPE-ROUTE-PHASE-05",
       "requirementId": "PHASE-05",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-05 / Phase 5 Injection and Ownership Design :: TREF-04/TREF-05/TREF-06 broad seams, factory state, and FLOW-09 criteria",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-05 / Phase 5 Injection and Ownership Design :: same stable requirements use real temp state or legitimate ports, preserve two composition exceptions, and remove terminal test-only seams",
       "findingIds": [
         "HHD-023",
         "MF-004",
@@ -91335,6 +91407,8 @@
       "id": "SCOPE-ROUTE-PHASE-06",
       "requirementId": "PHASE-06",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-06 / Phase 6 Assertion and Module Refinement :: TREF-07/TREF-08/TREF-09 broad assertion, patch, and split criteria",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-06 / Phase 6 Assertion and Module Refinement :: same stable requirements specify cardinality/tallies, global-patch removal, and the prerequisite-gated seven-flow split program",
       "findingIds": [
         "OMR-F02",
         "OPLU-A-F13",
@@ -91353,6 +91427,8 @@
       "id": "SCOPE-ROUTE-PHASE-07",
       "requirementId": "PHASE-07",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-07 / Phase 7 Gate Integrity :: GGAT-01/GGAT-02/GGAT-03/GGAT-04 active",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-07 / Phase 7 Gate Integrity :: GGAT-01/GGAT-03/GGAT-04 active with terminal controls; GGAT-02 retained only in evidence/history",
       "findingIds": [
         "ABG-004",
         "AHG-014",
@@ -91370,6 +91446,8 @@
       "id": "SCOPE-ROUTE-PHASE-08",
       "requirementId": "PHASE-08",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-08 / Phase 8 Direct Coverage :: RCOV-01/RCOV-02/RCOV-03/RCOV-04 active",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-08 / Phase 8 Direct Coverage :: RCOV-01/RCOV-02/RCOV-03 active for 204-pair baseline, seven shortfalls, and local-plus-CI gate; RCOV-04 retained only in evidence/history",
       "findingIds": [
         "AUDIT-010",
         "AUDIT-011",
@@ -91386,6 +91464,8 @@
       "id": "SCOPE-ROUTE-PHASE-09",
       "requirementId": "PHASE-09",
       "action": "narrow/split",
+      "beforeAnchor": ".planning/ROADMAP.md :: PHASE-09 / Phase 9 Final Quality and Backlog Closure :: CLOSE-01/CLOSE-02 broad suite and seven-item backlog disposition",
+      "afterAnchor": ".planning/ROADMAP.md :: PHASE-09 / Phase 9 Final Quality and Backlog Closure :: same stable requirements verify terminal suite/controls and distinguish shipped routes from explicit COV/AGCOL/unused-member/GAUTH history",
       "findingIds": [
         "AUDIT-010",
         "MF-001",

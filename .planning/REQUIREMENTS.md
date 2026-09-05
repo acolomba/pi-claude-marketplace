@@ -23,76 +23,111 @@ component as a working Pi artifact.
 
 ### Production Correctness
 
-- [ ] **PDEF-01**: Every production defect confirmed by revalidation has a
-  regression test that fails without the fix and a verified implementation fix.
-- [ ] **PDEF-02**: Manifest- or state-derived paths cannot escape their owning
-  root through symlinks, `..`, or lenient read paths.
-- [ ] **PDEF-03**: Malformed MCP structures fail cleanly without unexpected
-  throws or corrupt configuration writes.
-- [ ] **PDEF-04**: Lifecycle callbacks contain expected failures and remain
-  recoverable through `/reload` without restarting Pi.
-- [ ] **PDEF-05**: Failure reasons use typed classifications rather than message
-  substring matching, including the revalidated `REASON-01` malformed-input
-  family.
-- [ ] **PDEF-06**: Cleanup leaks, warning data, and other returned diagnostics
-  are not silently discarded.
-- [ ] **PDEF-07**: Dynamic lookups, predicates, and closed-union switches reject
-  unsupported values safely and exhaustively.
-- [ ] **PDEF-08**: Confirmed agent-discovery, reconcile-alias, compact-trigger,
-  and rollback defects are resolved according to their live behavior.
-- [ ] **AUTH-01**: All revalidated auth paths provide host-specific no-provider
-  guidance, and their tests can observe the actual authentication collaborator.
+- [ ] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3
+  has a direct owner regression that fails without the correction and passes
+  with it; stale, struck, and evidence-only claims authorize no implementation.
+- [ ] **PDEF-02**: Terminal manifest- and state-derived path flows preserve their
+  allowed root and reject traversal, symlink escape, and lenient-read escape.
+- [ ] **PDEF-03**: The terminal malformed-MCP input case returns its typed stable
+  failure without an unexpected throw or configuration write.
+- [ ] **PDEF-04**: Terminal resource-discovery and lifecycle-mutation failures
+  preserve their exact partial state and remain recoverable through `/reload`.
+- [ ] **PDEF-05**: Terminal lock-contention, sibling-sweep, and malformed-input
+  reasons use explicit typed classifications instead of message-substring flow.
+- [ ] **PDEF-06**: Terminal update cleanup, warning, and diagnostic paths preserve
+  the primary error, attach cleanup context, and leave no persistent artifact.
+- [ ] **PDEF-07**: Terminal dynamic lookups reject unsupported values safely and
+  unreachable test-shaped branches are removed without weakening real guards.
+- [ ] **PDEF-08**: The one-to-one reconcile-alias source-claim map fails closed
+  while preserving manifest-derived state identity; independently terminal
+  agent-discovery, compact-trigger, and rollback behavior keeps its own route.
+- [ ] **AUTH-01**: Terminal auth tests cover hostile-host rejection, optional
+  collaborator behavior, and realistic authentication-failure propagation.
 
 ### Test Architecture
 
-- [ ] **TREF-01**: Tests never read or write the developer's real home, Pi agent
-  directory, or MCP configuration.
-- [ ] **TREF-02**: Shared fakes preserve function-bearing collaborators such as
-  authentication bundles.
-- [ ] **TREF-03**: Tests use typed values and exact interaction doubles without
-  laundering invalid fixtures through broad casts.
-- [ ] **TREF-04**: Confirmed hidden dependencies have explicit injection seams.
-- [ ] **TREF-05**: Mutable runtime state is factory-owned wherever revalidation
-  confirms module-global coupling.
-- [ ] **TREF-06**: Tests exercise public contracts; exports that exist only for
-  tests follow the revalidated `FLOW-09` disposition.
-- [ ] **TREF-07**: Fragment assertions are replaced where they permit sibling
-  drift, while the review's three stated caveats remain protected.
-- [ ] **TREF-08**: Prototype and builtin-module patching is removed wherever a
-  case-owned seam can express the behavior.
-- [ ] **TREF-09**: Module splits occur only after their prerequisites and carry
-  the required gate, documentation, ownership, and completeness updates.
+- [ ] **TREF-01**: Terminal hermeticity gaps use case-owned temporary filesystem
+  state and cannot read or write the developer's real home, Pi agent directory,
+  or MCP configuration.
+- [ ] **TREF-02**: Shared external-failure doubles preserve function-bearing
+  collaborators, including authentication bundles, with production-faithful
+  behavior.
+- [ ] **TREF-03**: Tests use typed production-domain values and exact role-named
+  doubles without broad-cast laundering or test-helper terminology in
+  production.
+- [ ] **TREF-04**: Each terminal hidden dependency is classified: use real
+  temporary filesystem state by default and a narrow production-owned port only
+  for irreproducible faults or timing; preserve the two selected behavioral
+  composition exceptions without test-only seams.
+- [ ] **TREF-05**: Terminal mutable module state moves to legitimate lifecycle or
+  factory ownership without reset exports created only for tests.
+- [ ] **TREF-06**: Tests exercise public contracts, and terminal test-only
+  exports, reset hooks, and test-shaped branches follow the trace-preserving
+  removal disposition.
+- [ ] **TREF-07**: Observable assertions use complete exact outcomes, including
+  structural single/plural cardinality and visible plural tallies, while
+  documented caveats remain protected.
+- [ ] **TREF-08**: Global prototype and builtin-module patching and dishonest
+  dense-index cases are removed through real case-owned state or narrow
+  production-owned ports without ignore pragmas.
+- [ ] **TREF-09**: After Phase 2 and 3 prerequisites, the approved resolver,
+  notify, install, update, reinstall, list, and catalog splits land at named
+  seams with paired tests, one end-to-end proof per flow, and the four-part gate,
+  documentation, ownership, and completeness checklist; uninstall and the
+  independently deferred info split remain outside this requirement.
 
 ### Gate Integrity
 
-- [ ] **GGAT-01**: Every confirmed scanning gate proves that it visited its
-  targets and carries synthetic offender and benign controls.
-- [ ] **GGAT-02**: The agents collision gate is removed or retained according to
-  current discovery behavior, with the public behavior tested.
-- [ ] **GGAT-03**: `FLOW-07` is settled through an edge-by-edge comparison of the
-  ESLint and Fallow boundary matrices.
-- [ ] **GGAT-04**: Closed-set and delegated-contract gates cover their real
-  production consumers rather than only their configuration.
+- [ ] **GGAT-01**: Each terminal scanning-gate gap proves target visitation and
+  carries a synthetic offender and benign control; changed-pair discovery also
+  proves deterministic base selection and a fail-closed zero-selection case.
+- [ ] **GGAT-03**: `FLOW-07` varies effective config sources and broad overrides
+  across the terminal ESLint/Fallow boundary gaps and proves target visitation.
+- [ ] **GGAT-04**: Terminal closed-set and delegated-contract gates cover their
+  real production consumers and any public seams created by approved splits,
+  with visitation, offender, and benign controls.
 
 ### Direct Coverage
 
-- [ ] **RCOV-01**: The per-pair coverage baseline is regenerated from the
-  milestone branch.
-- [ ] **RCOV-02**: All seven carried shortfalls are reclassified; removable
-  branches are rewritten and genuinely compiler-forced cases retain explicit
-  evidence.
-- [ ] **RCOV-03**: Direct coverage is enforced at an approved cadence without
-  treating coverage as proof of assertion strength.
-- [ ] **RCOV-04**: The two `COV-01` orchestrators are remeasured and addressed
-  through tests or an explicit evidence-based disposition, never a flattering
-  exclusion.
+- [ ] **RCOV-01**: One honest per-pair coverage baseline is regenerated from the
+  milestone branch for all 204 current source-test pairs and records every
+  refusal without stale counts or a false pass.
+- [ ] **RCOV-02**: All seven terminal shortfalls are reclassified; the two
+  removable dense-index guards are honestly rewritten and the five genuinely
+  compiler-forced cases retain current explicit evidence without an allowlist.
+- [ ] **RCOV-03**: The same strict changed-pair gate runs in scoped local
+  pre-commit and dedicated authoritative CI with fail-closed base and pair
+  selection, while coverage remains reachability evidence only.
 
 ### Closure
 
-- [ ] **CLOSE-01**: The complete project quality suite passes after all confirmed
-  work is complete.
-- [ ] **CLOSE-02**: `TESTQ-01` and every bundled backlog item record what shipped,
-  what was stale, and what remains deliberately deferred.
+- [ ] **CLOSE-01**: The complete project quality suite passes after all terminal
+  work, selected controls, focused owner tests, and independent assertion-
+  strength requirements are complete.
+- [ ] **CLOSE-02**: `TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` record their
+  shipped terminal routes; `COV-01`, `AGCOL-01`, the unused-type-member todo, and
+  the named `GAUTH-01` prescription retain explicit evidence-only or deferred
+  histories without being described as implemented.
+
+## Evidence and History
+
+These stable requirement IDs no longer authorize active implementation. Their
+history remains here and in the canonical scope-impact records.
+
+- **GGAT-02** (`SCOPE-REQ-GGAT-02`, formerly Phase 7): `AGCOL-01` asserted that
+  the agents-collision gate was dead, but exhaustive canonical mapping found no
+  dedicated terminal finding for that premise. Revalidation is required before
+  this requirement can return to active scope; it is not implemented.
+- **RCOV-04** (`SCOPE-REQ-RCOV-04`, formerly Phase 8): the standalone `COV-01`
+  remeasurement is superseded by `RCOV-01`'s complete 204-pair baseline. Its two
+  orchestrators remain included in that baseline and neither is a terminal
+  current shortfall; this is not a flattering exclusion or an implementation
+  claim.
+
+The folded unused-type-member todo and the named `GAUTH-01` sentinel-wiring
+prescription likewise have no dedicated terminal finding. They remain traceable
+backlog history and cannot create active milestone work under D-22 without new
+terminal evidence inside the unit-test-quality boundary.
 
 ## Future Requirements
 
@@ -139,23 +174,24 @@ Roadmap creation assigns each requirement to exactly one phase.
 | TREF-08 | Phase 6 | Pending |
 | TREF-09 | Phase 6 | Pending |
 | GGAT-01 | Phase 7 | Pending |
-| GGAT-02 | Phase 7 | Pending |
+| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |
 | GGAT-03 | Phase 7 | Pending |
 | GGAT-04 | Phase 7 | Pending |
 | RCOV-01 | Phase 8 | Pending |
 | RCOV-02 | Phase 8 | Pending |
 | RCOV-03 | Phase 8 | Pending |
-| RCOV-04 | Phase 8 | Pending |
+| RCOV-04 | Evidence/history (formerly Phase 8) | Evidence only |
 | CLOSE-01 | Phase 9 | Pending |
 | CLOSE-02 | Phase 9 | Pending |
 
 **Coverage:**
 
 - refine-unit-tests requirements: 32 total
-- Mapped to phases: 32
+- Active or completed requirements mapped to phases: 30
+- Evidence/history requirements: 2
 - Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-09-04_
-_Last updated: 2026-09-04 after roadmap creation_
+_Last updated: 2026-09-05 from the terminal evidence crosswalk_

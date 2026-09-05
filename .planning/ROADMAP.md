@@ -209,6 +209,9 @@ Plans:
 - Dossiers are presented one at a time in risk/dependency order and never batched (D-15, D-16).
 - Recommendations favor safety and guideline conformity, including removing test-only exports, dead branches, and dishonest cases (D-17).
 - Every choice records evidence, selected and rejected alternatives, affected finding IDs, and exact downstream consequences (D-18).
+- Stale-only or unsupported historical work moves to evidence without an implementation claim, while mixed requirements retain only terminally supported clauses (D-19, D-21).
+- Later phase numbers and requirement IDs remain stable; a phase retires in place only if no terminal work remains (D-20).
+- New active work requires a terminal finding inside the current unit-test-quality boundary, and planning contracts must round-trip to the canonical crosswalk (D-22, D-23).
 
 ### Phase 2: Containment and Input Safety
 
@@ -219,12 +222,13 @@ Plans:
 
 **Success Criteria**:
 
-1. Regression tests prove that confirmed manifest- and state-derived path flows
-   reject traversal, symlink escape, and lenient-read escape cases.
-2. Malformed MCP values return stable failures and cannot cause unexpected
-   throws or configuration writes.
-3. Expected lifecycle failures stay contained, and `/reload` restores a usable
-   plugin without restarting Pi.
+1. Direct owner regressions prove that each terminal manifest- and state-derived
+   path flow preserves its allowed root and rejects traversal, symlink escape,
+   and lenient-read escape.
+2. The terminal malformed-MCP input case returns its typed stable failure
+   without an unexpected throw or configuration write.
+3. Terminal resource-discovery and lifecycle-mutation failures preserve exact
+   partial state, and `/reload` restores a usable plugin without restarting Pi.
 
 ### Phase 3: Production Defect Corrections
 
@@ -235,14 +239,18 @@ Plans:
 
 **Success Criteria**:
 
-1. Every confirmed production defect has a regression that fails without its
-   fix and passes with it.
-2. Failure handling uses typed classifications, including the confirmed
-   `REASON-01` cases, without message-substring control flow.
-3. Confirmed cleanup leaks, warnings, and returned diagnostics remain visible
-   to their callers.
-4. Confirmed dynamic-lookup, exhaustiveness, agent-discovery, alias,
-   compact-trigger, and rollback defects behave safely at their public seams.
+1. Every terminal production defect routed here has a direct owner regression
+   that fails without its correction and passes with it; stale or evidence-only
+   claims authorize no implementation.
+2. Terminal lock-contention, sibling-sweep, and malformed-input reasons use
+   explicit typed classifications without message-substring control flow.
+3. Terminal cleanup, warning, and diagnostic paths preserve the primary error,
+   attach cleanup context, and leave no persistent artifact.
+4. Dynamic lookup rejects unsupported values, and unreachable test-shaped
+   branches are removed without weakening real guards.
+5. The reconcile-alias source-claim map is one-to-one and fail-closed while
+   preserving manifest-derived state identity; independently terminal agent,
+   compact, and rollback behavior keeps its own contract.
 
 ### Phase 4: Hermetic Test Infrastructure
 
@@ -253,14 +261,16 @@ Plans:
 
 **Success Criteria**:
 
-1. Tests cannot read or write the developer's real home, Pi agent directory,
-   or MCP configuration.
-2. Shared fakes preserve function-bearing collaborators, including the actual
-   authentication bundle observed by the code under test.
-3. Revalidated auth paths produce host-specific no-provider guidance through
-   tests that observe the real authentication collaborator.
-4. Invalid fixtures and interactions are represented without broad-cast
-   laundering or inexact doubles.
+1. Terminal hermeticity cases use case-owned temporary filesystem state and
+   cannot read or write the developer's real home, Pi agent directory, or MCP
+   configuration.
+2. Shared external-failure doubles preserve function-bearing collaborators,
+   including the authentication bundle observed by the code under test.
+3. Auth tests cover hostile-host rejection, optional collaborator behavior,
+   and realistic authentication-failure propagation.
+4. Typed production-domain values and exact role-named doubles replace broad-
+   cast laundering and test-helper terminology in production while preserving
+   behavior and typings.
 
 ### Phase 5: Injection and Ownership Design
 
@@ -271,12 +281,14 @@ Plans:
 
 **Success Criteria**:
 
-1. Every confirmed hidden dependency used by tests has an explicit injection
-   seam with unchanged production defaults.
-2. Confirmed module-global mutable state is moved to factory-owned state and is
-   isolated between instances and tests.
-3. Tests exercise public contracts, and every test-only export named by
-   `FLOW-09` is removed or retained with a recorded evidence-based disposition.
+1. Each terminal hidden dependency uses real temporary filesystem state by
+   default or a narrow production-owned port only for irreproducible faults or
+   timing; the two selected composition exceptions retain public-result and
+   complete state assertions without test-only seams.
+2. Terminal mutable module state moves to legitimate lifecycle or factory
+   ownership without reset exports created only for tests.
+3. Tests exercise public contracts, and terminal test-only exports, reset
+   hooks, and test-shaped branches follow their trace-preserving removal route.
 
 ### Phase 6: Assertion and Module Refinement
 
@@ -287,48 +299,60 @@ Plans:
 
 **Success Criteria**:
 
-1. Confirmed fragment assertions are replaced with complete outcomes while the
-   three documented caveats remain protected.
-2. Confirmed prototype and builtin-module patches are replaced by case-owned
-   seams wherever those seams can express the behavior.
-3. Any approved module split occurs only after its prerequisites and updates
-   the relevant gates, documentation, ownership, and completeness evidence.
+1. Observable assertions use complete exact outcomes, including structural
+   single/plural cardinality and newly visible plural tallies, while documented
+   caveats remain protected.
+2. Global prototype and builtin-module patches and dishonest dense-index cases
+   are removed through real case-owned state or narrow production-owned ports,
+   with no ignore pragma or test-only export.
+3. After Phase 2 and 3 prerequisites, the approved resolver, notify, install,
+   update, reinstall, list, and catalog splits land at named seams with paired
+   tests, one end-to-end proof per flow, and gate, documentation, ownership, and
+   completeness repointing; uninstall and the deferred info split remain out.
 
 ### Phase 7: Gate Integrity
 
 **Goal:** Make structural gates prove that they scan and enforce real production contracts.
 **Depends on:** Phase 6
-**Requirements:** GGAT-01, GGAT-02, GGAT-03, GGAT-04
+**Requirements:** GGAT-01, GGAT-03, GGAT-04
 **Plans:** TBD
 
 **Success Criteria**:
 
-1. Every confirmed scanning gate proves target visitation and passes both a
-   synthetic offender and a benign control.
-2. The agents collision gate is removed or retained from current discovery
-   behavior, and the chosen public behavior has direct tests.
-3. `FLOW-07` has an edge-by-edge ESLint/Fallow boundary matrix and a recorded
-   keep, change, or close decision.
-4. Closed-set and delegated-contract gates exercise their real production
-   consumers rather than configuration alone.
+1. Every terminal scanning-gate gap proves target visitation and passes a
+   synthetic offender and a benign control; changed-pair discovery also proves
+   deterministic base selection and a fail-closed zero-selection case.
+2. `FLOW-07` varies effective config sources and broad overrides across its
+   terminal ESLint/Fallow boundary gaps and proves target visitation.
+3. Terminal closed-set and delegated-contract gates exercise their real
+   production consumers and any public seams created by approved splits.
+
+**Evidence/history:** `GGAT-02`/`AGCOL-01` retains its stable identity and former
+Phase 7 trace, but no dedicated terminal finding supports active implementation.
+It can return only after current revalidation; it is not marked implemented.
 
 ### Phase 8: Direct Coverage
 
 **Goal:** Re-establish honest direct coverage for every source-test pair and resolve shortfalls.
 **Depends on:** Phase 7
-**Requirements:** RCOV-01, RCOV-02, RCOV-03, RCOV-04
+**Requirements:** RCOV-01, RCOV-02, RCOV-03
 **Plans:** TBD
 
 **Success Criteria**:
 
-1. The milestone branch has a regenerated per-pair coverage baseline.
-2. All seven carried shortfalls are reclassified; removable branches are
-   rewritten, and retained compiler-forced cases have explicit evidence.
-3. Direct coverage runs at the approved enforcement cadence without being
-   represented as proof of assertion strength.
-4. Both `COV-01` orchestrators have current measurements and either adequate
-   tests or an explicit evidence-based disposition without exclusions that
-   flatter the result.
+1. The milestone branch has one regenerated baseline for all 204 current source-
+   test pairs, including the two historical `COV-01` orchestrators, and every
+   refusal is reported without stale counts or a false pass.
+2. All seven terminal shortfalls are reclassified; the two removable dense-
+   index guards are honestly rewritten and the five genuinely compiler-forced
+   cases retain current evidence without an allowlist or exclusion.
+3. The same strict changed-pair gate runs in scoped local pre-commit and a
+   dedicated authoritative CI job with fail-closed base and pair selection;
+   coverage remains reachability evidence only.
+
+**Evidence/history:** `RCOV-04`/`COV-01` retains its stable identity and former
+Phase 8 trace. Its standalone remeasurement is superseded by `RCOV-01`'s full
+baseline, which still includes both pairs; neither is a terminal shortfall.
 
 ### Phase 9: Final Quality and Backlog Closure
 
@@ -339,12 +363,16 @@ Plans:
 
 **Success Criteria**:
 
-1. The complete project quality suite passes on the final milestone tree.
-2. `TESTQ-01`, `COV-01`, `FLOW-09`, `AGCOL-01`, `REASON-01`, `GAUTH-01`, and
-   the `FLOW-07` closure task each record whether they shipped, proved stale,
-   or remain deliberately deferred.
-3. Final milestone artifacts distinguish implemented fixes from stale findings
-   and evidence-only closures.
+1. The complete project quality suite passes after every terminal work item,
+   selected control, focused owner test, and independent assertion-strength
+   requirement is complete.
+2. `TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` record their shipped
+   terminal routes; `COV-01`, `AGCOL-01`, the unused-type-member todo, and the
+   named `GAUTH-01` prescription retain explicit evidence-only or deferred
+   histories.
+3. Final milestone artifacts distinguish implemented fixes from stale,
+   unsupported, and evidence-only records and verify the selected local and CI
+   coverage controls without treating reachability as assertion strength.
 
 ## Progress
 
