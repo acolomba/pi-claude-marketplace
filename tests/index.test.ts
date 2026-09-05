@@ -37,9 +37,10 @@
 // from any of these cases fails where it happens.
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import fs, { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -627,96 +628,129 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   verifyBoundary();
 });
 
-test("contains one aggregate discovery failure and recovers through the same callback", async (t) => {
-  // arrange
-  const scope = await createHermeticScope(t, "discovery-recovery");
-  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
-  await seedEnabledPlugin(scope.cwd, resolvedSource);
-  const promptPath = await seedPrompt(scope.cwd, "recovered.md");
-  const skillPath = path.join(
-    scope.cwd,
-    ".pi",
-    "pi-claude-marketplace",
-    "resources",
-    "skills",
-    "recovered-skill",
-  );
-  await mkdir(skillPath, { recursive: true });
-  await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
-  process.env.PATH = "/usr/bin";
-  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
-  const refused = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READS_PER_DISCOVER);
-  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
-  const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
-  const expectedState = {
-    schemaVersion: 2,
-    marketplaces: {
-      mp: {
-        name: "mp",
-        scope: "project",
-        source: {
-          kind: "path",
-          logical: path.join(scope.cwd, "mp-src"),
-          raw: path.join(scope.cwd, "mp-src"),
-        },
-        addedFromCwd: scope.cwd,
-        manifestPath: path.join(scope.cwd, "mp-src", ".claude-plugin", "marketplace.json"),
-        marketplaceRoot: path.join(scope.cwd, "mp-src"),
-        plugins: {
-          plug: {
-            version: "1.0.0",
-            resolvedSource,
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-            enabled: true,
-            installedAt: "2026-08-03T00:00:00.000Z",
-            updatedAt: "2026-08-03T00:00:00.000Z",
+test(
+  "contains one aggregate discovery failure and recovers through the same callback",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "discovery-recovery");
+    const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+    const binDir = path.join(resolvedSource, "bin");
+    await seedEnabledPlugin(scope.cwd, resolvedSource);
+    const promptPath = await seedPrompt(scope.cwd, "recovered.md");
+    const skillPath = path.join(
+      scope.cwd,
+      ".pi",
+      "pi-claude-marketplace",
+      "resources",
+      "skills",
+      "recovered-skill",
+    );
+    await mkdir(skillPath, { recursive: true });
+    await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
+    const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+    process.env.PATH = "/usr/bin";
+    Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+    const skillsDir = path.dirname(skillPath);
+    const discoveryError = Object.assign(new Error("project skills directory read refused"), {
+      code: "EACCES",
+    });
+    const readDirectory: (
+      target: fs.PathLike,
+      options: { encoding: BufferEncoding; withFileTypes: true },
+    ) => Promise<fs.Dirent[]> = fs.promises.readdir;
+    let skillsDirectoryReached = false;
+    const directoryReader = t.mock.method(
+      fs.promises,
+      "readdir",
+      async (
+        target: fs.PathLike,
+        options: { encoding: BufferEncoding; withFileTypes: true },
+      ): Promise<fs.Dirent[]> => {
+        if (target === skillsDir) {
+          skillsDirectoryReached = true;
+          throw discoveryError;
+        }
+
+        return readDirectory(target, options);
+      },
+    );
+    t.after(() => {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+    const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "project",
+          source: {
+            kind: "path",
+            logical: path.join(scope.cwd, "mp-src"),
+            raw: path.join(scope.cwd, "mp-src"),
+          },
+          addedFromCwd: scope.cwd,
+          manifestPath: path.join(scope.cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: path.join(scope.cwd, "mp-src"),
+          plugins: {
+            plug: {
+              version: "1.0.0",
+              resolvedSource,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              enabled: true,
+              installedAt: "2026-08-03T00:00:00.000Z",
+              updatedAt: "2026-08-03T00:00:00.000Z",
+            },
           },
         },
       },
-    },
-    lastReconciledExtensionVersion: "0.18.1",
-  };
-  const expectedConfig = {
-    schemaVersion: 1,
-    marketplaces: { mp: { source: path.join(scope.cwd, "mp-src") } },
-    plugins: { "plug@mp": {} },
-  };
-  const expectedPath = `/usr/bin${path.delimiter}${binDir}`;
-  const expectedDiscovery: ResourcesDiscoverResult = {
-    skillPaths: [skillPath],
-    promptPaths: [promptPath],
-  };
+      lastReconciledExtensionVersion: "0.18.1",
+    };
+    const expectedConfig = {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: path.join(scope.cwd, "mp-src") } },
+      plugins: { "plug@mp": {} },
+    };
+    const expectedPath = `/usr/bin${path.delimiter}${binDir}`;
+    const expectedDiscovery: ResourcesDiscoverResult = {
+      skillPaths: [skillPath],
+      promptPaths: [promptPath],
+    };
 
-  // act
-  const failedDiscovery = await discover(refused.event, ctx);
+    // act
+    const failedDiscovery = await discover(discoverEvent(scope.cwd), ctx);
 
-  // assert
-  assert.deepStrictEqual(failedDiscovery, EMPTY_DISCOVERY);
-  assert.deepStrictEqual(JSON.parse(await readFile(statePath, "utf8")), expectedState);
-  assert.deepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), expectedConfig);
-  assert.deepStrictEqual(process.env.PATH, expectedPath);
-  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
-  assert.strictEqual(refused.refused(), true);
-  assert.strictEqual(refused.readCount(), CWD_READS_PER_DISCOVER);
-  assert.deepStrictEqual(notifications, []);
-  const stateBytesAfterFailure = await readFile(statePath, "utf8");
-  const configBytesAfterFailure = await readFile(configPath, "utf8");
+    // assert
+    assert.deepStrictEqual(failedDiscovery, EMPTY_DISCOVERY);
+    assert.deepStrictEqual(JSON.parse(await readFile(statePath, "utf8")), expectedState);
+    assert.deepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), expectedConfig);
+    assert.deepStrictEqual(process.env.PATH, expectedPath);
+    assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+    assert.strictEqual(skillsDirectoryReached, true);
+    assert.deepStrictEqual(notifications, []);
+    const stateBytesAfterFailure = await readFile(statePath, "utf8");
+    const configBytesAfterFailure = await readFile(configPath, "utf8");
+    directoryReader.mock.restore();
+    syncBuiltinESMExports();
 
-  // act
-  const recoveredDiscovery = await discover(discoverEvent(scope.cwd), ctx);
+    // act
+    const recoveredDiscovery = await discover(discoverEvent(scope.cwd), ctx);
 
-  // assert
-  assert.deepStrictEqual(recoveredDiscovery, expectedDiscovery);
-  assert.deepStrictEqual(await readFile(statePath, "utf8"), stateBytesAfterFailure);
-  assert.deepStrictEqual(await readFile(configPath, "utf8"), configBytesAfterFailure);
-  assert.deepStrictEqual(process.env.PATH, expectedPath);
-  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
-  assert.deepStrictEqual(notifications, []);
-  verifyBoundary();
-});
+    // assert
+    assert.deepStrictEqual(recoveredDiscovery, expectedDiscovery);
+    assert.deepStrictEqual(await readFile(statePath, "utf8"), stateBytesAfterFailure);
+    assert.deepStrictEqual(await readFile(configPath, "utf8"), configBytesAfterFailure);
+    assert.deepStrictEqual(process.env.PATH, expectedPath);
+    assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  },
+);
 
 test("reports the scope whose install state it cannot read once as a reconcile failure and once as a plugin PATH warning (PENV-01)", async (t) => {
   // arrange
