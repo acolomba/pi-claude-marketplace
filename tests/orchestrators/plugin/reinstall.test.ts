@@ -4211,21 +4211,40 @@ async function markRecordedPluginDisabled(
  */
 async function seedDisabledInstall(
   cwd: string,
-  opts: { readonly pluginName?: string; readonly marketplaceRoot?: string } = {},
-): Promise<{ readonly skillDir: string }> {
+  opts: {
+    readonly pluginName?: string;
+    readonly marketplaceRoot?: string;
+    /** WLIF-01: source names to declare, each landing as one envelope. */
+    readonly workflows?: readonly string[];
+  } = {},
+): Promise<{ readonly skillDir: string; readonly envelopePaths: readonly string[] }> {
   const pluginName = opts.pluginName ?? "hello";
+  const workflows = opts.workflows ?? [];
   await seedMarketplace({
     cwd,
     marketplaceRoot: opts.marketplaceRoot ?? path.join(cwd, "mp-src"),
     pluginName,
-    resources: { skill: "old skill", command: "old command" },
+    resources: {
+      skill: "old skill",
+      command: "old command",
+      workflows: workflows.map((sourceName) => ({ sourceName })),
+    },
     install: true,
   });
   await markRecordedPluginDisabled(cwd, "mp", pluginName);
 
-  const skillDir = path.join(locationsFor("project", cwd).skillsTargetDir, `${pluginName}-tool`);
+  const locations = locationsFor("project", cwd);
+  const skillDir = path.join(locations.skillsTargetDir, `${pluginName}-tool`);
   await rm(skillDir, { recursive: true, force: true });
-  return { skillDir };
+  // The envelopes are deliberately NOT removed: a disabled record keeps its
+  // recorded inventory, and the point of the disabled case is that reinstall
+  // leaves those bytes exactly where they are.
+  return {
+    skillDir,
+    envelopePaths: workflows.map((sourceName) =>
+      path.join(locations.workflowsSavedDir, `${pluginName}:${sourceName}.json`),
+    ),
+  };
 }
 
 // Re-staging artifacts and flipping a disabled record to enabled here would
@@ -4237,7 +4256,12 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-"));
     try {
       const locations = locationsFor("project", cwd);
-      const { skillDir } = await seedDisabledInstall(cwd);
+      const { skillDir, envelopePaths } = await seedDisabledInstall(cwd, {
+        workflows: ["greet"],
+      });
+      const envelopePath = envelopePaths[0];
+      assert.ok(envelopePath !== undefined);
+      const envelopeBefore = await readFile(envelopePath, "utf8");
 
       const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
@@ -4263,6 +4287,9 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
       assert.deepEqual(recordAfter, recordBefore);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), configBefore);
       assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
+      // WLIF-01: the recorded envelope is left exactly as it was -- the
+      // disabled skip runs before any prepare, so nothing displaces it.
+      assert.equal(await readFile(envelopePath, "utf8"), envelopeBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8110,6 +8137,137 @@ test("WLIF-03: an unremovable placed envelope becomes a manual-recovery leak", a
     } finally {
       unlinkMock?.mock.restore();
       syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-01 / T-112-15: the record names the envelopes reinstall actually wrote.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WLIF-01: the record names both envelopes a two-workflow reinstall wrote", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-two-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          skill: "old skill",
+          workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
+        },
+        install: true,
+      });
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:alpha",
+        "hello:beta",
+      ]);
+      for (const sourceName of ["alpha", "beta"]) {
+        const envelopePath = path.join(locations.workflowsSavedDir, `hello:${sourceName}.json`);
+        assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+          name: `hello:${sourceName}`,
+          description: `does ${sourceName}`,
+          script: `export const meta = { name: "${sourceName}", description: "does ${sourceName}" };\n`,
+        });
+      }
+
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a workflow the new version drops leaves neither an envelope nor a record entry", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-dropped-"));
+    try {
+      // arrange -- the workflows directory is REMOVED before the new tree is
+      // written, so the dropped source name is genuinely absent rather than
+      // shadowed by the new one. This is the case that distinguishes a replace
+      // from an add.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const droppedPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(droppedPath), true, "the install must place the envelope");
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await rm(path.join(seeded.pluginRoot, "workflows"), { force: true, recursive: true });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "farewell" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(await pathExists(droppedPath), false);
+      assert.equal(
+        await pathExists(path.join(locations.workflowsSavedDir, "hello:farewell.json")),
+        true,
+      );
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:farewell",
+      ]);
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a reinstall with no workflows records an empty array, not an absent key", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-empty-record-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- an own, empty array. A `deepStrictEqual` against `[]` alone
+      // would not distinguish an absent key from an empty one, so the presence
+      // of the property is asserted separately.
+      assert.equal(outcome.partition, "reinstalled");
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      assert.ok(Object.hasOwn(record.resources, "workflows"));
+      assert.deepStrictEqual(record.resources.workflows, []);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
+    } finally {
       await rm(cwd, { force: true, recursive: true });
     }
   });
