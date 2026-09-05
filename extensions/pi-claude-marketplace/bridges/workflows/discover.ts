@@ -232,12 +232,12 @@ function verdictWarning(verdict: WorkflowVerdict, workflowsDir: string): string 
  *    and refused verdicts earn a warning on the same terms: a helper module, a
  *    broken draft and a script the engine's raw-text gate rejects are each one
  *    file's defect, and the plugin still installs everything else.
- * 3. There is NO first-wins dedup by generated name here. Two scripts sharing
- *    a generated name is a WNAM-05 collision, a defect of the SET, and
+ * 3. There is NO dedup by generated name anywhere. Two scripts sharing a
+ *    generated name is a WNAM-05 collision, a defect of the SET, and
  *    `assertNoWorkflowNameCollisions` must see both records to report both
  *    file names. Dropping the second here would make that assert unreachable
  *    and silently install the first under a name the author gave to two
- *    scripts. The staging-side dedup runs AFTER the assert.
+ *    scripts.
  *
  * The one dedup that DOES run here is by absolute source path, and it is not a
  * name rule: the resolver dedups its component paths by the raw declared
