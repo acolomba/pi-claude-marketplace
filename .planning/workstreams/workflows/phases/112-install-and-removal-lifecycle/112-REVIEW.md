@@ -1,415 +1,187 @@
 ---
 phase: 112-install-and-removal-lifecycle
-reviewed: 2026-09-05T19:31:13Z
+iteration: 2
+reviewed: 2026-09-05T00:00:00Z
 depth: standard
-files_reviewed: 23
+diff_base: 1a478772
+files_reviewed: 5
 files_reviewed_list:
+  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/pi-claude-marketplace/orchestrators/types.ts
-  - extensions/pi-claude-marketplace/persistence/state-io.ts
-  - extensions/pi-claude-marketplace/persistence/migrate.ts
-  - extensions/pi-claude-marketplace/shared/errors.ts
-  - tests/orchestrators/plugin/install.test.ts
   - tests/orchestrators/plugin/reinstall.test.ts
   - tests/orchestrators/plugin/workflows-staging-gc.test.ts
-  - tests/orchestrators/marketplace/shared.test.ts
-  - tests/orchestrators/marketplace/remove.test.ts
-  - tests/orchestrators/plugin/uninstall.test.ts
-  - tests/orchestrators/plugin/enable-disable.test.ts
-  - tests/persistence/state-io.test.ts
-  - tests/persistence/migrate.test.ts
-  - .fallowrc.json
 findings:
-  critical: 2
-  warning: 8
-  info: 0
-  total: 10
+  critical: 0
+  warning: 5
+  info: 2
+  total: 7
 status: issues_found
 ---
 
-# Phase 112: Code Review Report
+# Phase 112: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-09-05T19:31:13Z
-**Depth:** standard
-**Files Reviewed:** 23
+**Reviewed:** 2026-09-05
+**Depth:** standard (narrow — regression-hunt over the four fix commits `7ed19e4f`, `42f7821a`, `240a63d1`, `bcadbf89`)
+**Files Reviewed:** 5
 **Status:** issues_found
 
 ## Summary
 
-The wiring is mostly sound and several of the phase's stated risk areas hold up under
-inspection. Verified independently:
+Answers to the five questions, then the findings.
 
-- **`ReplacementEntry` stays four-armed** (`reinstall.ts:291-295`); `BridgePhase` gained
-  `"workflows"` only to label `pushLeak` in `abortPartialHandles`. Correct, not an omission.
-- **`replaceAll` really does need two new members.** `placedWorkflowNames` is the removal
-  payload for the caller's catch and `workflowsCommitLeaks` carries the commit's staging-cleanup
-  report, which `commitPreparedWorkflows` returns by value and nothing else would surface.
-- **The asymmetric `PathContainmentError` handling is as described, in both halves.**
-  `bridges/workflows/unstage.ts` re-raises the refusal bare after the loop;
-  `phase-ledger.ts:87-89,124-126` re-throws it out of `runPhases`, so the install ledger lets
-  it escape. `reinstall.ts::unplaceWorkflows` converts it to a leak line inside a `catch` that
-  cannot throw. Neither policy leaked into the other.
-- **Both structural folds subtract the new axis and both are genuinely load-bearing.**
-  `plugin/shared.ts:1230-1232` is held by a dedicated behavioral case
-  (`tests/orchestrators/plugin/shared.test.ts:1654`, "subtracts the dropped workflow envelope
-  and leaves the other four axes alone"); the hand-rolled duplicate at `remove.ts:335-340` is
-  held by "subtracts a dropped workflow envelope from the persisted row and leaves hooks alone"
-  in `remove.test.ts`. The "delete both lines, two tests go red" claim checks out.
-- **The sweeper's age bound is correct in both directions** — `mtimeMs >= abandonedBefore`
-  skips, and there is a positive case for the fresh tree surviving, not just the aged one being
-  removed. The containment assertion is anchored on `workflowsHomeDir` (one level above the
-  staging dir) and resolved outside the swallowing try, and `lstat` + `isDirectory()` keeps a
-  planted symlink or file from being traversed or removed.
-- `.fallowrc.json`'s change is minimal and correct: the `bridges-workflows` zone already
-  existed; only `orchestrators`' allow-list gained it.
+**Q1 — did any fix introduce a new defect?** No behavioral regression. `npx tsc --noEmit` is clean, `reinstall.test.ts` is 122/122, `workflows-staging-gc.test.ts` is 10/10. The residual problems are in the sweeper's new retention predicate (WR-05, WR-06, WR-07 below) and in one fix that does not do what its commit message says (WR-04).
 
-What does **not** hold up is the reinstall verb's `replaceAll` catch. It contains two distinct
-defects that both trace to one false premise stated in a comment on `reinstall.ts:1369-1373`
-("nothing inside this function can fail after it, so this catch never has to undo it"). The
-workflows commit is the last step, but the commit itself can fail *part way*, and the bridge
-reports exactly that case through `onPlaced` for exactly this reason. That path is untested,
-and the reinstall test that comes closest states the same false premise in its own comment.
+**Q2 — are CR-01 and CR-02 actually fixed?** Yes, and both are non-vacuous, confirmed independently by execution. I restored the pre-fix catch in `replaceAll` (`const leaks = [...rollbackReplacements(replacements), ...abortHandles(handles)]`), re-ran the two cases, and both went red; the file was restored and md5-verified afterwards.
 
-Two further items are behavioral gaps rather than wiring bugs: the staging sweeper's carefully
-constructed containment refusal dead-ends in a bare `catch {}` at both call sites, and `update`
-does not touch workflows at all while its failure-phase types were widened as if it did.
-
-## Narrative Findings (AI reviewer)
-
-## Critical Issues
-
-### CR-01: `replaceAll`'s catch discards the placed-envelope report, orphaning executable files
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1369-1389`
-
-**Issue:**
-`replaceAll` calls `commitPreparedWorkflows` last, capturing the placed names into the
-function-local `let placedWorkflowNames` via `onPlaced`. If the commit throws, the `catch` at
-line 1385 runs `rollbackReplacements(replacements)` + `abortHandles(handles)` and rethrows —
-`placedWorkflowNames` is never read and `unplaceWorkflows` is never called. The only caller of
-`unplaceWorkflows` is `runLockedReinstall`'s catch (line 1043), which is reachable only after
-`replaceAll` has *returned*.
-
-The bridge's contract is explicit that this is wrong. `CommitWorkflowsOptions.onPlaced` in
-`bridges/workflows/types.ts` documents the callback as firing "before the throw on every failure
-path", and `commitPreparedWorkflows`'s own doc says the report "— not the type of the thrown
-error — is what a caller's removal payload must be built from". The commit reaches that report
-via its `stranded` computation (`stage.ts:432-438`): renames it completed and could not reverse,
-minus targets a restore reclaimed. Those envelopes sit at their target paths in
-`workflowsSavedDir`.
-
-Consequence: the reinstall fails, no state write occurs, and any stranded envelope whose
-generated name is **not** already in the old record's `resources.workflows` (the ordinary case
-when the new plugin version adds or renames a workflow) is left on disk under a name no record
-owns. `unstagePluginWorkflows` removes strictly by recorded name and the saved directory is never
-enumerated, so nothing will ever find it. That is precisely the WLIF-03 hazard — verbatim
-third-party executable JavaScript outside every scope root — that the rest of this phase is built
-to prevent.
-
-The comment at lines 1369-1373 asserting the catch never has to undo the workflows step is the
-root of the miss; it reasons about *later steps failing* and overlooks *this step failing
-partially*.
-
-**Fix:** thread the placed names out of the commit into the catch and unplace them, reusing the
-helper that already exists for the sibling path:
-
-```ts
-  } catch (err) {
-    const leaks = [
-      ...(await rollbackReplacements(replacements)),
-      // The commit reports what it left at its targets on the throw path too;
-      // that report is the removal payload, whatever the error class was.
-      ...(await unplaceWorkflows(opts.locations, placedWorkflowNames)),
-      ...(await abortHandles(handles)),
-    ];
-    throw errorWithManualRecovery(err, leaks);
-  }
+```
+✖ CR-01: a partially failed workflows commit unplaces what it stranded
+✖ CR-02: a failed restore keeps the staging root holding the only copy
+ℹ pass 0  ℹ fail 2
 ```
 
-and replace the comment at 1369-1373 with the true statement: the commit is last, so no *later*
-step in this function can fail, but the commit's own partial failure still places envelopes that
-this catch must take back. Add a case that faults `retryFs.rename` on a `workflowsSavedDir`
-target *and* on the reversal, then asserts the saved directory is empty and the leak text names
-the file.
+CR-01's recovery also provably cannot unlink an envelope belonging to the old record. The payload is the bridge's `onPlaced` report, and on the throw path that report is `stranded` (`bridges/workflows/stage.ts:431`) — completed renames whose reversal failed, **filtered by `restoredTargets`**. A target reclaimed by the restore loop is excluded, so the one case where the target holds an old-record envelope is exactly the case the caller never sees. Where the restore *failed*, the target holds the new envelope and the old copy is in `.previous/`; unlinking is correct there and the retained `.previous/` still backs the leak text's "move it back by hand".
 
----
+CR-02's path is closed. `workflowsCommitEntered` is set before the call, so the abort arm is skipped on every commit path. Cross-checked the corner cases: a commit that throws *before* displacing (`mkdir` / `assertTargetsUnoccupied`) already ran its own `cleanupStaging`, and `cleanupStaging` swallows ENOENT and never throws (`shared/fs-utils.ts:40`), so skipping the abort is harmless there. There is no double-unplace: `replaceAll` is called *outside* the outer `try` (`reinstall.ts:968`), so the outer catch at `:1048` cannot see a `placedWorkflowNames` the inner catch already consumed.
 
-### CR-02: `abortHandles` recursively deletes the staging root the commit deliberately preserved
+**Q3 — is WR-02's contents predicate correct?** The choice of a contents predicate over a sentinel is right, and the fixer's reasoning holds: a crash mid-commit strands identical bytes in the identical place with no sentinel ever written, so "does this hold the only copy" is the cause-independent question. But the *implementation* of that predicate can misfire in both directions — see WR-05 (sweeps something it should keep) and WR-06 (keeps something forever with no surface). Adjudication: keep the design, fix the predicate.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1386` and
-`extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1639-1648`
+**Q4 — is WR-01's fix sound, and did the test rewrite lose coverage?** The fix is sound. The rewritten test proves strictly more on the WR-01 axis: two entries refused rather than one, the sweep returning normally rather than throwing, and both external trees intact. The one thing it dropped — `caught.name === "SymlinkRefusedError"` — is no longer observable at that boundary by construction, because the production code now converts the refusal to `` `${name}: ${errorMessage(err)}` ``. A test cannot pin a class the code under test discards, and the project convention against message-substring narrowing does not apply to a leak *string* channel. So: more, not less. One residual gap recorded as IN-01.
 
-**Issue:**
-`commitPreparedWorkflows` moves previously-recorded target envelopes aside into
-`<stagingRoot>/.previous/` rather than unlinking them, and on a failed restore it **skips**
-`cleanupStaging` on purpose (`stage.ts:419-425`, the CR-01 fix in that file):
+**Q5 — is WR-08's deviation right?** The fixer is right and the iteration-1 citation was wrong. `tests/orchestrators/reconcile/apply.test.ts:200-206` is a `denyWrites` helper that **throws** `"denyWrites cannot deny root; run this suite as a non-root user"` under uid 0. It does not call `t.skip`. `requireNonRoot()` matches that idiom exactly, down to the comment shape.
 
-```ts
-const cleanupLeak =
-  unrestored.length > 0
-    ? `left ${STAGING_LABEL} at ${prepared.stagingRoot} in place: it still holds ` +
-      `${unrestored.length} unrestored previous workflow envelope(s)`
-    : await cleanupStaging(prepared.stagingRoot, STAGING_LABEL);
-```
-
-The leak string it emits tells the operator the staging root holds "the only copy" and to move it
-back by hand.
-
-`replaceAll`'s catch then calls `abortHandles(handles)` → `abortPartialHandles` →
-`abortPreparedWorkflows(handles.workflows)` → `cleanupStaging(stagingRoot)`, which is
-`fs.rm(dir, { recursive: true, force: true })` (`shared/fs-utils.ts:42`). `.previous/` is inside
-that root. The recovery copy the bridge went out of its way to retain is destroyed a few
-milliseconds after the message telling the user to go and get it — and the user's previous
-workflow envelopes are gone from both their target path (the restore failed) and staging.
-
-This is the exact data-loss class the displace-rather-than-unlink design exists to make
-impossible. The guarding comment at `reinstall.ts:1641-1645` reasons only about the *successful*
-commit case ("it tolerates being reached from `replaceAll`'s catch after a successful commit
-already removed the staging root") and does not consider the deliberate-retention case.
-
-**Fix:** make the workflows abort arm conditional on the commit not having run, or make
-`abortPreparedWorkflows` refuse to remove a root that still holds `.previous/`. The narrower fix
-is to track whether the commit was entered and skip the abort arm when it was — the commit owns
-its own staging lifecycle on both its success and failure paths:
-
-```ts
-// replaceAll
-let workflowsCommitEntered = false;
-...
-workflowsCommitEntered = true;
-const workflowsLeak = await commitPreparedWorkflows(handles.workflows, { onPlaced: ... });
-...
-} catch (err) {
-  const leaks = [
-    ...(await rollbackReplacements(replacements)),
-    ...(await unplaceWorkflows(opts.locations, placedWorkflowNames)),
-    // The commit owns its staging root on BOTH its paths, and deliberately
-    // retains it when it holds the only copy of a displaced envelope.
-    ...(await abortHandles(handles, { skipWorkflows: workflowsCommitEntered })),
-  ];
-  throw errorWithManualRecovery(err, leaks);
-}
-```
-
-Cover it with a case that faults the restore rename and asserts `<stagingRoot>/.previous/` still
-exists after the reinstall fails.
+**Also confirmed undisturbed:**
+- `PathContainmentError` asymmetry intact — `unstagePluginWorkflows` still raises by class, the install ledger still lets it escape (PI-14), and only `unplaceWorkflows` (`reinstall.ts:1442`) and now the sweeper's hygienic loop convert it to a leak string. Both conversions sit in D-19-01 best-effort cleanup.
+- `ReplacementEntry` is still four-armed (`reinstall.ts:291-295`); workflows remains deliberately outside `replacements[]`.
+- `CASCADEAX-01` still pinned as deliberately unrepaired at `tests/orchestrators/marketplace/remove.test.ts:1170`.
+- WR-03's carrier exists: ROADMAP Phase 113, success criterion 6, verbatim ("The `workflows` failure-phase widenings stop being inert"). Not re-reported.
 
 ## Warnings
 
-### WR-01: a containment refusal makes the staging sweeper permanently inert, silently
+### WR-04: the install warning fix is inert — the defect it claims to fix is still live
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:115`,
-`extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1694-1697`,
-`extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:448-452`
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1202`
 
-**Issue:** the module doc argues at length that `assertPathInside` must sit *outside* the
-swallowing try so "a `PathContainmentError` must propagate rather than be mistaken for an rm
-leak". It does propagate — straight into `try { await garbageCollectWorkflowsStaging(locations); }
-catch {}` at both call sites, where it is discarded whole. The net observable behavior is
-identical to folding it into a leak string, so the design intent is unrealized.
+**Issue:** Commit `240a63d1` moves `c.bridgeWarnings.push(...prep.result.warnings)` from after `commitPreparedWorkflows` to before it, and its message states the warnings are now kept "on exactly the run where the operator most needs them". They are not. `installCtx.bridgeWarnings` has exactly one consumer: `collectPostCommitWarnings` (`install.ts:1691`), whose own doc-comment says "POST-state-commit side effects" and which is called once, at `install.ts:2488`, **after** the ledger has returned and the state record has been committed. It is not a member of `InstallLedgerSummary` (`install.ts:511-530`), and the failure arm composes its `PluginFailedMessage` from the thrown error and the rollback partials, never from the context.
 
-Worse, the assertion is inside the per-entry loop with no per-entry guard, so one refusing entry
-aborts the sweep for **every remaining aged tree**. Combined with the swallow, a symlinked
-staging segment (the case the test at `workflows-staging-gc.test.ts:207` proves refuses) leaves
-GC permanently dead with no user-visible signal, while orphaned executable envelopes keep
-accumulating — the exact failure the sweeper exists to prevent.
+So when the workflows commit throws, `runPhases` unwinds, the ledger throws, and the array is discarded with the context — byte-for-byte the pre-fix outcome. The reordering is behavior-neutral on the success path and unobservable on the failure path. The commit carries no test, which is why the vacuity was not caught: a test asserting "a commit throw still surfaces the prepare's discovery warnings" would fail against both the old and the new code.
 
-**Fix:** either let the refusal reach the user, or make it per-entry so one poisoned entry does
-not stop the pass. The narrow version:
+The cited precedent is also wrong. Reinstall composes `bridgeWarnings` at `reinstall.ts:1055`, i.e. only after `replaceAll` **returned**; on a `replaceAll` throw it loses the same warnings for the same reason.
+
+**Fix:** Either revert the reorder as churn and re-carry the finding, or make it real. Real means giving the failure path a channel. The narrowest version is to thread the prepare's warnings out of the ledger on the throw, e.g. attach them to the error the way `appendLeaks` already attaches leak strings:
+
+```ts
+// install.ts, workflows phase
+c.bridgeWarnings.push(...prep.result.warnings);
+try {
+  const leak = await commitPreparedWorkflows(prep, { onPlaced: ... });
+  ...
+} catch (err) {
+  // The prepare's observations describe the SOURCE and survive the commit's
+  // failure; appendLeaks is the established carrier for strings that must
+  // reach the failure row.
+  throw appendLeaks(err, prep.result.warnings);
+}
+```
+
+and pin it with a case that drives a commit throw and asserts a refused-script warning appears in the rendered failure row.
+
+### WR-05: `holdsDisplacedEnvelopes` treats every errno as "nothing displaced", including the ones that prove nothing
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:183-189`
+
+**Issue:** The predicate is `readdir(...).length > 0` wrapped in a bare `catch { return false; }`. Its doc-comment argues "no other errno tells us the directory holds bytes, so none of them justifies keeping an aged tree forever" — but that inverts the asymmetry the rest of the file is built on. `WORKFLOWS_STAGING_MAX_AGE_MS`'s own comment states the policy explicitly: "the cost of erring in the safe direction is one orphan surviving an extra pass." Here the two outcomes are *one orphan surviving another pass* versus *`rm -rf` on the only surviving copy of the user's workflow scripts*, and the code picks the second on every non-ENOENT failure.
+
+`ENOENT` (and arguably `ENOTDIR`, a plain file named `.previous`) is the only errno that proves the directory holds nothing. Everything else — a transient `EMFILE`/`ENFILE` under fd pressure, `EIO`, an `EACCES` window that closes before the subsequent `rm` retries — reads as "nothing displaced" and hands the tree to a recursive force-remove. Narrow, but the loss is irreversible and it is precisely the loss `7ed19e4f` was written to prevent.
+
+**Fix:**
+
+```ts
+async function holdsDisplacedEnvelopes(stagingRoot: string): Promise<boolean> {
+  try {
+    return (await readdir(path.join(stagingRoot, DISPLACED_DIR))).length > 0;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    // Only an absent (or non-directory) `.previous` PROVES nothing is
+    // displaced. Any other errno leaves the question open, and the safe
+    // answer to an open question here is one orphan surviving another pass
+    // rather than a recursive rm over the only copy.
+    return code !== "ENOENT" && code !== "ENOTDIR";
+  }
+}
+```
+
+### WR-06: a retained tree is retained forever, and nothing enumerates the retained set
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:127-136`
+
+**Issue:** Once a staging root holds a non-empty `.previous/`, no code path ever removes it. The sweeper skips it on every pass; uninstall and `/reload` cannot reach it because `workflowsStagingDir` sits outside every scope root (WPTH-04); and both sweeper call sites (`install.ts:1701`, `uninstall.ts:449`) discard the return inside a bare `catch {}`, so nothing ever names it again. The single notice the operator gets is the one-shot leak line inside the failure the commit threw.
+
+The crash case the fix was designed around makes this concrete and worse: a kill signal between `displacePreviousTargets` and the rename loop leaves the targets **empty** and the only copies inside `.previous/`, with no error thrown and therefore no leak line ever emitted. The user's workflows have silently vanished; the recovery bytes now live forever in a `randomUUID()` directory that no surface lists. Pre-fix behavior deleted them after 24 hours, which is worse — but "kept forever, undiscoverable" is not the finished state.
+
+**Fix:** Retention needs a read surface. Cheapest version that closes the discoverability half without changing the retention policy: have the sweeper return retained roots as their own channel and give an existing user-facing verb somewhere to render it, e.g.
+
+```ts
+export async function garbageCollectWorkflowsStaging(
+  locations: Pick<ScopedLocations, "workflowsStagingDir" | "workflowsHomeDir">,
+): Promise<{ readonly leaks: string[]; readonly retained: string[] }>
+```
+
+with `retained` carrying `` `${name}: holds N displaced previous workflow envelope(s) at ${candidate}` ``, surfaced once from `info` or `pending`. If that belongs to Phase 113/114, carry it there explicitly rather than leaving it implicit.
+
+### WR-07: the retention probe reads through the candidate before the containment refusal
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:134` (probe) vs `:149` (assertion)
+
+**Issue:** `holdsDisplacedEnvelopes(candidate)` runs *before* `assertPathInside`. The file's own comment at `:138` states the discipline — "resolve the containment boundary OUTSIDE the rm's try" — and WPTH-04's whole point is that the staging segment is the one an attacker could have replaced. The new predicate now performs a `readdir` through that unvalidated segment, on every aged entry, ahead of the check that exists to refuse it. The WR-01 test proves this happens: both symlinked entries reach the refusal, which means both were probed through the symlink first.
+
+The reachable consequence is retention rather than disclosure, and it is permanent: `readdir` follows symlinks, so planting `.previous -> /` (or any non-empty directory) inside a staging root pins that root against the sweeper for the life of the machine. Combined with WR-06 there is no way to notice.
+
+**Fix:** Move the containment assertion above the retention probe. The assertion has no dependency on the probe, and running it first means every subsequent read is inside a boundary that has been walked.
 
 ```ts
 try {
   await assertPathInside(locations.workflowsHomeDir, candidate, `workflows staging root ${name}`);
 } catch (err) {
-  // NFR-10: a refusal is loud but must not abort the sweep of every other tree.
   leaks.push(`${name}: ${errorMessage(err)}`);
+  continue;
+}
+
+if (await holdsDisplacedEnvelopes(candidate)) {
   continue;
 }
 ```
 
-If the refusal really must be fatal, then at minimum one of the two call sites has to surface it
-rather than swallow it.
+Optionally `lstat` `.previous` unfollowed inside the predicate so a symlinked `.previous` is not credited as displaced content.
+
+### WR-08: the sweeper's header enumerates an import surface it no longer has
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:17-22`
+
+**Issue:** The header states "This helper is fs-only: node:fs/promises + the containment chokepoint + the shared error-message helper + the locations type", and uses that closed enumeration to justify an architectural property ("It never touches the git surface, so any orchestrator — even one gated by tests/architecture/no-orchestrator-network.test.ts — can import it"). `7ed19e4f` added a fifth import, `DISPLACED_DIR` from `bridges/workflows/stage.ts`, and the enumeration was not updated. The claim's *conclusion* still holds (I checked `stage.ts:47-59` — no git surface, and `install.ts` already imports the same module directly), but a header whose enumeration is load-bearing and stale is a trap for the next reader who takes it as an invariant.
+
+**Fix:** Add the bridge import to the list and say why it is safe there, e.g. "…plus `DISPLACED_DIR` from the workflows bridge, whose own imports are fs-only — the shared constant is what keeps the sweeper's retention predicate and the commit's displacement from drifting apart."
+
+## Info
+
+### IN-01: the WR-01 test never shows a *collectible* tree surviving a containment refusal
+
+**File:** `tests/orchestrators/plugin/workflows-staging-gc.test.ts:229`
+
+**Issue:** The rewritten case plants two entries behind the same symlinked staging segment, so both are refused and neither is removable. It proves the refusal does not escape and does not stop at the first entry, but it does not demonstrate the harm the fix names — "orphaned executable envelopes kept accumulating" — because no sweepable tree exists in that fixture to be swept afterwards. The fixture cannot hold one: every entry lives under the same symlink. The adjacent case at `:204` ("continues past a staging tree it cannot remove") does prove continuation-then-collection, but through the `rm`-leak path, not the containment path.
+
+**Fix:** Optional. If you want the containment path to carry the same proof, refuse one entry by containment and make a second entry collectible by planting only *one* of the two behind a per-entry symlink rather than symlinking the staging directory itself, then assert the collectible one is gone.
+
+### IN-02: a post-commit failure still leaves the record naming envelopes that no longer exist
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1048`
+
+**Issue:** Pre-existing and outside this iteration's fixes, recorded for completeness because it is the mirror image of what CR-01/CR-02 closed. On a *successful* workflows commit followed by a state-write or write-back failure, the outer catch unlinks the full placed set — while the previous envelopes were already destroyed by the commit's own `cleanupStaging`. The transaction does not save, so `state.json` keeps the old record naming workflows that are now absent from disk: the exact record/disk divergence this phase exists to prevent, reached from the one path where it is unavoidable without a second staging generation.
+
+**Fix:** None proposed. The manual-recovery contract covers it (re-running reinstall re-resolves and re-materializes) and reinstall is the repair verb. Worth one sentence in the Phase 114 contract document so the window is written down rather than rediscovered.
 
 ---
 
-### WR-02: the 24-hour sweeper deletes the manual-recovery copy the commit deliberately retained
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:6-10,
-110-118`
-
-**Issue:** the module header names the retention path explicitly — "the deliberate retention path
-a failed restore takes leaves it behind" — and sweeps it anyway. That tree is, per
-`stage.ts:419-423`, the **only** copy of the user's previous workflow envelopes, and the leak
-string the operator received instructs them to move the file back by hand. Twenty-four hours
-later the sweeper deletes it, with no notice (the leaks are discarded at both call sites) and no
-liveness signal distinguishing it from a crash orphan.
-
-Independent of CR-02, this puts a silent expiry on a recovery instruction the product just gave.
-
-**Fix:** mark the retention deliberately — e.g. have the commit write a sentinel file into the
-retained root (`.retained`) and have the sweeper skip any root containing it, or move the
-unrestored envelopes to a sibling `recovery/` tree the sweeper does not walk. Whatever the
-mechanism, the sweeper must be able to tell "abandoned by a crash" from "kept on purpose because
-it holds the only copy".
-
----
-
-### WR-03: `update` never re-stages workflows, and nothing tells the user
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1429-1436, 1448-1455`,
-`extensions/pi-claude-marketplace/orchestrators/types.ts:145`,
-`extensions/pi-claude-marketplace/shared/errors.ts:360`
-
-**Issue:** three closed sets gained a `workflows` member that `update.ts` cannot produce, and the
-comment concedes it: "`update.ts` cannot produce a workflows failure today and gains no behavior
-from the widening". The per-axis record assignments at `update.ts:1840-1856` cover skills,
-prompts, agents, mcpServers and hooks and deliberately leave `resources.workflows` alone — so the
-inventory is at least not erased (good), but the envelopes on disk are never re-staged from the
-new source.
-
-The user-visible result: after `/claude:plugin update`, the version, the record and the row all
-say updated, while the workflow envelopes still hold the **previous** version's executable
-script. A workflow the new version added never appears; one it removed stays installed and
-runnable. No row, reason token or warning marks the gap.
-
-Two problems compound here. First, the widening pre-consumes the very signal
-`PHASE3_FAILURE_PHASES` was built to give: its own comment says "a future bridge surfaces here as
-a TS error", and adding the member now removes that error for workflows specifically. Second, the
-deferral has no carrier in the product — only in a source comment.
-
-**Fix:** if the update re-stage is genuinely a later phase, revert the three widenings (they are
-type-only and buy nothing today) so the compiler still flags the slot when the re-stage lands,
-and surface the gap to the user in the meantime — e.g. a `bridgeWarnings` line on any update of a
-plugin whose resolved `componentPaths.workflows` is non-empty, stating the workflows were not
-re-materialized and `reinstall` is the remedy.
-
----
-
-### WR-04: the install ledger's workflows phase loses the prepare's warnings when the commit throws
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1195-1201`
-
-**Issue:** `c.bridgeWarnings.push(...prep.result.warnings)` runs *after* `commitPreparedWorkflows`
-returns. Every discovery warning the prepare produced — refused scripts, unreadable files, skipped
-directories — is discarded when the commit throws, which is precisely the run where the operator
-most needs to know what the bridge saw. Reinstall does not have this problem: it reads
-`handles.workflows.result.warnings` at `reinstall.ts:1054` independently of whether the commit
-succeeded.
-
-**Fix:** push the prepare's warnings immediately after the prepare returns, before the commit:
-
-```ts
-c.workflowsPrep = prep;
-c.stagedWorkflowNames = [];
-// Recorded before the commit so a commit throw does not discard what the
-// prepare already observed about the source.
-c.bridgeWarnings.push(...prep.result.warnings);
-const leak = await commitPreparedWorkflows(prep, { onPlaced: ... });
-```
-
----
-
-### WR-05: `garbageCollectWorkflowsStaging` takes a scoped bundle for two scope-independent fields
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts:79-81`
-
-**Issue:** the parameter is a full `ScopedLocations`, but the function reads only
-`workflowsStagingDir` and `workflowsHomeDir`, both of which `locations.ts:235-248` derives from
-`workflowHomeDir()` with no scope input. The signature therefore implies a per-scope sweep that
-does not exist: a project-scope uninstall sweeps user-scope staging trees and vice versa. The
-doc comment on the age constant knows this ("`workflowsStagingDir` is scope-independent so the
-per-scope `proper-lockfile` state guard does not serialize access to it either") but the
-signature does not say it, and `ScopedLocations` is a branded type whose whole purpose is to stop
-one scope's path being used in another scope's operation.
-
-**Fix:** narrow the parameter to the two fields it actually reads, so the type states the truth
-and no caller can conclude the sweep is scoped:
-
-```ts
-export async function garbageCollectWorkflowsStaging(
-  locations: Pick<ScopedLocations, "workflowsStagingDir" | "workflowsHomeDir">,
-): Promise<string[]> {
-```
-
----
-
-### WR-06: `resourcesFromHandles` defaults `placedWorkflowNames` to `[]`, defeating its own discipline
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1543,
-1560-1567`
-
-**Issue:** the parameter is declared `placedWorkflowNames: readonly string[] = []`, and the
-comment immediately below invokes the project's compile-forcing convention — the same convention
-`state-io.ts:122` cites for making the schema member required ("Required, like every sibling axis,
-so each construction site is compile-forced to answer for it"). A default parameter is the exact
-opposite: a future third caller silently records an empty workflow inventory for a plugin whose
-envelopes are on disk, which is the record/disk divergence the phase is guarding against, and it
-compiles clean.
-
-The existing `plugin?` / `installable?` optionals set the precedent, but they were not introduced
-by a change whose stated rationale is that this axis cannot be recovered from disk.
-
-**Fix:** make the parameter required and have `successOutcome`'s call site pass `[]` explicitly,
-so the "no state write occurs on that path" reasoning is stated at the site that relies on it
-rather than hidden in a default.
-
----
-
-### WR-07: the reinstall abort test's premise is false, and it is why CR-01/CR-02 are untested
-
-**File:** `tests/orchestrators/plugin/reinstall.test.ts` — "WLIF-01: a replace-step failure leaves
-no workflows staging tree behind"
-
-**Issue:** the arrange comment states that faulting the *skills* replace is "the only path on
-which the workflows abort arm can fire, because workflows is prepared last and no later prepare
-exists to fail after it". That is wrong: the abort arm also fires when the **workflows commit
-itself** throws, which is the path CR-01 and CR-02 live on. The test then asserts the envelope is
-byte-unchanged and notes "the failure landed BEFORE the workflows step" — so the whole
-commit-failure branch of `replaceAll`'s catch has no coverage at all, despite the file's ten new
-cases.
-
-The install-side suite does exercise the analogous branch (`WLIF-03: an undo that cannot remove a
-placed envelope raises the typed failure`, `T-112-01: an envelope this install did not place
-survives the undo byte-unchanged`), which makes the reinstall-side absence a scope gap rather
-than a house-style one.
-
-**Fix:** correct the comment, and add the two cases named in CR-01 and CR-02 — fault the
-`workflowsSavedDir` rename plus its reversal (assert the saved directory ends empty), and fault
-the `.previous/` restore rename (assert the staging root still exists after the failure).
-
----
-
-### WR-08: the sweeper's permission-denial tests have no root guard
-
-**File:** `tests/orchestrators/plugin/workflows-staging-gc.test.ts:165-186, 188-211`
-
-**Issue:** "records a leak for a staging entry it cannot inspect" and "continues past a staging
-tree it cannot remove and names it once" both manufacture failure with `chmod` (`0o444` on the
-staging dir, `0o555` on a subtree). Running as root — the default in many container CI images —
-those modes do not restrict anything: `lstat` and `rm` succeed, `leaks.length` is `0`, and both
-`assert.strictEqual(leaks.length, 1)` calls fail. The repo already has the guard pattern for
-exactly this (`tests/orchestrators/reconcile/apply.test.ts:204` checks `process.getuid() === 0`),
-so the omission is inconsistent rather than novel.
-
-**Fix:** skip both cases when `process.getuid?.() === 0`, matching the existing precedent:
-
-```ts
-if (typeof process.getuid === "function" && process.getuid() === 0) {
-  t.skip("chmod-based denial is inert for root");
-  return;
-}
-```
-
----
-
-_Reviewed: 2026-09-05T19:31:13Z_
+_Reviewed: 2026-09-05_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: standard, iteration 2 (narrow regression scope)_
