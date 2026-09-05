@@ -1,7 +1,10 @@
 ---
 phase: 109-kind-inversion
-reviewed: 2026-09-05T00:33:53Z
+reviewed: 2026-09-05T01:24:57Z
 depth: standard
+iteration: 2
+diff_base: 084bb552
+head: b4bb4f42
 files_reviewed: 24
 files_reviewed_list:
   - docs/output-catalog.md
@@ -30,420 +33,317 @@ files_reviewed_list:
   - tests/shared/probe-classifiers.test.ts
 findings:
   critical: 1
-  warning: 6
-  info: 5
-  total: 12
+  warning: 2
+  info: 7
+  total: 10
 status: issues_found
 ---
 
-# Phase 109: Code Review Report
+# Phase 109: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-09-05T00:33:53Z
+**Reviewed:** 2026-09-05T01:24:57Z
 **Depth:** standard
 **Files Reviewed:** 24
 **Status:** issues_found
 
 ## Summary
 
-The mechanical half of this change is sound. I independently verified the four
-things the phase brief named as the real risk areas and three of them are clean:
+Six of the seven iteration-1 fixes hold as claimed. One (WR-04) is half-done and
+now carries a citation that is false for the block it was added to. CR-01 is
+unchanged in code by design, but its documentary mitigation landed only in
+carriers that cannot be relied on, so I am keeping it at Critical rather than
+closing it.
 
-- **Closed-set completeness holds.** `_ReasonsCoverageProof` in
-  `notify-reasons.ts:264-268` still resolves to `never` on both `Exclude`
-  arms — `"workflows"` was removed from `REASONS` *and* from the private
-  `UnsupportedReason` group in the same change, so the partition stays total.
-  `npm run typecheck` exits 0. A repo-wide grep finds no surviving reference to
-  the retired literal in `extensions/`.
-- **`componentPaths` was widened as a REQUIRED key everywhere.** Every one of
-  the 20 fixture sites and the `discover-names.test.ts:24` parameter type takes
-  `workflows: readonly string[]` non-optionally; no site used `?` to silence the
-  compiler. `info.ts:652`'s narrower structural parameter type is a pre-existing
-  read-side subset, not a widening dodge.
-- **Byte-contract coherence holds.** All three `catalog-state` ids exist in both
-  homes under the correct H2 section; `catalog-uat` passes 6/6 including the
-  inverse orphan walk.
+**What I verified myself, not by reading the fix report:**
 
-What I did find is a cluster of truthfulness defects the phase's own framing
-did not reach: the retirement is correct for *freshly resolved* plugins but
-silently degrades the message rendered from **persisted pre-inversion records**,
-which are creatable on the already-released v0.18.1. Separately, the
-install-level "window pin" — the artifact D-109-07 exists to produce — is
-unconditioned on its fixture and would stay green if the workflows kind stopped
-being recognized entirely. Its non-vacuity proof lives in a SUMMARY, not in the
-repository.
+- **WR-01 is genuinely non-vacuous.** I re-ran the fixer's mutation independently:
+  copied `tests/integration/workflow-kind-inversion.test.ts` to a scratch sibling,
+  renamed the fixture's `workflows/` directory to `NOTworkflows/`, ran it, and got
+  `fail 1` with `AssertionError: fixture must resolve workflows supported; got:
+  skills`. The scratch copy was removed. The precondition reads
+  `record.compatibility.supported`, which `PLUGIN_INSTALL_RECORD_SCHEMA`
+  (`state-io.ts:110-115`) fills from the resolver's own `supported[]`, so it
+  engages the resolver and the persistence path exactly as claimed.
+- **WR-06 holds and no sibling survives.** `withHermeticHome` is now
+  `(home: string) => Promise<T>` and hands the temp dir down;
+  `grep '?? ""'` over the two most-edited test files returns only the doc comment
+  that explains why the fallback was removed. No other silent-fallback of that
+  shape exists in the touched files.
+- **WR-02 holds.** `resolver.ts:1588` now reads
+  `HOOK-01 / WINV-01: iterates SUPPORTED_COMPONENT_PATH_KINDS
+  (skills/commands/agents/workflows)`, matching the tuple at line 369, and the
+  file header at line 28 names `workflows` too.
+- **WR-03 holds and is the strongest of the seven.** The new resolver test drives
+  a plugin carrying both `workflows/` and a `themes` declaration and asserts
+  `partially-available`, `unsupported` deep-equal `["themes"]`, `supported`
+  includes `workflows`, and no note mentions workflows. That is the causal claim
+  the catalog block makes, now actually enforced.
+- **WR-05's pin is accurate.** The non-path `workflows` declaration does resolve
+  `unavailable` with the `component path for "workflows" is not a string` note.
+- **Gates:** `npx tsc --noEmit` exit 0. ESLint exit 0 and Prettier clean on the
+  changed production and test files. `node --test` green on
+  `tests/domain/resolver.test.ts`, `catalog-uat`, `hooks-foundation`,
+  `compat-01-no-expansion`, `notify-closed-set-locks`, `probe-classifiers`
+  (233 pass / 0 fail) and on the integration window test (1 pass / 0 fail).
+- **No stale literal survives.** `grep '"workflows"'` over `tests/` outside the
+  legitimate `componentPaths` / resolver / classifier sites returns nothing, and
+  `grep -i workflow` over `extensions/` returns only
+  `plugin.ts:33` plus two unrelated prose uses. The retirement is complete.
+- **No persistence-compat hazard from the widened `componentPaths`.**
+  `componentPaths` is resolver-only; `PLUGIN_INSTALL_RECORD_SCHEMA` never stores
+  it, so adding a REQUIRED `workflows` member cannot fail validation on a
+  v0.18.1 `state.json`. `SUPPORTED_COMPONENT_KINDS` has no production consumer at
+  all (only `hooks-foundation.test.ts`), so growing it 4→5 changes no runtime
+  behavior outside the resolver's own loops.
 
-Verified green locally: `npm run typecheck`, ESLint and Prettier on the changed
-production files, `tests/integration/workflow-kind-inversion.test.ts`,
-`tests/architecture/catalog-uat.test.ts`,
-`tests/domain/components/plugin.test.ts`,
-`tests/orchestrators/plugin/list.test.ts`.
+**On the two judgment calls the fix report asked about, explicitly:**
+
+1. **I agree with skipping the `list.test.ts` pin of `{unsupported component}`.**
+   A test asserting today's defective rendering would go red at convergence and
+   create a second Phase 111 obligation to discover and invert. More decisively,
+   the convergence *mechanism* is already covered generically:
+   `tests/orchestrators/reconcile/backfill.test.ts` has
+   `BFILL-01: promotes a plugin whose supported set grew into a fully installed
+   record` and `BFILL-02: stamps the running version when the recorded stamp is
+   older`. Nothing workflow-specific is missing from the test tree; the only
+   missing input is the version bump, which no test can force.
+2. **Pinning WR-05's consequence without its premise is sound, but the
+   disclosure overstates the vacuum.** See WR-02 below — the premise does have an
+   in-repo lineage the comment does not cite.
 
 ## Critical Issues
 
-### CR-01: A persisted pre-inversion record now renders a token that names nothing
+### CR-01: The Phase 111 `EXTENSION_VERSION` obligation has no durable carrier
 
-**File:** `extensions/pi-claude-marketplace/shared/probe-classifiers.ts:203-213`
-(reached via `orchestrators/plugin/list.ts:335`,
-`orchestrators/plugin/info.ts:1147`,
-`orchestrators/plugin/enable-disable.ts:1195`,
-`orchestrators/reconcile/notify.ts:574`)
+**Files:** `.planning/workstreams/workflows/ROADMAP.md:221-242` (the missing
+home), `.planning/workstreams/workflows/phases/109-kind-inversion/109-CONTEXT.md:366-380`,
+`.planning/workstreams/workflows/STATE.md:65-79`
+**Underlying code:** `extensions/pi-claude-marketplace/shared/probe-classifiers.ts:196-213`
+reached from `orchestrators/plugin/list.ts:335`, `info.ts:1147`,
+`enable-disable.ts:1195`, `orchestrators/reconcile/notify.ts:574`
 
-**Issue:** `kindToReason` no longer special-cases `"workflows"`, so it falls
-through to `"unsupported component"`. That is correct for *resolver* output —
-the resolver can no longer emit the kind — but three surfaces feed
-`narrowUnsupportedKinds` from the **persisted** `record.compatibility.unsupported`
-array, not from a fresh resolution:
+**Issue:** The code defect is unchanged and correctly so — A-03 forbids the bump
+during the window. What was supposed to close the finding is the *recorded
+inverse obligation*, and the two places it landed are both places Phase 111 is
+not guaranteed to read.
 
-```ts
-// list.ts:335
-const kinds = narrowUnsupportedKinds(record.compatibility.unsupported);
+The content is good. Both entries name the mechanism (`backfill.ts:76` returns
+early on version equality; `backfill.ts:343` `supportedSetGrew` is what
+re-materializes), the record shape v0.18.1 wrote
+(`compatibility: { installable: false, unsupported: ["workflows"] }`), the four
+surfaces that read the persisted array, and the user-visible symptom
+(`◉ helper (partially-installed) {unsupported component}`). I re-traced the
+mechanism and it is accurate: `applyBackfillForScope` returns at the version
+equality check (`backfill.ts:76`), and `maybeBackfillPlugin` reaches
+`reinstallPlugin` only through `supportedSetGrew(record.compatibility.supported,
+resolved.supported)` (`backfill.ts:343`), which a
+`supported: ["skills"] → ["skills","workflows"]` record satisfies.
+
+The carriers are the problem:
+
+- `109-CONTEXT.md` §Deferred Ideas is a **phase-109 artifact**. Its own text says
+  "Carry this into Phase 111's CONTEXT.md" — an instruction to a future agent,
+  not a fact in front of that agent. `.planning/workstreams/workflows/phases/111-workflows-bridge/`
+  contains one empty `.gitkeep`; there is nothing there to have received it.
+- `STATE.md` §Current Position is **volatile**. It is rewritten at every
+  `phase.complete` / `plan-phase` transition; Phase 109's own completion and
+  Phase 110's planning both rewrite that section before Phase 111 is discussed.
+- `ROADMAP.md` §"Phase 111: Workflows bridge" — the artifact `/gsd-discuss-phase 111`
+  actually opens — lists six success criteria and mentions **neither** the bump
+  **nor** the pre-existing ENOENT-assertion inversion. The fixer matched the
+  weak carrier the assertion-inversion deferral already used; matching a weak
+  precedent is what leaves both obligations exposed.
+
+If Phase 111 lands `bridges/workflows/` without the bump, every v0.18.1
+`--partial` workflow record stays `(partially-installed) {unsupported component}`
+permanently — a token naming a dropped component for a kind Pi materializes —
+with no self-heal path, because the gate never reopens.
+
+**Fix:** Put both obligations where the phase that owes them will read them.
+One line each in `ROADMAP.md` §Phase 111 Success Criteria:
+
+```markdown
+7. `EXTENSION_VERSION` is bumped in the same change. The load-time backfill
+   returns early while `state.lastReconciledExtensionVersion === EXTENSION_VERSION`
+   (`orchestrators/reconcile/backfill.ts:76`), so the bump is the only thing that
+   opens the gate and lets `supportedSetGrew` (`backfill.ts:343`) re-materialize
+   the `compatibility: { installable: false, unsupported: ["workflows"] }`
+   records released v0.18.1 wrote. Without it those rows render
+   `(partially-installed) {unsupported component}` forever.
+8. The D-109-06 window assertion in
+   `tests/integration/workflow-kind-inversion.test.ts` is INVERTED —
+   `assert.rejects(stat(<home>/.pi/workflows), { code: "ENOENT" })` becomes an
+   assertion that the envelopes ARE written.
 ```
 
-Such a record is not hypothetical. `git tag` shows **v0.18.1 is released**, and
-its CHANGELOG entry (`CHANGELOG.md:5`) documents exactly the behavior that
-writes it: "Structurally valid plugins that declare `workflows` … now report
-`(partially-available) {workflows}` … `--partial` installs only supported
-components." Any user who `--partial`-installed a workflow-bearing plugin on
-0.18.1 has `compatibility: { installable: false, unsupported: ["workflows"] }`
-on disk.
-
-After this change their `list` / `info` row silently changes from
-`◉ helper (partially-installed) {workflows}` to
-`◉ helper (partially-installed) {unsupported component}` — a token that names a
-component kind Pi now *supports*, offering the user no actionable information
-and contradicting the project's truthful-attribution rule for the reason set.
-`derivePersistedInstalledStatus` (`info.ts:1164`) keeps deriving
-`partially-installed` from the same record, so the row is stale in both halves.
-
-The executor was aware of the legacy-record input axis — the renamed unit test
-at `tests/shared/probe-classifiers.test.ts:266` is literally titled "a stray
-workflows kind in a legacy record falls through to unsupported component" — but
-treated it as a classifier-arm detail. Nothing records it as a user-visible
-consequence, no test covers the record-driven surfaces, and no `CHANGELOG`
-entry or SUMMARY paragraph carries it forward.
-
-The only convergence path is `orchestrators/reconcile/backfill.ts:343`
-(`supportedSetGrew` → `reinstallPlugin`), which is gated shut at
-`backfill.ts:76` while `EXTENSION_VERSION` stays `0.18.1`. Amendment A-03 is
-correct that this keeps the window safe — I confirmed the gate returns early on
-version *equality*. But A-03 only records "do not bump during the window." The
-**inverse obligation** — that Phase 111 MUST bump `EXTENSION_VERSION` so the
-backfill actually converges these records — is written nowhere. If Phase 111
-lands the bridge without a bump, every 0.18.1 `--partial` workflow record stays
-`partially-installed {unsupported component}` permanently, with workflows
-supported and materialized but the row still claiming a dropped component.
-
-**Fix:** Two parts.
-
-1. Carry the obligation into Phase 111's CONTEXT as an explicit deliverable,
-   alongside the already-recorded inversion of the ENOENT assertion:
-
-   > Phase 111 MUST bump `EXTENSION_VERSION` in the same change that lands
-   > `bridges/workflows/`. The bump is what opens the `backfill.ts:76` gate so
-   > `supportedSetGrew` re-materializes v0.18.1 `--partial` workflow records.
-   > Without it those records keep rendering
-   > `(partially-installed) {unsupported component}` forever.
-
-2. Add a record-driven regression test so the surface is not left unguarded.
-   `tests/orchestrators/plugin/list.test.ts` already seeds
-   `compatibility.unsupported`; a case seeding `["workflows"]` pins today's
-   token and goes red the moment the convergence changes it:
-
-   ```ts
-   // WINV-03: a v0.18.1 --partial record still carries the retired kind string.
-   // Until the backfill re-materializes it, the row falls through to the
-   // generic component token -- pinned so the convergence is observable.
-   test("WINV-03: a legacy workflows record renders the generic component token", ...);
-   ```
+Leave the `109-CONTEXT.md` and `STATE.md` copies in place; they are the
+rationale, the ROADMAP line is the trigger.
 
 ## Warnings
 
-### WR-01: The install-level window pin is unconditioned on its own fixture
+### WR-01: The `workflow-available-inventory` block now cites a guard that does not cover it
 
-**File:** `tests/integration/workflow-kind-inversion.test.ts:156-160`
+**File:** `docs/output-catalog.md:444` (paired with
+`tests/architecture/catalog-uat.test.ts:904-930`)
 
-**Issue:** The D-109-06 half of the test is
+**Issue:** WR-04's fix appended the same sentence to both workflow-agnostic
+blocks:
+
+> The workflow-specific half of that claim is enforced by
+> `tests/integration/workflow-kind-inversion.test.ts`, not by this block's byte
+> pairing.
+
+For `workflow-install-success` (line 580) that is true — the integration test
+drives a real `installPlugin` and asserts the `(installed)` row with no brace
+and no `--partial`. For `workflow-available-inventory` it is **false**. That
+block's claim is about the *not-installed inventory* row (`○`, `(available)`,
+no brace); the integration test never calls `list`, never renders an inventory
+row, and asserts nothing before the install. No test in the tree exercises the
+`(available)` surface for a workflow-bearing plugin — the nearest coverage is
+`tests/domain/resolver.test.ts`'s "WINV-01 strict: implicit-by-convention
+workflows/ dir -> installable", from which the status deriver *would* yield
+`(available)`, but that composition is not asserted anywhere.
+
+This is the same defect class WR-03 was raised for and this fix was meant to
+remove: a documentation block asserting an enforcement that does not exist. It
+is arguably worse than the unguarded prose it replaced, because the citation
+tells a reader to stop looking.
+
+**Fix:** Cite the guard that exists, and say plainly that the surface itself is
+unguarded:
+
+```markdown
+The resolver half of that claim is enforced by `tests/domain/resolver.test.ts`
+("WINV-01 strict: implicit-by-convention workflows/ dir -> installable with
+componentPaths.workflows populated"); the inventory rendering itself has no
+workflow-specific guard. These bytes are identical to the generic `(available)`
+row by construction (D-109-04), and the paired fixture carries no workflow
+signal, so `catalog-uat` would stay green if a workflow reason token came back.
+```
+
+### WR-02: The path-bearing premise has an in-repo lineage the pin does not cite, and no carrier for the open question
+
+**File:** `tests/domain/resolver.test.ts:1798-1806` (the comment above the
+`non-string workflows declaration` test)
+
+**Issue:** Two halves, both about disclosure rather than behavior.
+
+First, the comment tells the reader the premise is bare ("rests entirely on the
+premise that upstream's `workflows` field is path-bearing") and names no source,
+so the next reader repeats the search I just did. There is a lineage:
+`.planning/workstreams/workflows/milestones/workflows-REQUIREMENTS.md:26`
+(WFLW-02) states the field as `string | array` with the quoted semantics
+"Custom workflow script files or directories, replaces default `workflows/`",
+and `101-RESEARCH.md:880` records it as assumption A1 sourced from Spike 021 and
+risk-graded **Low**, with the exact consequence this test pins spelled out
+("any other shape produces the standard 'not a string' note"). So the harsher
+verdict was assumed and risk-assessed before this phase, not invented by it —
+which makes the pin *more* defensible than the comment admits. What is still
+absent is any upstream citation; both in-repo homes quote a description without
+naming where it came from.
+
+Second, the fix report says "Confirming the field shape against Claude Code's
+docs remains open for Phase 111" — but unlike CR-01's obligation, that one was
+recorded nowhere. `grep 'path-bearing'` over `.planning/workstreams/workflows/`
+outside the archived 101 milestone returns nothing; `109-CONTEXT.md` §Deferred
+Ideas and `STATE.md` do not mention it. The behavior consequence is real: a
+plugin whose `plugin.json` carries an object-shaped `workflows` key went from
+`partially-available` (user can `--partial` past it, keeping skills and
+commands) to `unavailable` (the whole plugin is refused). That regression is now
+locked by a passing test with no open-question carrier.
+
+**Fix:** Cite the lineage in the test comment and give the open question a home.
 
 ```ts
-await assert.rejects(stat(path.join(process.env.HOME ?? "", ".pi", "workflows")), {
-  code: "ENOENT",
-});
+// ... the harsher verdict rests on the premise that upstream's `workflows`
+// field is path-bearing (`string | array`), inherited from WFLW-02 and
+// risk-graded Low as assumption A1 of the archived 101 research. The premise
+// has no upstream citation; if it is ever falsified this test moves first.
 ```
 
-`HOME` is a fresh `mkdtemp` and the install is **project**-scoped
-(`scope: "project"`, writing under `<cwd>/.pi/`), so nothing in the entire test
-can ever create `$HOME/.pi/workflows`. The assertion therefore passes for:
+and one bullet in `109-CONTEXT.md` §Deferred Ideas:
 
-- a plugin with no `workflows/` directory at all,
-- a resolver that dropped `workflows` from both tuples,
-- a resolver that silently ignores `componentPaths.workflows`.
-
-`109-05-SUMMARY.md:103` says the fixture was proved non-vacuous by driving
-`resolveStrict` in a **scratch probe**. That probe is not in the repository, so
-the property it established is unprotected: the fixture's
-`workflows/greet.js` (line 84-88) can be deleted and the whole file still
-passes. The deferred Phase 111 obligation ("invert this assertion to assert the
-envelopes ARE written") therefore rests on an assertion that currently means
-nothing, which is the exact failure mode `109-CONTEXT.md` §Deferred flags: "an
-assertion that quietly stays green while meaning the opposite is worse than no
-assertion."
-
-Note the path itself is forward-correct — `features/workflows-spike`'s
-`platform/workflow-home.ts` resolves the engine root from `os.homedir()`, which
-honors the `HOME` override. The defect is the missing positive precondition,
-not the path.
-
-**Fix:** Add the positive half the scratch probe checked, so the negative half
-is conditioned on the kind actually being engaged. The install record is already
-on disk and carries it:
-
-```ts
-// The negative assertion below is only meaningful if the kind resolved
-// supported in the first place -- pin that, or the ENOENT is a tautology.
-const { loadState } = await import(".../persistence/state-io.ts");
-const after = await loadState(locationsFor("project", cwd).extensionRoot);
-assert.ok(
-  after.marketplaces.mp?.plugins["hello"]?.compatibility.supported.includes("workflows"),
-  "fixture must engage the inverted kind, else the ENOENT assert is vacuous",
-);
-```
-
-### WR-02: `resolver.ts:1587` still documents the pre-inversion loop contents
-
-**File:** `extensions/pi-claude-marketplace/domain/resolver.ts:1587`
-
-**Issue:** The doc comment sitting directly above the loop this phase changed
-reads:
-
-```
- * HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
- * NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
- * per-entry component-path semantics.
-```
-
-`SUPPORTED_COMPONENT_PATH_KINDS` is now `["skills", "commands", "agents",
-"workflows"]` (line 368), so the parenthetical is false. This is the same class
-of stale comment the phase was chartered to correct — it fixed both instances in
-`notify.ts` (lines 922, 1770) and the tuple headers at `resolver.ts:344-352`,
-then missed the one nearest the behavior change. A reader tracing why
-`componentPaths.workflows` is populated lands here and concludes it is not.
-
-The adjacent file header at `resolver.ts:28` (`hooks` is admitted alongside
-`skills` / `commands` / `agents` / `mcpServers`) is now incomplete for the same
-reason, though it is narrating hooks rather than the loop.
-
-**Fix:**
-
-```ts
- * HOOK-01 / WINV-01: iterates SUPPORTED_COMPONENT_PATH_KINDS
- * (skills/commands/agents/workflows), NOT the full SUPPORTED_COMPONENT_KINDS
- * tuple, because `hooks` carries no per-entry component-path semantics.
-```
-
-### WR-03: The repointed rejection state documents a contract nothing enforces
-
-**File:** `docs/output-catalog.md:630` (paired with
-`tests/architecture/catalog-uat.test.ts:1313-1338`)
-
-**Issue:** The prose now claims a specific causal story:
-
-> The plugin carries a `workflows/` directory AND a second component kind Pi
-> does not support (`themes`). The rejection is driven by that second kind, and
-> the brace names it alone — **which is what shows the workflow kind
-> contributes no token of its own.**
-
-The paired fixture is a renderer-level `notify()` message with hardcoded
-`reasons: ["unsupported component"]`. It contains no plugin, no `workflows/`
-directory and no `themes` declaration. `catalog-uat` pairs annotation prose to
-rendered bytes only, so nothing in the repository establishes that a plugin
-carrying *both* kinds emits exactly one token. The claim happens to be true (I
-traced it: `workflows` left `UNSUPPORTED_COMPONENT_KINDS` so it never enters
-`partial.unsupported`, and `kindToReason("themes")` → `"unsupported component"`)
-— but a documentation block asserting an unverified proof is precisely the
-stale-contract defect WINV-05 was written to remove from this same file.
-
-**Fix:** Either soften the prose to describe only what the fixture shows, or
-back the claim with a resolver test beside the two WINV-01 cases already added
-to `tests/domain/resolver.test.ts`:
-
-```ts
-// WINV-01: a plugin carrying BOTH workflows/ and themes/ resolves
-// partially-available on `themes` ALONE -- the brace-naming proof the
-// `workflow-plus-unsupported-rejection` catalog state describes.
-test("WINV-01: workflows/ + themes/ -> partially-available, unsupported === ['themes']", ...);
-```
-
-### WR-04: Two catalog states are now workflow-agnostic duplicates
-
-**File:** `docs/output-catalog.md:433-442`, `docs/output-catalog.md:567-576`
-(paired with `catalog-uat.test.ts:907`, `:1208`)
-
-**Issue:** `workflow-available-inventory` and `workflow-install-success` render
-bytes identical to ordinary `(available)` / `(installed)` states, and their
-fixtures carry no workflow signal at all — `status: "available"` and
-`status: "installed"` with nothing else. D-109-04 explicitly permits duplicate
-bytes, so this is not a `catalog-uat` violation. But the surviving prose still
-claims a workflow-specific contract ("A workflow-bearing plugin renders as an
-ordinary not-installed inventory row"), and no gate ties either block to
-workflows. If a future change reintroduced a workflow reason token, both states
-would stay green; only `tests/integration/workflow-kind-inversion.test.ts:154`
-(`!summary.includes("{workflows}")`) would catch it — the same test flagged in
-WR-01.
-
-**Fix:** Keep the blocks (they are the human contract), but move the enforcing
-claim to the one place that can carry it. Reword each block to name its real
-guard, e.g. append to line 440:
-
-> The workflow-specific claim is enforced by
-> `tests/integration/workflow-kind-inversion.test.ts`, not by this block's
-> byte pairing — this fixture is byte-identical to the generic `(available)`
-> row by construction (D-109-04).
-
-### WR-05: The "path-bearing" premise silently narrows a failure mode, untested
-
-**File:** `extensions/pi-claude-marketplace/domain/components/plugin.ts:33`,
-`extensions/pi-claude-marketplace/domain/resolver.ts:368`
-
-**Issue:** Admitting `workflows` to `SUPPORTED_COMPONENT_PATH_KINDS` routes any
-declared `workflows` field through `readPathOrArray` →
-`validateComponentPath` (`resolver.ts:937-1005`). A declaration that is not a
-string or array of strings — e.g. `"workflows": { "greet": {...} }`, an inline
-map in the shape `mcpServers` uses — now produces
-`component path for "workflows" is not a string (got object)`, sets the
-structural `dirty` flag, and resolves the plugin **`unavailable`**. Before this
-change the same declaration produced a `contains workflows` note and
-`partially-available`, i.e. a plugin the user could still `--partial` install.
-
-That is a strictly harsher verdict on real manifests, and it rests entirely on
-the premise that upstream's `workflows` field is path-bearing. The premise is
-inherited from `features/workflows-spike` and asserted in the new
-`resolver.ts:349-351` comment; `109-RESEARCH.md:716-718` records the spike's
-prose but cites no upstream documentation. No test covers a non-path `workflows`
-declaration in either direction — `tests/domain/resolver.test.ts` has no
-kind-parameterized loop, so the two new WINV-01 cases are the only `workflows`
-coverage and both use a well-formed convention directory.
-
-**Fix:** Confirm the field shape against Claude Code's plugin manifest docs
-before Phase 111 reads it, and pin whichever answer holds:
-
-```ts
-// WINV-01: `workflows` is path-bearing, so a non-path declaration is a
-// STRUCTURAL defect (unavailable), not an unsupported-kind degrade.
-test("WINV-01: a non-string workflows declaration resolves unavailable", async () => {
-  const resolved = await resolveStrict(pluginEntry({ source: "./local", workflows: {} }), ctx);
-  assert.strictEqual(resolved.state, "unavailable");
-});
-```
-
-### WR-06: `?? ""` turns a broken precondition into a cwd-relative probe
-
-**File:** `tests/integration/workflow-kind-inversion.test.ts:158`
-
-**Issue:** `path.join(process.env.HOME ?? "", ".pi", "workflows")` resolves to
-the relative path `.pi/workflows` when `HOME` is unset, silently probing the
-process working directory instead of failing. The fallback exists only to
-satisfy `strictNullChecks`; it cannot be exercised today because
-`withHermeticHome` always sets `HOME`, but it makes a future helper regression
-(an early `finally` restore, a helper refactor) produce a green tautology
-against the wrong path rather than a crash.
-
-The root cause is that `withHermeticHome` (line 43) does not hand the temp home
-to its callback, so the test has to re-read the global it just wrote — the same
-coupling `features/workflows-spike`'s `platform/workflow-home.ts` header warns
-against ("a test relocates storage by calling the setter rather than by mutating
-process-global environment state").
-
-**Fix:** Thread the home through the helper and drop the fallback:
-
-```ts
-async function withHermeticHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "workflow-inversion-home-"));
-  // ... unchanged
-  return await fn(hermeticHome);
-}
-
-// call site
-await withHermeticHome(async (home) => {
-  // ...
-  await assert.rejects(stat(path.join(home, ".pi", "workflows")), { code: "ENOENT" });
-});
-```
+> **Phase 111 must confirm the `workflows` manifest field shape against Claude
+> Code's plugin documentation** before it reads the field. If the field is not
+> `string | array`, the `WINV-01 strict: a non-string workflows declaration
+> resolves unavailable` pin in `tests/domain/resolver.test.ts` is the first
+> thing to move, and `workflows` has to leave `SUPPORTED_COMPONENT_PATH_KINDS`.
 
 ## Info
 
-### IN-01: The `plugin.ts` field-group move is inert and unobservable
+### IN-01: `plugin.ts` field-group move is still inert and unobservable
 
 **File:** `extensions/pi-claude-marketplace/domain/components/plugin.ts:29-46`
 
-**Issue:** `SUPPORTED_COMPONENT_PATH_FIELDS` and `UNSUPPORTED_COMPONENT_FIELDS`
-are both spread into the same `Type.Object({...})` at lines 73-78 and 100-101,
-so moving `workflows` between them changes no schema and no behavior — it is
-narrative grouping only. That the grouping is already unreliable is visible one
-line down: `hooks` (a *supported* component kind since HOOK-01) still sits in
-`UNSUPPORTED_COMPONENT_FIELDS:37`. Both consts are module-private, so no test
-can observe the move; the `hooks-foundation.test.ts` mirror the phase added
-guards `resolver.ts`'s tuples, not these.
+Unchanged from iteration 1 and out of fix scope by design. Both bags spread into
+the same `Type.Object({...})`, so the move changes no schema; `hooks` (a
+supported kind) still sits in `UNSUPPORTED_COMPONENT_FIELDS:37`, which is the
+visible evidence the grouping is narrative only. No code change needed.
 
-**Fix:** No code change needed. Worth an inline note so a later reader does not
-mistake the bags for a live contract, and worth considering whether `hooks`
-should move too as a separate cleanup.
-
-### IN-02: The spike's `plugin.ts` shape comment was dropped
+### IN-02: The `workflows` schema field still carries no shape comment
 
 **File:** `extensions/pi-claude-marketplace/domain/components/plugin.ts:33`
 
-**Issue:** `109-RESEARCH.md:718` recorded the spike's inline comment
-(`// WFLW-01: path-bearing (string | array), same shape as the three above.`)
-and recommended retagging it to WINV-01 if kept. The bare field was added with
-no comment. Given WR-05, the shape claim is the one thing a reader most needs at
-this line.
+Unchanged. Given WR-02 above, the shape claim is the one thing a reader most
+needs at this line: `// WINV-01: path-bearing (\`string | array\`), same shape
+as the three above.`
 
-**Fix:** `// WINV-01: path-bearing (\`string | array\`), same shape as the three above.`
+### IN-03: The integration fixture still seeds `schemaVersion: 1`
 
-### IN-03: The new fixture seeds a legacy `schemaVersion`
+**File:** `tests/integration/workflow-kind-inversion.test.ts:116`
 
-**File:** `tests/integration/workflow-kind-inversion.test.ts:109`
+Unchanged. Production always writes `2` (`state-io.ts:306`, `:458`) and the
+sibling seeder at `tests/orchestrators/plugin/install.test.ts:636` uses `2`, so
+the install under test also traverses the 1→2 migration — a second variable in a
+test whose subject is the resolver's kind set.
 
-**Issue:** `saveState(..., { schemaVersion: 1, ... })` writes the pre-ENBL-02
-shape. `state-io.ts:306` and `:458` show production always writes `2`, and the
-sibling seeder at `tests/orchestrators/plugin/install.test.ts:636` uses `2`.
-The install under test therefore also traverses the 1→2 migration path — an
-unintended second variable in a test whose subject is the resolver's kind set.
+### IN-04: The seeder now mixes static and dynamic imports of the same module
 
-**Fix:** `schemaVersion: 2`, matching `install.test.ts:636`.
+**File:** `tests/integration/workflow-kind-inversion.test.ts:112-114`
 
-### IN-04: Dynamic `import()` inside the seeder buys nothing
+Half-fixed as a side effect of WR-01: `loadState` was hoisted to a static import
+(line 10), but `saveState` is still pulled in with `await import(...)` from the
+same module inside `seedWorkflowPlugin`, and the dead `const state = await
+loadState(...)` round-trip on a freshly created `extensionRoot` (it can only
+ever spread an empty `marketplaces`) survives. The result is less coherent than
+before the fix, not more. Hoist `saveState` beside `loadState` and drop the
+round-trip.
 
-**File:** `tests/integration/workflow-kind-inversion.test.ts:105-106`
+### IN-05: The 14th `withHermeticHome` copy has now diverged in signature
 
-**Issue:** `saveState` / `loadState` are pulled in with `await import(...)`
-inside `seedWorkflowPlugin` while every other production module in the file is a
-top-level import. ESM module caching makes the deferral inert (nothing about
-`state-io.ts` is `HOME`-sensitive at load time), and it sidesteps the
-`import-x/order` grouping the project enforces on static imports. The preceding
-`const state = await loadState(...)` on line 107 is also dead for a freshly
-created `extensionRoot` — it only ever spreads an empty `marketplaces`.
+**File:** `tests/integration/workflow-kind-inversion.test.ts:50-65`
 
-**Fix:** Hoist to a static import beside the `locationsFor` import and drop the
-`loadState` round-trip.
+WR-06 changed this copy to `(home: string) => Promise<T>` while the other 13
+copies keep the no-argument form. The drift IN-05 warned about is now realized:
+a reader copying either shape gets a different contract, and the hazard WR-06
+removed still lives in 13 other files. Still out of scope for this phase; worth
+a backlog item to promote the helper into `tests/helpers/`.
 
-### IN-05: A 14th private copy of `withHermeticHome`
+### IN-06: The loose-mode test comment claims more than the test asserts
 
-**File:** `tests/integration/workflow-kind-inversion.test.ts:43-58`
+**File:** `tests/domain/resolver.test.ts:3204-3207`
 
-**Issue:** `grep -rn "function withHermeticHome" tests/` now returns 14 hits.
-The copy added here is byte-identical to
-`tests/orchestrators/plugin/install.test.ts:306` except for the `mkdtemp`
-prefix. `fallow dupes` (threshold 3) tolerates the block today, but the drift
-risk compounds — WR-06's fix would have to be applied 14 times.
+The comment says a `workflows/` directory "yields `installable` with nothing
+collected", but the test asserts only the state and the absence of the
+`contains workflows` note. The "nothing collected" half — `componentPaths.workflows`
+being empty in loose mode — is not asserted. One line closes the gap:
+`assert.deepStrictEqual(resolvedPlugin.componentPaths.workflows, [])` inside the
+`installable` narrow.
 
-**Fix:** Out of scope for this phase. Worth capturing as a backlog item to
-promote the helper into a shared `tests/helpers/` module (the same directory
-`CONVENTIONS.md` already describes for `makeMock*` factories, and which does not
-yet exist in this tree).
+### IN-07: The catalog block cites a test by its exact title string
+
+**File:** `docs/output-catalog.md:636`
+
+`That causal claim is enforced by tests/domain/resolver.test.ts ("WINV-01
+strict: workflows/ plus themes -> ...")` pins a doc to a test *title*, which
+nothing checks. A rename leaves the doc pointing at a test that no longer
+exists, silently — the same "source-walk gates follow code" hazard this repo has
+hit before. Citing the file and the `WINV-01` anchor without the full title is
+enough.
 
 ---
 
-_Reviewed: 2026-09-05T00:33:53Z_
+_Reviewed: 2026-09-05T01:24:57Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2 (re-review of `084bb552..b4bb4f42`)_
