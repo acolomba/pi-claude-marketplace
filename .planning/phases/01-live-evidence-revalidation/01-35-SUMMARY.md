@@ -13,7 +13,7 @@ affects: [phase-02-remediation, phase-07-gates, phase-08-coverage, operator-deci
 actuals:
   tokens: 21144
   tasks: 2
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [isolated surviving mutations, behavioral containment probes, claim-preserving evidence routing]

@@ -13,7 +13,7 @@ affects: [phase-02-remediation, phase-07-gates, operator-decisions, scope-reconc
 actuals:
   tokens: 18452
   tasks: 1
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [CodeGraph-first evidence, explicit D-11 inconclusive dispositions, temporary-root behavioral probes]

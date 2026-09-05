@@ -12,7 +12,7 @@ affects: [phase-02-remediation, unit-test-quality, reconcile-orchestrator]
 actuals:
   tokens: 14000
   tasks: 1
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [claim-preserving evidence adjudication, explicit mutation-required inconclusive status]

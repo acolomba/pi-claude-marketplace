@@ -12,7 +12,7 @@ affects: [phase-02-remediation, unit-test-quality, plugin-orchestrators]
 actuals:
   tokens: 23859
   tasks: 2
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [claim-preserving evidence adjudication, explicit mutation-required inconclusive status]

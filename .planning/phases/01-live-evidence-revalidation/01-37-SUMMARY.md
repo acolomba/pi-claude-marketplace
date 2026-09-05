@@ -13,7 +13,7 @@ affects: [phase-01-merge, phase-02-unit-test-remediation]
 actuals:
   tokens: 12915
   tasks: 2
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [CodeGraph-first revalidation, repository-local isolated mutation copies, normalized linked findings]

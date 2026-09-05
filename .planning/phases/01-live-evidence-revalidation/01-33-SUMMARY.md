@@ -11,7 +11,7 @@ affects: [phase-02-remediation, operator-decisions, evidence-merge]
 actuals:
   tokens: 21631
   tasks: 2
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [D-11 evidence ladder, status-route separation, positive stale proof]

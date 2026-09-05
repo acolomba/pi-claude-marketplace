@@ -12,7 +12,7 @@ affects: [phase-02-test-remediation, plugin-reinstall]
 actuals:
   tokens: 29240
   tasks: 2
-  commits: 0
+  commits: 1
 tech-stack:
   added: []
   patterns: [namespaced source claims, isolated surviving mutations, status-route separation]
