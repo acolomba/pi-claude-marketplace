@@ -174,6 +174,10 @@ export interface UnstageWorkflowsResult {
    * than optional so every construction site is compile-forced to answer the
    * question; an already-absent envelope is idempotent success (NFR-3) and
    * never lands here.
+   *
+   * Neither does a containment refusal: PI-14 raises that class to the caller
+   * instead of softening it into a row, so a result exists at all only when
+   * every recorded name was composed inside the saved directory.
    */
   readonly failed: readonly UnstageWorkflowFailure[];
 }

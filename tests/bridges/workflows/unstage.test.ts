@@ -6,6 +6,7 @@ import test, { type TestContext } from "node:test";
 
 import { unstagePluginWorkflows } from "../../../extensions/pi-claude-marketplace/bridges/workflows/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type {
   UnstageWorkflowFailure,
@@ -182,31 +183,40 @@ test("records a recorded name carrying a path separator and removes the names af
   assert.deepStrictEqual(await readdir(savedDirectory), []);
 });
 
-test("records a symlinked target and removes the names after it", async (t) => {
+test("raises the first symlinked target after removing the names after it", async (t) => {
   // arrange
   const { savedDirectory, locations } = await createWorkflowScope(t, "workflows-unstage-symlink-");
   // The saved directory is shared with the user's own hand-saved workflows and
   // with every other tool, so a recorded name can find a symlink at its target
-  // at any time. That refusal must not cost the envelopes recorded after it.
+  // at any time. PI-14 puts that refusal on the caller's error path rather than
+  // in `failed[]`, and it still must not cost the envelopes recorded after it.
   const outsideEnvelopePath = path.join(savedDirectory, "..", "outside.json");
   await writeFile(outsideEnvelopePath, "outside bytes\n");
-  const linkedTarget = path.join(savedDirectory, "acme:linked.json");
-  await symlink(outsideEnvelopePath, linkedTarget, "file");
+  const firstLinkedTarget = path.join(savedDirectory, "acme:linked.json");
+  const secondLinkedTarget = path.join(savedDirectory, "acme:relinked.json");
+  await symlink(outsideEnvelopePath, firstLinkedTarget, "file");
+  await symlink(outsideEnvelopePath, secondLinkedTarget, "file");
   await writeFile(path.join(savedDirectory, "acme:later.json"), '{"name":"acme:later"}\n');
 
   // act
-  const unstagedWorkflows = await unstagePluginWorkflows({
+  const error = await unstagePluginWorkflows({
     locations,
-    previousWorkflowNames: ["acme:linked", "acme:later"],
-  });
+    previousWorkflowNames: ["acme:linked", "acme:relinked", "acme:later"],
+  }).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  const savedEntries = (await readdir(savedDirectory)).sort();
 
   // assert
-  assert.deepStrictEqual(unstagedWorkflows.removedNames, ["acme:later"]);
-  assert.deepStrictEqual(unstagedWorkflows.warnings, []);
-  assert.deepStrictEqual(
-    unstagedWorkflows.failed.map((failure) => failure.name),
-    ["acme:linked"],
-  );
-  assert.deepStrictEqual(await readdir(savedDirectory), ["acme:linked.json"]);
+  assert.ok(error instanceof SymlinkRefusedError);
+  // The FIRST refusal, not the last: every later one is reached only by
+  // continuing past this one, so raising a later one would report a refusal
+  // caused by the decision to keep going.
+  assert.strictEqual(error.linkPath, firstLinkedTarget);
+  // The envelope recorded after both refusals is still removed. It is
+  // executable code left outside every scope root, so abandoning it is the
+  // outcome the loop continues to avoid.
+  assert.deepStrictEqual(savedEntries, ["acme:linked.json", "acme:relinked.json"]);
   assert.strictEqual(await readFile(outsideEnvelopePath, "utf8"), "outside bytes\n");
 });
