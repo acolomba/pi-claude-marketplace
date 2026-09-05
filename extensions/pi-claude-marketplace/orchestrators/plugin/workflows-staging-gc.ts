@@ -71,16 +71,18 @@ export const WORKFLOWS_STAGING_MAX_AGE_MS =
  *      is skipped, so a planted file or link is neither traversed nor removed.
  *      Anything modified inside `WORKFLOWS_STAGING_MAX_AGE_MS` is skipped, so a
  *      concurrent installation's in-flight envelopes survive.
- *   3. For an aged directory, skip it if it still holds `.previous/` entries
- *      (WR-02): those are displaced previous envelopes the commit kept on
- *      purpose because they are the only copy left.
- *   4. Run the containment assertion against `workflowsHomeDir` -- one level
- *      ABOVE the staging directory, so the staging segment itself is walked
- *      (WPTH-04; anchoring at the staging root skips an lstat of the one
- *      segment an attacker could have replaced, leaving a check that cannot
- *      fail). Resolved OUTSIDE the removal's try, so D-19-01's sanction to
- *      swallow the cleanup never covers the assertion guarding it -- a refusal
- *      is recorded distinctly and is never mistaken for an rm leak.
+ *   3. For an aged directory, run the containment assertion against
+ *      `workflowsHomeDir` -- one level ABOVE the staging directory, so the
+ *      staging segment itself is walked (WPTH-04; anchoring at the staging root
+ *      skips an lstat of the one segment an attacker could have replaced,
+ *      leaving a check that cannot fail). Resolved OUTSIDE the removal's try,
+ *      so D-19-01's sanction to swallow the cleanup never covers the assertion
+ *      guarding it -- a refusal is recorded distinctly and is never mistaken
+ *      for an rm leak. WR-07: it precedes every read through the candidate, so
+ *      no decision below rests on bytes from outside the boundary.
+ *   4. Skip the directory if it still holds `.previous/` entries (WR-02): those
+ *      are displaced previous envelopes the commit kept on purpose because they
+ *      are the only copy left.
  *   5. `rm(dir, { recursive, force })` inside a try/catch that records
  *      `<name>: <message>` leaks and never throws; the next pass retries.
  *
@@ -124,19 +126,16 @@ export async function garbageCollectWorkflowsStaging(
       continue;
     }
 
-    // WR-02: never sweep a root that still holds displaced previous envelopes.
-    // Those bytes are the ONLY copy -- the commit's failed-restore path keeps
-    // this tree on purpose and hands the operator a leak string telling them to
-    // move the file back by hand. Sweeping it would put a silent 24-hour expiry
-    // on a recovery instruction the product just gave. Cause-independent by
-    // design: a crash mid-commit strands the same bytes in the same place, and
-    // the sweeper cannot tell the two apart -- nor does it need to.
-    if (await holdsDisplacedEnvelopes(candidate)) {
-      continue;
-    }
-
-    // WPTH-04 / NFR-10: resolve the containment boundary OUTSIDE the rm's try,
-    // so a refusal is never mistaken for an rm leak.
+    // WPTH-04 / NFR-10: resolve the containment boundary BEFORE anything reads
+    // through the candidate, and OUTSIDE the rm's try so a refusal is never
+    // mistaken for an rm leak.
+    //
+    // WR-07: this is the FIRST thing the loop does with the candidate path, not
+    // merely the last thing before the rm. The staging segment is the one an
+    // attacker could have replaced, so a read performed ahead of the refusal is
+    // a read the refusal exists to prevent -- and it would decide retention on
+    // bytes from outside the boundary. Every access below is inside a path that
+    // has been walked.
     //
     // WR-01: caught PER ENTRY. Both call sites wrap the whole sweep in a bare
     // `catch {}` (D-19-01), so a refusal that escaped this loop would be
@@ -153,6 +152,17 @@ export async function garbageCollectWorkflowsStaging(
       );
     } catch (err) {
       leaks.push(`${name}: ${errorMessage(err)}`);
+      continue;
+    }
+
+    // WR-02: never sweep a root that still holds displaced previous envelopes.
+    // Those bytes are the ONLY copy -- the commit's failed-restore path keeps
+    // this tree on purpose and hands the operator a leak string telling them to
+    // move the file back by hand. Sweeping it would put a silent 24-hour expiry
+    // on a recovery instruction the product just gave. Cause-independent by
+    // design: a crash mid-commit strands the same bytes in the same place, and
+    // the sweeper cannot tell the two apart -- nor does it need to.
+    if (await holdsDisplacedEnvelopes(candidate)) {
       continue;
     }
 

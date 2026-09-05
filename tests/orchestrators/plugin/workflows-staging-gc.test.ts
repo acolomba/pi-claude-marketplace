@@ -263,6 +263,35 @@ test("WR-01: refuses a symlinked staging segment per entry without ending the sw
   assert.deepStrictEqual(await readdir(second), ["acme_greet.json"]);
 });
 
+test("WR-07: refuses a symlinked staging segment before reading through it", async (t) => {
+  // arrange
+  // The refused entry carries a non-empty `.previous/`, so the retention
+  // predicate would answer "keep this" if it ran first -- and answering it
+  // reads through the very segment the containment check exists to refuse.
+  // Ordering is the whole assertion here: a refusal recorded as a leak can only
+  // happen if the boundary was walked before anything under it was read.
+  const { home, locations } = await createStagingScope(t, "workflows-staging-gc-probe-order-");
+  const external = path.join(home, "external-staging");
+  const orphan = path.join(external, "abandoned");
+  const displaced = path.join(orphan, ".previous");
+  await mkdir(displaced, { recursive: true });
+  await writeFile(path.join(orphan, "acme_greet.json"), "{}\n");
+  await writeFile(path.join(displaced, "acme_greet.json"), `{"name":"acme:previous"}\n`);
+  await backdate(orphan);
+
+  await mkdir(locations.workflowsHomeDir, { recursive: true });
+  await symlink(external, locations.workflowsStagingDir, "dir");
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
+  // assert
+  assert.strictEqual(leaks.length, 1);
+  assert.match(leaks[0] ?? "", /^abandoned: workflows staging root abandoned contains symlink/);
+  // NFR-10: refused, so the tree outside the home is untouched either way.
+  assert.deepStrictEqual((await readdir(orphan)).sort(), [".previous", "acme_greet.json"]);
+});
+
 test("WR-02: keeps an aged staging tree whose .previous still holds displaced envelopes", async (t) => {
   // arrange
   // `retained` models the commit's failed-restore path: the restore could not
