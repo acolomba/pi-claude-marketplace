@@ -134,6 +134,7 @@ describe("disabled-state classification architecture", () => {
         mcpServers: [],
         prompts: [],
         skills: [],
+        workflows: [],
       },
     };
 
@@ -155,6 +156,7 @@ describe("disabled-state classification architecture", () => {
         mcpServers: ["mcp-a"],
         prompts: ["prompt-a"],
         skills: ["skill-a"],
+        workflows: [],
       },
     };
 

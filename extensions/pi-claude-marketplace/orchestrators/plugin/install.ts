@@ -1218,6 +1218,9 @@ async function runInstallLedgerBody(
           // When the resolver did not surface a hooks config, the
           // inventory stays empty.
           hooks: c.resolved.hooksConfigPath === undefined ? [] : [c.plugin],
+          // WLIF-01: the workflow envelope inventory. Empty here until the
+          // workflows ledger phase exists to stage anything.
+          workflows: [],
         },
         // ENBL-02: always set enabled: true on install and re-materialization.
         // The disable branch sets it to false; the enable branch re-runs

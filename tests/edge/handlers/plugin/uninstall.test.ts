@@ -184,7 +184,7 @@ async function seedInstalledPlugin(
     plugins: {
       demo: buildInstalledPluginRecord(
         { version: "1.0.0" },
-        { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       ),
     },
   });

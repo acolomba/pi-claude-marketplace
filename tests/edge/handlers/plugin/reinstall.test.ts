@@ -244,7 +244,14 @@ async function seedMarketplace(
         plugin,
         buildInstalledPluginRecord(
           { version: "1.0.0", resolvedSource: `./${plugin}` },
-          { skills: [`${plugin}-tool`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+          {
+            skills: [`${plugin}-tool`],
+            prompts: [],
+            agents: [],
+            mcpServers: [],
+            hooks: [],
+            workflows: [],
+          },
         ),
       ]),
     ),
@@ -621,7 +628,7 @@ test("answers a cold git source from the no-network resolver without opening a c
     plugins: {
       far: buildInstalledPluginRecord(
         { version: "1.0.0", resolvedSource: "https://127.0.0.1:9/far.git" },
-        { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       ),
     },
   });

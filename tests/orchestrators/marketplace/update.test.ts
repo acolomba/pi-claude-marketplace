@@ -314,7 +314,7 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     version: "0.0.1",
     resolvedSource: "/tmp",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

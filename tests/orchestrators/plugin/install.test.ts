@@ -423,6 +423,7 @@ function conflictingMarketplaceRecord(
           agents: cp.agentName === undefined ? [] : [cp.agentName],
           mcpServers: [],
           hooks: [],
+          workflows: [],
         },
         enabled: true,
         installedAt: "2026-01-01T00:00:00.000Z",
@@ -654,7 +655,14 @@ async function seedPathMarketplaceWithPlugin(opts: {
                     supported: [],
                     unsupported: [],
                   },
-                  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+                  resources: {
+                    skills: [],
+                    prompts: [],
+                    agents: [],
+                    mcpServers: [],
+                    hooks: [],
+                    workflows: [],
+                  },
                   enabled: true,
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -3753,7 +3761,14 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: ["hello-tool"],
+          workflows: [],
+        },
       );
     } finally {
       unlinkMock?.mock.restore();
@@ -7402,7 +7417,14 @@ test("runInstallLedger unwinds the completed phases when a plugin appears at sta
         enabled: true,
         installedAt: "2026-01-01T00:00:00.000Z",
         resolvedSource: "/raced/plugin",
-        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        resources: {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: [],
+          workflows: [],
+        },
         updatedAt: "2026-01-01T00:00:00.000Z",
         version: "raced",
       };
@@ -7623,6 +7645,7 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
           mcpServers: [],
           prompts: ["complete:deploy"],
           skills: ["complete-audit"],
+          workflows: [],
         },
       );
     } finally {
@@ -7858,7 +7881,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
-        { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
+        { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [], workflows: [] },
       );
     } finally {
       read?.mock.restore();
@@ -7991,7 +8014,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
-        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [], workflows: [] },
       );
       await assert.rejects(stat(path.join(locations.hooksDir, "hooky", "hooks.json")), /ENOENT/);
     } finally {
@@ -8150,7 +8173,14 @@ test("runInstallLedger preserves installedAt while replacing an existing disable
         enabled: true,
         installedAt: "2026-01-01T00:00:00.000Z",
         resolvedSource: path.join(cwd, "mp-src", "plugins", "existing"),
-        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        resources: {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: [],
+          workflows: [],
+        },
         updatedAt: state.marketplaces.mp?.plugins.existing?.updatedAt,
         version: "0.0.1",
       });
@@ -8209,7 +8239,14 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
           installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
             ?.plugins.plain?.installedAt,
           resolvedSource: pluginRoot,
-          resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+          resources: {
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            prompts: [],
+            skills: [],
+            workflows: [],
+          },
           updatedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
             ?.plugins.plain?.updatedAt,
           version: "pinned-by-entrypoint",
@@ -8438,6 +8475,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
           mcpServers: [],
           prompts: ["retryable:deploy"],
           skills: ["retryable-audit"],
+          workflows: [],
         },
       );
       assert.deepStrictEqual(firstTree, [
@@ -8569,7 +8607,14 @@ test("retry proof: install: skills prepare failure with no committed phases conv
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: ["retryable-audit"],
+          workflows: [],
+        },
       );
     } finally {
       restoreSchedule?.();
@@ -8697,6 +8742,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
           mcpServers: [],
           prompts: ["retryable:deploy"],
           skills: ["retryable-audit"],
+          workflows: [],
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
@@ -8868,6 +8914,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         mcpServers: [],
         prompts: ["retryable:deploy"],
         skills: ["retryable-audit"],
+        workflows: [],
       });
       assert.deepStrictEqual(record?.hookEntries, [{ event: "PreToolUse", matcher: "" }]);
       const finalTree = await retryTree(locations.scopeRoot);
@@ -9021,6 +9068,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
           mcpServers: ["server"],
           prompts: ["retryable:deploy"],
           skills: ["retryable-audit"],
+          workflows: [],
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
@@ -9153,6 +9201,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
           mcpServers: [],
           prompts: ["retryable:deploy"],
           skills: ["retryable-audit"],
+          workflows: [],
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
@@ -9272,7 +9321,14 @@ test("retry proof: install: containment failure preserves the refused residue an
       assert.strictEqual(firstTree.includes("pi-claude-marketplace/skills-staging/"), true);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: ["retryable-audit"],
+          workflows: [],
+        },
       );
       assert.strictEqual((await stat(skillTarget)).isDirectory(), true);
     } finally {
@@ -9411,6 +9467,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         mcpServers: [],
         prompts: ["retryable:deploy"],
         skills: ["retryable-audit"],
+        workflows: [],
       });
       assert.strictEqual(record?.enabled, true);
       const finalTree = await retryTree(locations.scopeRoot);

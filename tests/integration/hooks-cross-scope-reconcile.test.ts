@@ -72,6 +72,7 @@ function buildStateWithSingleHooksPlugin(opts: {
               agents: [],
               mcpServers: [],
               hooks: [opts.plugin],
+              workflows: [],
             },
             enabled: true,
             installedAt: "2026-06-17T00:00:00Z",

@@ -145,13 +145,28 @@ async function writeUserState(
     agents: string[];
     mcpServers: string[];
     hooks: string[];
+    workflows: string[];
   };
   if (opts.disabled) {
-    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] };
   } else if (opts.hooksOnly === true) {
-    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [opts.pluginName] };
+    resources = {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [opts.pluginName],
+      workflows: [],
+    };
   } else {
-    resources = { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] };
+    resources = {
+      skills: ["s1"],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [],
+      workflows: [],
+    };
   }
 
   const unsupported = opts.unsupported ?? [];
@@ -427,7 +442,14 @@ async function seedRealDisabledMarketplace(
             version: opts.version,
             resolvedSource: pluginRoot,
             compatibility,
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             enabled: false,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -797,6 +819,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
+                workflows: [];
               };
               compatibility: { installable: boolean };
               installedAt: string;
@@ -816,7 +839,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
     // and `updatedAt` and nothing else.
     assert.deepEqual(
       rec.resources,
-      { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       "ENBL-18: disable retains the record's inventory verbatim",
     );
     // ENBL-02: the explicit disabled marker must be written -- without this
@@ -895,6 +918,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
+                workflows: [];
               };
               compatibility: { installable: boolean };
             }
@@ -905,7 +929,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
     const rec = state.marketplaces.mp!.plugins.foo!;
     assert.deepEqual(
       rec.resources,
-      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["foo"] },
+      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["foo"], workflows: [] },
       "ENBL-18: the hooks-only inventory survives the disable verbatim",
     );
     // ENBL-13 / D-100-04: the artifact itself is gone.
@@ -1424,6 +1448,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
+                workflows: [];
               };
             }
           >;
@@ -3305,7 +3330,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
-        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [], workflows: [] },
       );
       await assert.rejects(stat(path.join(locations.hooksDir, "foo", "hooks.json")), /ENOENT/);
     } finally {
@@ -3496,6 +3521,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
         mcpServers: ["server"],
         prompts: [],
         skills: ["foo-s1"],
+        workflows: [],
       });
       assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
     } finally {

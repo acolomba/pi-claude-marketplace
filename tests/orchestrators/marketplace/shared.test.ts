@@ -160,6 +160,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
       agents: resources.agents ?? [],
       hooks: resources.hooks ?? [],
       mcpServers: resources.mcpServers ?? [],
+      workflows: resources.workflows ?? [],
     },
     enabled: true,
     installedAt: "2026-08-31T12:00:00.000Z",
@@ -342,6 +343,7 @@ async function seedFullCascade(
       agents: [agentName],
       hooks: [plugin],
       mcpServers: ["sample-server"],
+      workflows: [],
     }),
     agentName,
   };

@@ -106,6 +106,7 @@ function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): P
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
       hooks: resources.hooks ?? [],
+      workflows: resources.workflows ?? [],
     },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -248,6 +249,7 @@ async function seedFullPlugin(
             agents: [agentName],
             mcpServers: [mcpServerName],
             hooks: [plugin],
+            workflows: [],
           }),
         },
       },
@@ -3004,6 +3006,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         mcpServers: ["uni-server"],
         prompts: [],
         skills: [],
+        workflows: [],
       });
       assert.deepStrictEqual(firstSchedule, [
         `unstage:skill:uni-skill`,

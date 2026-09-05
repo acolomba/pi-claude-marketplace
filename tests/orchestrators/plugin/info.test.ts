@@ -370,6 +370,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       mcpServers: [...(override?.mcpServers ?? [])],
       prompts: [...(override?.prompts ?? [])],
       skills: [...(override?.skills ?? [`${name}-skill`])],
+      workflows: [],
     });
   }
 
@@ -1350,6 +1351,7 @@ test("BOUND-01: a manifest READ FAILURE with an installed record present still r
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -1699,6 +1701,7 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",

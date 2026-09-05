@@ -393,6 +393,7 @@ async function seedGitUpdateMarketplace(opts: {
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             resolvedSource: oldCloneRoot,
             resolvedSha: opts.recordedSha,
@@ -422,6 +423,7 @@ function makePluginRecord(
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
       hooks: resources.hooks ?? [],
+      workflows: [],
     },
     enabled,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -5132,6 +5134,7 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
             agents: [...r.resources.agents],
             mcpServers: [...r.resources.mcpServers],
             hooks: [...r.resources.hooks],
+            workflows: [],
           },
         };
       };
@@ -6527,7 +6530,14 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       seededState.marketplaces["mp"]!.plugins["gp"] = {
         ...seededRecord,
         enabled: false,
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        resources: {
+          skills: [],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+          workflows: [],
+        },
       };
       await saveState(locations.extensionRoot, seededState);
 
@@ -7956,7 +7966,14 @@ async function markGitPluginDisabled(locations: ReturnType<typeof locationsFor>)
   const record = state.marketplaces["mp"]?.plugins["gp"];
   assert.ok(record !== undefined);
   record.enabled = false;
-  record.resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  record.resources = {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
   await saveState(locations.extensionRoot, state);
 }
 

@@ -78,6 +78,7 @@ function makePluginRecord(opts: {
       agents: [...(opts.agents ?? [])],
       mcpServers: [...(opts.mcpServers ?? [])],
       hooks: [...(opts.hooks ?? [])],
+      workflows: [],
     },
     enabled: opts.enabled ?? true,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -1615,6 +1616,7 @@ describe("applyPartialCascadeFold", () => {
         agents: ["drop-agent", "keep-agent"],
         mcpServers: ["drop-mcp", "keep-mcp"],
         hooks: ["drop-hook", "keep-hook"],
+        workflows: [],
       },
     };
     const dropped = {
@@ -1636,6 +1638,7 @@ describe("applyPartialCascadeFold", () => {
         agents: ["keep-agent"],
         mcpServers: ["keep-mcp"],
         hooks: ["keep-hook"],
+        workflows: [],
       },
     });
     assert.deepStrictEqual(dropped, {

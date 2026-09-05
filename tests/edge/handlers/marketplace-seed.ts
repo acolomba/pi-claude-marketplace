@@ -20,13 +20,14 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-/** The five inventory axes a persisted install record carries. */
+/** The six inventory axes a persisted install record carries. */
 export interface SeededResources {
   skills: string[];
   prompts: string[];
   agents: string[];
   mcpServers: string[];
   hooks: string[];
+  workflows: string[];
 }
 
 export interface SeededRecordInput {

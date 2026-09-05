@@ -119,6 +119,12 @@ export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
     agents: Type.Array(Type.String()),
     mcpServers: Type.Array(Type.String()),
     hooks: Type.Array(Type.String()),
+    // WLIF-01: the workflow envelopes this install placed. Required, like
+    // every sibling axis, so each construction site is compile-forced to
+    // answer for it. It is the ONLY inventory of those envelopes that
+    // survives the process -- they sit outside every scope root and nothing
+    // on disk can be enumerated to rediscover them.
+    workflows: Type.Array(Type.String()),
   }),
   enabled: Type.Boolean(),
   installedAt: Type.String(),
@@ -171,6 +177,8 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
       mcpServers: [...record.resources.mcpServers],
       // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
       hooks: [...record.resources.hooks],
+      // WLIF-01: clone the workflow envelope inventory verbatim.
+      workflows: [...record.resources.workflows],
     },
     enabled: record.enabled,
     installedAt: record.installedAt,

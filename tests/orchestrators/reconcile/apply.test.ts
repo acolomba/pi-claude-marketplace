@@ -362,6 +362,7 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
       agents: [...(seed.agents ?? [])],
       mcpServers: [...(seed.mcpServers ?? [])],
       hooks: [...(seed.hooks ?? [])],
+      workflows: [],
     },
     enabled: seed.enabled ?? true,
     installedAt: RECORDED_AT,
@@ -1265,6 +1266,7 @@ describe("applyReconcile", () => {
       mcpServers: [],
       prompts: [],
       skills: ["hello-tool"],
+      workflows: [],
     });
     assert.equal(record?.enabled, true);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);

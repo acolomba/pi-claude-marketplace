@@ -1430,6 +1430,9 @@ function resourcesFromHandles(
     // `plugin` / `installable` args and the hooks inventory stays empty
     // for that path (no state write occurs there either).
     hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
+    // WLIF-01: the workflow envelope inventory. Empty here until reinstall
+    // gains a workflows handle to read placed names from.
+    workflows: [],
   };
 }
 

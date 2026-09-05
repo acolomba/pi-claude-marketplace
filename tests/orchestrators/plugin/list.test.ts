@@ -204,6 +204,7 @@ interface SeedMarketplaceOpts {
         agents?: readonly string[];
         mcpServers?: readonly string[];
         hooks?: readonly string[];
+        workflows?: readonly string[];
       };
     }
   >;
@@ -219,6 +220,56 @@ interface SeedMarketplaceOpts {
  * `manifest` is provided. Creates installable source dirs under the same
  * marketplace root so resolveStrict can find them.
  */
+type SeededPluginInfo = NonNullable<SeedMarketplaceOpts["installed"]>[string];
+
+/**
+ * The per-plugin resource inventory a seeded record carries.
+ *
+ * ENBL-18: the inventory is INDEPENDENT of `disabled` -- disable preserves
+ * every array, so the same defaults apply to an enabled and a disabled record
+ * and the caller's `resources` override decides the rest.
+ * D-63-04: hooksOnly seeds the resources.hooks axis populated while every
+ * other axis is empty (the production shape of a hooks-only installed plugin
+ * like learning-output-style).
+ *
+ * Extracted from `seedMarketplace` so the seeder stays under the complexity
+ * ceiling: every axis contributes one fallback branch, so the composition
+ * grows with the record schema while the seeder's own control flow does not.
+ */
+function seededResources(
+  name: string,
+  info: SeededPluginInfo,
+): {
+  skills: string[];
+  prompts: string[];
+  agents: string[];
+  mcpServers: string[];
+  hooks: string[];
+  workflows: string[];
+} {
+  const defaults =
+    info.hooksOnly === true
+      ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [name], workflows: [] }
+      : {
+          skills: [`${name}-skill`],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+          workflows: [],
+        };
+  const override = info.resources;
+
+  return {
+    skills: [...(override?.skills ?? defaults.skills)],
+    prompts: [...(override?.prompts ?? defaults.prompts)],
+    agents: [...(override?.agents ?? defaults.agents)],
+    mcpServers: [...(override?.mcpServers ?? defaults.mcpServers)],
+    hooks: [...(override?.hooks ?? defaults.hooks)],
+    workflows: [...(override?.workflows ?? defaults.workflows)],
+  };
+}
+
 async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   const { scope, scopeRoot, cwd, mpName, manifest } = opts;
   const locations = locationsFor(scope, cwd);
@@ -244,32 +295,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
-    // ENBL-18: the inventory is INDEPENDENT of `disabled` -- disable preserves
-    // every array, so the same defaults apply to an enabled and a disabled
-    // record and the caller's `resources` override decides the rest.
-    // D-63-04: hooksOnly seeds the resources.hooks axis populated while
-    // every other axis is empty (the production shape of a hooks-only
-    // installed plugin like learning-output-style).
-    const defaults =
-      info.hooksOnly === true
-        ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [name] }
-        : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] };
-    const override = info.resources;
-    const resources: {
-      skills: string[];
-      prompts: string[];
-      agents: string[];
-      mcpServers: string[];
-      hooks: string[];
-    } = {
-      skills: [...(override?.skills ?? defaults.skills)],
-      prompts: [...(override?.prompts ?? defaults.prompts)],
-      agents: [...(override?.agents ?? defaults.agents)],
-      mcpServers: [...(override?.mcpServers ?? defaults.mcpServers)],
-      hooks: [...(override?.hooks ?? defaults.hooks)],
-    };
-
-    plugins[name] = buildInstalledPluginRecord(info, resources);
+    plugins[name] = buildInstalledPluginRecord(info, seededResources(name, info));
   }
 
   const record: Record<string, unknown> = {
@@ -1458,6 +1484,7 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -1475,6 +1502,7 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -2070,6 +2098,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -3785,6 +3814,7 @@ async function seedFoldedProjectClone(opts: {
               agents: [],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             installedAt: "2026-01-01T00:00:00.000Z",

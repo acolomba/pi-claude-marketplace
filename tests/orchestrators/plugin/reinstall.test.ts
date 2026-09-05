@@ -3147,7 +3147,14 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
           supported: [] as string[],
           unsupported: [] as string[],
         },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        resources: {
+          skills: [],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+          workflows: [],
+        },
         resolvedSource: await locations.pluginCloneDir(
           pluginCloneKey(`https://github.com/${repo}`, sha),
         ),
@@ -3480,7 +3487,14 @@ async function seedUnpinnedGitRecord(opts: {
             resolvedSource: opts.resolvedSource,
             resolvedSha: opts.resolvedSha,
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             enabled: true,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -5708,6 +5722,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
           mcpServers: [],
           prompts: ["hello:deploy"],
           skills: ["hello-tool"],
+          workflows: [],
         },
       );
     } finally {
@@ -6345,6 +6360,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
           mcpServers: [],
           prompts: ["hello:deploy"],
           skills: ["hello-fresh", "hello-tool"],
+          workflows: [],
         },
       );
       assert.match(
@@ -6514,6 +6530,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
           mcpServers: [],
           prompts: ["hello:deploy", "hello:fresh"],
           skills: ["hello-tool"],
+          workflows: [],
         },
       );
     } finally {
@@ -6650,7 +6667,14 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: ["hello-tool"],
+          workflows: [],
+        },
       );
       assert.match(await readSkill(cwd), /new skill/);
     } finally {

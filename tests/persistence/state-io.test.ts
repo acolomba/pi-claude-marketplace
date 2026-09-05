@@ -25,13 +25,14 @@ interface HooksOnlyResources {
   readonly agents: [];
   readonly mcpServers: [];
   readonly hooks: [string];
+  readonly workflows: [];
 }
 
 void ({
   version: "1.0.0",
   resolvedSource: "/plugins/active",
   compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   enabled: true,
   installedAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -95,6 +96,7 @@ test("clones every plugin field without retaining nested aliases", () => {
       agents: ["agent-a"],
       mcpServers: ["mcp-a"],
       hooks: ["hooks-a"],
+      workflows: ["plugin:build"],
     },
     enabled: false,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -117,6 +119,7 @@ test("clones every plugin field without retaining nested aliases", () => {
       agents: ["agent-a"],
       mcpServers: ["mcp-a"],
       hooks: ["hooks-a"],
+      workflows: ["plugin:build"],
     },
     enabled: false,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -135,6 +138,10 @@ test("clones every plugin field without retaining nested aliases", () => {
   assert.notStrictEqual(clonedRecord.compatibility.notes, record.compatibility.notes);
   assert.notStrictEqual(clonedRecord.resources, record.resources);
   assert.notStrictEqual(clonedRecord.resources.skills, record.resources.skills);
+  // WLIF-01: the enumeration must deep-copy the workflows axis too. A spread
+  // would alias it, and a later in-place mutation of the live record would
+  // reach the snapshot the removal paths read from.
+  assert.notStrictEqual(clonedRecord.resources.workflows, record.resources.workflows);
 });
 
 test("clones a legacy plugin without inventing optional fields", () => {
@@ -143,7 +150,7 @@ test("clones a legacy plugin without inventing optional fields", () => {
     version: "1.0.0",
     resolvedSource: "/plugins/legacy",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     installedAt: "2025-01-01T00:00:00.000Z",
     updatedAt: "2025-01-01T00:00:00.000Z",
@@ -157,7 +164,7 @@ test("clones a legacy plugin without inventing optional fields", () => {
     version: "1.0.0",
     resolvedSource: "/plugins/legacy",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: true,
     installedAt: "2025-01-01T00:00:00.000Z",
     updatedAt: "2025-01-01T00:00:00.000Z",
@@ -174,6 +181,7 @@ test("disables a plugin while preserving its complete inventory", () => {
     agents: [],
     mcpServers: [],
     hooks: ["hooks-a"],
+    workflows: [],
   };
   const record: PluginInstallRecord & { resources: HooksOnlyResources } = {
     version: "sha-a1b2c3d4e5f6",
@@ -299,6 +307,7 @@ test("validates complete hook and resolved-sha plugin records", () => {
               agents: [],
               mcpServers: [],
               hooks: ["hooks-a"],
+              workflows: [],
             },
             enabled: true,
             installedAt: "2026-01-01T00:00:00.000Z",
@@ -430,6 +439,7 @@ test(
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2025-01-01T00:00:00.000Z",
@@ -470,7 +480,8 @@ test(
             ],
             "agents": [],
             "mcpServers": [],
-            "hooks": []
+            "hooks": [],
+            "workflows": []
           },
           "installedAt": "2025-01-01T00:00:00.000Z",
           "updatedAt": "2025-01-01T00:00:00.000Z",
@@ -819,7 +830,14 @@ test("reports the exact post-normalization schema failure", async (t) => {
             version: "1.0.0",
             resolvedSource: "/catalog/plugin",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             enabled: null,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1087,7 +1105,30 @@ for (const { name, plugin } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: "hooks" },
+      resources: {
+        skills: [],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: "hooks",
+        workflows: [],
+      },
+      enabled: true,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  {
+    // WLIF-01: `workflows` is a REQUIRED resources member, not an optional
+    // one, so every construction site is compile-forced to answer for it and
+    // a record that reaches the validator without it is rejected rather than
+    // silently read as an empty inventory.
+    name: "a plugin whose resources omit workflows",
+    plugin: {
+      version: "1.0.0",
+      resolvedSource: "/catalog/plugin",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
       enabled: true,
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1099,7 +1140,7 @@ for (const { name, plugin } of [
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     },
@@ -1130,6 +1171,61 @@ for (const { name, plugin } of [
   });
 }
 
+test("round-trips the recorded workflow envelope names through save and load", async (t) => {
+  // arrange
+  // WLIF-01: the record is the ONLY inventory of the placed envelopes -- they
+  // sit outside every scope root and nothing on disk can be enumerated to
+  // rediscover them -- so a name that does not survive the round trip is a
+  // name no removal path can ever reach.
+  const extensionRoot = await createExtensionRoot(t, "state-io-workflows-roundtrip-");
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "1.0.0",
+            resolvedSource: "/catalog/plugin",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["workflows"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: ["plugin:build", "plugin:deploy"],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  await saveState(extensionRoot, state);
+  const loaded = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(loaded.marketplaces["catalog"]?.plugins["plugin"]?.resources.workflows, [
+    "plugin:build",
+    "plugin:deploy",
+  ]);
+});
+
 test("round-trips resolved sha and hook entries through exact state bytes", async (t) => {
   // arrange
   const extensionRoot = await createExtensionRoot(t, "state-io-plugin-roundtrip-");
@@ -1150,7 +1246,14 @@ test("round-trips resolved sha and hook entries through exact state bytes", asyn
             resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
             hookEntries: [{ event: "SessionStart" }],
             compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hooks-a"] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["hooks-a"],
+              workflows: [],
+            },
             enabled: true,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1187,6 +1290,7 @@ test("round-trips resolved sha and hook entries through exact state bytes", asyn
               agents: [],
               mcpServers: [],
               hooks: ["hooks-a"],
+              workflows: [],
             },
             enabled: true,
             installedAt: "2026-01-01T00:00:00.000Z",

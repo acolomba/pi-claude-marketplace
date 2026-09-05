@@ -225,7 +225,14 @@ async function recordMarketplace(
   for (const name of installed) {
     plugins[name] = buildInstalledPluginRecord(
       { version },
-      { skills: [`${name}-tool`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      {
+        skills: [`${name}-tool`],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: [],
+        workflows: [],
+      },
     );
   }
 

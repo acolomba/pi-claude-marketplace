@@ -165,7 +165,7 @@ function recordedPlugin(name: string): PluginRecord {
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: `/marketplaces/plugins/${name}`,
-    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     updatedAt: "2026-01-01T00:00:00.000Z",
     version: "1.0.0",
   };

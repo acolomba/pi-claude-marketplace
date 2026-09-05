@@ -244,7 +244,14 @@ async function seedScope(
   scopeRoot: string,
   disabled: boolean,
 ): Promise<void> {
-  const emptyResources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  const emptyResources = {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
   await mergeMarketplaceIntoState(path.join(scopeRoot, "pi-claude-marketplace"), "mp", {
     name: "mp",
     scope,

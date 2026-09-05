@@ -256,6 +256,7 @@ function seededRecord(plugin: SeededPlugin): Record<string, unknown> {
       agents: plugin.agent === true ? [`pi-claude-marketplace-${plugin.name}-scout`] : [],
       mcpServers: [],
       hooks: [],
+      workflows: [],
     },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",

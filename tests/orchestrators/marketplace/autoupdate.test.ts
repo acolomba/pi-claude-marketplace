@@ -170,7 +170,7 @@ test("enables one project marketplace in the base config without rewriting state
       enabled: false,
       installedAt: "2026-01-01T00:00:00.000Z",
       resolvedSource: "/fixture/plugins/example",
-      resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+      resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
       updatedAt: "2026-01-01T00:00:00.000Z",
       version: "1.0.0",
     };

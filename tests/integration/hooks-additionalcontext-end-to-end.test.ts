@@ -116,6 +116,7 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
               agents: [],
               mcpServers: [],
               hooks: ["test-plugin"],
+              workflows: [],
             },
             enabled: true,
             installedAt: "2026-06-17T00:00:00Z",
