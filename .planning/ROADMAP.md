@@ -218,7 +218,7 @@ Plans:
 **Goal:** Correct confirmed defects in path containment, MCP input, and lifecycle recovery.
 **Depends on:** Phase 1
 **Requirements:** PDEF-02, PDEF-03, PDEF-04
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -227,7 +227,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Normalize shared path containment and prove affected live consumers
+- [x] 02-02-PLAN.md — Normalize shared path containment and prove affected live consumers
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -392,7 +392,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
 | 1. Live Evidence Revalidation | 69/69 | Complete | 2026-09-05 |
-| 2. Containment and Input Safety | 1/3 | In Progress | — |
+| 2. Containment and Input Safety | 2/3 | In Progress | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
 | 5. Injection and Ownership Design | 0/0 | Not started | — |

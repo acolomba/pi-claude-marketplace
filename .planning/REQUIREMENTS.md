@@ -26,7 +26,7 @@ component as a working Pi artifact.
 - [ ] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3
   has a direct owner regression that fails without the correction and passes
   with it; stale, struck, and evidence-only claims authorize no implementation.
-- [ ] **PDEF-02**: Terminal manifest- and state-derived path flows preserve their
+- [x] **PDEF-02**: Terminal manifest- and state-derived path flows preserve their
   allowed root and reject traversal, symlink escape, and lenient-read escape.
 - [x] **PDEF-03**: The terminal malformed-MCP input case returns its typed stable
   failure without an unexpected throw or configuration write.
@@ -156,7 +156,7 @@ Roadmap creation assigns each requirement to exactly one phase.
 | RVAL-03 | Phase 1 | Complete |
 | RVAL-04 | Phase 1 | Complete |
 | PDEF-01 | Phase 3 | Pending |
-| PDEF-02 | Phase 2 | Pending |
+| PDEF-02 | Phase 2 | Complete |
 | PDEF-03 | Phase 2 | Complete |
 | PDEF-04 | Phase 2 | Pending |
 | PDEF-05 | Phase 3 | Pending |

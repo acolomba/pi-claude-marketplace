@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Containment and Input Safety",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -54,5 +54,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 2 of 9 · 0% · executing"
   },
-  "updated_at": "2026-09-05T21:47:30.477Z"
+  "updated_at": "2026-09-05T22:32:57.018Z"
 }

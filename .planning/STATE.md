@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 02
 current_phase_name: Containment and Input Safety
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-05T22:09:56.505Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-05T22:33:03.579Z"
 last_activity: 2026-09-05
-last_activity_desc: PDEF-03 malformed MCP boundary completed
-state_head: 16c216386b5916cf5df7d3c3f2e11f52c37f68a4
+last_activity_desc: PDEF-02 path containment safety completed
+state_head: eb262cadeeae16a551e30a05d03d4efbe8ef6a2a
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 72
-  completed_plans: 70
+  completed_plans: 71
   percent: 0
 ---
 
@@ -33,10 +33,10 @@ sealed terminal evidence ledger.
 ## Current Position
 
 Phase: 02 (Containment and Input Safety) — EXECUTING
-Next: Execute 02-02-PLAN.md
-Plan: 2 of 3
-Status: In progress
-Last activity: 2026-09-05 — PDEF-03 malformed MCP boundary completed
+Next: Execute 02-03-PLAN.md
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-09-05 — PDEF-02 path containment safety completed
 
 ## Performance Metrics
 
@@ -255,6 +255,7 @@ Last activity: 2026-09-05 — PDEF-03 malformed MCP boundary completed
 | Phase 01 P68 | 9min | 1 tasks | 4 files |
 | Phase 01 P69 | 31min | 1 tasks | 27 files |
 | Phase 02 P01 | 18min | 2 tasks | 6 files |
+| Phase 02 P02 | 17min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -611,6 +612,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Stage owns the shared MCP classifier and typed error so unstage can reuse the policy without an import cycle.
 - [Phase 02]: Existing MCP callers propagate malformed-field failures without new lifecycle result arms or translations.
 - [Phase 02]: Own-property absence remains a no-op while every present non-record JSON value fails closed.
+- [Phase 02]: Reject a raw child component exactly equal to .. before resolution or filesystem inspection; normalize only refused diagnostics.
+- [Phase 02]: Use one normalized parent-child pair for every accepted-path containment decision, error, relative segment, and lstat walk.
+- [Phase 02]: Keep production consumers byte-identical because all live callers inherit the repaired shared pre-I/O assertion.
 
 ### Pending Todos
 
@@ -663,18 +667,18 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-01-PLAN.md
+**Stopped at:** Completed 02-02-PLAN.md
 
-Phase 01 is sealed at 69/69 plans. Phase 02 Plan 01 completed PDEF-03 with a
-shared typed MCP field classifier and exact no-write evidence. Plans 02-02 and
-02-03 remain for path containment and lifecycle recovery.
+Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 and 02 completed PDEF-03
+and PDEF-02 with typed fail-closed input and path boundaries. Plan 02-03 remains
+to close the lifecycle-recovery requirement and finish Phase 02.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/02-containment-and-input-safety/02-01-SUMMARY.md`,
-`.planning/phases/02-containment-and-input-safety/02-02-PLAN.md`,
+**Read beside it:** `.planning/phases/02-containment-and-input-safety/02-02-SUMMARY.md`,
+`.planning/phases/02-containment-and-input-safety/02-03-PLAN.md`,
 `.planning/REQUIREMENTS.md`, and `.planning/ROADMAP.md`.
 
-Last session: 2026-09-05T22:09:56.342Z
+Last session: 2026-09-05T22:33:03.442Z
 
-**Next:** Execute `.planning/phases/02-containment-and-input-safety/02-02-PLAN.md`.
+**Next:** Execute `.planning/phases/02-containment-and-input-safety/02-03-PLAN.md`.
