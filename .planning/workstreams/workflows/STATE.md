@@ -4,17 +4,17 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 110
 current_phase_name: Domain and platform modules
-current_plan: Not started
-status: planning
-stopped_at: Phase 109 complete, ready to plan Phase 110
-last_updated: "2026-09-05T02:14:05.944Z"
+current_plan: 110-01 (not started)
+status: Ready to execute
+stopped_at: Phase 110 planned (3 plans), ready to execute
+last_updated: "2026-09-05T04:16:48.275Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 109 complete, transitioned to Phase 110
-state_head: 304f4dfe2cfb615510fd85a4021657846f862f73
+last_activity_desc: Phase 110 planned - 3 plans, checker clean
+state_head: 8c880217892c9ddb182e55dd5ab4a910796be9c8
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 5
+  total_plans: 8
   completed_plans: 5
   percent: 11
 ---
@@ -35,25 +35,34 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 110 — Domain and platform modules
-Plan: none yet — Phase 110 is not planned
-Status: Ready to plan. Phase 109 is complete and verified 12/12. The inversion is
-live in production code, the whole test tree agrees with
-it, the published contract states the post-inversion meaning, and both halves of
-the intermediate window are pinned by an assertion. `workflows` sits in both
-supported tuples and in neither unsupported structure,
-`componentPaths.workflows` exists, and the dedicated `{workflows}` reason is
-retired from all four declaration sites. `tests/integration/workflow-kind-inversion.test.ts`
-drives a real `installPlugin` and asserts the clean `(installed)` row with no
-`--partial`, then asserts `<HOME>/.pi/workflows` does not exist. The whole
-`npm run check` chain is green: typecheck **0** errors, all three fallow
-sub-gates, Prettier, both corresponding-test gates, the direct-coverage negative
-gate, `npm test` at **5197 pass / 0 fail**, `npm run test:integration` at
-**32 pass / 0 fail**, and ESLint exit 0. `pre-commit run --all-files` passes with
-no file left modified. The verifier re-ran the whole chain independently and
-scored the phase 12/12.
-Last activity: 2026-09-04 — Phase 109 verified 12/12 and marked complete; the
-next step is `/gsd-plan-phase 110`
+Phase: 110 (Domain and platform modules) — READY TO EXECUTE
+Plan: 3 plans, none started
+Status: Ready to execute. Phase 110 is planned and the plans passed the checker
+with 0 blockers and 2 warnings, both since closed or accepted. The three plans
+run serially — `110-01` (the tracer: `platform/workflow-home.ts` and
+`domain/workflow-project-key.ts` with their owner tests), `110-02`
+(`domain/name.ts` and `shared/errors.ts` with their owner tests extended), and
+`110-03` (`acorn`, `domain/workflow-script.ts` and its owner test as one atomic
+commit). They are serialized on the *gate*, not on the code: `use_worktrees` is
+false and `typecheck`/`fallow`/`format:check`/`npm test` all scan the whole
+tree, so a half-finished sibling makes a green run read red. `110-03` also
+carries a real import dependency on `110-02`.
+
+Phase 109 remains complete and verified 12/12; the inversion is live, the whole
+test tree agrees with it, and `npm run check` was green end to end at its close.
+
+**The research measured a defect the port would otherwise have carried into
+Phase 111.** `assertSafeSavedWorkflowName` claims `assertSafeName` covers the
+engine's remaining `isSafeSavedWorkflowName` clauses. It does not: `assertSafeName`
+screens only `charCode < 0x20 || charCode === 0x7f` plus `/` and `\`, so a plain
+space and every `\p{Cf}` code point pass it and the engine then rejects the
+generated name. `meta.name` of `"my name"` yields `acme:my name`, which the real
+engine 3.10.1 validator refuses — in Phase 111 that becomes an envelope the
+engine never registers, a silent install with no command. `110-02` Task 1 closes
+it red-first: the four parity cases are written before the production change and
+must fail against the ported wrapper.
+Last activity: 2026-09-05 — Phase 110 planned; the next step is
+`/gsd-execute-phase 110`
 
 **The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
 workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
