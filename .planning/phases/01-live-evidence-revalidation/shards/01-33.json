@@ -1,0 +1,2044 @@
+{
+  "plan": "01-33",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "category": "adversarial",
+      "assignedPlan": "01-33",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-032"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "category": "adversarial",
+      "assignedPlan": "01-33",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-031"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-001",
+      "findingId": "ORN-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-002",
+      "findingId": "ORN-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-003",
+      "findingId": "ORN-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-004",
+      "findingId": "ORN-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-005",
+      "findingId": "ORN-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-006",
+      "findingId": "ORN-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-007",
+      "findingId": "ORN-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-008",
+      "findingId": "ORN-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-009",
+      "findingId": "ORN-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-010",
+      "findingId": "ORN-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-011",
+      "findingId": "ORN-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-012",
+      "findingId": "ORN-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-013",
+      "findingId": "ORN-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-014",
+      "findingId": "ORN-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-015",
+      "findingId": "ORN-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-016",
+      "findingId": "ORN-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-017",
+      "findingId": "ORN-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-018",
+      "findingId": "ORN-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-019",
+      "findingId": "ORN-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-020",
+      "findingId": "ORN-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-021",
+      "findingId": "ORN-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-022",
+      "findingId": "ORN-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-023",
+      "findingId": "ORN-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-024",
+      "findingId": "ORN-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-025",
+      "findingId": "ORN-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-026",
+      "findingId": "ORN-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-027",
+      "findingId": "ORN-F027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-028",
+      "findingId": "ORN-F028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-029",
+      "findingId": "ORN-F029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-030",
+      "findingId": "ORN-F030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-031",
+      "findingId": "ORN-F031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md",
+      "label": "CLAIM-032",
+      "findingId": "ORN-F032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-001",
+      "findingId": "ORR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-002",
+      "findingId": "ORR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-003",
+      "findingId": "ORR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-004",
+      "findingId": "ORR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-005",
+      "findingId": "ORR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-006",
+      "findingId": "ORR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-007",
+      "findingId": "ORR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-008",
+      "findingId": "ORR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-009",
+      "findingId": "ORR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-010",
+      "findingId": "ORR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-011",
+      "findingId": "ORR-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-012",
+      "findingId": "ORR-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-013",
+      "findingId": "ORR-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-014",
+      "findingId": "ORR-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-015",
+      "findingId": "ORR-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-016",
+      "findingId": "ORR-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-017",
+      "findingId": "ORR-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-018",
+      "findingId": "ORR-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-019",
+      "findingId": "ORR-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-020",
+      "findingId": "ORR-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-021",
+      "findingId": "ORR-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-022",
+      "findingId": "ORR-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-023",
+      "findingId": "ORR-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-024",
+      "findingId": "ORR-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-025",
+      "findingId": "ORR-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-026",
+      "findingId": "ORR-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-027",
+      "findingId": "ORR-F027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-028",
+      "findingId": "ORR-F028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-029",
+      "findingId": "ORR-F029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-030",
+      "findingId": "ORR-F030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md",
+      "label": "CLAIM-031",
+      "findingId": "ORR-F031"
+    }
+  ],
+  "findings": [
+    {
+      "id": "ORN-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-001"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Will-enable/disable scope brackets are not discriminated by current cases"
+      },
+      "rationale": "Will-enable/disable scope brackets are not discriminated by current cases; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-002"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Soft-dependency independence titles exceed what their fixtures discriminate"
+      },
+      "rationale": "Soft-dependency independence titles exceed what their fixtures discriminate; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "PENDING_STATUSES is a test-only production export"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Reconcile re-inlines renderUninstalledRow instead of calling the shared composer"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-005"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "recordedMarketplaces scope-key behavior lacks a discriminating cross-scope case"
+      },
+      "rationale": "recordedMarketplaces scope-key behavior lacks a discriminating cross-scope case; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "pending state evolving let lacks an explicit annotation"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Reconcile comments narrate retired implementations"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-008"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "resolvePendingForceInstalls multi-plan and multi-install accumulation is not mutation-proven"
+      },
+      "rationale": "resolvePendingForceInstalls multi-plan and multi-install accumulation is not mutation-proven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "resolvePendingForceInstalls lacks an injected resolver seam"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-010"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Frozen-array immutability is not asserted"
+      },
+      "rationale": "Frozen-array immutability is not asserted; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Two reasonAsContent scope-qualified sentinels have no current producer"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "backfill test duplicates the shared silent notification boundary"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Backfill tests fake Date because production owns no clock seam"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Three reconcile exports lack consumers outside their modules"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-015"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "The unavailable backfill verdict remains reachable without a focused benign-skip proof"
+      },
+      "rationale": "The unavailable backfill verdict remains reachable without a focused benign-skip proof; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "The defensive entry validator is unreachable after manifest validation"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Explicit partial false and orphanRewake false branches have no real producer"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-018"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "The status-undefined guard is compiler-forced and covered"
+      },
+      "rationale": "Current repository evidence positively replaces or refutes the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORN-F019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-019"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "The broad reasonAsContent-uncovered claim is refuted by a current exact case"
+      },
+      "rationale": "Current repository evidence positively replaces or refutes the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORN-F020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Backfill and pending duplicate their hermetic-scope helper"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "types.test uses the prohibited placeholder name subject"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "notify.ts uses single-letter mismatch bindings"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "backfill.ts uses an inline import type despite an existing resolver import"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "scanForceInstalledBackfills remains exported only as a testing seam"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current reconcile suites retain strong whole-value, ordering, isolation, and readonly proofs"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORN-F026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Hidden production clocks remain a cross-cutting testability concern"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Module-only export census is broader than reset hooks"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Shared notification composer drift remains ungated"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Over-wide reconcile options force compile-only strong-mock placeholders"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORN-F030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-030"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Loose assertion-name findings are spurious under node:assert/strict"
+      },
+      "rationale": "Current repository evidence positively replaces or refutes the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORN-F031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/partial-vocabulary-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Force-install vocabulary gate misses camelCase identifiers"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORN-F032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Notification boundary is a current reference implementation"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-001"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/scope-fanout.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Explicit user-only scope fanout is not discriminated"
+      },
+      "rationale": "Explicit user-only scope fanout is not discriminated; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-002"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "loadStateForScope verbatim error propagation lacks a focused case"
+      },
+      "rationale": "loadStateForScope verbatim error propagation lacks a focused case; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "LocationsResolver structural synchronization is not compile-enforced"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-004"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Installed entries without a manifest version are not mutation-proven"
+      },
+      "rationale": "Installed entries without a manifest version are not mutation-proven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/architecture/no-orchestrator-network.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "NFR-5 gate omits edge-deps and git-source-probe targets"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "makeLocationsResolver lacks collaborator injection and duplicates classifier ownership"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORR-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-007"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Discover single-failure aggregation threshold is not mutation-proven"
+      },
+      "rationale": "Discover single-failure aggregation threshold is not mutation-proven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-008"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Discover sort fixture does not discriminate locale from codepoint order"
+      },
+      "rationale": "Discover sort fixture does not discriminate locale from codepoint order; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "discover.test uses prohibited result placeholders"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-010"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "DEFAULT_CREDENTIAL_OPS runtime re-export lacks an identity case"
+      },
+      "rationale": "DEFAULT_CREDENTIAL_OPS runtime re-export lacks an identity case; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Auth-host optional-collaborator case asserts its own fixture"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Git-source kind union is duplicated instead of using GitBackedSource"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "plugin-path passes an inert homedir argument"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "plugin-path hidden environment dependencies force process-global mutation"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORR-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/scope-fanout.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Orchestrator tests duplicate hermetic temporary-scope harnesses"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-016"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Two WR-01 never pins remain unproven"
+      },
+      "rationale": "Two WR-01 never pins remain unproven; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-017"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "partialDegrade atomicity and ReinstallSkippedOutcome notes requiredness are incompletely pinned"
+      },
+      "rationale": "partialDegrade atomicity and ReinstallSkippedOutcome notes requiredness are incompletely pinned; no isolated behavioral or mutation probe was run, so D-11 prevents a terminal verdict.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Discover symlink subconditions are redundant for current Dirent and lstat inputs"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORR-F019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Discover filtering and plugin-path branch behavior otherwise have current focused coverage"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Auth-host has no untested reachable runtime branch in current static census"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-021"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "First-pass loose assertion-name warning is stale under node:assert/strict"
+      },
+      "rationale": "Current repository evidence positively replaces or refutes the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "First-pass environment-restoration warning understates the production design issue"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORR-F023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Caught-value cast, missing discover header, and six-parameter helper remain"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "edge-deps positional signature and indexed access type remain"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/types.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Types comments and ReinstallOutcomeBase documentation gaps remain"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current top-level orchestrator suites retain strong exact interaction and silence proofs"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-027"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "The historical no-BLOCKER clean verdict is refuted by current plausible gaps"
+      },
+      "rationale": "Current repository evidence positively replaces or refutes the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "scripts/test-coverage-direct.mjs"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "package.json"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Direct-pair tooling exists, but the positive direct gate is absent from npm run check"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    },
+    {
+      "id": "ORR-F029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Edge-handler injection-seam scope should include edge-deps"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "ORR-F030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-030"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Auth memo is caller-owned rather than leaking module state"
+      },
+      "rationale": "Current repository evidence positively replaces or refutes the preserved historical claim.",
+      "destination": "No remediation; retain as current evidence."
+    },
+    {
+      "id": "ORR-F031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Sibling drift remains visible across discover, plugin-path, and types tests"
+      },
+      "rationale": "Current repository evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation and its discriminating test into Phase 2."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
