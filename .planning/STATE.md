@@ -5,8 +5,8 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-31-PLAN.md
-last_updated: "2026-09-05T00:27:14.420Z"
+stopped_at: Completed 01-32-PLAN.md
+last_updated: "2026-09-05T00:43:04.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
 state_head: fbd1b2cd370a45d0b90e802551030cc79c22510c
@@ -14,7 +14,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 31
+  completed_plans: 32
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 32 of 69
+Plan: 33 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -215,6 +215,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P29 | 8min | 2 tasks | 2 files |
 | Phase 01 P30 | 8min | 2 tasks | 1 files |
 | Phase 01 P31 | 12min | 2 tasks | 1 files |
+| Phase 01 P32 | 14min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -484,6 +485,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route still-live plugin-reinstall findings to Phase 2 independently of evidence status.
 - [Phase 01]: Keep D-11 test-strength claims inconclusive when no isolated surviving mutation was run.
 - [Phase 01]: Plan 01-31 keeps D-11 test-strength claims inconclusive until an isolated surviving mutation supplies terminal proof.
+- [Phase 01]: Plan 01-32 routes source-claimed marketplace plugin behavior, exhaustiveness fallbacks, the test-only export, and the state-read seam through operator decisions.
+- [Phase 01]: Plan 01-32 preserves positive behavioral-test patterns separately from live remediation findings.
 
 ### Pending Todos
 
@@ -536,7 +539,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-31-PLAN.md
+**Stopped at:** Completed 01-32-PLAN.md
 phase are complete.
 
 **Resume file:** None
