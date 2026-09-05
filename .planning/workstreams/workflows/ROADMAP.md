@@ -472,7 +472,24 @@ Plans:
    they would be a field every reader discards.
 9. `npm run check` is green.
 
-**Plans**: TBD
+**Plans**: 5 plans in 4 waves. Same-wave plans have no `files_modified` overlap, but the waves are
+serialized in practice because `use_worktrees` is `false` here and every gate this phase leans on scans
+the whole tree rather than the staged diff. Wave 1 is a single tracer plan: the thinnest end-to-end path
+through the bridge, the orchestrator, the renderer and the published byte contract, so an architectural
+dead end shows up after one commit instead of after four.
+
+Plans:
+
+- [ ] 113-01-PLAN.md — Tracer: the `info` `workflows:` line end to end, with the required discovery tense
+  discriminant and a component-kind guard that was seen to fire (wave 1)
+- [ ] 113-02-PLAN.md — The `update` sixth bridge: prepare, abort, commit, the two-window record policy,
+  and one reachability case per widened failure slot (wave 2)
+- [ ] 113-03-PLAN.md — The staged workflow names on the ledger projection both enable verbs read, and the
+  load-time no-re-materialization guard with a negative control (wave 2)
+- [ ] 113-04-PLAN.md — The lingering-command reload remedy as a closed-set token stamped by all four
+  retiring verbs, plus the verified reinstall traceability correction (wave 3)
+- [ ] 113-05-PLAN.md — The read-only retained-staging scan, its advisory on both `pending` arms, and the
+  phase green gate (wave 4)
 
 ### Phase 114: Degradation and documentation
 
