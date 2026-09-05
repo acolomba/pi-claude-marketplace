@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-56-PLAN.md
-last_updated: "2026-09-05T13:40:47.000Z"
-last_activity: 2026-09-04
-last_activity_desc: Phase 01 execution started
-state_head: 7192277154d9574acad4a8425c903b2921bfdb00
+stopped_at: Completed 01-57-PLAN.md
+last_updated: "2026-09-05T15:25:10.000Z"
+last_activity: 2026-09-05
+last_activity_desc: Plan 01-57 closed all 109 evidence gaps; nine operator decisions remain
+state_head: fd45670fa53fae7b4caa605b846a078e11939b15
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 56
+  completed_plans: 57
   percent: 0
 ---
 
@@ -33,9 +33,9 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 56 of 69
+Plan: 57 of 69
 Status: Ready to execute
-Last activity: 2026-09-04 — Phase 01 execution started
+Last activity: 2026-09-05 — Plan 01-57 closed all 109 evidence gaps; nine operator decisions remain
 
 ## Performance Metrics
 
@@ -239,6 +239,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P54 | 10min | 2 tasks | 5 files |
 | Phase 01 P55 | 18min | 3 tasks | 21 files |
 | Phase 01 P56 | 12min | 1 tasks | 3 files |
+| Phase 01 P57 | 1h 43m | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -563,6 +564,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Point every source claim and duplicate directly to its terminal canonical finding while retaining duplicate-local claim IDs and evidence records.
 - [Phase 01]: Use existing surviving-mutation or behavioral-probe evidence when it is stronger than a canonical root's static proof; preserve method-specific local evidence on duplicate records.
 - [Phase 01]: Leave 109 genuinely unresolved findings inconclusive for plan 01-57 and leave MF-DEC-01 through MF-DEC-09 pending without making operator decisions.
+- [Phase 01]: Resolve every one of the 109 remaining evidence gaps with bounded case-owned-copy probes or stronger current proof, without altering live production or test source.
+- [Phase 01]: Classify the 109 gaps strictly from proof as 103 confirmed, four duplicate, and two stale; never treat a green baseline alone as terminal test-strength evidence.
+- [Phase 01]: Preserve exactly MF-DEC-01 through MF-DEC-09 as pending and validate the terminal ledger with only the pending-decision allowance.
 
 ### Pending Todos
 
@@ -615,7 +619,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-56-PLAN.md
+**Stopped at:** Completed 01-57-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -624,11 +628,10 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T13:40:47.000Z
+Last session: 2026-09-05T15:25:10.000Z
 
-**Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
-are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
-under Blockers.
+**Next:** Execute `01-58-PLAN.md` and present only `MF-DEC-01`, whose current premises are now
+terminal. Record the operator's selection before opening the next decision dossier.
 
 Plan counts here are MEASURED, not carried: 220 total and 220 complete, counted by `find` over
 `1??-??-{PLAN,SUMMARY}.md` after this plan's SUMMARY landed. Every phase 108-117 has a SUMMARY for
