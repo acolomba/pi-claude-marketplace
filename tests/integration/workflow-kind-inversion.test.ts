@@ -7,6 +7,7 @@ import test from "node:test";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -108,7 +109,7 @@ async function seedWorkflowPlugin(opts: {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
-  const { saveState, loadState } =
+  const { saveState } =
     await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
   const state = await loadState(locations.extensionRoot);
   await saveState(locations.extensionRoot, {
@@ -158,6 +159,22 @@ test("WINV-02 / D-109-06: a workflow-bearing plugin installs with no partial fla
       );
       assert.ok(!summary.includes("--partial"), `expected no partial-flag hint; got: ${summary}`);
       assert.ok(!summary.includes("{workflows}"), `expected no reason brace; got: ${summary}`);
+
+      // assert -- WINV-01 precondition: the fixture must actually engage the
+      // inverted kind. Without this the ENOENT assertion below is a tautology,
+      // green for a plugin carrying no `workflows/` directory at all and green
+      // for a resolver that dropped the kind entirely.
+      const persisted = await loadState(locationsFor("project", cwd).extensionRoot);
+      const record = persisted.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record, "expected an installed record for hello");
+      assert.ok(
+        record.compatibility.supported.includes("workflows"),
+        `fixture must resolve workflows supported; got: ${record.compatibility.supported.join(" / ")}`,
+      );
+      assert.ok(
+        !record.compatibility.unsupported.includes("workflows"),
+        `workflows must not be recorded unsupported; got: ${record.compatibility.unsupported.join(" / ")}`,
+      );
 
       // assert -- D-109-06: the workflows kind resolves supported, and no bridge
       // materializes it, so the host engine's storage root is never created.
