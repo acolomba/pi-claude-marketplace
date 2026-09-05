@@ -4,17 +4,17 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 current_phase: 02
 current_phase_name: Containment and Input Safety
-status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-09-05T22:33:03.579Z"
+status: verifying
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-09-05T22:50:59.171Z"
 last_activity: 2026-09-05
-last_activity_desc: PDEF-02 path containment safety completed
-state_head: eb262cadeeae16a551e30a05d03d4efbe8ef6a2a
+last_activity_desc: PDEF-04 resource discovery lifecycle containment completed
+state_head: 73f2fa7454f5c7994401e11fd77aded193ef3835
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 72
-  completed_plans: 71
+  completed_plans: 72
   percent: 0
 ---
 
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Containment and Input Safety execution from the
-sealed terminal evidence ledger.
+**Current focus:** Phase 02 — Containment and Input Safety verification against
+the sealed terminal evidence ledger.
 
 ## Current Position
 
-Phase: 02 (Containment and Input Safety) — EXECUTING
-Next: Execute 02-03-PLAN.md
+Phase: 02 (Containment and Input Safety) — READY FOR VERIFICATION
+Next: Verify Phase 02
 Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-09-05 — PDEF-02 path containment safety completed
+Status: Phase complete — ready for verification
+Last activity: 2026-09-05 — PDEF-04 resource discovery lifecycle containment completed
 
 ## Performance Metrics
 
@@ -256,6 +256,7 @@ Last activity: 2026-09-05 — PDEF-02 path containment safety completed
 | Phase 01 P69 | 31min | 1 tasks | 27 files |
 | Phase 02 P01 | 18min | 2 tasks | 6 files |
 | Phase 02 P02 | 17min | 2 tasks | 5 files |
+| Phase 02 P03 | 13min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -615,6 +616,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Reject a raw child component exactly equal to .. before resolution or filesystem inspection; normalize only refused diagnostics.
 - [Phase 02]: Use one normalized parent-child pair for every accepted-path containment decision, error, relative segment, and lstat walk.
 - [Phase 02]: Keep production consumers byte-identical because all live callers inherit the repaired shared pre-I/O assertion.
+- [Phase 02]: Catch only aggregateDiscoveredResources and its result projection at the registered host callback; keep reconciliation, PATH recompute, and the aggregator unchanged.
+- [Phase 02]: Use a real mode-000 skill directory to prove transient failure, then restore it before invoking the same registered callback again.
+- [Phase 02]: Retain the per-warning try/catch and prove both user and project warning attempts under a notifier that throws on every call.
 
 ### Pending Todos
 
@@ -667,18 +671,18 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-02-PLAN.md
+**Stopped at:** Completed 02-03-PLAN.md
 
-Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 and 02 completed PDEF-03
-and PDEF-02 with typed fail-closed input and path boundaries. Plan 02-03 remains
-to close the lifecycle-recovery requirement and finish Phase 02.
+Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
+PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
+boundaries. Phase 02 is ready for goal verification.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/02-containment-and-input-safety/02-02-SUMMARY.md`,
-`.planning/phases/02-containment-and-input-safety/02-03-PLAN.md`,
+**Read beside it:** `.planning/phases/02-containment-and-input-safety/02-03-SUMMARY.md`,
+`.planning/phases/02-containment-and-input-safety/02-VALIDATION.md`,
 `.planning/REQUIREMENTS.md`, and `.planning/ROADMAP.md`.
 
-Last session: 2026-09-05T22:33:03.442Z
+Last session: 2026-09-05T22:50:59.029Z
 
-**Next:** Execute `.planning/phases/02-containment-and-input-safety/02-03-PLAN.md`.
+**Next:** Verify Phase 02 against its goal, requirements, and validation contract.

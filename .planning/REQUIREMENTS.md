@@ -30,7 +30,7 @@ component as a working Pi artifact.
   allowed root and reject traversal, symlink escape, and lenient-read escape.
 - [x] **PDEF-03**: The terminal malformed-MCP input case returns its typed stable
   failure without an unexpected throw or configuration write.
-- [ ] **PDEF-04**: Terminal resource-discovery and lifecycle-mutation failures
+- [x] **PDEF-04**: Terminal resource-discovery and lifecycle-mutation failures
   preserve their exact partial state and remain recoverable through `/reload`.
 - [ ] **PDEF-05**: Terminal lock-contention, sibling-sweep, and malformed-input
   reasons use explicit typed classifications instead of message-substring flow.
@@ -158,7 +158,7 @@ Roadmap creation assigns each requirement to exactly one phase.
 | PDEF-01 | Phase 3 | Pending |
 | PDEF-02 | Phase 2 | Complete |
 | PDEF-03 | Phase 2 | Complete |
-| PDEF-04 | Phase 2 | Pending |
+| PDEF-04 | Phase 2 | Complete |
 | PDEF-05 | Phase 3 | Pending |
 | PDEF-06 | Phase 3 | Pending |
 | PDEF-07 | Phase 3 | Pending |
