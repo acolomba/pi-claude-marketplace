@@ -437,6 +437,15 @@ describe("generatedWorkflowName", () => {
     { plugin: "ab", source: "abc", expectedWorkflowName: "ab:abc" },
     { plugin: "foo", source: "foo", expectedWorkflowName: "foo:foo" },
     { plugin: "acme", source: "a.b", expectedWorkflowName: "acme:a.b" },
+    // The engine judges the WHOLE saved name, and its own `isSafeSavedWorkflowName`
+    // rejects a name that IS "." or ".." rather than one that ends in it. Refusing
+    // these would be a gate stricter than the engine, which is the one direction
+    // that does not self-correct when a later engine relaxes a rule.
+    { plugin: "acme", source: ".", expectedWorkflowName: "acme:." },
+    { plugin: "acme", source: "..", expectedWorkflowName: "acme:.." },
+    // D-141-02: the elision would empty the head, so it does not fire and the
+    // source stands verbatim. The bare "acme:" is never produced.
+    { plugin: "acme", source: "acme-", expectedWorkflowName: "acme:acme-" },
   ]) {
     test(`generates ${JSON.stringify(expectedWorkflowName)} from ${JSON.stringify(source)}`, () => {
       // arrange
@@ -509,12 +518,19 @@ describe("generatedWorkflowName", () => {
     {
       pluginName: "acme",
       sourceName: "",
-      errorMessage: "Name must be a non-empty string.",
+      errorMessage: "Workflow name must be a non-empty string.",
     },
     {
       pluginName: "acme",
-      sourceName: "acme-",
-      errorMessage: "Name must be a non-empty string.",
+      sourceName: "   ",
+      errorMessage: "Workflow name must be a non-empty string.",
+    },
+    {
+      // A separator is the one part-level defect the join cannot fix, and
+      // `assertSafeName` sees it in the joined name rather than in the part.
+      pluginName: "acme",
+      sourceName: "reports/weekly",
+      errorMessage: 'Name "acme:reports/weekly" must not contain path separators.',
     },
     {
       pluginName: "acme",

@@ -105,10 +105,11 @@ export function generatedSkillName(plugin: string, source: string): string {
  * same tree. The elision exists to remove a stutter, and a head that is
  * nothing but the stutter has no command name left underneath it.
  *
- * Commands only. `generatedSkillName` and `generatedAgentName` keep their
- * throw, because Pi validates a skill name and rejects both a trailing and
- * a doubled hyphen: keeping the head there would yield "acme-acme-" and
- * move the same failure to a worse message further downstream.
+ * Colon-joined names only. `generatedWorkflowName` applies the same rule to the
+ * same join. `generatedSkillName` and `generatedAgentName` keep their throw,
+ * because Pi validates a skill name and rejects both a trailing and a doubled
+ * hyphen: keeping the head there would yield "acme-acme-" and move the same
+ * failure to a worse message further downstream.
  */
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);
@@ -171,6 +172,22 @@ export function generatedAgentName(plugin: string, source: string): string {
  * the command generator would mean pulling its nested-path handling into a
  * caller that can never produce that shape.
  *
+ * D-141-02: an elision that would empty the head does not fire, exactly as it
+ * does not for `generatedCommandName`'s identically-joined name. A `meta.name`
+ * of "acme-" in plugin "acme" therefore yields "acme:acme-", not the bare
+ * "acme:" -- a name whose command half is empty. The elision exists to remove a
+ * stutter, and a name that is nothing but the stutter has nothing left under it.
+ *
+ * Only the WHOLE name is screened by the dot, empty and whitespace rules,
+ * because the whole name is the only thing the engine judges. Screening `source`
+ * or the elided remainder for those would refuse names the engine accepts: it
+ * rejects a saved name that IS "." but not one that merely ENDS in it, so a
+ * `meta.name` of "." makes "acme:.", which its own `isSafeSavedWorkflowName`
+ * admits and its own `sourcePath` writes as the one-segment file "acme:..json".
+ * The path separator and control-character screens do still catch a defect the
+ * join cannot fix, and `assertSafeName(generated)` sees each of them in the
+ * joined name.
+ *
  * Every failure of the NAME leaves as `UnsafeGeneratedNameError`, never as the
  * bare `Error` the RN-2 validators throw. `domain/workflow-script.ts` turns
  * exactly this failure into one file's `refused` verdict, and the typed class is
@@ -186,16 +203,21 @@ export function generatedWorkflowName(plugin: string, source: string): string {
   assertSafeName(plugin);
 
   const prefix = `${plugin}-`;
-  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
+  const stripped = source.startsWith(prefix) ? source.slice(prefix.length) : source;
+  const elided = stripped === "" ? source : stripped;
   const generated = `${plugin}:${elided}`;
 
-  // The conversion wraps the three RN-2 calls and nothing else, so what it can
-  // relabel is bounded by one pure string validator. The engine-parity gate
-  // below raises the typed class itself rather than being round-tripped
-  // through this catch.
+  // The one emptiness rule that survives as a check on the part: the join always
+  // carries "<plugin>:", so a `source` of nothing at all still produces a
+  // non-empty name that every whole-name screen below would admit.
+  if (source.trim() === "") {
+    throw new UnsafeGeneratedNameError(generated, "Workflow name must be a non-empty string.");
+  }
+
+  // The conversion wraps one RN-2 call and nothing else, so what it can relabel
+  // is bounded by one pure string validator. The engine-parity gate below raises
+  // the typed class itself rather than being round-tripped through this catch.
   try {
-    assertSafeName(source);
-    assertSafeName(elided);
     assertSafeName(generated);
   } catch (error) {
     throw new UnsafeGeneratedNameError(generated, errorMessage(error));
@@ -213,9 +235,12 @@ export function generatedWorkflowName(plugin: string, source: string): string {
  *
  * Four of the engine's six clauses live here: the 128-character cap, the
  * trim-equality rule, the whitespace/separator/NUL screen, and the
- * control-and-format screen. `assertSafeName` carries the other two -- the
- * non-empty check and both dot forms -- and `generatedWorkflowName` runs it on
- * the joined name before calling this.
+ * control-and-format screen. The other two are satisfied by the SHAPE of what
+ * `generatedWorkflowName` produces rather than by a check: a `<plugin>:<name>`
+ * join is never the empty string and can never be exactly "." or "..", because
+ * the plugin half is itself a non-empty RN-2 name and the colon always follows
+ * it. Neither clause is replicated as a test on the joined name, because a test
+ * that can never fire would read as a rule the generator has to obey.
  *
  * The last two screens overlap `assertSafeName` without being covered by it.
  * That validator refuses only code points below 0x20 plus 0x7f, so a plain
