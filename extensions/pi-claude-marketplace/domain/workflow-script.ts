@@ -30,7 +30,7 @@ import { errorMessage, WorkflowNameCollisionError } from "../shared/errors.ts";
 import { assertSafeName, generatedWorkflowName } from "./name.ts";
 
 import type { WorkflowNameCollision } from "../shared/errors.ts";
-import type { Comment, Program, Property, SpreadElement, Token } from "acorn";
+import type { Comment, Program, Property, SpreadElement, Token, VariableDeclarator } from "acorn";
 
 /** WNAM-01: the script declared a string-literal `meta.name`. */
 export interface NamedWorkflow {
@@ -579,6 +579,10 @@ type MetaElement = Property | SpreadElement;
  * binding is the one that survives, so stopping at the first would report a name
  * the evaluated script never carries. That is the argument `readMetaString`
  * already makes for properties, and it does not stop being true one level up.
+ *
+ * LAST WINS is a rule about REBINDING, not about textual position: only a
+ * declarator carrying an initializer supersedes an earlier one, because
+ * `var meta = {...}; var meta;` leaves `meta` holding the object.
  */
 function findMetaObject(ast: Program): MetaLookup {
   let found: MetaLookup = { kind: "no-meta" };
@@ -591,18 +595,33 @@ function findMetaObject(ast: Program): MetaLookup {
     }
 
     for (const declarator of decl.declarations) {
-      if (declarator.id.type !== "Identifier" || declarator.id.name !== "meta") {
-        continue;
+      if (declarator.id.type === "Identifier" && declarator.id.name === "meta") {
+        found = bindMeta(found, declarator);
       }
-
-      found =
-        declarator.init?.type === "ObjectExpression"
-          ? { kind: "object-literal", elements: declarator.init.properties }
-          : { kind: "meta-not-object-literal" };
     }
   }
 
   return found;
+}
+
+/**
+ * What one `meta` declarator leaves the binding holding, given what the
+ * declarators before it left.
+ *
+ * A declarator with no initializer re-declares without REBINDING, so it cannot
+ * supersede an earlier one: `var meta = {...}; var meta;` leaves `meta` holding
+ * the object, exactly as `var x = 1; var x;` leaves `x === 1`. It does still
+ * ESTABLISH the binding when nothing else has, and an established-but-unset
+ * binding holds `undefined`, which is not an object literal.
+ */
+function bindMeta(found: MetaLookup, declarator: VariableDeclarator): MetaLookup {
+  if (declarator.init === undefined || declarator.init === null) {
+    return found.kind === "no-meta" ? { kind: "meta-not-object-literal" } : found;
+  }
+
+  return declarator.init.type === "ObjectExpression"
+    ? { kind: "object-literal", elements: declarator.init.properties }
+    : { kind: "meta-not-object-literal" };
 }
 
 /**

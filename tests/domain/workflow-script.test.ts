@@ -271,6 +271,29 @@ var meta = makeMeta();
     assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
   });
 
+  test("keeps an object literal a later init-less meta declarator only re-declares", () => {
+    // arrange
+    // `var meta;` re-declares without rebinding, so JavaScript leaves `meta`
+    // holding the object (`var x = 1; var x;` leaves `x === 1`). Reporting
+    // `meta-not-object-literal` here would make the user-facing reason a false
+    // statement about the file. `makeMeta()` in the row above cannot catch this,
+    // because it rebinds.
+    const source = `var meta = { name: "first" };
+var meta;
+`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "first",
+      generatedName: "acme:first",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.workflow.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+  });
+
   test("lets a literal name that follows a spread win, because the read is last-wins", () => {
     // arrange
     const source = `const extra = {};
