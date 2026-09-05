@@ -939,6 +939,62 @@ describe("commitPreparedWorkflows", () => {
     assert.deepStrictEqual(savedEntries, ["acme:greet.json", "acme:shout.json"]);
   });
 
+  test("omits a still-placed name whose target the restore loop reclaimed", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-reclaimed-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-reclaimed-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    await writeWorkflowScript(workflowsDir, "shout.js", SHOUT_SOURCE);
+    await mkdir(locations.workflowsSavedDir, { recursive: true });
+    const greetTarget = await locations.workflowArtifactPath("acme:greet");
+    await writeFile(greetTarget, "PREVIOUS ENVELOPE\n", "utf8");
+    const placed: (readonly string[])[] = [];
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({
+        locations,
+        pluginName: PLUGIN_NAME,
+        resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+        previousWorkflowNames: ["acme:greet"],
+      }),
+    );
+    const rollbackBlocker = path.join(prepared.stagingRoot, "rollback-blocker");
+    await mkdir(rollbackBlocker, { recursive: true });
+    await writeFile(path.join(rollbackBlocker, "child.txt"), "keep child\n", "utf8");
+    // A replaced name has ONE target path in both lists, so its reversal and
+    // its restore compete for the same file. The first pair renames forward
+    // from its real staged path and then reverses onto a non-empty directory,
+    // which leaves it still placed; the second never renames at all, which is
+    // what drives the commit into its rollback.
+    let greetReads = 0;
+
+    redefineRenamePairPath(prepared, "acme:greet", "from", (actual) => {
+      greetReads += 1;
+      return greetReads === 1 ? actual : rollbackBlocker;
+    });
+    redefineRenamePairPath(prepared, "acme:shout", "from", () =>
+      path.join(prepared.stagingRoot, "absent.json"),
+    );
+
+    // act
+    const error = await commitPreparedWorkflows(prepared, {
+      onPlaced: (names) => placed.push(names),
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    const greetBytes = await readFile(greetTarget, "utf8");
+
+    // assert
+    assert.ok(error instanceof Error);
+    // `rename(2)` replaces an existing regular file, so the restore put the
+    // previous envelope back over the still-placed new one. The target no
+    // longer holds anything this commit placed, and a caller acting on the
+    // report would delete the envelope the rollback just recovered.
+    assert.strictEqual(greetBytes, "PREVIOUS ENVELOPE\n");
+    assert.deepStrictEqual(placed, [[]]);
+  });
+
   test("keeps the staging tree when a displaced envelope cannot be restored", async (t) => {
     // arrange
     const { locations } = await createWorkflowScope(t, "workflows-commit-restore-fail-");

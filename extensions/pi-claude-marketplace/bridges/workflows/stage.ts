@@ -371,13 +371,16 @@ export async function commitPreparedWorkflows(
     }
   } catch (err) {
     const rollbackLeaks: string[] = [];
-    const stillPlaced: string[] = [];
+    // The PAIRS rather than their names: the placement report below has to
+    // compare target paths, and re-deriving a pair from its name would need an
+    // absent-lookup arm no input can reach.
+    const stillPlaced: { name: string; to: string }[] = [];
 
     for (const pair of [...completedRenames].reverse()) {
       try {
         await rename(pair.to, pair.from);
       } catch (rollbackErr) {
-        stillPlaced.push(pair.name);
+        stillPlaced.push(pair);
         rollbackLeaks.push(
           `failed to roll back workflow rename ${pair.to} -> ${pair.from}: ${errorMessage(rollbackErr)}`,
         );
@@ -388,9 +391,11 @@ export async function commitPreparedWorkflows(
     // the same target path in both lists, and restoring first would put the
     // previous envelope back only for the reversal to remove it again.
     const unrestored: string[] = [];
+    const restoredTargets = new Set<string>();
     for (const move of [...displaced].reverse()) {
       try {
         await rename(move.to, move.from);
+        restoredTargets.add(move.from);
       } catch (restoreErr) {
         unrestored.push(
           `failed to restore previous workflow envelope ${move.from}; the only copy is at ` +
@@ -409,9 +414,21 @@ export async function commitPreparedWorkflows(
           `${unrestored.length} unrestored previous workflow envelope(s)`
         : await cleanupStaging(prepared.stagingRoot, STAGING_LABEL);
 
+    // CR-02: a target the restore loop reclaimed no longer holds this commit's
+    // envelope, whatever the reversal reported. `rename(2)` replaces an
+    // existing regular file, and a replaced name has ONE target path in both
+    // lists, so a failed reversal followed by a successful restore leaves the
+    // PREVIOUS envelope there. Reporting the name anyway would hand the caller
+    // a removal payload that deletes the bytes the rollback just recovered.
+    //
     // Reversed back into discovery order: `completedRenames` was walked
     // backwards to unwind it.
-    reportPlaced(stillPlaced.reverse());
+    reportPlaced(
+      stillPlaced
+        .reverse()
+        .filter((pair) => !restoredTargets.has(pair.to))
+        .map((pair) => pair.name),
+    );
     throw appendLeaks(err, [...rollbackLeaks, ...unrestored, cleanupLeak]);
   }
 
