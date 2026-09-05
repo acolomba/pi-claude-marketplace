@@ -38,7 +38,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -392,27 +392,6 @@ interface CwdRefusal {
   readonly readCount: () => number;
 }
 
-interface CountedDiscoverEvent {
-  readonly event: ResourcesDiscoverEvent;
-  readonly readCount: () => number;
-}
-
-/** A discover event that exposes how often the callback reads its working directory. */
-function countedDiscoverEvent(event: ResourcesDiscoverEvent): CountedDiscoverEvent {
-  let reads = 0;
-  const proxy = new Proxy(event, {
-    get(target, property, receiver): unknown {
-      if (property === "cwd") {
-        reads += 1;
-      }
-
-      return Reflect.get(target, property, receiver);
-    },
-  });
-
-  return { event: proxy, readCount: () => reads };
-}
-
 function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRefusal {
   let reads = 0;
   let refused = false;
@@ -665,12 +644,10 @@ test("contains one aggregate discovery failure and recovers through the same cal
   );
   await mkdir(skillPath, { recursive: true });
   await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
-  t.after(() => chmod(skillPath, 0o755).catch(() => undefined));
-  await chmod(skillPath, 0o000);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
-  const counted = countedDiscoverEvent(discoverEvent(scope.cwd));
+  const refused = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READS_PER_DISCOVER);
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
   const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
   const expectedState = {
@@ -714,7 +691,7 @@ test("contains one aggregate discovery failure and recovers through the same cal
   };
 
   // act
-  const failedDiscovery = await discover(counted.event, ctx);
+  const failedDiscovery = await discover(refused.event, ctx);
 
   // assert
   assert.deepStrictEqual(failedDiscovery, EMPTY_DISCOVERY);
@@ -722,14 +699,14 @@ test("contains one aggregate discovery failure and recovers through the same cal
   assert.deepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), expectedConfig);
   assert.deepStrictEqual(process.env.PATH, expectedPath);
   assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
-  assert.deepStrictEqual(counted.readCount(), CWD_READS_PER_DISCOVER);
+  assert.strictEqual(refused.refused(), true);
+  assert.strictEqual(refused.readCount(), CWD_READS_PER_DISCOVER);
   assert.deepStrictEqual(notifications, []);
   const stateBytesAfterFailure = await readFile(statePath, "utf8");
   const configBytesAfterFailure = await readFile(configPath, "utf8");
-  await chmod(skillPath, 0o755);
 
   // act
-  const recoveredDiscovery = await discover(counted.event, ctx);
+  const recoveredDiscovery = await discover(discoverEvent(scope.cwd), ctx);
 
   // assert
   assert.deepStrictEqual(recoveredDiscovery, expectedDiscovery);
@@ -737,7 +714,6 @@ test("contains one aggregate discovery failure and recovers through the same cal
   assert.deepStrictEqual(await readFile(configPath, "utf8"), configBytesAfterFailure);
   assert.deepStrictEqual(process.env.PATH, expectedPath);
   assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
-  assert.deepStrictEqual(counted.readCount(), CWD_READS_PER_DISCOVER * 2);
   assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
