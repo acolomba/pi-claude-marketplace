@@ -28,10 +28,10 @@ Only the requirements below are new, and all of them exist because #154 landed.
 
 <!-- Seams: domain/resolver.ts (UNSUPPORTED_COMPONENT_KINDS, UNSUPPORTED_COMPONENT_CONVENTIONS, both supported tuples), shared/notify-reasons.ts (the REASONS closed set), shared/probe-classifiers.ts (narrowUnsupportedKinds), tests/architecture/notify-closed-set-locks.test.ts, tests/architecture/catalog-uat.test.ts, tests/architecture/compat-01-no-expansion.test.ts, docs/output-catalog.md. -->
 
-- [ ] **WINV-01**: `workflows` leaves `UNSUPPORTED_COMPONENT_KINDS` and its `UNSUPPORTED_COMPONENT_CONVENTIONS` entry, and joins `SUPPORTED_COMPONENT_KINDS` and `SUPPORTED_COMPONENT_PATH_KINDS`. The convention directory `<pluginRoot>/workflows/` keeps the same name and the same probe; only which tuple reads it changes.
+- [x] **WINV-01**: `workflows` leaves `UNSUPPORTED_COMPONENT_KINDS` and its `UNSUPPORTED_COMPONENT_CONVENTIONS` entry, and joins `SUPPORTED_COMPONENT_KINDS` and `SUPPORTED_COMPONENT_PATH_KINDS`. The convention directory `<pluginRoot>/workflows/` keeps the same name and the same probe; only which tuple reads it changes.
 - [ ] **WINV-02**: A plugin that resolved `partially-available {workflows}` before the inversion resolves `installable` after it, and installs on a normal install rather than needing `--partial`. This is the user-visible inversion and the one that must not be silent. Envelope materialization is deliberately NOT part of this requirement: the clause that once read "installs its workflow envelopes" was struck as redundant with WLIF-01 ("Install materializes workflows as a 6th phase of the transactional ledger"), which owns that behavior in Phase 112. WINV-02 therefore closes in Phase 109; the absence of any workflow artifact during the 109-111 window is pinned as a test rather than treated as a gap (D-109-06, D-109-07).
-- [ ] **WINV-03**: The dedicated `workflows` member of the `REASONS` closed set is retired together with its `probe-classifiers` arm, or kept with a stated second meaning. It cannot stay as-is: it means "this plugin has workflows and we dropped them", which becomes false. Whichever way it goes, the closed-set counts named in the `notify-reasons.ts` header comment and the byte-pinned catalog states move with it.
-- [ ] **WINV-04**: Every test #154 wrote that locks the unsupported reading is turned rather than deleted. `compat-01-no-expansion`, `catalog-uat`, and `notify-closed-set-locks` each assert the old meaning; each must assert the new one, so the inversion is proved by a red-then-green test and not by an absence.
+- [x] **WINV-03**: The dedicated `workflows` member of the `REASONS` closed set is retired together with its `probe-classifiers` arm, or kept with a stated second meaning. It cannot stay as-is: it means "this plugin has workflows and we dropped them", which becomes false. Whichever way it goes, the closed-set counts named in the `notify-reasons.ts` header comment and the byte-pinned catalog states move with it.
+- [x] **WINV-04**: Every test #154 wrote that locks the unsupported reading is turned rather than deleted. `compat-01-no-expansion`, `catalog-uat`, and `notify-closed-set-locks` each assert the old meaning; each must assert the new one, so the inversion is proved by a red-then-green test and not by an absence.
 - [ ] **WINV-05**: `docs/output-catalog.md` and any `docs/` prose stating that workflow-bearing plugins degrade is corrected in the same phase that changes the behavior, so the published contract never describes the losing side of the inversion.
 
 ## Milestone: workflow-hardening (planned)
@@ -93,10 +93,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WINV-01 | Phase 109 | Pending |
+| WINV-01 | Phase 109 | Complete |
 | WINV-02 | Phase 109 | Pending |
-| WINV-03 | Phase 109 | Pending |
-| WINV-04 | Phase 109 | Pending |
+| WINV-03 | Phase 109 | Complete |
+| WINV-04 | Phase 109 | Complete |
 | WINV-05 | Phase 109 | Pending |
 | WNAM-01..06, WPTH-02 | Phase 110 | Pending (re-land) |
 | WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Pending (re-land) |
