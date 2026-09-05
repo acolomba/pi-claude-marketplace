@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 02
 current_phase_name: Containment and Input Safety
 status: executing
-stopped_at: Phase 02 planned; ready to execute
-last_updated: "2026-09-05T21:47:30.412Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-05T22:09:56.505Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 02 planning passed independent review with 3 plans covering PDEF-02, PDEF-03, and PDEF-04
-state_head: 91faa50164c4875dd2417cfb643ec503044e7793
+last_activity_desc: PDEF-03 malformed MCP boundary completed
+state_head: 16c216386b5916cf5df7d3c3f2e11f52c37f68a4
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 72
-  completed_plans: 69
+  completed_plans: 70
   percent: 0
 ---
 
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Containment and Input Safety discussion and
-planning from the sealed terminal evidence ledger.
+**Current focus:** Phase 02 — Containment and Input Safety execution from the
+sealed terminal evidence ledger.
 
 ## Current Position
 
-Phase: 02 (Containment and Input Safety) — READY TO EXECUTE
-Next: Execute Phase 02 (Containment and Input Safety)
-Plan: 0 of 3 complete
-Status: Ready to execute
-Last activity: 2026-09-05 — Phase 02 planning passed independent review with 3 plans covering PDEF-02, PDEF-03, and PDEF-04
+Phase: 02 (Containment and Input Safety) — EXECUTING
+Next: Execute 02-02-PLAN.md
+Plan: 2 of 3
+Status: In progress
+Last activity: 2026-09-05 — PDEF-03 malformed MCP boundary completed
 
 ## Performance Metrics
 
@@ -254,6 +254,7 @@ Last activity: 2026-09-05 — Phase 02 planning passed independent review with 3
 | Phase 01 P67 | 14min | 1 tasks | 3 files |
 | Phase 01 P68 | 9min | 1 tasks | 4 files |
 | Phase 01 P69 | 31min | 1 tasks | 27 files |
+| Phase 02 P01 | 18min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -607,6 +608,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Keep the unused-type-member todo and named GAUTH-01 prescription historical until a dedicated terminal finding authorizes in-boundary work.
 - [Phase 01]: Seal the final ledger at 110 complete files, 2,897 linked claims, 2,437 terminal findings, nine resolved decisions, and 40 validated scope rows before Phase 02 planning.
 - [Phase 01]: Treat the Plan 01-69 Prettier repair as formatting-only because normalized parsed-JSON digests remained equal for all 26 files.
+- [Phase 02]: Stage owns the shared MCP classifier and typed error so unstage can reuse the policy without an import cycle.
+- [Phase 02]: Existing MCP callers propagate malformed-field failures without new lifecycle result arms or translations.
+- [Phase 02]: Own-property absence remains a no-op while every present non-record JSON value fails closed.
 
 ### Pending Todos
 
@@ -659,21 +663,18 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 02 context gathered; ready for planning
+**Stopped at:** Completed 02-01-PLAN.md
 
-Phase 01 is sealed at 69/69 plans. Its final ledger contains 110 complete files,
-2,897 linked source claims, 2,437 terminal findings, nine resolved decisions,
-zero inconclusive records, and 40 validated scope-impact rows. Phase 02 remains
-unplanned and is ready for evidence-derived discussion and planning.
+Phase 01 is sealed at 69/69 plans. Phase 02 Plan 01 completed PDEF-03 with a
+shared typed MCP field classifier and exact no-write evidence. Plans 02-02 and
+02-03 remain for path containment and lifecycle recovery.
 
-**Resume file:** .planning/phases/02-containment-and-input-safety/02-CONTEXT.md
+**Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-69-SUMMARY.md`,
-`.planning/phases/01-live-evidence-revalidation/01-VALIDATION.md`,
-`.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the canonical
-`.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
+**Read beside it:** `.planning/phases/02-containment-and-input-safety/02-01-SUMMARY.md`,
+`.planning/phases/02-containment-and-input-safety/02-02-PLAN.md`,
+`.planning/REQUIREMENTS.md`, and `.planning/ROADMAP.md`.
 
-Last session: 2026-09-05T21:13:46.761Z
+Last session: 2026-09-05T22:09:56.342Z
 
-**Next:** Run `$gsd-autonomous --from 2` to discuss, plan, and execute Phase 02
-from the sealed `PDEF-02`, `PDEF-03`, and `PDEF-04` scope.
+**Next:** Execute `.planning/phases/02-containment-and-input-safety/02-02-PLAN.md`.

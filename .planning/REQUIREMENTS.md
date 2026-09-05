@@ -28,7 +28,7 @@ component as a working Pi artifact.
   with it; stale, struck, and evidence-only claims authorize no implementation.
 - [ ] **PDEF-02**: Terminal manifest- and state-derived path flows preserve their
   allowed root and reject traversal, symlink escape, and lenient-read escape.
-- [ ] **PDEF-03**: The terminal malformed-MCP input case returns its typed stable
+- [x] **PDEF-03**: The terminal malformed-MCP input case returns its typed stable
   failure without an unexpected throw or configuration write.
 - [ ] **PDEF-04**: Terminal resource-discovery and lifecycle-mutation failures
   preserve their exact partial state and remain recoverable through `/reload`.
@@ -157,7 +157,7 @@ Roadmap creation assigns each requirement to exactly one phase.
 | RVAL-04 | Phase 1 | Complete |
 | PDEF-01 | Phase 3 | Pending |
 | PDEF-02 | Phase 2 | Pending |
-| PDEF-03 | Phase 2 | Pending |
+| PDEF-03 | Phase 2 | Complete |
 | PDEF-04 | Phase 2 | Pending |
 | PDEF-05 | Phase 3 | Pending |
 | PDEF-06 | Phase 3 | Pending |
