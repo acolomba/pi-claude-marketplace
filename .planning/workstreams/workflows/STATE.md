@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 110
 current_phase_name: Domain and platform modules
-current_plan: 110-02 (not started)
+current_plan: 110-03 (not started)
 status: In progress
-stopped_at: Completed 110-01-PLAN.md
-last_updated: "2026-09-05T04:42:19Z"
+stopped_at: Completed 110-02-PLAN.md
+last_updated: "2026-09-05T05:06:00Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 110 plan 01 executed - storage root and project key landed
+last_activity_desc: Phase 110 plan 02 executed - workflow name generator and collision error landed
 state_head: 8c880217892c9ddb182e55dd5ab4a910796be9c8
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 11
 ---
 
@@ -36,17 +36,19 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 110 (Domain and platform modules) — IN PROGRESS
-Plan: 1 of 3 complete (`110-01`), `110-02` next
+Plan: 2 of 3 complete (`110-01`, `110-02`), `110-03` next
 Status: In progress. `110-01` landed the tracer: `platform/workflow-home.ts`
 with its relocation seam deleted, `domain/workflow-project-key.ts` unedited,
-and both owner tests, in two commits (`df7b9be8`, `ed756b8f`). The whole gate
-chain is green and Phase 109's five inverted files are provably untouched.
-Remaining: `110-02` (`domain/name.ts` and `shared/errors.ts` with their owner
-tests extended) and `110-03` (`acorn`, `domain/workflow-script.ts` and its
-owner test as one atomic commit). They are serialized on the *gate*, not on the
-code: `use_worktrees` is false and `typecheck`/`fallow`/`format:check`/`npm
-test` all scan the whole tree, so a half-finished sibling makes a green run read
-red. `110-03` also carries a real import dependency on `110-02`.
+and both owner tests, in two commits (`df7b9be8`, `ed756b8f`). `110-02` landed
+`generatedWorkflowName` and `WorkflowNameCollisionError` in one commit
+(`2152a2aa`), with the ported engine-parity wrapper completed from two clauses
+to six. The whole gate chain is green and Phase 109's five inverted files are
+provably untouched. Remaining: `110-03` (`acorn`,
+`domain/workflow-script.ts` and its owner test as one atomic commit). The plans
+are serialized on the *gate*, not on the code: `use_worktrees` is false and
+`typecheck`/`fallow`/`format:check`/`npm test` all scan the whole tree, so a
+half-finished sibling makes a green run read red. `110-03` also carries a real
+import dependency on `110-02`, which is now satisfied.
 
 **The phase mechanism is proved and reusable.** `110-01` ran it end to end:
 path-scoped `git checkout features/workflow-port-wip -- <one file>` (never a
@@ -66,18 +68,31 @@ satisfied on Phase 110's evidence.
 Phase 109 remains complete and verified 12/12; the inversion is live, the whole
 test tree agrees with it, and `npm run check` was green end to end at its close.
 
-**The research measured a defect the port would otherwise have carried into
-Phase 111.** `assertSafeSavedWorkflowName` claims `assertSafeName` covers the
-engine's remaining `isSafeSavedWorkflowName` clauses. It does not: `assertSafeName`
-screens only `charCode < 0x20 || charCode === 0x7f` plus `/` and `\`, so a plain
-space and every `\p{Cf}` code point pass it and the engine then rejects the
-generated name. `meta.name` of `"my name"` yields `acme:my name`, which the real
-engine 3.10.1 validator refuses — in Phase 111 that becomes an envelope the
-engine never registers, a silent install with no command. `110-02` Task 1 closes
-it red-first: the four parity cases are written before the production change and
-must fail against the ported wrapper.
-Last activity: 2026-09-05 — Phase 110 planned; the next step is
-`/gsd-execute-phase 110`
+**The measured WNAM-06 defect is CLOSED.** The port's
+`assertSafeSavedWorkflowName` claimed `assertSafeName` covered the engine's
+remaining `isSafeSavedWorkflowName` clauses. It did not: `assertSafeName` screens
+only `charCode < 0x20 || charCode === 0x7f` plus `/` and `\`, so a plain space
+and every `\p{Cf}` code point passed it and the engine then rejected the
+generated name. `110-02` closed it red-first — four parity rows written before
+any production edit, observed failing 4-of-78 against the ported wrapper — then
+added the `/[\s/\\\0]/u` and `/[\p{Cc}\p{Cf}]/u` screens so the wrapper carries
+all six engine clauses. The wrapper now matches engine 3.10.1 exactly rather
+than exceeding it, and its docblock cites that version.
+
+**One item rides to pull-request time, not to `110-03`.** `fallow dupes` now
+reports a new clone family in `domain/name.ts` ("2 groups, 70 lines", tree total
+928 lines / 1.4%) because `generatedWorkflowName` deliberately mirrors
+`generatedSkillName`. `fallow` exits 0, so no local gate fails, but
+`sonar-project.properties` does not list `domain/name.ts` in
+`sonar.cpd.exclusions` — expect a SonarCloud Duplicated Lines condition on the
+PR. The remedy is that exclusion entry with the `port/README.md` rationale, NOT
+a refactor into a shared colon-name helper: WNAM-06's 2026-09-04 amendment
+explicitly declines that mechanism, and main has since taught
+`generatedCommandName` nested-path and empty-head rules a flat workflow caller
+can never produce.
+
+Last activity: 2026-09-05 — `110-02` executed; the next step is
+`/gsd-execute-phase 110` for `110-03`
 
 **The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
 workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
@@ -112,7 +127,7 @@ that way permanently.
 ## Progress
 
 **Phases Complete:** 1/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 110-02, not started (110-01 complete)
+**Current Plan:** 110-03, not started (110-01 and 110-02 complete)
 
 ```text
 [=---------] 11%
@@ -121,7 +136,7 @@ that way permanently.
 | Phase | Name | Status |
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
-| 110 | Domain and platform modules | In progress (1/3 plans) |
+| 110 | Domain and platform modules | In progress (2/3 plans) |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
@@ -230,13 +245,14 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T04:42:19Z
+**Last session:** 2026-09-05T05:06:00Z
 
-**Stopped At:** Completed 110-01-PLAN.md
+**Stopped At:** Completed 110-02-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 110` to run `110-02`. `110-01` is complete
-and its SUMMARY is on disk; the two production commits are `df7b9be8` (storage
-root) and `ed756b8f` (project key). Reuse `110-01`'s proved mechanism verbatim:
+**Next Action:** `/gsd-execute-phase 110` to run `110-03`. `110-01` and `110-02`
+are complete and both SUMMARYs are on disk; the production commits are
+`df7b9be8` (storage root), `ed756b8f` (project key) and `2152a2aa` (name
+generator plus collision error). Reuse the proved mechanism verbatim:
 path-scoped checkout naming individual files, the five-file blast-radius
 assertion immediately after, an owner test that imports every export by name,
 and the full gate chain before each commit. `110-03` must land `acorn`,
@@ -329,6 +345,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 109 P04 | 14 min | 3 tasks | 5 files |
 | Phase 109 P05 | 15 min | 2 tasks | 1 file |
 | Phase 110 P01 | 21 min | 2 tasks | 4 files |
+| Phase 110 P02 | 22 min | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -340,6 +357,9 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 110]: The header sentence defending the seam was replaced, not merely orphaned. — A comment arguing for a mechanism you just deleted, from a premise measured false, is worse than no comment.
 - [Phase 110]: The relative-path parity case pins the working directory with `process.chdir("/")` instead of taking the spike's split pin. — The split pin computes half its expectation with production code; a pinned cwd makes the same row a transcribed literal that is deterministic on any machine.
 - [Phase 110]: WPTH-02 is recorded as carried forward rather than completed. — Phase 110 writes nothing, so it can prove only the home-derivation negative; the "never written" guarantee belongs to the Phase 111 modules that write.
+- [Phase 110]: The ported `assertSafeSavedWorkflowName` was completed to all six engine clauses rather than the gap being recorded and carried to the admission-gate hardening phase. — The wrapper is new code the port itself introduces, so completing it makes the bridge match the engine EXACTLY rather than exceed it; the alternative was a workflow whose author put a space in `meta.name` installing and never running, with no signal.
+- [Phase 110]: The docblock sentence claiming `assertSafeName` already enforced the separator/NUL screening was replaced, not annotated. — It was measured false against engine 3.10.1 for a plain space and the whole `\p{Cf}` category; a comment arguing a false premise is worse than none.
+- [Phase 110]: `CrossPluginConflictError`'s reference-identity assertion was INVERTED for `WorkflowNameCollisionError` rather than copied as `110-PATTERNS.md` instructs. — The analog assigns its argument array directly; this class assigns `Object.freeze([...collisions])`, so the owner test pins `notStrictEqual` + `Object.isFrozen` + a post-construction push into the caller's array, which is what proves the copy defensive rather than incidental.
 - [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
