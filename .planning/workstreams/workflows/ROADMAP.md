@@ -410,7 +410,22 @@ Plans:
    the `info` surface and the phrasing is shipped text that will be quoted back.
    (`"could not be read and was skipped"` is also inaccurate at its `lstat` call
    site, where nothing was read.)
-6. `npm run check` is green.
+6. **The `workflows` failure-phase widenings stop being inert.** Carried from
+   the Phase 112 code review (WR-03). Three closed sets -- `update.ts`'s two
+   failure-phase arrays, `orchestrators/types.ts`, and `shared/errors.ts` --
+   already carry a `workflows` member that `update.ts` cannot produce, so the
+   compile-forcing signal `PHASE3_FAILURE_PHASES` exists to give ("a future
+   bridge surfaces here as a TS error") is already spent for this axis. Phase
+   112 left them widened rather than reverting type-only churn for one phase.
+   Criterion 1 above is what makes them honest: once `update` stages workflows,
+   each widened slot must be reachable and covered by a case that drives a
+   workflows failure through the update verb. Until then the gap is silent --
+   an update reports success while the envelopes on disk still hold the
+   PREVIOUS version's executable script, a workflow the new version added never
+   appears, and one it removed stays installed and runnable. No row, reason
+   token or warning marks it. Nothing outside this branch is exposed, because
+   the kind is not fully shipped until Phase 114.
+7. `npm run check` is green.
 
 **Plans**: TBD
 
