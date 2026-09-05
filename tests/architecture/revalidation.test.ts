@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 // @ts-expect-error The production validator is intentionally a directly executable .mjs CLI.
 import * as revalidation from "../../scripts/revalidation.mjs";
@@ -18,6 +20,13 @@ const {
   validateLedger,
   validateShard,
 } = revalidation as RevalidationApi;
+
+const revalidationCli = fileURLToPath(new URL("../../scripts/revalidation.mjs", import.meta.url));
+const phaseRoot = ".planning/phases/01-live-evidence-revalidation";
+const ledgerPath = `${phaseRoot}/01-REVALIDATION.json`;
+const markdownPath = `${phaseRoot}/01-REVALIDATION.md`;
+const assignmentPath = `${phaseRoot}/01-CORPUS-ASSIGNMENT.md`;
+const shardRoot = `${phaseRoot}/shards`;
 
 interface Violation {
   readonly code: string;
@@ -82,7 +91,13 @@ interface RevalidationApi {
   enumerateCorpus: (projectRoot: string) => string[];
   validateLedger: (
     ledger: unknown,
-    context: { projectRoot: string; expectedPaths: string[]; allowIncomplete?: boolean },
+    context: {
+      projectRoot: string;
+      expectedPaths: string[];
+      allowIncomplete?: boolean;
+      allowInconclusive?: boolean;
+      allowPendingDecisions?: boolean;
+    },
   ) => Violation[];
   validateShard: (shard: Ledger & { plan: string }, assignment: Assignment[]) => Violation[];
   mergeShards: (
@@ -96,6 +111,19 @@ interface RevalidationApi {
     decisionId: string,
   ) => Ledger["decisions"][number] & { premises: Ledger["findings"] };
   deriveScopeImpact: (ledger: Ledger) => Ledger["scopeChanges"];
+}
+
+interface CliExecution {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+interface CliFixture {
+  readonly projectRoot: string;
+  readonly corpusPath: string;
+  readonly ledger: Ledger;
+  readonly shard: Ledger & { plan: string };
 }
 
 function benignLedger(corpusPath: string): Ledger {
@@ -145,6 +173,67 @@ async function corpusFixture(t: TestContext): Promise<{ projectRoot: string; cor
   await mkdir(path.dirname(path.join(projectRoot, corpusPath)), { recursive: true });
   await writeFile(path.join(projectRoot, corpusPath), "historical evidence only\n");
   return { projectRoot, corpusPath };
+}
+
+function pendingDecisions(): Ledger["decisions"] {
+  return Array.from({ length: 9 }, (_, index) => ({
+    id: `MF-DEC-${String(index + 1).padStart(2, "0")}`,
+    status: "pending",
+    premiseFindingIds: [],
+    proof: "",
+    options: [],
+    selectedOption: "",
+    rejectedOptions: [],
+    affectedIds: [],
+    recommendation: "",
+    downstreamConsequences: "",
+  }));
+}
+
+function runCli(projectRoot: string, args: readonly string[]): CliExecution {
+  const environment = { ...process.env };
+  delete environment.NODE_TEST_CONTEXT;
+  const execution = spawnSync(process.execPath, [revalidationCli, ...args, "--root", projectRoot], {
+    encoding: "utf8",
+    env: environment,
+  });
+  return {
+    status: execution.status,
+    stdout: execution.stdout,
+    stderr: execution.stderr,
+  };
+}
+
+async function createCliFixture(t: TestContext): Promise<CliFixture> {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "revalidation-cli-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const corpusPath = ".planning/reviews/unit-test-adversarial/sample.md";
+  await mkdir(path.join(projectRoot, shardRoot), { recursive: true });
+  await mkdir(path.dirname(path.join(projectRoot, corpusPath)), { recursive: true });
+  await writeFile(path.join(projectRoot, corpusPath), "historical evidence only\n");
+  await writeFile(
+    path.join(projectRoot, assignmentPath),
+    `| 001 | 01-02 | 1 | \`${corpusPath}\` |\n`,
+  );
+  const ledger = benignLedger(corpusPath);
+  ledger.decisions = pendingDecisions();
+  const shard = { ...structuredClone(ledger), plan: "01-02", decisions: [], scopeChanges: [] };
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+  await writeFile(path.join(projectRoot, markdownPath), "original markdown\n");
+  await writeFile(path.join(projectRoot, shardRoot, "01-02.json"), JSON.stringify(shard));
+  return { projectRoot, corpusPath, ledger, shard };
+}
+
+async function writeCanonical(projectRoot: string, ledger: Ledger): Promise<void> {
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+  await writeFile(path.join(projectRoot, markdownPath), renderRevalidation(ledger));
+}
+
+async function destinationBytes(projectRoot: string): Promise<readonly [Buffer, Buffer]> {
+  return Promise.all([
+    readFile(path.join(projectRoot, ledgerPath)),
+    readFile(path.join(projectRoot, markdownPath)),
+  ]);
 }
 
 test("tracer validates and renders one namespaced claim without interpreting corpus prose", async (t) => {
@@ -521,4 +610,268 @@ test("derives scope impact only from traced scope records", async (t) => {
       rationale: "The premise survives.",
     },
   ]);
+});
+
+test("public merge check and publish preserve and then replace complete destination bytes", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const originalBytes = await destinationBytes(fixture.projectRoot);
+  const mergeArgs = [
+    "merge-shards",
+    "--assignment",
+    assignmentPath,
+    "--shard-dir",
+    shardRoot,
+    "--allow-inconclusive",
+    "--allow-pending-decisions",
+  ] as const;
+
+  // act
+  const checked = runCli(fixture.projectRoot, [...mergeArgs, "--check", "--allow-incomplete"]);
+  const checkedBytes = await destinationBytes(fixture.projectRoot);
+  const published = runCli(fixture.projectRoot, mergeArgs);
+  const firstPublishedBytes = await destinationBytes(fixture.projectRoot);
+  const publishedAgain = runCli(fixture.projectRoot, mergeArgs);
+  const secondPublishedBytes = await destinationBytes(fixture.projectRoot);
+  const publishedLedger = JSON.parse(firstPublishedBytes[0].toString()) as Ledger;
+
+  // assert
+  assert.strictEqual(checked.status, 0, checked.stderr);
+  assert.deepStrictEqual(checkedBytes, originalBytes);
+  assert.strictEqual(published.status, 0, published.stderr);
+  assert.strictEqual(publishedAgain.status, 0, publishedAgain.stderr);
+  assert.deepStrictEqual(secondPublishedBytes, firstPublishedBytes);
+  assert.strictEqual(firstPublishedBytes[1].toString(), renderRevalidation(publishedLedger));
+  assert.deepStrictEqual(
+    publishedLedger.decisions.map((decision) => decision.id),
+    pendingDecisions().map((decision) => decision.id),
+  );
+});
+
+for (const row of [
+  {
+    title: "allow-incomplete relaxes only an incomplete file",
+    flag: "--allow-incomplete",
+    code: "incomplete-file",
+    mutate: (ledger: Ledger) => {
+      ledger.files[0]!.reviewStatus = "pending";
+      ledger.files[0]!.outcome = "unreviewed";
+    },
+  },
+  {
+    title: "allow-inconclusive relaxes only an inconclusive finding",
+    flag: "--allow-inconclusive",
+    code: "inconclusive-finding",
+    mutate: (ledger: Ledger) => {
+      ledger.findings[0]!.evidenceStatus = "inconclusive";
+      ledger.files[0]!.outcome = "no live findings";
+    },
+  },
+  {
+    title: "allow-pending-decisions relaxes exactly the nine pending decisions",
+    flag: "--allow-pending-decisions",
+    code: "pending-decision",
+    mutate: (ledger: Ledger) => {
+      ledger.decisions = pendingDecisions();
+    },
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const fixture = await createCliFixture(t);
+    const ledger = benignLedger(fixture.corpusPath);
+    row.mutate(ledger);
+    await writeCanonical(fixture.projectRoot, ledger);
+
+    // act
+    const strict = runCli(fixture.projectRoot, ["validate"]);
+    const allowed = runCli(fixture.projectRoot, ["validate", row.flag]);
+
+    // assert
+    assert.strictEqual(strict.status, 1);
+    assert.match(strict.stderr, new RegExp(`^${row.code}:`, "m"), JSON.stringify(strict));
+    assert.strictEqual(allowed.status, 0, allowed.stderr);
+  });
+}
+
+test("other transition allowances do not hide an incomplete file", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const ledger = benignLedger(fixture.corpusPath);
+  ledger.files[0]!.reviewStatus = "pending";
+  ledger.files[0]!.outcome = "unreviewed";
+  ledger.findings[0]!.evidenceStatus = "inconclusive";
+  ledger.decisions = pendingDecisions();
+  await writeCanonical(fixture.projectRoot, ledger);
+
+  // act
+  const execution = runCli(fixture.projectRoot, [
+    "validate",
+    "--allow-inconclusive",
+    "--allow-pending-decisions",
+  ]);
+
+  // assert
+  assert.strictEqual(execution.status, 1);
+  assert.match(execution.stderr, /^incomplete-file:/m);
+  assert.doesNotMatch(execution.stderr, /^inconclusive-finding:|^pending-decision:/m);
+});
+
+for (const row of [
+  {
+    title: "pending-decision allowance rejects a missing decision ID",
+    mutate: (decisions: Ledger["decisions"]) => decisions.slice(0, -1),
+  },
+  {
+    title: "pending-decision allowance rejects an unexpected decision ID",
+    mutate: (decisions: Ledger["decisions"]) => [
+      ...decisions.slice(0, -1),
+      { ...decisions.at(-1)!, id: "MF-DEC-10" },
+    ],
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const fixture = await createCliFixture(t);
+    const ledger = benignLedger(fixture.corpusPath);
+    ledger.decisions = row.mutate(pendingDecisions());
+    await writeCanonical(fixture.projectRoot, ledger);
+
+    // act
+    const execution = runCli(fixture.projectRoot, ["validate", "--allow-pending-decisions"]);
+
+    // assert
+    assert.strictEqual(execution.status, 1);
+    assert.match(execution.stderr, /^pending-decision-set:/m);
+  });
+}
+
+for (const row of [
+  {
+    title: "public merge rejects a missing shard without changing destinations",
+    mutate: async (fixture: CliFixture) => {
+      await rm(path.join(fixture.projectRoot, shardRoot, "01-02.json"));
+    },
+    error: /missing shards: 01-02/,
+  },
+  {
+    title: "public merge rejects a duplicate shard plan without changing destinations",
+    mutate: async (fixture: CliFixture) => {
+      await writeFile(
+        path.join(fixture.projectRoot, shardRoot, "duplicate.json"),
+        JSON.stringify(fixture.shard),
+      );
+    },
+    error: /duplicate shard plans: 01-02/,
+  },
+  {
+    title: "public merge rejects an unexpected shard plan without changing destinations",
+    mutate: async (fixture: CliFixture) => {
+      await writeFile(
+        path.join(fixture.projectRoot, shardRoot, "unexpected.json"),
+        JSON.stringify({ ...fixture.shard, plan: "01-99", files: [] }),
+      );
+    },
+    error: /unexpected shard plans: 01-99/,
+  },
+  {
+    title: "public merge rejects wrong file ownership without changing destinations",
+    mutate: async (fixture: CliFixture) => {
+      const shard = structuredClone(fixture.shard);
+      shard.files[0]!.assignedPlan = "01-99";
+      await writeFile(
+        path.join(fixture.projectRoot, shardRoot, "01-02.json"),
+        JSON.stringify(shard),
+      );
+    },
+    error: /every shard file must name its owning plan/,
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const fixture = await createCliFixture(t);
+    const before = await destinationBytes(fixture.projectRoot);
+    await row.mutate(fixture);
+
+    // act
+    const execution = runCli(fixture.projectRoot, [
+      "merge-shards",
+      "--assignment",
+      assignmentPath,
+      "--shard-dir",
+      shardRoot,
+      "--allow-inconclusive",
+      "--allow-pending-decisions",
+    ]);
+    const after = await destinationBytes(fixture.projectRoot);
+
+    // assert
+    assert.strictEqual(execution.status, 1);
+    assert.match(execution.stderr, row.error);
+    assert.deepStrictEqual(after, before);
+  });
+}
+
+test("public merge rejects a wrong live category distribution before either write", async (t) => {
+  // arrange
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "revalidation-live-cli-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  await mkdir(path.join(projectRoot, shardRoot), { recursive: true });
+  const corpusDirectory = path.join(projectRoot, ".planning/reviews/unit-test-adversarial");
+  await mkdir(corpusDirectory, { recursive: true });
+  const corpusPaths = Array.from(
+    { length: 110 },
+    (_, index) =>
+      `.planning/reviews/unit-test-adversarial/report-${String(index + 1).padStart(3, "0")}.md`,
+  );
+  for (const corpusPath of corpusPaths) {
+    await writeFile(path.join(projectRoot, corpusPath), "historical evidence only\n");
+  }
+
+  const assignment = corpusPaths
+    .map(
+      (corpusPath, index) =>
+        `| ${String(index + 1).padStart(3, "0")} | 01-02 | 1 | \`${corpusPath}\` |`,
+    )
+    .join("\n");
+  await writeFile(path.join(projectRoot, assignmentPath), `${assignment}\n`);
+  const files = corpusPaths.map((corpusPath) => ({
+    path: corpusPath,
+    category: "first-pass",
+    assignedPlan: "01-02",
+    claimIds: [],
+    reviewStatus: "complete",
+    outcome: "no live findings",
+  }));
+  const base = {
+    version: 1,
+    inventoryMode: "live",
+    files: [],
+    sourceClaims: [],
+    findings: [],
+    decisions: [],
+    scopeChanges: [],
+  } satisfies Ledger;
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(base, null, 2)}\n`);
+  await writeFile(path.join(projectRoot, markdownPath), "original markdown\n");
+  await writeFile(
+    path.join(projectRoot, shardRoot, "01-02.json"),
+    JSON.stringify({ ...base, plan: "01-02", files }),
+  );
+  const before = await destinationBytes(projectRoot);
+
+  // act
+  const execution = runCli(projectRoot, [
+    "merge-shards",
+    "--assignment",
+    assignmentPath,
+    "--shard-dir",
+    shardRoot,
+  ]);
+  const after = await destinationBytes(projectRoot);
+
+  // assert
+  assert.strictEqual(execution.status, 1);
+  assert.match(execution.stderr, /^category-count:/m);
+  assert.deepStrictEqual(after, before);
 });

@@ -4,6 +4,8 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -29,6 +31,10 @@ const OUTCOMES = new Set([
   "superseded",
 ]);
 const METHODS = new Set(["behavioral-probe", "surviving-mutation", "static-proof"]);
+const PENDING_DECISION_IDS = Array.from(
+  { length: 9 },
+  (_, index) => `MF-DEC-${String(index + 1).padStart(2, "0")}`,
+);
 const SECRET_PATTERN = /(?:token|password|secret|authorization|api[-_]?key)\s*[=:]\s*\S+/i;
 
 function toPosix(candidate) {
@@ -178,6 +184,8 @@ export function validateLedger(ledger, context = {}) {
   const projectRoot = context.projectRoot ?? DEFAULT_ROOT;
   const expectedPaths = context.expectedPaths ?? enumerateCorpus(projectRoot);
   const allowIncomplete = context.allowIncomplete ?? false;
+  const allowInconclusive = context.allowInconclusive ?? false;
+  const allowPendingDecisions = context.allowPendingDecisions ?? false;
   const violations = [];
   for (const collection of ["files", "sourceClaims", "findings", "decisions", "scopeChanges"]) {
     if (!Array.isArray(ledger[collection])) {
@@ -219,6 +227,38 @@ export function validateLedger(ledger, context = {}) {
         `live inventory must contain exactly 110 paths; found ${ledger.files.length}`,
       ),
     );
+  }
+
+  if (ledger.inventoryMode === "live") {
+    const categoryCounts = Object.fromEntries(
+      [...CATEGORIES].map((category) => [
+        category,
+        ledger.files.filter((file) => file.category === category).length,
+      ]),
+    );
+    if (
+      categoryCounts["first-pass"] !== 45 ||
+      categoryCounts.adversarial !== 58 ||
+      categoryCounts.control !== 7
+    ) {
+      violations.push(
+        violation(
+          "category-count",
+          "files",
+          `live inventory must contain 45 first-pass, 58 adversarial, and 7 control files; found ${categoryCounts["first-pass"]}/${categoryCounts.adversarial}/${categoryCounts.control}`,
+        ),
+      );
+    }
+
+    if (ledger.sourceClaims.length !== 2_897 || ledger.findings.length !== 2_437) {
+      violations.push(
+        violation(
+          "evidence-count",
+          "ledger",
+          `live evidence must contain 2897 claims and 2437 findings; found ${ledger.sourceClaims.length}/${ledger.findings.length}`,
+        ),
+      );
+    }
   }
 
   const claims = new Map();
@@ -404,7 +444,7 @@ export function validateLedger(ledger, context = {}) {
       );
     }
 
-    if (!allowIncomplete && finding.evidenceStatus === "inconclusive") {
+    if (!allowInconclusive && finding.evidenceStatus === "inconclusive") {
       violations.push(
         violation("inconclusive-finding", finding.id, "inconclusive evidence blocks completion"),
       );
@@ -430,6 +470,22 @@ export function validateLedger(ledger, context = {}) {
     violations.push(
       violation("duplicate-decision", id, "decision identity appears more than once"),
     );
+  }
+
+  if (allowPendingDecisions) {
+    const pendingDecisionIds = ledger.decisions
+      .filter((decision) => decision.status === "pending")
+      .map((decision) => decision.id)
+      .sort();
+    if (JSON.stringify(pendingDecisionIds) !== JSON.stringify(PENDING_DECISION_IDS)) {
+      violations.push(
+        violation(
+          "pending-decision-set",
+          "decisions",
+          `pending decisions must be exactly ${PENDING_DECISION_IDS.join(", ")}`,
+        ),
+      );
+    }
   }
 
   for (const decision of ledger.decisions) {
@@ -483,7 +539,7 @@ export function validateLedger(ledger, context = {}) {
       violations.push(violation("invalid-decision-status", decision.id, String(decision.status)));
     }
 
-    if (!allowIncomplete && decision.status !== "resolved") {
+    if (!allowPendingDecisions && decision.status !== "resolved") {
       violations.push(
         violation("pending-decision", decision.id, "operator decision is unresolved"),
       );
@@ -558,11 +614,31 @@ export function validateShard(shard, assignment) {
     );
   }
 
+  if (shard.files.some((file) => file.assignedPlan !== shard.plan)) {
+    violations.push(
+      violation("shard-owner", shard.plan, "every shard file must name its owning plan"),
+    );
+  }
+
   return violations;
 }
 
 export function mergeShards(baseLedger, shards, assignment = []) {
   const planOrder = [...new Set(assignment.map((row) => row.plan))];
+  const duplicatePlans = duplicateValues(shards.map((shard) => shard.plan));
+  if (duplicatePlans.length > 0) {
+    throw new Error(`duplicate shard plans: ${duplicatePlans.join(", ")}`);
+  }
+
+  const assignedPlans = new Set(planOrder);
+  const unexpected = shards
+    .map((shard) => shard.plan)
+    .filter((plan) => !assignedPlans.has(plan))
+    .sort();
+  if (unexpected.length > 0) {
+    throw new Error(`unexpected shard plans: ${unexpected.join(", ")}`);
+  }
+
   const byPlan = new Map(shards.map((shard) => [shard.plan, shard]));
   const missing = planOrder.filter((plan) => !byPlan.has(plan));
   if (missing.length > 0) {
@@ -676,7 +752,12 @@ function parseArgs(args) {
       continue;
     }
 
-    if (item === "--allow-incomplete" || item === "--check") {
+    if (
+      item === "--allow-incomplete" ||
+      item === "--allow-inconclusive" ||
+      item === "--allow-pending-decisions" ||
+      item === "--check"
+    ) {
       options[item.slice(2)] = true;
       continue;
     }
@@ -695,6 +776,29 @@ function parseArgs(args) {
 
 function readJson(projectRoot, relativePath) {
   return JSON.parse(readFileSync(assertSafeRelativePath(projectRoot, relativePath), "utf8"));
+}
+
+function validationContext(projectRoot, options) {
+  return {
+    projectRoot,
+    allowIncomplete: options["allow-incomplete"] === true,
+    allowInconclusive: options["allow-inconclusive"] === true,
+    allowPendingDecisions: options["allow-pending-decisions"] === true,
+  };
+}
+
+function writeAtomically(destination, contents) {
+  const temporary = `${destination}.tmp-${process.pid}-${Date.now()}-${Math.random()
+    .toString(16)
+    .slice(2)}`;
+  try {
+    writeFileSync(temporary, contents, { flag: "wx" });
+    renameSync(temporary, destination);
+  } finally {
+    if (existsSync(temporary)) {
+      unlinkSync(temporary);
+    }
+  }
 }
 
 // CLI dispatch is kept in one boundary; all domain work remains in pure exports.
@@ -748,10 +852,7 @@ function main(args = process.argv.slice(2)) {
   }
 
   if (command === "validate") {
-    const violations = validateLedger(ledger, {
-      projectRoot,
-      allowIncomplete: options["allow-incomplete"] === true,
-    });
+    const violations = validateLedger(ledger, validationContext(projectRoot, options));
     const rendered = renderRevalidation(ledger);
     const markdown = readFileSync(assertSafeRelativePath(projectRoot, MARKDOWN_PATH), "utf8");
     if (markdown !== rendered) {
@@ -810,7 +911,29 @@ function main(args = process.argv.slice(2)) {
       shards,
       assignment,
     );
-    process.stdout.write(`${JSON.stringify(merged, null, 2)}\n`);
+    const violations = validateLedger(merged, validationContext(projectRoot, options));
+    if (violations.length > 0) {
+      for (const item of violations) {
+        process.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
+      }
+
+      process.exitCode = 1;
+      return;
+    }
+
+    const json = `${JSON.stringify(merged, null, 2)}\n`;
+    const markdown = renderRevalidation(merged);
+    if (options.check === true) {
+      process.stdout.write("Shard merge valid.\n");
+      return;
+    }
+
+    writeAtomically(assertSafeRelativePath(projectRoot, LEDGER_PATH, { mustExist: false }), json);
+    writeAtomically(
+      assertSafeRelativePath(projectRoot, MARKDOWN_PATH, { mustExist: false }),
+      markdown,
+    );
+    process.stdout.write("Shard merge published.\n");
     return;
   }
 
