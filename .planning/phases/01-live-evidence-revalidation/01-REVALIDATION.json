@@ -90628,8 +90628,26 @@
     },
     {
       "id": "MF-DEC-06",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "OMR-F02"
+      ],
+      "proof": "OMR-F02 is the single specific terminal canonical root for this decision and remains confirmed after the refactor. Current CodeGraph and source inspection show 43 production notifyWithContext calls but only three explicit cardinality arguments. The shared seam includes cardinality on the cascade envelope only when a caller supplies it, and composeTally returns an empty string unless cardinality is plural. The autoupdate empty and multi-marketplace branches describe structurally plural rows but omit the argument; populated autoupdate rows carry statuses and severities, so the omission suppresses a user-visible Marketplace autoupdate or Marketplace noautoupdate tally. Marketplace list likewise describes a plural inventory but omits cardinality; when classified plural it still emits no tally because its rows are bare headers and the composer subtracts bare headers from the success count. This proves the historical OUT-07 contract mismatch remains current without using row-count inference. MF-009 remains broad decision provenance rather than a premise substitute. OMR-F18, OPR-B-F02 and its duplicate OPRFP-F003, SHC-F013, SNC-F016, and SHC-F041 remain independent under their current statuses and routes.",
+      "options": [
+        "Enforce structural cardinality and honor plural tallies",
+        "Formalize selective tally opt-in and preserve current no-tally behavior",
+        "Separate structural cardinality from tally policy"
+      ],
+      "selectedOption": "Enforce structural cardinality and honor plural tallies",
+      "rejectedOptions": [
+        "Formalize selective tally opt-in and preserve current no-tally behavior — rejected because it turns accidental argument omission into policy, leaves the approved all-bulk OUT-03/OUT-04 contract selectively false, and preserves inert label assertions instead of proving user-visible output.",
+        "Separate structural cardinality from tally policy — rejected because it introduces a second command policy and broader production/test surface without current evidence that plural operations need an independent tally switch."
+      ],
+      "affectedIds": [
+        "OMR-F02"
+      ],
+      "recommendation": "Enforce structural cardinality and honor plural tallies. This is the D-17 guideline-conformant choice because it restores the approved OUT-03/OUT-04/OUT-07 contract, makes single-versus-plural intent type-safe at producers, forbids row-count inference, and replaces inert label-object assertions with discriminating user-visible output evidence wherever a label can render.",
+      "downstreamConsequences": "Phase 3 PDEF-01 must type-safely classify all current notifyWithContext producer call sites as structural single or plural without row-count inference and atomically update the output catalog and independently authored exact-byte tests for every newly visible tally. Marketplace autoupdate must derive cardinality from invocation form: an explicit named marketplace is single and retains no tally, while the bare sweep is plural and gains its tally for populated operation rows. Marketplace list is still classified plural but remains without a tally when it contains only bare headers because the existing composer produces no nonzero category. Phase 6 TREF-07 replaces or removes inert label-object assertions with user-visible exact-output evidence where the label is observable and type-only enforcement where it is not. Preserve OMR-F18, OPR-B-F02 and duplicate OPRFP-F003, SHC-F013, SNC-F016, and SHC-F041 as independent findings under their current statuses and routes; this decision coordinates their later work but does not mark them resolved or expand their individual scopes."
     },
     {
       "id": "MF-DEC-07",
