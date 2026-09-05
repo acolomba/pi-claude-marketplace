@@ -12,10 +12,16 @@
 // carried forward on the record so `stage` does not re-read them, and so the
 // read-only `info` surface can reuse the same pass.
 //
-// Symlink discipline (D-14): refuse symlinked script entries. We `lstat` each
-// candidate before reading; `isSymbolicLink()` short-circuits without touching
-// the file body, so a link pointing outside the plugin root never has its
-// contents copied into an envelope.
+// Symlink discipline (D-14): refuse symlinked script entries, in the same two
+// layers the sibling bridges use (`shared/fs-utils.ts::isPlainMarkdownFile`),
+// each of which refuses on its own. `readdir(withFileTypes)` answers
+// `isFile() === false` for a symlink on every filesystem -- Node resolves a
+// `UV_DIRENT_UNKNOWN` d_type through `lstat` before it constructs the `Dirent`
+// -- so the dirent filter is what refuses the entry, and it runs first. The
+// `lstat` under it re-asks the question against the live filesystem, covering
+// an entry swapped for a link after the `readdir` snapshot was taken. Neither
+// layer opens the file, so a link pointing outside the plugin root never has
+// its contents copied into an envelope.
 //
 // NFR-10 on the READ side: every declared workflows directory is re-checked
 // against the plugin root here, not assumed of the caller. The resolver does
@@ -61,8 +67,11 @@ async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
  * the stem rule must admit the same set, or a file the filter admits keeps its
  * suffix inside the command name.
  *
- * Dotfiles, directories and non-script suffixes are excluded before the
- * `lstat`, so the scan stays flat and reads nothing it will not decide.
+ * Dotfiles, directories, symlinks and non-script suffixes are all excluded by
+ * the dirent filter, before the `lstat`, so the scan stays flat and reads
+ * nothing it will not decide. The `lstat` re-asks the symlink question against
+ * the live filesystem rather than the `readdir` snapshot -- see the module
+ * header for why both layers are here.
  *
  * WBRG-03: the `lstat` rides the same per-file soft-fail channel as the
  * `readFile` below it. Both IO calls land on the same file one step apart, so

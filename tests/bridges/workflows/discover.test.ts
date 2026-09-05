@@ -223,6 +223,11 @@ test("admits an uppercase script suffix and strips it from the fallback name", a
   ]);
 });
 
+// What this case pins is the refusal, not which layer performs it. Discovery
+// refuses a symlinked entry twice over -- the `Dirent` filter and the `lstat`
+// under it -- so neutralizing either one alone leaves this green, and only
+// removing both turns it red. Read that as the two layers being redundant by
+// design, not as either one being unreachable.
 test("refuses a symlinked script without opening the file it points at", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "workflow-discover-symlink-");
