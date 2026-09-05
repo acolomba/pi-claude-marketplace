@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-40-PLAN.md
-last_updated: "2026-09-05T01:36:42.675Z"
+stopped_at: Completed 01-41-PLAN.md
+last_updated: "2026-09-05T01:51:21.552Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 5074b2033cdb6ad8f1ad4e218fb3a75016c5dd46
+state_head: e1b5ed0f2473dea919535a6830a4448a1a570b06
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 40
+  completed_plans: 41
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 41 of 69
+Plan: 42 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -224,6 +224,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01-live-evidence-revalidation P38 | 12min | 2 tasks | 1 files |
 | Phase 01-live-evidence-revalidation P39 | 15min | 1 tasks | 1 files |
 | Phase 01-live-evidence-revalidation P40 | 18min | 3 tasks | 2 files |
+| Phase 01 P41 | 12min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -508,6 +509,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Retain the fallow planted-cycle limitation as deferred gate-integrity work because the current case proves only package-script shape.
 - [Phase 01]: Route unsafe notification doubles, misplaced paired coverage, the ineffective hooks schema scan, and hidden clock/home dependencies to Phase 2.
 - [Phase 01]: Keep structural readability, redundancy, naming, and module-size issues in the deferred backlog while retaining sound gate behavior as evidence-only closure.
+- [Phase 01]: Route live configSource and manifest-read gate-strength gaps to Phase 2 and retain the command rollback-pair gap under its Phase 3 canonical finding.
+- [Phase 01]: Close historical agents no-op and force/foreign blockers as stale only after positive current-suite proof.
+- [Phase 01]: Keep structural cleanup and language-operator branch decisions separate from evidence status while retaining sound gates as evidence-only closures.
 
 ### Pending Todos
 
@@ -560,7 +564,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-40-PLAN.md
+**Stopped at:** Completed 01-41-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -569,7 +573,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T01:36:42.564Z
+Last session: 2026-09-05T01:51:21.435Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
