@@ -176,14 +176,21 @@ export async function garbageCollectWorkflowsStaging(
  * root; a commit whose restore loop failed KEEPS it, because the directory then
  * holds the only surviving copy of the user's previous workflow envelope.
  *
- * Any failure reads as "nothing displaced". ENOENT is the ordinary case -- most
- * roots never displaced anything -- and no other errno tells us the directory
- * holds bytes, so none of them justifies keeping an aged tree forever.
+ * WR-05: only ENOENT (no `.previous/` at all -- the ordinary case, since most
+ * roots never displaced anything) and ENOTDIR (a plain file at that name, which
+ * the commit never writes and which therefore holds no envelope) PROVE the
+ * directory holds nothing. Every other errno -- EACCES, a transient EMFILE or
+ * ENFILE under fd pressure, EIO -- leaves the question open, and an open
+ * question is answered in the direction `WORKFLOWS_STAGING_MAX_AGE_MS` already
+ * names: one orphan surviving another pass, never a recursive rm over what may
+ * be the only surviving copy of the user's workflow scripts. The next pass
+ * retries (NFR-3), so a transient failure costs a day, not the bytes.
  */
 async function holdsDisplacedEnvelopes(stagingRoot: string): Promise<boolean> {
   try {
     return (await readdir(path.join(stagingRoot, DISPLACED_DIR))).length > 0;
-  } catch {
-    return false;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code !== "ENOENT" && code !== "ENOTDIR";
   }
 }

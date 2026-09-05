@@ -288,6 +288,57 @@ test("WR-02: keeps an aged staging tree whose .previous still holds displaced en
   assert.deepStrictEqual(await readdir(displaced), ["acme_greet.json"]);
 });
 
+test("WR-05: keeps an aged staging tree whose .previous cannot be read", async (t) => {
+  // arrange
+  // An unreadable `.previous/` does not prove the directory is empty -- it
+  // proves nothing at all, and the answer to an open question here is retention
+  // rather than a recursive force-remove over what may be the only copy.
+  // `chmod 0o000` stands in for the transient EMFILE/EIO window that cannot be
+  // provoked deterministically. `bbb-swept` holds the skip to the one entry
+  // whose `.previous/` is ambiguous.
+  requireNonRoot();
+  const { locations } = await createStagingScope(t, "workflows-staging-gc-unreadable-prev-");
+  const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
+  const displaced = path.join(retained, ".previous");
+  await mkdir(displaced);
+  await writeFile(path.join(displaced, "acme_greet.json"), `{"name":"acme:previous"}\n`);
+  t.after(() => chmod(displaced, 0o755).catch(() => undefined));
+  await chmod(displaced, 0o000);
+  await backdate(retained);
+  await seedStagingTree(locations, "bbb-swept", { aged: true });
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
+  // assert
+  // Restore before asserting: the scope's own removal hook is registered first
+  // and would otherwise race an unreadable subtree on a failing case.
+  await chmod(displaced, 0o755);
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await stagingEntries(locations), ["aaa-retained"]);
+  // The bytes themselves: the whole point is that they may be the only copy.
+  assert.deepStrictEqual(await readdir(displaced), ["acme_greet.json"]);
+});
+
+test("WR-05: sweeps an aged staging tree whose .previous is a plain file", async (t) => {
+  // arrange
+  // ENOTDIR is the second errno that PROVES nothing is displaced: the commit
+  // only ever creates `.previous/` as a directory, so a plain file at that name
+  // holds no envelope and the tree is an ordinary orphan. Pins the carve-out so
+  // a later widening of the retained set has to state its reason.
+  const { locations } = await createStagingScope(t, "workflows-staging-gc-file-prev-");
+  const root = await seedStagingTree(locations, "abandoned", { aged: false });
+  await writeFile(path.join(root, ".previous"), "not a directory\n");
+  await backdate(root);
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await stagingEntries(locations), []);
+});
+
 test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) => {
   // arrange
   // An empty `.previous/` holds no bytes, so nothing is at risk and the tree is
