@@ -1,16 +1,25 @@
 ---
 phase: 110-domain-and-platform-modules
-fixed_at: 2026-09-05T07:05:00Z
+fixed_at: 2026-09-05T07:52:00Z
 review_path: .planning/workstreams/workflows/phases/110-domain-and-platform-modules/110-REVIEW.md
-iteration: 1
-findings_in_scope: 10
-fixed: 8
+iteration: 2
+findings_in_scope: 13
+fixed: 11
 skipped: 2
 status: partial
 verification_ran_in: main checkout (workflow.use_worktrees is false)
 ---
 
 # Phase 110: Code Review Fix Report
+
+Two iterations, recorded in order. The frontmatter counts are cumulative: 13
+findings in scope across both passes, 11 fixed, 2 redirected in iteration 1
+(WR-07 refiled, WR-09 deferred). Iteration 2 fixed all three of its findings and
+skipped none.
+
+---
+
+# Iteration 1
 
 **Fixed at:** 2026-09-05T07:05:00Z
 **Source review:** `110-REVIEW.md`
@@ -411,3 +420,235 @@ to this phase.
 _Fixed: 2026-09-05T07:05:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+---
+
+# Iteration 2
+
+**Fixed at:** 2026-09-05T07:52:00Z
+**Source review:** `110-REVIEW.md` (iteration 2, `reviewed: 2026-09-05T09:20:00Z`)
+**Iteration:** 2
+**Scope:** the three Warnings WR-10, WR-11, WR-12. IN-07 and IN-08 are Info and
+out of scope without `--all`.
+
+**Summary:**
+
+- Findings in scope: 3
+- Fixed: 3 (WR-10, WR-11, WR-12)
+- Skipped: 0
+- Deferred or redirected: 0. WR-12 was fixed here rather than deferred to Phase
+  111; the reasoning is under WR-12.
+
+**Verification environment:** the main checkout, not an isolated worktree.
+`workflow.use_worktrees` is `false` in `.planning/config.json`, so per that
+opt-out no worktree was created and every edit, gate run and commit happened in
+`/home/acolomba/pi-claude-marketplace-workflows` on `features/workflow`. Every
+number below is reproducible from the tree as it now stands.
+
+**Gate state on completion:** `npm run check` exits 0. Direct coverage
+re-measured on all five touched pairs, all at `hit === found`:
+
+| pair | branches | functions | lines |
+| --- | --- | --- | --- |
+| `domain/name.ts` | 52/52 | 6/6 | 314/314 |
+| `domain/workflow-script.ts` | 116/116 | 38/38 | 816/816 |
+| `domain/workflow-project-key.ts` | 5/5 | 2/2 | 71/71 |
+| `platform/workflow-home.ts` | 2/2 | 1/1 | 32/32 |
+| `shared/errors.ts` | 104/104 | 48/48 | 675/675 |
+
+No coverage shortfall was accepted and no unreachable guard was added. The one
+place iteration 1 had to decline a guard for that reason (WR-04) is unchanged.
+
+---
+
+## Fixed Issues
+
+### WR-10: the last-wins rewrite reported a wrong verdict for `var meta = {…}; var meta;`
+
+**Files modified:** `extensions/pi-claude-marketplace/domain/workflow-script.ts`,
+`tests/domain/workflow-script.test.ts`
+**Commit:** `9463ac63`
+
+Confirmed as a regression my predecessor introduced, and reproduced before
+touching anything:
+
+```text
+input : var meta = { name: "first", description: "d" };
+        var meta;
+before: {"outcome":"skipped","cause":"meta-not-object-literal"}
+after : {"outcome":"named","metaName":"first","generatedName":"acme:first"}
+```
+
+LAST WINS is a rule about **rebinding**, not about textual position. A
+declarator with no initializer re-declares without rebinding, so
+`var x = 1; var x;` leaves `x === 1`, and the review is right that the loop's own
+doc comment stated the invariant the loop then violated.
+
+One detail the review's proposed patch would have got wrong, and which the
+existing test suite would have caught: `continue`-ing past every init-less
+declarator also breaks `let meta;` **on its own**, which has no earlier
+initializer to preserve. That script declares `meta`, holding `undefined` — not
+an object literal — and there is a row pinning it as `meta-not-object-literal`.
+So the rule applied is narrower than "skip init-less declarators": an init-less
+declarator cannot *supersede*, but it does *establish* the binding when nothing
+else has. Both halves are now pinned:
+
+| source | verdict |
+| --- | --- |
+| `var meta = { name: "first" }; var meta;` | `named`, `acme:first` (new row) |
+| `let meta;` | `meta-not-object-literal` (existing row, unchanged) |
+
+The per-declarator decision moved into a `bindMeta` helper. That was not
+tidying: the inlined form measured cognitive complexity 20 against the
+`sonarjs/cognitive-complexity: 15` ceiling and also tripped fallow's independent
+`maxCognitive: 15`, so `npm run lint` and `npm run fallow` both failed until it
+was extracted.
+
+The new test row is titled for the distinction it pins — the existing
+`var meta = makeMeta()` row cannot catch this, because a call expression
+rebinds.
+
+### WR-11: a computed key could overwrite `meta.name` and the scan dropped it silently
+
+**Files modified:** `extensions/pi-claude-marketplace/domain/workflow-script.ts`,
+`tests/domain/workflow-script.test.ts`
+**Commit:** `83585d28`
+
+Reproduced: `var meta = { name: "x", ["na"+"me"]: "y" }` returned
+`{"outcome":"named","metaName":"x","generatedName":"acme:x"}` while the evaluated
+object carries `"y"`.
+
+I took the review's instruction and checked what `meta-spread` does before
+choosing a disposition. A spread and a computed key are the same hazard on the
+same terms — either can supply a key that was never written and overwrite one
+that was — and the module already answers a spread with `opaque` rather than a
+guess, with the argument written out in `readMetaString`'s doc comment. A
+computed key now gets the same answer. `metaPropertyKey` returning `undefined`
+for it meant the scan `continue`d past the element with the **strongest** claim
+on the key, which is the one form it should never ignore.
+
+**One deliberate divergence from the review's snippet: the cause.** The review
+offered `meta-spread` "or a new cause". A new cause, `meta-computed-key`, is what
+went in, for the reason `skippedVerdict`'s own doc comment already states — the
+unreadable-`meta` shapes carry distinct causes *because they are distinct facts
+about the script*. Reusing `meta-spread` would print "declares `meta` with a
+spread…" for a file that has no spread, which is the same class of defect as
+WR-10: a user-facing reason that is a false statement about the file. Adding the
+member is compiler-forced at the one derivation site that matters
+(`SKIPPED_REASONS` is a `Record<SkippedCause, …>`), so it cannot be silently
+half-adopted.
+
+The harmless case keeps working and is now titled for its reason: a computed key
+**before** the last literal `name` loses to that literal under last-wins, exactly
+as a spread before it does. The existing row that asserted this was retitled from
+"reads past a computed meta key" — which described the defect — to name the
+last-wins argument instead.
+
+`metaPropertyKey`'s `p.computed` guard is unreachable once the caller settles
+computed keys first, and was dropped rather than left as an uncoverable branch.
+
+| source | verdict |
+| --- | --- |
+| `{ [chosenKey]: "x", name: "ship" }` | `named`, `acme:ship` (retitled row) |
+| `{ name: "ship", ["na" + "me"]: "other" }` | `skipped`, `meta-computed-key` (new row) |
+
+### WR-12: two distinct generated names collapsed onto one file
+
+**Files modified:** `extensions/pi-claude-marketplace/domain/name.ts`,
+`tests/domain/name.test.ts`, `.planning/BACKLOG.md`
+**Commit:** `af1634ea`
+
+**Fixed here rather than deferred to Phase 111.** The review left that open and
+the deferral route was available (WR-09 took it). I did not take it, for two
+reasons that are specific to this variant:
+
+1. **Phase 111 cannot fix it.** The bridge writes files; it does not mint names.
+   Two names that are distinct in memory arrive at the writer as two names, and
+   the writer's only signal that they collide is a check the writer would have to
+   invent — which is this gate, relocated. `assertNoWorkflowNameCollisions` lives
+   in this module and correctly sees two names; the collapse happens below it.
+   The one place it is visible is where the name is minted.
+2. **Nothing is being turned into a refusal that would otherwise work.** That is
+   the milestone's design anchor and it is what made the case-fold (WR-07) a
+   policy question. It does not apply here — see below.
+
+Reproduced on Linux/ext4 before deciding, not inferred:
+
+```text
+writeFileSync(dir + "/acme:\uD800.json", "A");
+writeFileSync(dir + "/acme:\uDC00.json", "B");
+readdirSync(dir) -> [ "acme:<U+FFFD>.json" ]   // one entry
+readFileSync(a)  -> "B"                        // A silently overwritten
+```
+
+I also confirmed the engine side against the unpacked
+`@quintinshaw/pi-dynamic-workflows@3.10.1` rather than taking the review's word:
+`isSafeSavedWorkflowName` (`dist/workflow-saved.js:27`) screens `\p{Cc}` and
+`\p{Cf}` and nothing else, and `sourcePath` (line 78) joins `${name}.json`. So
+the engine admits such a name and then loses one of the two itself.
+
+**On the module's "never exceed the engine" invariant.** This screen does exceed
+it, and that is stated at the site rather than glossed. It is the same kind of
+excess as the one iteration 1 kept deliberately (the empty `meta.name`, refused
+because the engine's `validateMeta` refuses it at a different layer): the engine's
+*name predicate* admits the name, but the engine's *own end-to-end save/load
+behavior* cannot honor it. The screen sits in `generatedWorkflowName`, **not** in
+`assertSafeSavedWorkflowName`, so that function stays a replica a reader can diff
+line-for-line against `dist/workflow-saved.js`; both doc comments now say so.
+
+`/\p{Cs}/u` and not `String.prototype.isWellFormed()`: `isWellFormed` is ES2024
+and `tsconfig.json` declares no `lib`, so it inherits `ES2022` and would not
+typecheck. With `/u` the property escape matches code points, so a well-formed
+astral pair is a single non-surrogate code point and passes — pinned as a
+negative control (`acme:ship\u{1F680}` is accepted) alongside the two
+lone-surrogate rejection rows.
+
+**NAMEFOLD-01 corrected.** The iteration-1 fixer's recorded rebuttal — "on a
+case-sensitive volume, Linux, which is the only platform CI runs, `acme:Ship` and
+`acme:ship` are two distinct working files" — is true for the case and
+normalization variants and **false for this one**, which collapses at the
+encoding layer on every platform. That bullet now carries the correction inline,
+and a dated amendment records the variant, the measurement, that it is closed for
+the workflows gate, and that `assertNoAgentCollisions` and
+`assertNoCommandCollisions` keep the same exposure because `assertSafeName` has
+no surrogate screen. The sibling gates were **not** changed: that is the
+repo-wide policy question NAMEFOLD-01 exists to hold, and iteration 1's reason
+for not fixing one of five gates in isolation still stands.
+
+All invisible and astral code points in the changed source, tests and backlog
+text are written as `\uXXXX` / `\u{XXXXX}` escapes and named in prose. Nothing
+was pasted literally.
+
+---
+
+## Info findings
+
+Out of scope (`fix_scope: critical+warning`). IN-07 (import member order in
+`tests/shared/errors.test.ts`) and IN-08 (`forMessage` does not escape its own
+backslash marker) are untouched. IN-01..IN-06 from iteration 1 likewise.
+
+---
+
+## Scope boundaries observed
+
+- `.planning/WINDOWS.md` — not touched, though the WR-12 amendment names it as a
+  document the eventual NAMEFOLD-01 decision will touch.
+- `bridges/workflows/`, `persistence/locations.ts`, `shared/errors-bridges.ts` —
+  not touched (Phase 111). `shared/errors.ts` was not modified in this pass
+  either; `UnsafeGeneratedNameError` already existed from iteration 1.
+- `EXTENSION_VERSION` — not bumped (A-03).
+- Phase 109's five inverted files — not touched.
+- No `fallow-ignore`, no coverage suppression, no test-only export, no
+  module-global setter.
+- No `--no-verify` and no `--amend`. Each commit ran `pre-commit run --files` to
+  a clean result apart from the documented structural `trufflehog` git-mode
+  failure (`.git` is a file here), each confirmed by a filesystem-mode scan
+  reporting `verified_secrets: 0, unverified_secrets: 0`, and each committed with
+  `SKIP=trufflehog` naming that hook alone. `git status` was checked after every
+  commit for prettier-hook rewrites; there were none.
+
+---
+
+_Fixed: 2026-09-05T07:52:00Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
