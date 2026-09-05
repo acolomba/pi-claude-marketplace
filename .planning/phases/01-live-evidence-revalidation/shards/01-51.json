@@ -1,0 +1,344 @@
+{
+  "plan": "01-51",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "category": "plugin-orchestrators",
+      "assignedPlan": "01-51",
+      "claimIds": ["OPUFP-C001", "OPUFP-C002", "OPUFP-C003", "OPUFP-C004", "OPUFP-C005", "OPUFP-C006", "OPUFP-C007", "OPUFP-C008", "OPUFP-C009", "OPUFP-C010", "OPUFP-C011", "OPUFP-C012", "OPUFP-C013", "OPUFP-C014", "OPUFP-C015", "OPUFP-C016", "OPUFP-C017", "OPUFP-C018", "OPUFP-C019", "OPUFP-C020"],
+      "reviewStatus": "complete",
+      "outcome": "All 20 actionable claims were reconciled; current probes preserve the positive evidence, while canonical findings retain ownership of the unproven test-strength and structural issues."
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "category": "reconcile-orchestrators",
+      "assignedPlan": "01-51",
+      "claimIds": ["ORAFP-C001", "ORAFP-C002", "ORAFP-C003", "ORAFP-C004", "ORAFP-C005", "ORAFP-C006", "ORAFP-C007", "ORAFP-C008", "ORAFP-C009", "ORAFP-C010", "ORAFP-C011", "ORAFP-C012", "ORAFP-C013", "ORAFP-C014", "ORAFP-C015", "ORAFP-C016", "ORAFP-C017", "ORAFP-C018", "ORAFP-C019"],
+      "reviewStatus": "complete",
+      "outcome": "All 19 actionable claims were reconciled; focused tests confirm the suite's behavior while current structural findings remain linked to their canonical owners."
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "category": "reconcile-orchestrators",
+      "assignedPlan": "01-51",
+      "claimIds": ["ORNFP-C001", "ORNFP-C002", "ORNFP-C003", "ORNFP-C004", "ORNFP-C005", "ORNFP-C006", "ORNFP-C007", "ORNFP-C008", "ORNFP-C009", "ORNFP-C010", "ORNFP-C011", "ORNFP-C012", "ORNFP-C013", "ORNFP-C014", "ORNFP-C015", "ORNFP-C016", "ORNFP-C017", "ORNFP-C018", "ORNFP-C019", "ORNFP-C020", "ORNFP-C021", "ORNFP-C022"],
+      "reviewStatus": "complete",
+      "outcome": "All 22 actionable claims were reconciled; current exact reason coverage corrects the broad historical gap while narrower sentinel, backfill, and design findings remain canonically routed."
+    }
+  ],
+  "sourceClaims": [
+    {"id":"OPUFP-C001","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The review covers update.ts and its paired update.test.ts suite."},
+    {"id":"OPUFP-C002","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The suite uses hermetic temporary roots and restores process state."},
+    {"id":"OPUFP-C003","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Results and reason arrays receive exact whole-value and ordering assertions."},
+    {"id":"OPUFP-C004","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Git and filesystem boundaries use fakes or local temporary directories without network access."},
+    {"id":"OPUFP-C005","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Negative controls and multi-element cases provide strong positive coverage."},
+    {"id":"OPUFP-C006","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The dropCache failure case does not discriminate removal of the drop call."},
+    {"id":"OPUFP-C007","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Abort cleanup cases do not directly observe cleanup effects."},
+    {"id":"OPUFP-C008","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Warm-cache SHA proof asserts clone count but not the complete Git call sequence."},
+    {"id":"OPUFP-C009","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Many tests omit Arrange-Act-Assert comments."},
+    {"id":"OPUFP-C010","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"makeCtx uses double casts to satisfy broad interfaces."},
+    {"id":"OPUFP-C011","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Production catch blocks cast unknown values directly to Error."},
+    {"id":"OPUFP-C012","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"updateSinglePlugin reads process.cwd directly."},
+    {"id":"OPUFP-C013","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Production update logic constructs Date values inline."},
+    {"id":"OPUFP-C014","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"UpdatePluginsOptions lacks top-level documentation."},
+    {"id":"OPUFP-C015","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The production and paired test modules are oversized."},
+    {"id":"OPUFP-C016","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The module should be split along preflight, swap, and cascade boundaries."},
+    {"id":"OPUFP-C017","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The default cascade dependency remains a hard-coded integration seam."},
+    {"id":"OPUFP-C018","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Current whole-message sibling tests demonstrate the preferred assertion pattern."},
+    {"id":"OPUFP-C019","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"Messaging-row and support modules are outside this review's scope."},
+    {"id":"OPUFP-C020","filePath":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md","label":"The historical review did not run tests or coverage."},
+
+    {"id":"ORAFP-C001","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"The review covers plan, apply, and apply-outcomes production-test pairs."},
+    {"id":"ORAFP-C002","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Tests use fresh literals and exact whole-value expectations."},
+    {"id":"ORAFP-C003","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Planner tests prove complete plans, purity, determinism, and enabled-state distinctions."},
+    {"id":"ORAFP-C004","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Apply tests exercise real orchestrators by design and discriminate their behavior."},
+    {"id":"ORAFP-C005","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Notification-boundary tests use a strong hermetic recording double."},
+    {"id":"ORAFP-C006","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Apply-outcomes tests cover clean and hybrid outcomes."},
+    {"id":"ORAFP-C007","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Several tests use a generic result variable name."},
+    {"id":"ORAFP-C008","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"No focused case isolates a config-to-record mismatch without an artifact diff."},
+    {"id":"ORAFP-C009","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"diffMarketplaces has no explicit default branch for future variants."},
+    {"id":"ORAFP-C010","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"applySourceMismatches has no explicit default branch for future causes."},
+    {"id":"ORAFP-C011","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Apply hard-codes five orchestrator dependencies through static imports."},
+    {"id":"ORAFP-C012","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"The static imports prevent lightweight behavior doubles."},
+    {"id":"ORAFP-C013","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"classifyOrchestratorThrow has no explicit default although a fallback follows its switch."},
+    {"id":"ORAFP-C014","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"classifyOrchestratorThrow documentation incorrectly calls an exported helper module-private."},
+    {"id":"ORAFP-C015","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"The remaining reviewed production and test files are clean."},
+    {"id":"ORAFP-C016","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Compiler-forced exhaustive branches are appropriate structural evidence."},
+    {"id":"ORAFP-C017","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Current sibling tests demonstrate strong whole-value notification assertions."},
+    {"id":"ORAFP-C018","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"Background reconcile helpers are outside this review's scope."},
+    {"id":"ORAFP-C019","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md","label":"The historical review did not run tests or coverage."},
+
+    {"id":"ORNFP-C001","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"The review covers notify, backfill, pending, types, and reconcile messaging pairs."},
+    {"id":"ORNFP-C002","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"The suites use clear structure and exact whole-value assertions."},
+    {"id":"ORNFP-C003","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Filesystem suites use hermetic temporary roots."},
+    {"id":"ORNFP-C004","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Notification-boundary doubles assert exact ordered calls and offline behavior."},
+    {"id":"ORNFP-C005","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Renderer tests prove tri-state severity and grammar."},
+    {"id":"ORNFP-C006","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"reasonAsContent lacked direct sentinel coverage in the historical review."},
+    {"id":"ORNFP-C007","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Scope-qualified structural sentinel reasons have no current producer."},
+    {"id":"ORNFP-C008","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"The backfill unavailable branch lacks focused discriminating proof."},
+    {"id":"ORNFP-C009","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"The backfill invalid-entry guard is unreachable after validation."},
+    {"id":"ORNFP-C010","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Backfill and pending duplicate a hermetic setup helper."},
+    {"id":"ORNFP-C011","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Pending tests are otherwise clean."},
+    {"id":"ORNFP-C012","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"types.test.ts uses a generic subject variable name."},
+    {"id":"ORNFP-C013","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Hybrid runtime and compile-time type tests are appropriate."},
+    {"id":"ORNFP-C014","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Wide compile-only option mocks require an ownership decision."},
+    {"id":"ORNFP-C015","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Reconcile messaging tests are clean."},
+    {"id":"ORNFP-C016","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"notify.ts uses terse single-letter callback parameter names."},
+    {"id":"ORNFP-C017","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"backfill.ts uses an inline import type."},
+    {"id":"ORNFP-C018","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"scanForceInstalledBackfills is exported only for tests."},
+    {"id":"ORNFP-C019","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"The reviewed production modules otherwise avoid hidden environmental dependencies."},
+    {"id":"ORNFP-C020","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Current boundary tests provide strong whole-value, ordering, isolation, and readonly reference patterns."},
+    {"id":"ORNFP-C021","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"Loose assertion-alias concerns are not supported by the current tests."},
+    {"id":"ORNFP-C022","filePath":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md","label":"The historical review did not run tests or coverage."}
+  ],
+  "findings": [
+    {
+      "id":"OPUFP-F001","claimIds":["OPUFP-C001","OPUFP-C002","OPUFP-C003","OPUFP-C004","OPUFP-C005"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/plugin/update.test.ts","exitCode":0,"observed":"The focused update suite passed; its current cases use temporary roots, injected Git/filesystem collaborators, exact outcomes, negative controls, and ordered multi-item expectations."},
+      "rationale":"The current source-test pair and successful focused rerun support the report's positive structure, hermeticity, and behavior claims.","destination":"No implementation change; retain as validated evidence."
+    },
+    {
+      "id":"OPUFP-F002","claimIds":["OPUFP-C006"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F18",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph plus current test inspection","observed":"The drop-cache failure path still swallows the exception, while the named case asserts only the successful update result; no isolated mutation was run in this pass."},
+      "rationale":"This is the same currently inconclusive test-strength claim already owned by OPU-B-F18 under D-11.","destination":"Use OPU-B-F18 for any isolated mutation and Phase 2 strengthening."
+    },
+    {
+      "id":"OPUFP-F003","claimIds":["OPUFP-C007"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F19",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph plus current test inspection","observed":"Abort helpers still call partial-handle cleanup, but current cases observe state consequences rather than an independent cleanup effect; no mutation was run."},
+      "rationale":"OPU-B-F19 already preserves this D-11-inconclusive cleanup-strength claim.","destination":"Retain the canonical Phase 2 mutation route in OPU-B-F19."
+    },
+    {
+      "id":"OPUFP-F004","claimIds":["OPUFP-C008"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F20",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph plus current test inspection","observed":"The warm-cache SHA case still records cloneCalls rather than asserting the complete Git operation transcript; no isolated mutation was run."},
+      "rationale":"The same unproven assertion-strength observation is canonically owned by OPU-B-F20.","destination":"Use OPU-B-F20 for the isolated mutation and any exact-call enhancement."
+    },
+    {
+      "id":"OPUFP-F005","claimIds":["OPUFP-C009"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F21",
+      "sourceRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],"testRefs":[{"path":"N/A","reason":"This is a test readability observation."}],
+      "validation":{"method":"static-proof","tool":"Current test-file structure inspection","observed":"The file still mixes commented and uncommented Arrange-Act-Assert structure."},
+      "rationale":"OPU-B-F21 already owns the same readability cleanup.","destination":"Consolidate any comment cleanup under OPU-B-F21."
+    },
+    {
+      "id":"OPUFP-F006","claimIds":["OPUFP-C010"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F22",
+      "sourceRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],"testRefs":[{"path":"N/A","reason":"The finding concerns test-double typing."}],
+      "validation":{"method":"static-proof","tool":"Current TypeScript inspection","observed":"makeCtx still uses double casts to supply minimal collaborators for broad interfaces."},
+      "rationale":"This is the same test-double design issue already owned by OPU-B-F22.","destination":"Use OPU-B-F22 for any narrow test-port refactor."
+    },
+    {
+      "id":"OPUFP-F007","claimIds":["OPUFP-C011"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F23",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production error-normalization observation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current catch-block inspection","observed":"Direct unknown-to-Error casts remain in the current production module."},
+      "rationale":"OPU-B-F23 already owns the same error-normalization cleanup.","destination":"Apply any Phase 2 normalization under OPU-B-F23."
+    },
+    {
+      "id":"OPUFP-F007A","claimIds":["OPUFP-C012"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F24",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production dependency observation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current symbol inspection","observed":"updateSinglePlugin still reads process.cwd directly."},
+      "rationale":"OPU-B-F24 already owns the same hidden working-directory dependency.","destination":"Resolve the dependency under OPU-B-F24."
+    },
+    {
+      "id":"OPUFP-F007B","claimIds":["OPUFP-C013"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F25",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production clock-dependency observation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current constructor inspection","observed":"Production update logic still constructs Date values inline."},
+      "rationale":"OPU-B-F25 already owns the same hidden clock dependency.","destination":"Resolve the clock dependency under OPU-B-F25."
+    },
+    {
+      "id":"OPUFP-F007C","claimIds":["OPUFP-C014"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F26",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"N/A","reason":"This is an exported-contract documentation observation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current type declaration inspection","observed":"UpdatePluginsOptions still lacks top-level documentation."},
+      "rationale":"OPU-B-F26 already owns the same documentation cleanup.","destination":"Document the exported options under OPU-B-F26."
+    },
+    {
+      "id":"OPUFP-F008","claimIds":["OPUFP-C015","OPUFP-C016"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"OPU-B-F28",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"},{"path":"tests/orchestrators/plugin/update.test.ts"}],"testRefs":[{"path":"N/A","reason":"This is a module-boundary recommendation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph module inspection","observed":"The production and test files remain large and combine preflight, swap, cascade, and cleanup responsibilities."},
+      "rationale":"OPU-B-F28 already owns the same split recommendation.","destination":"Consider the split only through OPU-B-F28 after behavior-preserving tests remain green."
+    },
+    {
+      "id":"OPUFP-F009","claimIds":["OPUFP-C017"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"OPU-B-F12",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph call-path inspection","observed":"The default update path still binds its cascade integration directly rather than through an injected dependency."},
+      "rationale":"This is the same seam decision already owned by OPU-B-F12.","destination":"Resolve dependency ownership under OPU-B-F12 before implementation."
+    },
+    {
+      "id":"OPUFP-F010","claimIds":["OPUFP-C018"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"OPU-B-F34",
+      "sourceRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"static-proof","tool":"Current test comparison","observed":"Sibling cases retain literal whole-message and ordered whole-array expectations."},
+      "rationale":"OPU-B-F34 already records this positive reference pattern.","destination":"Retain OPU-B-F34 as the canonical example."
+    },
+    {
+      "id":"OPUFP-F011","claimIds":["OPUFP-C019"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md"}],"testRefs":[{"path":"N/A","reason":"This is an explicit corpus scope boundary."}],
+      "validation":{"method":"static-proof","tool":"Review scope and assignment comparison","observed":"The report explicitly excludes messaging-row and support modules; separate assigned corpus records own those files."},
+      "rationale":"The scope boundary is current and prevents accidental duplicate ownership.","destination":"No implementation action."
+    },
+    {
+      "id":"OPUFP-F012","claimIds":["OPUFP-C020"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md"}],"testRefs":[{"path":"tests/orchestrators/plugin/update.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/plugin/update.ts","exitCode":0,"observed":"Current revalidation passed the paired suite with 100% direct branch, function, and line coverage, replacing the historical no-command premise."},
+      "rationale":"The statement was historically accurate but is stale after this positive replacement rerun.","destination":"Close with the recorded current probe; coverage does not independently settle mutation-strength claims."
+    },
+
+    {
+      "id":"ORAFP-F001","claimIds":["ORAFP-C001","ORAFP-C002","ORAFP-C003","ORAFP-C004","ORAFP-C005","ORAFP-C006"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/plan.test.ts"},{"path":"tests/orchestrators/reconcile/apply.test.ts"},{"path":"tests/orchestrators/reconcile/apply-outcomes.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/reconcile/apply-outcomes.test.ts tests/orchestrators/reconcile/plan.test.ts","exitCode":0,"observed":"All three focused suites passed, including plan purity/determinism, enabled-state distinctions, real-orchestrator behavior, exact notification calls, and clean/hybrid outcome cases."},
+      "rationale":"Current focused behavior supports the report's positive apply-stack claims.","destination":"No implementation change; retain as validated evidence."
+    },
+    {
+      "id":"ORAFP-F002","claimIds":["ORAFP-C007"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORA-F18",
+      "sourceRefs":[{"path":"tests/orchestrators/reconcile/apply.test.ts"}],"testRefs":[{"path":"N/A","reason":"This is a test naming observation."}],
+      "validation":{"method":"static-proof","tool":"Current test inspection","observed":"The generic result identifier remains in the cited apply cases."},
+      "rationale":"ORA-F18 already owns this naming cleanup.","destination":"Use ORA-F18 if the readability cleanup is selected."
+    },
+    {
+      "id":"ORAFP-F003","claimIds":["ORAFP-C008"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORA-F20",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/apply.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph plus current test inspection","observed":"No focused fixture deletes only the recorded artifact while preserving the config-to-record mismatch; no isolated mutation was run."},
+      "rationale":"ORA-F20 already owns this D-11-inconclusive test-strength claim.","destination":"Use ORA-F20 for an isolated mutation or discriminating Phase 2 case."
+    },
+    {
+      "id":"ORAFP-F004","claimIds":["ORAFP-C009"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORA-F21",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production exhaustiveness-policy decision."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current switch inspection","observed":"diffMarketplaces still switches over match without an explicit default."},
+      "rationale":"ORA-F21 canonically owns this current structural decision.","destination":"Choose the nonthrow fallback policy under ORA-F21."
+    },
+    {
+      "id":"ORAFP-F005","claimIds":["ORAFP-C010"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORA-F22",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production exhaustiveness-policy decision."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current switch inspection","observed":"applySourceMismatches still switches over cause without an explicit default."},
+      "rationale":"ORA-F22 canonically owns this current structural decision.","destination":"Choose the fallback policy under ORA-F22."
+    },
+    {
+      "id":"ORAFP-F006","claimIds":["ORAFP-C011","ORAFP-C012"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORA-F23",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/apply.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph import and call-path inspection","observed":"Apply still statically imports and invokes the five concrete orchestrators, so tests cannot replace those boundaries with lightweight doubles."},
+      "rationale":"ORA-F23 already owns the dependency-seam decision while ORA-F19 preserves evidence that current real-orchestrator tests are behaviorally sound.","destination":"Resolve the seam under ORA-F23 without weakening the behavior covered by ORA-F19."
+    },
+    {
+      "id":"ORAFP-F007","claimIds":["ORAFP-C013"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORA-F24",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"}],"testRefs":[{"path":"N/A","reason":"The post-switch fallback makes this a structural pin."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current control-flow inspection","observed":"classifyOrchestratorThrow still lacks an explicit switch default, but execution reaches an existing conservative fallback."},
+      "rationale":"ORA-F24 owns the optional explicit structural pin; no runtime defect is claimed.","destination":"Use ORA-F24 for Phase 2 exhaustiveness cleanup."
+    },
+    {
+      "id":"ORAFP-F008","claimIds":["ORAFP-C014"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORA-F25",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production documentation defect."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current symbol source","observed":"The exported classifyOrchestratorThrow helper still has documentation describing the fallback as module-private."},
+      "rationale":"ORA-F25 already owns this misleading documentation.","destination":"Correct the wording under ORA-F25."
+    },
+    {
+      "id":"ORAFP-F009","claimIds":["ORAFP-C015","ORAFP-C016","ORAFP-C017"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"ORA-F35",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/plan.test.ts"},{"path":"tests/orchestrators/reconcile/apply.test.ts"},{"path":"tests/orchestrators/reconcile/apply-outcomes.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph plus current test comparison","observed":"Current compiler-forced branches and literal whole-value notification expectations retain the reference patterns summarized by ORA-F35; no additional defect was found."},
+      "rationale":"ORA-F35 is the canonical positive reference finding for the reviewed stack.","destination":"Retain ORA-F35 as evidence-only guidance."
+    },
+    {
+      "id":"ORAFP-F010","claimIds":["ORAFP-C018"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md"}],"testRefs":[{"path":"N/A","reason":"This is an explicit corpus scope boundary."}],
+      "validation":{"method":"static-proof","tool":"Review scope and assignment comparison","observed":"The report explicitly excludes background reconcile helpers, which are owned by separate review records."},
+      "rationale":"The boundary is current and prevents duplicate ownership.","destination":"No implementation action."
+    },
+    {
+      "id":"ORAFP-F011","claimIds":["ORAFP-C019"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md"}],"testRefs":[{"path":"tests/orchestrators/reconcile/apply.test.ts"},{"path":"tests/orchestrators/reconcile/apply-outcomes.test.ts"},{"path":"tests/orchestrators/reconcile/plan.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/reconcile/apply-outcomes.test.ts tests/orchestrators/reconcile/plan.test.ts","exitCode":0,"observed":"The current revalidation reran all three focused suites successfully; separate direct coverage runs also reached 100% branch, function, and line coverage for each paired source file."},
+      "rationale":"The historical no-command limitation is positively replaced by current successful reruns.","destination":"Close with current probe evidence; retain D-11 caution for unmutated test-strength claims."
+    },
+
+    {
+      "id":"ORNFP-F001","claimIds":["ORNFP-C001","ORNFP-C002","ORNFP-C003","ORNFP-C004","ORNFP-C005"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/notify.test.ts"},{"path":"tests/orchestrators/reconcile/backfill.test.ts"},{"path":"tests/orchestrators/reconcile/pending.test.ts"},{"path":"tests/orchestrators/reconcile/types.test.ts"},{"path":"tests/orchestrators/reconcile/reconcile.messaging.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/reconcile/notify.test.ts tests/orchestrators/reconcile/backfill.test.ts tests/orchestrators/reconcile/pending.test.ts tests/orchestrators/reconcile/types.test.ts tests/orchestrators/reconcile/reconcile.messaging.test.ts","exitCode":0,"observed":"All five focused suites passed, including temporary-root filesystem cases, exact ordered notification calls, severity tri-state, and row grammar."},
+      "rationale":"Current focused behavior supports the report's positive structure, hermeticity, and boundary claims.","destination":"No implementation change; retain as validated evidence."
+    },
+    {
+      "id":"ORNFP-F002","claimIds":["ORNFP-C006"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"ORN-F019",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/notify.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/reconcile/notify.test.ts","exitCode":0,"observed":"The current suite contains and passes an exact case mapping reason 'marketplace not added' to ['not found'], positively replacing the report's broad no-sentinel-case premise."},
+      "rationale":"ORN-F019 already owns this stale broad claim and its positive replacement.","destination":"Close under ORN-F019; do not generalize this case to unproduced scope-qualified sentinels."
+    },
+    {
+      "id":"ORNFP-F003","claimIds":["ORNFP-C007"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORN-F011",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/notify.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph producer/reference inspection","observed":"The remaining scope-qualified structural sentinels are mapped by reasonAsContent but still have no current producer."},
+      "rationale":"ORN-F011 already owns the question of retaining, producing, or removing these branches.","destination":"Resolve sentinel ownership under ORN-F011 before changing tests or production."
+    },
+    {
+      "id":"ORNFP-F004","claimIds":["ORNFP-C008"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORN-F015",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/backfill.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph plus current test inspection","observed":"The unavailable path remains reachable, but no focused case or isolated mutation was established in this pass."},
+      "rationale":"D-11 keeps the test-strength verdict inconclusive, as already recorded by ORN-F015.","destination":"Use ORN-F015 for an isolated mutation or focused Phase 2 case."
+    },
+    {
+      "id":"ORNFP-F005","claimIds":["ORNFP-C009"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORN-F016",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/backfill.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current call-path inspection","observed":"Validated data reaches the entry guard, leaving the invalid-entry branch unreachable through current public control flow."},
+      "rationale":"ORN-F016 already owns the safety-sensitive decision to remove, relocate, or expose this defensive guard.","destination":"Resolve under ORN-F016; do not add a dishonest unreachable test."
+    },
+    {
+      "id":"ORNFP-F006","claimIds":["ORNFP-C010"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORN-F020",
+      "sourceRefs":[{"path":"tests/orchestrators/reconcile/backfill.test.ts"},{"path":"tests/orchestrators/reconcile/pending.test.ts"}],"testRefs":[{"path":"N/A","reason":"This is duplicated test-infrastructure structure."}],
+      "validation":{"method":"static-proof","tool":"Current helper comparison","observed":"The backfill and pending suites retain equivalent temporary-root setup helpers."},
+      "rationale":"ORN-F020 already owns the consolidation opportunity.","destination":"Consolidate only under ORN-F020 without weakening hermetic cleanup."
+    },
+    {
+      "id":"ORNFP-F007","claimIds":["ORNFP-C011","ORNFP-C013","ORNFP-C015","ORNFP-C020"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"ORN-F025",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/pending.test.ts"},{"path":"tests/orchestrators/reconcile/types.test.ts"},{"path":"tests/orchestrators/reconcile/reconcile.messaging.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/reconcile/pending.test.ts tests/orchestrators/reconcile/types.test.ts tests/orchestrators/reconcile/reconcile.messaging.test.ts","exitCode":0,"observed":"The three focused suites passed and retain exact whole-value, ordering, isolation, readonly, runtime, and compile-time reference patterns."},
+      "rationale":"ORN-F025 already canonically records these positive reference patterns.","destination":"Retain ORN-F025 as evidence-only guidance."
+    },
+    {
+      "id":"ORNFP-F008","claimIds":["ORNFP-C012"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORN-F021",
+      "sourceRefs":[{"path":"tests/orchestrators/reconcile/types.test.ts"}],"testRefs":[{"path":"N/A","reason":"This is a test naming observation."}],
+      "validation":{"method":"static-proof","tool":"Current test inspection","observed":"The generic subject identifier remains in types.test.ts."},
+      "rationale":"ORN-F021 already owns this readability cleanup.","destination":"Use ORN-F021 if the naming cleanup is selected."
+    },
+    {
+      "id":"ORNFP-F009","claimIds":["ORNFP-C014"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORN-F029",
+      "sourceRefs":[{"path":"tests/orchestrators/reconcile/types.test.ts"}],"testRefs":[{"path":"N/A","reason":"This is a type-test ownership decision."}],
+      "validation":{"method":"static-proof","tool":"Current TypeScript type-test inspection","observed":"The option mocks remain wider than the properties exercised by runtime assertions."},
+      "rationale":"ORN-F029 already owns the decision between narrower ports and full contract pins.","destination":"Resolve type-test ownership under ORN-F029."
+    },
+    {
+      "id":"ORNFP-F010","claimIds":["ORNFP-C016"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORN-F022",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"}],"testRefs":[{"path":"N/A","reason":"This is a production readability observation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current symbol inspection","observed":"Terse single-letter callback parameter names remain in notify.ts."},
+      "rationale":"ORN-F022 already owns the naming cleanup.","destination":"Use ORN-F022 for Phase 2 readability work."
+    },
+    {
+      "id":"ORNFP-F011","claimIds":["ORNFP-C017"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"ORN-F023",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"}],"testRefs":[{"path":"N/A","reason":"This is an import-style observation."}],
+      "validation":{"method":"static-proof","tool":"CodeGraph current source inspection","observed":"backfill.ts retains the inline import type."},
+      "rationale":"ORN-F023 already owns this style cleanup.","destination":"Use ORN-F023 if the import is normalized."
+    },
+    {
+      "id":"ORNFP-F012","claimIds":["ORNFP-C018"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"ORN-F024",
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/backfill.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph reference inspection","observed":"scanForceInstalledBackfills remains exported with only internal and test consumers."},
+      "rationale":"ORN-F024 already owns the decision to remove the test-only export or establish a production contract.","destination":"Resolve the export under ORN-F024."
+    },
+    {
+      "id":"ORNFP-F013","claimIds":["ORNFP-C019"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"}],"testRefs":[{"path":"tests/orchestrators/reconcile/backfill.test.ts"},{"path":"tests/orchestrators/reconcile/pending.test.ts"},{"path":"tests/orchestrators/reconcile/types.test.ts"}],
+      "validation":{"method":"static-proof","tool":"CodeGraph dependency inspection","observed":"The three reviewed modules keep filesystem/environment effects behind supplied paths or collaborators; no new direct network or credential access was found."},
+      "rationale":"Current source supports the report's bounded clean-production observation.","destination":"No implementation change."
+    },
+    {
+      "id":"ORNFP-F014","claimIds":["ORNFP-C021"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"ORN-F030",
+      "sourceRefs":[{"path":"tests/orchestrators/reconcile/notify.test.ts"},{"path":"tests/orchestrators/reconcile/backfill.test.ts"},{"path":"tests/orchestrators/reconcile/pending.test.ts"}],"testRefs":[{"path":"N/A","reason":"This adjudicates an assertion-style claim."}],
+      "validation":{"method":"static-proof","tool":"Current assertion inspection","observed":"The current suites use strict node:assert forms; the broad loose-alias concern is not present."},
+      "rationale":"ORN-F030 already records the historical assertion-alias concern as spurious/stale.","destination":"No change; retain current strict assertions."
+    },
+    {
+      "id":"ORNFP-F015","claimIds":["ORNFP-C022"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,
+      "sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md"}],"testRefs":[{"path":"tests/orchestrators/reconcile/notify.test.ts"},{"path":"tests/orchestrators/reconcile/backfill.test.ts"},{"path":"tests/orchestrators/reconcile/pending.test.ts"},{"path":"tests/orchestrators/reconcile/types.test.ts"},{"path":"tests/orchestrators/reconcile/reconcile.messaging.test.ts"}],
+      "validation":{"method":"behavioral-probe","command":"node --test tests/orchestrators/reconcile/notify.test.ts tests/orchestrators/reconcile/backfill.test.ts tests/orchestrators/reconcile/pending.test.ts tests/orchestrators/reconcile/types.test.ts tests/orchestrators/reconcile/reconcile.messaging.test.ts","exitCode":0,"observed":"All five focused suites passed; separate direct coverage reruns reached 100% branch, function, and line coverage for each paired source module."},
+      "rationale":"The historical no-command limitation is positively replaced by current successful reruns.","destination":"Close with current probe evidence; coverage does not replace D-11 mutation proof."
+    }
+  ]
+}
