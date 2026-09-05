@@ -1753,6 +1753,38 @@ test("WINV-01 strict: implicit-by-convention workflows/ dir -> installable with 
   }
 });
 
+// WINV-01: admitting `workflows` to SUPPORTED_COMPONENT_PATH_KINDS routes a
+// declared `workflows` field through `validateComponentPath`, so a declaration
+// that is neither a string nor an array of strings -- an inline map in the
+// shape `mcpServers` accepts, say -- is a STRUCTURAL defect that resolves
+// `unavailable`, NOT an unsupported-kind degrade a user could `--partial`
+// past. Pinned because the harsher verdict rests entirely on the premise that
+// upstream's `workflows` field is path-bearing; if that premise is ever
+// falsified this test is the first thing that has to move.
+test("WINV-01 strict: a non-string workflows declaration resolves unavailable", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./local")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", workflows: { greet: { run: "greet.js" } } }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "unavailable",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes('component path for "workflows" is not a string')),
+    `expected the path-shape note; got: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
 // D-07 corollary: entry declares "custom" AND implicit "skills/" exists ->
 // UNION (declared-first ordering), NOT a short-circuit on the declared path.
 test("D-07 entry-declared path UNIONs with implicit-by-convention (was: PR-4 short-circuit)", async () => {
