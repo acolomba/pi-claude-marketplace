@@ -789,6 +789,61 @@ describe("commitPreparedWorkflows", () => {
     assert.strictEqual(stagingRootExists, false);
   });
 
+  test("restores an already-displaced envelope when a later displacement fails", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-displace-partial-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-displace-partial-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    await mkdir(locations.workflowsSavedDir, { recursive: true });
+    const survivingTarget = path.join(locations.workflowsSavedDir, "acme:one.json");
+    await writeFile(survivingTarget, "previous one bytes\n", "utf8");
+    const blockerFile = path.join(locations.workflowsSavedDir, "blocker.json");
+    await writeFile(blockerFile, "blocker bytes\n", "utf8");
+    // Two recorded previous names where the SECOND displacement fails: the
+    // first has already been moved aside by then, so its only copy is inside
+    // the staging tree. A single-name case cannot reach this state -- the
+    // partial list is the whole point.
+    const blockedLocations: ScopedLocations = {
+      ...locations,
+      workflowArtifactPath: (generatedName: string): Promise<string> =>
+        generatedName === "acme:two"
+          ? Promise.resolve(path.join(blockerFile, "acme:two.json"))
+          : locations.workflowArtifactPath(generatedName),
+    };
+    const placed: (readonly string[])[] = [];
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({
+        locations: blockedLocations,
+        pluginName: PLUGIN_NAME,
+        resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+        previousWorkflowNames: ["acme:one", "acme:two"],
+      }),
+    );
+
+    // act
+    const error = await commitPreparedWorkflows(prepared, {
+      onPlaced: (names) => placed.push(names),
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    const savedEntries = (await readdir(locations.workflowsSavedDir)).sort();
+    const survivingBytes = await readFile(survivingTarget, "utf8");
+    const stagingRootExists = await pathIsPresent(prepared.stagingRoot);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.strictEqual((error as NodeJS.ErrnoException).code, "ENOTDIR");
+    // The bytes of the envelope displaced BEFORE the failure are the contract:
+    // the staging tree is removed on this path, so a displacement list that did
+    // not survive the throw takes them with it.
+    assert.strictEqual(survivingBytes, "previous one bytes\n");
+    assert.deepStrictEqual(savedEntries, ["acme:one.json", "blocker.json"]);
+    assert.deepStrictEqual(placed, [[]]);
+    assert.strictEqual(stagingRootExists, false);
+  });
+
   test("reverses every completed rename when a later one fails", async (t) => {
     // arrange
     const { locations } = await createWorkflowScope(t, "workflows-commit-reversed-");

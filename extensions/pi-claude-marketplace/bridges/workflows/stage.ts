@@ -220,7 +220,7 @@ export async function prepareStageWorkflows(
 const DISPLACED_DIR = ".previous";
 
 /**
- * Move every previously-named target aside into the staging root, returning
+ * Move every previously-named target aside into the staging root, recording
  * the moves so a failed commit can put them back.
  *
  * The previous targets are NOT unlinked. A bare unlink is unrecoverable: the
@@ -229,16 +229,23 @@ const DISPLACED_DIR = ".previous";
  * envelopes nor the new ones. Every sibling bridge moves previous content
  * aside for the same reason (`shared/fs-utils.ts::rollbackReplacementCommon`).
  *
+ * CR-01: `displaced` is OWNED BY THE CALLER and mutated in place, so a move
+ * already made is visible to the rollback even when a LATER name throws. A
+ * local list returned by value is lost on that throw, which leaves the caller
+ * believing nothing was displaced -- it then skips the restore loop and lets
+ * the staging cleanup delete the only surviving copy of every envelope moved
+ * before the failure. The sibling commands bridge declares its `backups` in the
+ * same caller-owned position for the same reason.
+ *
  * ENOENT-tolerant: a previous name with no file behind it (a prior install
  * that never finished its commit) is simply not displaced.
  */
 async function displacePreviousTargets(
   prepared: PreparedWorkflowsStaged,
-): Promise<{ from: string; to: string }[]> {
-  const displaced: { from: string; to: string }[] = [];
-
+  displaced: { from: string; to: string }[],
+): Promise<void> {
   if (prepared._previousNames.length === 0) {
-    return displaced;
+    return;
   }
 
   const displacedRoot = path.join(prepared.stagingRoot, DISPLACED_DIR);
@@ -255,6 +262,8 @@ async function displacePreviousTargets(
 
     try {
       await rename(target, aside);
+      // Recorded immediately, so a throw on any later name still leaves this
+      // move reversible.
       displaced.push({ from: target, to: aside });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -262,8 +271,6 @@ async function displacePreviousTargets(
       }
     }
   }
-
-  return displaced;
 }
 
 /**
@@ -344,7 +351,9 @@ export async function commitPreparedWorkflows(
   }
 
   const completedRenames: { name: string; from: string; to: string }[] = [];
-  let displaced: { from: string; to: string }[] = [];
+  // Declared out here so a displacement that throws part-way through still
+  // hands the rollback below the moves it already made (CR-01).
+  const displaced: { from: string; to: string }[] = [];
 
   try {
     // Lazy-create: for project scope this creates the `projects/<key>/saved`
@@ -352,7 +361,7 @@ export async function commitPreparedWorkflows(
     // not racing it into an inconsistent state.
     await mkdir(prepared.locations.workflowsSavedDir, { recursive: true });
 
-    displaced = await displacePreviousTargets(prepared);
+    await displacePreviousTargets(prepared, displaced);
 
     await assertTargetsUnoccupied(prepared._renamePairs);
 
