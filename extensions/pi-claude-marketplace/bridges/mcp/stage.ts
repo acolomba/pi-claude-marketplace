@@ -89,10 +89,6 @@ async function readScopedDoc(filePath: string): Promise<{ doc: RawMcpDoc; malfor
   return { doc: parsed as RawMcpDoc, malformed: false };
 }
 
-type McpServersClassification =
-  | { readonly kind: "missing" }
-  | { readonly kind: "present"; readonly servers: Record<string, unknown> };
-
 /** Refusal for a present scoped `mcpServers` field that is not an object map. */
 export class MalformedMcpServersError extends Error {
   readonly mcpJsonPath: string;
@@ -115,7 +111,12 @@ function mcpServersValueKind(value: unknown): string {
 }
 
 /** Classifies the raw scoped field before either MCP bridge enumerates it. */
-export function classifyMcpServers(doc: RawMcpDoc, mcpJsonPath: string): McpServersClassification {
+export function classifyMcpServers(
+  doc: RawMcpDoc,
+  mcpJsonPath: string,
+):
+  | { readonly kind: "missing" }
+  | { readonly kind: "present"; readonly servers: Record<string, unknown> } {
   if (!Object.hasOwn(doc, "mcpServers")) {
     return { kind: "missing" };
   }
