@@ -291,7 +291,7 @@ wave 2.
    (the fixture resolves `workflows` supported) stays as-is; only the ENOENT
    half moves.
 
-**Plans**: 1/4 plans executed in 4 waves, each wave one commit group. The waves are serialized
+**Plans**: 4/4 plans executed in 4 waves, each wave one commit group. The waves are serialized
 deliberately: `use_worktrees` is `false` here, so same-wave plans would share one working tree,
 and every gate this phase leans on (`typecheck`, `lint`, `fallow`, `format:check`,
 `test:corresponding`, `npm test`) scans the whole tree rather than the staged diff. Waves 2 and
@@ -321,7 +321,7 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 111-04-PLAN.md — Bump `EXTENSION_VERSION` at all six sites and invert the install-window
+- [x] 111-04-PLAN.md — Bump `EXTENSION_VERSION` at all six sites and invert the install-window
   assertion so it proves the envelope present
 
 ### Phase 112: Install and removal lifecycle
@@ -493,7 +493,7 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
 | 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
-| 111. Workflows bridge | 3/4 | In Progress | - |
+| 111. Workflows bridge | 4/4 | In Progress | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
 | 114. Degradation and documentation | 0/? | Not started | - |

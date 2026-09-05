@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 111
 current_phase_name: Workflows bridge
-current_plan: 111-04 (not started)
+current_plan: 111-04 (complete)
 status: In progress
-stopped_at: Completed 111-03-PLAN.md
-last_updated: "2026-09-05T11:10:00.000Z"
+stopped_at: Completed 111-04-PLAN.md
+last_updated: "2026-09-05T11:50:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: 111-03 executed - workflows staging triplet and barrel landed, all five bridge pairs at complete direct coverage
-state_head: 6981b2b4
+last_activity_desc: 111-04 executed - version bumped to 0.19.0 at all six sites and the install-window assertion inverted to prove the envelope present
+state_head: a3939034
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
   percent: 22
 ---
 
@@ -35,38 +35,53 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 111 (Workflows bridge) — IN PROGRESS
-Plan: 3 of 4 complete (`111-01`, `111-02`, `111-03`), `111-04` next
-Status: In progress. `111-03` completed the bridge: `bridges/workflows/stage.ts`
-and `bridges/workflows/index.ts` landed byte-identical to the port in one commit
-(`6981b2b4`) carrying exactly its four planned paths, with 24 cases in
-`stage.test.ts` and 5 in `index.test.ts`. All five bridge pairs now report their
-expected direct coverage — `types.ts` classified `type-only`, and discovery
-(56/56 branches), unstage (8/8), staging (61/61) and the barrel (25/25 lines) at
-`hit === found`. No branch proved unreachable and no `fallow-ignore` marker was
-added: the four gaps the first measurement reported were closed by adding three
-public-behaviour cases. The whole chain is green — typecheck 0, ESLint 0, all
-three fallow sub-gates, Prettier, both corresponding-test gates, `npm test` at
-5378/0 and `npm run test:integration` at 32/0.
+Phase: 111 (Workflows bridge) — ALL PLANS EXECUTED, awaiting verification
+Plan: 4 of 4 complete (`111-01`, `111-02`, `111-03`, `111-04`)
+Status: `111-04` closed the phase's two standing obligations in two commits.
+`b524524c` moved the version literal to `0.19.0` at all six sites — the
+manifest, both lockfile records, the `EXTENSION_VERSION` constant, the
+hard-coded literal in `tests/shared/extension-version.test.ts` (the site the
+repository's own checklist does not name), the Sonar project version, and a new
+`## [0.19.0]` changelog heading — plus the `.planning/PROJECT.md` prose site.
+The bump opens the load-time backfill gate; the re-materialization behind it
+runs through `reinstallPlugin`, which gains no workflows phase until Phase 112,
+so **artifacts for records written by the last released version do not appear
+yet**. `a3939034` turned the install-window assertion: it now drives the bridge
+through its barrel and compares the `hello:greet` envelope as one whole object,
+read back from `workflowsSavedDir`. The fixture body changed from a default
+export (which the admission rule classifies `skipped`/`no-meta`, so no envelope
+was ever written) to a named `meta` export. A negative control confirmed the
+case goes red when the old body is restored. The positive precondition's three
+assertions are byte-identical; only its comment, which named a deleted ENOENT
+assertion, was rewritten.
 
-Earlier in the phase, `111-01` landed the path layer, and `111-02` landed the
-bridge's read half on top of it: `bridges/workflows/{types,discover,unstage}.ts`
-with their three owner tests, the `bridges-workflows` fallow zone triple, and
-the one behavior this phase authors — the criterion-4 admitted-but-caveated
-warning row for a stem-fallback script, emitted from `verdictWarning` through
-the existing `softFailWarning` composer. `types.ts` and `unstage.ts` are
-byte-identical to the port; `discover.ts` differs by exactly the two docblock
-lines the new arm makes false. Discovery and unstage each reach 100% direct
-coverage (56/56 and 8/8 branches), including the `pathDedupKey` darwin arm that
-is unreachable on Linux without relocating `process.platform`. The criterion-4
-assertions were observed failing (23 tests, 21 pass, 2 fail, both with an empty
-actual warnings array) before the arm existed. Four serialized waves: `111-01`
-(the tracer — the `locations.ts` workflows members and `WorkflowTargetOccupiedError`,
-opening red on the two exhaustive `Object.keys` bundle assertions the port breaks),
-`111-02` (types/discover/unstage, the `bridges-workflows` fallow zone, and the
-criterion-4 stem-fallback warning row), `111-03` (the stage triplet and barrel,
-the WR-06 occupancy refusal, every rollback branch), and `111-04` (the 0.19.0
-version bump across six sites and the install-window assertion inversion).
+Phase gate: `npm run check` green end to end (unit 5378/0, integration 32/0),
+`npm run test:corresponding` passing, `pre-commit run --all-files` leaving no
+file modified, and all six touched pairs at complete direct coverage —
+discover 56/56, stage 61/61, unstage 8/8, barrel 25/25 lines, locations 20/20,
+errors-bridges 13/13.
+
+Two items ride forward. **The end-to-end stale-record repair is not observable
+in this phase** and goes to the milestone's live acceptance testing. **The
+duplication remedy at pull-request time is a `sonar.cpd.exclusions` entry citing
+`port/README.md`, explicitly not a shared-helper refactor** — `fallow dupes`
+measures zero new duplicated lines for this bridge.
+
+Phase 112 inherits two carriers: replace the two explicit bridge calls in
+`tests/integration/workflow-kind-inversion.test.ts` with the install-driven path
+(the assertion itself does not change), and add `"bridges-workflows"` to the
+`orchestrators` zone's `allow` array in `.fallowrc.json` at its first
+orchestrator import. This phase left that array alone deliberately: nothing
+imports the bridge yet, so the edge would be unverifiable.
+
+Earlier in the phase, `111-01` landed the path layer, `111-02` landed the
+bridge's read half — `bridges/workflows/{types,discover,unstage}.ts` with their
+three owner tests, the `bridges-workflows` fallow zone triple, and the one
+behavior this phase authors, the criterion-4 admitted-but-caveated warning row
+for a stem-fallback script — and `111-03` completed the bridge with
+`bridges/workflows/stage.ts` and `bridges/workflows/index.ts` (`6981b2b4`), 24
+cases in `stage.test.ts` and 5 in `index.test.ts`. No branch proved unreachable
+and no `fallow-ignore` marker was added anywhere in the phase.
 
 Two findings the research measured in a probe worktree shape this phase.
 **Criterion 9 could not be satisfied as written**: `tests/integration/workflow-kind-inversion.test.ts`
@@ -187,7 +202,7 @@ that way permanently.
 ## Progress
 
 **Phases Complete:** 2/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** `111-04` — Phase 111 is 3/4 executed.
+**Current Plan:** none — Phase 111 is 4/4 executed, verification pending.
 
 ```text
 [==--------] 22%
@@ -197,7 +212,7 @@ that way permanently.
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
-| 111 | Workflows bridge | In progress (3/4 plans executed) |
+| 111 | Workflows bridge | In progress (4/4 plans executed, verification pending) |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
@@ -305,27 +320,33 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T11:03:00Z
+**Last session:** 2026-09-05T11:50:00Z
 
-**Stopped At:** Completed 111-03-PLAN.md
+**Stopped At:** Completed 111-04-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 111` — `111-04` (bump `EXTENSION_VERSION`
-at all six sites and invert the install-window assertion so it proves the
-envelope present). `111-03`'s single commit is `6981b2b4`, carrying exactly its
-four planned paths. The phase mechanism held a third time: path-scoped checkout
-naming individual files, the blast-radius assertion printing `0` immediately
-after, owner tests importing every export by name, complete direct coverage per
-pair, and the full gate chain before the commit.
+**Next Action:** `/gsd-verify-work 111` — all four plans are executed and the
+phase gate is green. `111-04`'s two commits are `b524524c` (the version bump at
+six sites plus the `.planning/PROJECT.md` prose site) and `a3939034` (the
+install-window assertion inversion). Task 3 produced no commit, which is the
+planned outcome: `pre-commit run --all-files` rewrote nothing.
 
-Two things `111-04` inherits. **The `orchestrators` fallow allow-list still
-omits `"bridges-workflows"`** — nothing imports the bridge yet, so adding it in
-`111-03` would have been unverifiable, but the first orchestrator import must add
-that one string in the same change or `fallow dead-code`'s boundary sub-gate
-fails on the new edge. And `commitPreparedWorkflows`'s `onPlaced` is the
-caller's removal payload on every path including each throw, while its RETURN
-value is a leak string rather than a throw when only the staging cleanup failed;
-a caller that derives removal work from the thrown error's type instead will
-unlink either a foreign file or a previous envelope the rollback just restored.
+Three things the next phase inherits. **The `orchestrators` fallow allow-list
+still omits `"bridges-workflows"`** — nothing imports the bridge yet, so adding
+it here would be unverifiable, but the first orchestrator import must add that
+one string in the same change or `fallow dead-code`'s boundary sub-gate fails on
+the new edge. **The two explicit bridge calls in
+`tests/integration/workflow-kind-inversion.test.ts` are a placeholder for the
+install-driven path**; replacing them is a small edit and the assertion beside
+them does not change. And **the bump does not repair a stale record's artifacts
+in this phase** — the gate opens and the re-resolution clears the reason token,
+but the re-materialization runs through `reinstallPlugin`, which gains no
+workflows phase until Phase 112.
+
+`commitPreparedWorkflows`'s `onPlaced` is the caller's removal payload on every
+path including each throw, while its RETURN value is a leak string rather than a
+throw when only the staging cleanup failed; a caller that derives removal work
+from the thrown error's type instead will unlink either a foreign file or a
+previous envelope the rollback just restored.
 
 Phase 109 remains verified 12/12 and marked complete in ROADMAP.md;
 `109-VERIFICATION.md` carries the evidence. The phase's two manual-only
@@ -365,10 +386,11 @@ re-persists `harness-worktree` as a side effect.
   Phase 102's review found two blockers in comparable code, so the gap is real.
   Resume with `/gsd-code-review 101`.
 
-- **Release work from the `workflows` milestone is still open.** Bump the
-  version in `package.json`, `sonar-project.properties` and `EXTENSION_VERSION`;
-  update `package-lock.json`; record the milestone in `CHANGELOG.md`; re-run
-  `npm test` (pre-commit does not run the suite that guards the version). Push
+- **Release work from the `workflows` milestone is partly done.** `111-04`
+  bumped `package.json`, `package-lock.json`, `EXTENSION_VERSION`,
+  `tests/shared/extension-version.test.ts` and `sonar-project.properties` to
+  `0.19.0` and opened a `## [0.19.0]` `CHANGELOG.md` section; later phases append
+  bullets there rather than bumping again. Still open: push
   `features/workflows-spike` and open the PR — nothing is pushed yet and no PR
   exists. This milestone's phases can land on the same branch first.
 
@@ -402,6 +424,7 @@ re-persists `harness-worktree` as a side effect.
   Flip to `Flujos de trabajo (workflows).` if preferred — the link text changes
   with it.
 
+
 ## Performance Metrics
 
 | Plan | Duration | Tasks | Files |
@@ -418,6 +441,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 111 P01 | 35 min | 2 tasks | 5 files |
 | Phase 111 P02 | 62 min | 3 tasks | 7 files |
 | Phase 111 P03 | 35 min | 3 tasks | 4 files |
+| Phase 111 P04 | 34 min | 3 tasks | 8 files |
 
 ## Decisions
 
@@ -451,11 +475,15 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 111]: Four measured branch gaps in `stage.ts` were closed by adding three public-behaviour cases, never a suppression directive. — The noop case now plants a no-`meta` script instead of a non-script file, and two rollback cases were added (a non-ENOENT displacement failure, and a re-stage whose restore succeeds); the module went from 53/57 to 61/61 branches.
 - [Phase 111]: The staging-side first-wins dedup is reported as unreachable through the public API rather than force-covered. — Discovery dedups by absolute source path and the collision assert rejects any two records sharing a generated name, so no input makes `seen.has(...)` true; V8 records the expression as evaluated, the module still reports 61/61, and the guard stands as defence in depth.
 - [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
+- [Phase 111]: The version moves to `0.19.0`, a MINOR bump, and it is the only bump of the milestone. — Every `0.x.0` heading in this changelog introduces new user-visible capability and a sixth component kind is capability; a patch bump would force a second bump later and a renamed section, and later phases append bullets under the heading created here.
+- [Phase 111]: The install-window assertion was inverted against two EXPLICIT bridge calls through the barrel rather than deferred to the install-driven path. — No orchestrator calls the bridge until Phase 112, so the criterion could not be met by wiring; the explicit drive makes the assertion true today and Phase 112 replaces the two calls without the assertion inverting again.
+- [Phase 111]: The fixture's script body was changed from a default export to a named `meta` export. — The real admission rule classifies a default export `skipped`/`no-meta`, so no envelope was written in any phase and the inverted assertion would have been red forever; a negative control restoring the old body confirmed the case goes red.
+- [Phase 111]: The precondition's COMMENT was rewritten while its three assertions stayed byte-identical. — It named an ENOENT assertion the inversion deletes, and the failure mode it described inverts too; the project's comment policy forbids narrating code that no longer exists, and the guard the plan protects is the assertions, not the prose above them.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps
 
-- Continue Phase 111 with `/gsd-execute-phase 111` — `111-04` is next
+- Verify Phase 111 with `/gsd-verify-work 111` — all 4 plans are executed
 - Phase 109 is complete and verified 12/12; 110-114 run in order, each
   depending on the one before it
 - The hardening phases 115, 116 and 117 are mutually independent; the order
