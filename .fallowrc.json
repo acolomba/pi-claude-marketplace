@@ -46,6 +46,10 @@
         "patterns": ["extensions/pi-claude-marketplace/bridges/hooks/**"]
       },
       {
+        "name": "bridges-workflows",
+        "patterns": ["extensions/pi-claude-marketplace/bridges/workflows/**"]
+      },
+      {
         "name": "domain",
         "patterns": ["extensions/pi-claude-marketplace/domain/**"]
       },
@@ -111,6 +115,10 @@
         "allow": ["domain", "persistence", "shared", "platform"]
       },
       {
+        "from": "bridges-workflows",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
         "from": "domain",
         "allow": ["shared", "platform"]
       },
@@ -163,6 +171,10 @@
         },
         {
           "from": "bridges-hooks",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "bridges-workflows",
           "callee": ["process.stdout.*", "process.stderr.*"]
         },
         {
