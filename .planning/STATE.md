@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-63-PLAN.md
-last_updated: "2026-09-05T18:00:05.000Z"
+stopped_at: Completed 01-64-PLAN.md
+last_updated: "2026-09-05T19:17:25.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-63 preserved two deliberate behavioral-composition proofs for MF-DEC-03; three decision dossiers remain pending
-state_head: 6eaee8a73b02e100344e4c4199179f8009dc4966
+last_activity_desc: Plan 01-64 selected classify-and-eliminate for MF-DEC-07 builtin patching; two decision dossiers remain pending
+state_head: b1f6d692b97bc3ac0d12c9d4ed26c36892def51d
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 63
+  completed_plans: 64
   percent: 0
 ---
 
@@ -33,17 +33,17 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 63 of 69
+Plan: 64 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-63 preserved two deliberate behavioral-composition proofs for MF-DEC-03; three decision dossiers remain pending
+Last activity: 2026-09-05 — Plan 01-64 selected classify-and-eliminate for MF-DEC-07 builtin patching; two decision dossiers remain pending
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 164
-- Average recorded duration: 11.8 min
-- Total recorded execution time: 32 hr 17 min
+- Total plans completed: 165
+- Average recorded duration: 12.2 min
+- Total recorded execution time: 33 hr 34 min
 
 **By Phase:**
 
@@ -246,6 +246,7 @@ Last activity: 2026-09-05 — Plan 01-63 preserved two deliberate behavioral-com
 | Phase 01 P61 | 17min | 1 tasks | 3 files |
 | Phase 01 P62 | 24min | 1 tasks | 3 files |
 | Phase 01 P63 | 16min | 1 tasks | 3 files |
+| Phase 01 P64 | 1h 17m | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -585,6 +586,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route approved splits through Phase 6 TREF-09 with mirrored owner tests, one end-to-end proof per flow, no test-only exports, direct-pair coverage, and mandatory gate, documentation, ownership, and completeness repointing; keep info deferred and uninstall unsplit.
 - [Phase 01]: Preserve applyReconcile and bootstrapClaudePlugin as the only two demonstrated behavioral-composition exceptions instead of adding production dependency seams solely for interaction tests.
 - [Phase 01]: Phase 5 TREF-04 must exempt only those observed flows while preserving their public-result, full state/configuration/tree, and exact-notification assertions; add no test-only exports or injection seams for them.
+- [Phase 01]: Classify each builtin-patching use and eliminate process-global mutation, using case-owned temporary filesystem behavior by default and narrow production-owned ports only for irreproducible faults, timing, schedules, or rollback control.
+- [Phase 01]: Coordinate MF-DEC-07 through Phase 5 TREF-04, Phase 6 TREF-08, and the TREF-09 split sequence without test-only exports, __deps additions, unused defaults, dead seams, or weakened observable assertions.
 
 ### Pending Todos
 
@@ -637,16 +640,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-63-PLAN.md
+**Stopped at:** Completed 01-64-PLAN.md
 
-Phase 01 remains active. MF-DEC-01 through MF-DEC-06 are resolved, and three decision dossiers remain pending.
+Phase 01 remains active. MF-DEC-01 through MF-DEC-07 are resolved, and two decision dossiers remain pending.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-63-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-64-SUMMARY.md` and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T18:00:05.000Z
+Last session: 2026-09-05T19:17:25.000Z
 
-**Next:** Execute `01-64-PLAN.md` and evaluate only `MF-DEC-07` from its terminal current
+**Next:** Execute `01-65-PLAN.md` and evaluate only `MF-DEC-08` from its terminal current
 premises before opening another dossier.
