@@ -14,12 +14,20 @@
 // copy of the user's previous workflow scripts, and the operator has been told
 // to move them back by hand. See `holdsDisplacedEnvelopes`.
 //
-// This helper is fs-only: node:fs/promises + the containment chokepoint + the
-// shared error-message helper + the locations type. It never touches the git
-// surface, so any orchestrator -- even one gated by
-// tests/architecture/no-orchestrator-network.test.ts -- can import it without
-// introducing a git token. It needs no state load either, which is one import
-// fewer than `clone-gc.ts`, its structural model.
+// The import list is closed and load-bearing, so a new entry belongs in it:
+// node:fs/promises + node:path, the containment chokepoint, the shared
+// error-message helper, the locations type, and `DISPLACED_DIR` from the
+// workflows bridge. Sharing that constant rather than restating the literal is
+// what keeps the retention predicate here and the displacement in the commit
+// from drifting apart.
+//
+// None of them reaches the git surface, so any orchestrator -- even one gated
+// by tests/architecture/no-orchestrator-network.test.ts -- can import this
+// module without introducing a git token. The bridge import is the only one
+// that is not a leaf, and it is safe on the terms that gate actually uses: the
+// gate greps named files for git tokens, and `install.ts` is both gated and
+// already importing the same bridge module directly. It needs no state load
+// either, which is one import fewer than `clone-gc.ts`, its structural model.
 
 import { lstat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
