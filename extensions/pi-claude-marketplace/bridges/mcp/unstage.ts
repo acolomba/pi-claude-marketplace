@@ -13,6 +13,9 @@
 //   - Nothing to remove (no entries match the tuple) -> noop. We do NOT
 //     re-write the file in that case (PRD §5.7 quiet-on-noop).
 //
+// A present non-object `mcpServers` field is refused through stage.ts's
+// shared classifier before enumeration or mutation.
+//
 // Malformed scoped JSON propagates as a parse error rather than being
 // silently overwritten, mirroring the conservative behavior we want for
 // destructive-shaped operations: when the user-visible file is broken,
@@ -25,6 +28,7 @@ import { errorMessage } from "../../shared/errors.ts";
 
 import { isOwnedBy } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
+import { classifyMcpServers } from "./stage.ts";
 
 import type { RawMcpDoc, UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 
@@ -67,15 +71,12 @@ export async function unstageMcpServers(input: UnstageMcpInput): Promise<Unstage
   }
 
   const doc = parsed as RawMcpDoc;
-
-  const existingValue = doc.mcpServers;
-  // MC-7 tolerance: missing or non-object `mcpServers` -> nothing owned
-  // by us, so the unstage is a clean noop.
-  if (existingValue === undefined || Array.isArray(existingValue)) {
+  const classification = classifyMcpServers(doc, locations.mcpJsonPath);
+  if (classification.kind === "missing") {
     return EMPTY_RESULT;
   }
 
-  const existing = existingValue;
+  const existing = classification.servers;
 
   const removed: string[] = [];
   const kept: Record<string, unknown> = {};
