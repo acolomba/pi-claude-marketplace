@@ -4,17 +4,17 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 111
 current_phase_name: Workflows bridge
-current_plan: Not started
-status: planning
-stopped_at: Phase 110 complete, ready to plan Phase 111
-last_updated: "2026-09-05T08:15:55.028Z"
+current_plan: 111-01 (not started)
+status: Ready to execute
+stopped_at: Phase 111 planned (4 plans), ready to execute
+last_updated: "2026-09-05T09:19:16.918Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 110 complete, transitioned to Phase 111
-state_head: 7489ba97d3fe2c295a700842eead23f204be930a
+last_activity_desc: Phase 111 planned - 4 plans, checker passed clean
+state_head: 8bf926deb34d50a1e28bd277e072f0a1ae1d0a0f
 progress:
   total_phases: 9
   completed_phases: 2
-  total_plans: 8
+  total_plans: 12
   completed_plans: 8
   percent: 22
 ---
@@ -35,9 +35,28 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 111 — Workflows bridge
-Plan: none yet — Phase 111 is not planned
-Status: Ready to plan Phase 111. Phase 110 is complete and verified 20/20.
+Phase: 111 (Workflows bridge) — READY TO EXECUTE
+Plan: 4 plans, none started
+Status: Ready to execute. Phase 111 is planned and the checker passed with zero
+issues across all seven phase-specific traps. Four serialized waves: `111-01`
+(the tracer — the `locations.ts` workflows members and `WorkflowTargetOccupiedError`,
+opening red on the two exhaustive `Object.keys` bundle assertions the port breaks),
+`111-02` (types/discover/unstage, the `bridges-workflows` fallow zone, and the
+criterion-4 stem-fallback warning row), `111-03` (the stage triplet and barrel,
+the WR-06 occupancy refusal, every rollback branch), and `111-04` (the 0.19.0
+version bump across six sites and the install-window assertion inversion).
+
+Two findings the research measured in a probe worktree shape this phase.
+**Criterion 9 could not be satisfied as written**: `tests/integration/workflow-kind-inversion.test.ts`
+still passes with the complete bridge present, because nothing drives the bridge
+from `installPlugin` until Phase 112 — and the fixture ships
+`export default { name: "greet" }`, which admits as `skipped`/`no-meta`, so no
+envelope would be written in any phase. Resolved to Option A: invert against an
+explicit bridge drive now and fix the fixture body, rather than defer. **The
+version bump has six sites, not the five CLAUDE.md names** — `tests/shared/extension-version.test.ts`
+is the one the checklist misses.
+
+Phase 110 is complete and verified 20/20.
 `110-01` landed the tracer: `platform/workflow-home.ts` with
 its relocation seam deleted, `domain/workflow-project-key.ts` unedited, and both
 owner tests, in two commits (`df7b9be8`, `ed756b8f`). `110-02` landed
