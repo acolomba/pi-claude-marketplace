@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -153,27 +153,60 @@ test("records an unremovable name and still removes the names after it", async (
   assert.deepStrictEqual(await readdir(savedDirectory), ["acme:blocked.json"]);
 });
 
-test("rejects a recorded name carrying a path separator", async (t) => {
+test("records a recorded name carrying a path separator and removes the names after it", async (t) => {
   // arrange
   const { savedDirectory, locations } = await createWorkflowScope(t, "workflows-unstage-unsafe-");
   const escapedEnvelopePath = path.join(savedDirectory, "..", "escape.json");
   await writeFile(escapedEnvelopePath, "escaped bytes\n");
+  await writeFile(path.join(savedDirectory, "acme:later.json"), '{"name":"acme:later"}\n');
   const unstageInput: UnstageWorkflowsInput = {
     locations,
-    previousWorkflowNames: ["../escape"],
+    previousWorkflowNames: ["../escape", "acme:later"],
+  };
+  const expectedFailure: UnstageWorkflowFailure = {
+    name: "../escape",
+    reason:
+      'workflowArtifactPath workflow name "../escape" "../escape" must not contain path separators.',
   };
 
-  // act & assert
-  await assert.rejects(
-    () => unstagePluginWorkflows(unstageInput),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.strictEqual(
-        error.message,
-        'workflowArtifactPath workflow name "../escape" "../escape" must not contain path separators.',
-      );
-      return true;
-    },
-  );
+  // act
+  const unstagedWorkflows = await unstagePluginWorkflows(unstageInput);
+
+  // assert
+  assert.deepStrictEqual(unstagedWorkflows, {
+    removedNames: ["acme:later"],
+    warnings: [],
+    failed: [expectedFailure],
+  });
   assert.strictEqual(await readFile(escapedEnvelopePath, "utf8"), "escaped bytes\n");
+  assert.deepStrictEqual(await readdir(savedDirectory), []);
+});
+
+test("records a symlinked target and removes the names after it", async (t) => {
+  // arrange
+  const { savedDirectory, locations } = await createWorkflowScope(t, "workflows-unstage-symlink-");
+  // The saved directory is shared with the user's own hand-saved workflows and
+  // with every other tool, so a recorded name can find a symlink at its target
+  // at any time. That refusal must not cost the envelopes recorded after it.
+  const outsideEnvelopePath = path.join(savedDirectory, "..", "outside.json");
+  await writeFile(outsideEnvelopePath, "outside bytes\n");
+  const linkedTarget = path.join(savedDirectory, "acme:linked.json");
+  await symlink(outsideEnvelopePath, linkedTarget, "file");
+  await writeFile(path.join(savedDirectory, "acme:later.json"), '{"name":"acme:later"}\n');
+
+  // act
+  const unstagedWorkflows = await unstagePluginWorkflows({
+    locations,
+    previousWorkflowNames: ["acme:linked", "acme:later"],
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedWorkflows.removedNames, ["acme:later"]);
+  assert.deepStrictEqual(unstagedWorkflows.warnings, []);
+  assert.deepStrictEqual(
+    unstagedWorkflows.failed.map((failure) => failure.name),
+    ["acme:linked"],
+  );
+  assert.deepStrictEqual(await readdir(savedDirectory), ["acme:linked.json"]);
+  assert.strictEqual(await readFile(outsideEnvelopePath, "utf8"), "outside bytes\n");
 });

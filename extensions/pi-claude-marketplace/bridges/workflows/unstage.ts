@@ -29,11 +29,16 @@ export async function unstagePluginWorkflows(
   const failed: UnstageWorkflowFailure[] = [];
 
   for (const name of input.previousWorkflowNames) {
-    // The bundle's composer runs assertSafeName + assertPathInside itself, so
-    // there is no second containment check at this call site.
-    const target = await input.locations.workflowArtifactPath(name);
-
     try {
+      // The bundle's composer runs assertSafeName + assertPathInside itself, so
+      // there is no second containment check at this call site. It sits inside
+      // the accumulate block because it REFUSES as well as composes: it throws
+      // `SymlinkRefusedError` when the leaf it built is a symlink, and the
+      // saved directory is shared with the user's own hand-saved workflows and
+      // with every other tool, so a link can appear at a recorded name at any
+      // time.
+      const target = await input.locations.workflowArtifactPath(name);
+
       await unlink(target);
       removed.push(name);
     } catch (err) {
