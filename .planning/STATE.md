@@ -5,8 +5,8 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-47-PLAN.md
-last_updated: "2026-09-05T03:04:00.000Z"
+stopped_at: Completed 01-48-PLAN.md
+last_updated: "2026-09-05T03:15:00.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
 state_head: 2e2ecb05e3cf3244235669b5dda197350af27a2c
@@ -14,7 +14,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 47
+  completed_plans: 48
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 48 of 69
+Plan: 49 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -41,9 +41,9 @@ Last activity: 2026-09-04 — Phase 01 execution started
 
 **Velocity:**
 
-- Total plans completed: 159
+- Total plans completed: 160
 - Average recorded duration: 11.7 min
-- Total recorded execution time: 31 hr 09 min
+- Total recorded execution time: 31 hr 20 min
 
 **By Phase:**
 
@@ -231,6 +231,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P45 | 10min | 3 tasks | 5 files |
 | Phase 01 P46 | 11min | 3 tasks | 5 files |
 | Phase 01 P47 | 16min | 3 tasks | 5 files |
+| Phase 01 P48 | 11min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -536,6 +537,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Preserve all 49 edge-handler, edge-root, and import first-pass claims while linking exact overlaps to canonical adversarial findings.
 - [Phase 01]: Treat both corrupt-state tool rejections as one behavioral production defect while retaining the host-catch question only as a severity caveat.
 - [Phase 01]: Keep D-102-03 mutation-backed behavior independent from its recorder-style and missing-traceability routes.
+- [Phase 01]: Preserve all 82 marketplace and plugin first-pass claims while linking exact overlaps to already-revalidated adversarial findings.
+- [Phase 01]: Treat node:assert/strict aliases as positive stale proof against historical loose-comparison claims while keeping spellings as optional cleanup.
+- [Phase 01]: Keep evidence status independent from route across Phase 2, Phase 4, Phase 7, backlog, closure, and operator-decision outcomes.
 
 ### Pending Todos
 
@@ -588,7 +592,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-47-PLAN.md
+**Stopped at:** Completed 01-48-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -597,7 +601,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T03:04:00.000Z
+Last session: 2026-09-05T03:15:00.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
