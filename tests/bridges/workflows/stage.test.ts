@@ -993,6 +993,11 @@ describe("commitPreparedWorkflows", () => {
     // report would delete the envelope the rollback just recovered.
     assert.strictEqual(greetBytes, "PREVIOUS ENVELOPE\n");
     assert.deepStrictEqual(placed, [[]]);
+    // The same claim on the human-readable channel. These leak strings are the
+    // manual-recovery instructions -- the restore leak beside this one says to
+    // move a file back by hand -- so naming a reclaimed target here sends an
+    // operator to delete the very bytes the structured report withholds.
+    assert.doesNotMatch(error.message, /failed to roll back workflow rename/);
   });
 
   test("keeps the staging tree when a displaced envelope cannot be restored", async (t) => {

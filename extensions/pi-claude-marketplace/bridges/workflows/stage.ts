@@ -363,20 +363,18 @@ export async function commitPreparedWorkflows(
       completedRenames.push(pair);
     }
   } catch (err) {
-    const rollbackLeaks: string[] = [];
-    // The PAIRS rather than their names: the placement report below has to
-    // compare target paths, and re-deriving a pair from its name would need an
-    // absent-lookup arm no input can reach.
-    const stillPlaced: { name: string; to: string }[] = [];
+    // The PAIRS rather than their names: both channels below have to compare
+    // target paths, and re-deriving a pair from its name would need an
+    // absent-lookup arm no input can reach. The reversal failure's reason
+    // travels with the pair because whether it is worth reporting at all is not
+    // known until the restore loop below has run.
+    const stillPlaced: { name: string; from: string; to: string; reason: string }[] = [];
 
     for (const pair of [...completedRenames].reverse()) {
       try {
         await rename(pair.to, pair.from);
       } catch (rollbackErr) {
-        stillPlaced.push(pair);
-        rollbackLeaks.push(
-          `failed to roll back workflow rename ${pair.to} -> ${pair.from}: ${errorMessage(rollbackErr)}`,
-        );
+        stillPlaced.push({ ...pair, reason: errorMessage(rollbackErr) });
       }
     }
 
@@ -411,17 +409,23 @@ export async function commitPreparedWorkflows(
     // envelope, whatever the reversal reported. `rename(2)` replaces an
     // existing regular file, and a replaced name has ONE target path in both
     // lists, so a failed reversal followed by a successful restore leaves the
-    // PREVIOUS envelope there. Reporting the name anyway would hand the caller
-    // a removal payload that deletes the bytes the rollback just recovered.
+    // PREVIOUS envelope there -- nothing is stranded and the failed reversal
+    // cost nothing.
+    //
+    // ONE predicate feeds BOTH channels. Reporting such a name hands the caller
+    // a removal payload that deletes the bytes the rollback just recovered, and
+    // naming it in the leak text tells an operator to do the same by hand --
+    // these strings are the manual-recovery instructions, as the restore leak
+    // above says in as many words.
     //
     // Reversed back into discovery order: `completedRenames` was walked
     // backwards to unwind it.
-    reportPlaced(
-      stillPlaced
-        .reverse()
-        .filter((pair) => !restoredTargets.has(pair.to))
-        .map((pair) => pair.name),
+    const stranded = stillPlaced.reverse().filter((pair) => !restoredTargets.has(pair.to));
+    const rollbackLeaks = stranded.map(
+      (pair) => `failed to roll back workflow rename ${pair.to} -> ${pair.from}: ${pair.reason}`,
     );
+
+    reportPlaced(stranded.map((pair) => pair.name));
     throw appendLeaks(err, [...rollbackLeaks, ...unrestored, cleanupLeak]);
   }
 
