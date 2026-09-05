@@ -1193,12 +1193,18 @@ async function runInstallLedgerBody(
       // and is not separable at this site, so it rides `bridgeWarnings` (the
       // agents-bridge shape) rather than `discoveryWarnings`.
       //
-      // WR-04: recorded BEFORE the commit. These describe what the prepare
-      // already observed about the source -- refused scripts, unreadable
-      // files, skipped directories -- and a commit throw must not discard
-      // them, because a failed run is exactly when the operator most needs
-      // them. Reinstall reads the same warnings off the handle independently
-      // of the commit's outcome.
+      // Pushed at the prepare, matching `agentsPhase` -- the other bridge whose
+      // WARNINGS come off the prepare rather than off the commit's return, and
+      // the shape this one follows. (`mcpPhase` pushes after its commit because
+      // its warnings are a member of the commit's result.)
+      //
+      // WR-04: the position buys ordering consistency, NOT survival. A phase
+      // throw unwinds `runPhases` and the whole `InstallCtx` is discarded, so
+      // these warnings are lost on the failure path wherever the push sits.
+      // `bridgeWarnings` has one consumer -- `collectPostCommitWarnings`, run
+      // after the ledger returned and the state record committed -- and it is
+      // not a member of `InstallLedgerSummary`. That is true of every bridge's
+      // warnings alike, not of this one, so it is not repaired here.
       c.bridgeWarnings.push(...prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit

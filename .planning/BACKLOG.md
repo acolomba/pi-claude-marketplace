@@ -2579,3 +2579,37 @@ exhaustive so the compiler leads on the next kind — an exhaustive destructure,
 `Record<UnstageAxis, …>` keyed on the union, or an `assertNever` arm. Any of the
 three converts a future silent omission into a build error. Doing this while
 touching `remove.ts` for an unrelated reason is the cheapest moment.
+
+## WARN-01: a failed install discards every bridge's prepare warnings
+
+Surfaced by the Phase 112 code review, iteration 2 (WR-04). Not workflows-specific
+and not repairable inside a workflows phase, which is why it is filed here rather
+than as a phase criterion.
+
+`InstallCtx.bridgeWarnings` has exactly one consumer, `collectPostCommitWarnings`,
+which the install orchestrator calls only after the ledger has returned and the
+state record has been committed. The array is not a member of
+`InstallLedgerSummary`, and the failure arm composes its `PluginFailedMessage`
+from the thrown error and the rollback partials. So when any bridge phase throws,
+`runPhases` unwinds and the whole context — including every warning pushed into it
+by the phases that already succeeded — is discarded.
+
+Reinstall has the same shape from the other direction: `bridgeWarnings` is
+composed only after `replaceAll` returned, so a throw there loses the same
+warnings.
+
+What the user loses is the prepare's observations about the SOURCE — refused
+scripts, unreadable files, skipped directories, agents-index corruptions,
+duplicate-name skips. Those describe why the install may be worth retrying, and a
+failed run is exactly when they are worth reading. The loss is bounded: the
+observations are properties of the source, so a retry re-derives them.
+
+The narrow per-bridge fix (catch the commit and `appendLeaks(err, warnings)`) was
+considered and rejected. It routes discovery warnings through a carrier whose
+documented meaning is a manual-cleanup hint, and applying it to one bridge makes
+that bridge inconsistent with the other five for a defect all six share.
+
+**The durable fix** is a channel: either give `InstallLedgerSummary` a warnings
+member the failure arm can read, or have `runPhases` surface the context's
+accumulated warnings alongside its `RollbackPartial[]`. Either converts a
+discarded array into a rendered one for every bridge at once.
