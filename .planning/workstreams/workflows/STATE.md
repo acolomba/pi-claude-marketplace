@@ -4,17 +4,17 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 112
 current_phase_name: Install and removal lifecycle
-current_plan: Not started
-status: planning
-stopped_at: Phase 111 complete, ready to plan Phase 112
-last_updated: "2026-09-05T13:58:00.207Z"
+current_plan: 112-01 (not started)
+status: Ready to execute
+stopped_at: Phase 112 planned (4 plans), ready to execute
+last_updated: "2026-09-05T15:05:21.804Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 111 complete, transitioned to Phase 112
-state_head: e097ad2fb4b790e98f83a7f71cb66b1cf1f50b43
+last_activity_desc: Phase 112 planned - 4 plans, checker clean (0 blockers)
+state_head: 740da1cd7958d27ca26eb8a7c291c145e4b57e27
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 12
+  total_plans: 16
   completed_plans: 12
   percent: 33
 ---
@@ -35,12 +35,35 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 112 — Install and removal lifecycle
-Plan: none yet — Phase 112 is not planned
-Status: Ready to plan Phase 112. Phase 111 is complete and verified 9/9 against
-the ROADMAP's nine success criteria. The sixth bridge is on disk as a
-discover/stage/unstage triplet with owner tests, and the review loop ran two
-iterations over it.
+Phase: 112 (Install and removal lifecycle) — READY TO EXECUTE
+Plan: 4 plans, none started
+Status: Ready to execute. Phase 112 is planned; the checker passed with 0
+blockers, tracing all nine phase-specific traps against the plan text. Three
+waves: `112-01` (the tracer — the `resources.workflows` record schema, then the
+sixth ledger phase and the three mirrored closed sets), `112-02` and `112-03` in
+parallel (the cascade slot with both compile-silent folds; reinstall's bespoke
+re-materialization), and `112-04` (the age-bounded staging sweep).
+
+**Unlike Phases 110 and 111, nothing is ported here.** Those two checked
+production code out of `features/workflow-port-wip` verbatim and spent their
+effort on owner tests. This phase writes new wiring against orchestrators main
+rewrote after the spike branch was cut, and criterion 5 makes that a success
+criterion rather than a style note.
+
+Three measured findings shape it. **An unnamed prerequisite has to be commit
+1**: `state.json`'s record schema has no `workflows` resources array, every
+removal path removes by recorded name, and adding the field produces ~68 `tsc`
+errors across 30 files. **Two fold sites the compiler will not catch** —
+`applyPartialCascadeFold` and a hand-rolled duplicate in `remove.ts` read
+`dropped` structurally and keep compiling while silently omitting a new axis;
+this is a defect class the project has shipped repeatedly, now filed as
+`CASCADEAX-01`. And **the disk-state undo test does not exist**: the assertion
+appears in three places, all driven by a sibling-bridge failure, but the
+workflows phase is the last bridge slot so its vehicle must be `statePhase` —
+and the `statePhase`-vehicle tests assert only on the rejection. That gap is how
+Phase 111's two data-loss bugs survived 100% coverage.
+
+Phase 111 is complete and verified 9/9.
 `b524524c` moved the version literal to `0.19.0` at all six sites — the
 manifest, both lockfile records, the `EXTENSION_VERSION` constant, the
 hard-coded literal in `tests/shared/extension-version.test.ts` (the site the
