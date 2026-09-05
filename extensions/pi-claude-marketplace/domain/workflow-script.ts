@@ -261,9 +261,21 @@ function namedVerdict(
 
 /**
  * WNAM-02: `meta` is a readable object literal, but its `name` is absent or is
- * not a string literal -- an identifier, a template literal, a member
- * expression, a call. That value is classified by node type and never resolved,
- * so the file stem names the command instead.
+ * not statically known text -- an identifier, a substituted template, a member
+ * expression, a call, a number. That value is classified by node type and never
+ * resolved, so the file stem names the command instead.
+ *
+ * A stem-named command is installable but not necessarily RUNNABLE. The engine's
+ * `validateMeta` demands a `meta.name` AND a `meta.description` that both
+ * resolve to non-empty strings, and every shape reaching this arm fails at least
+ * the name half -- so the command this registers reports a validation error the
+ * first time anyone runs it. Narrowing the fallback to the shapes the engine can
+ * load would mean replicating its structural rules here, which the module header
+ * declines for the good reason that an engine upgrade may drop them; and the
+ * `description` half cannot be judged from `meta.name` alone anyway. Telling the
+ * user belongs to the bridge that writes the envelope, which owns the
+ * `warnings[]` channel for a script staged with a caveat. Carried as a Phase 111
+ * success criterion so the arm does not stay a silent dead-command factory.
  */
 function stemFallbackVerdict(
   pluginName: string,

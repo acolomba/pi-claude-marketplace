@@ -256,13 +256,24 @@ wave 2.
 2. Discovery is flat, non-recursive, refuses symlinks, and dedups first-wins.
 3. A script that cannot be read or staged is reported through `warnings[]`
    without failing the plugin install.
-4. Staging sits adjacent to its target so the commit `rename()` never crosses a
+4. **A stem-fallback workflow gets a `warnings[]` row.** Every WNAM-02
+   stem-fallback verdict names a command the engine cannot actually load: its
+   `validateMeta` requires a `meta.name` and a `meta.description` that both
+   resolve to non-empty strings, and no shape that reaches the stem fallback
+   resolves a name. Phase 110 settled that narrowing the fallback in
+   `domain/workflow-script.ts` is the wrong place — it would replicate engine
+   structural rules the module deliberately does not copy, and it cannot see the
+   `description` half at all. The bridge stages the envelope and owns the
+   warning channel, so the row belongs here: it must say the command will not
+   run until the script declares a literal `name` and `description`. A test
+   states it, so the arm is not silently a dead-command factory.
+5. Staging sits adjacent to its target so the commit `rename()` never crosses a
    filesystem boundary, and a commit that finds foreign content at a target path
    refuses before its first rename.
-5. Every file under `bridges/workflows/` has a mirrored owner test and
+6. Every file under `bridges/workflows/` has a mirrored owner test and
    `npm run test:corresponding` passes.
-6. `npm run check` is green.
-7. **`EXTENSION_VERSION` is bumped in this phase.** Phase 109 deliberately left it
+7. `npm run check` is green.
+8. **`EXTENSION_VERSION` is bumped in this phase.** Phase 109 deliberately left it
    at `0.18.1` (D-109-06 / A-03) because bumping it would have fired the
    `supportedSetGrew` convergence with no bridge to materialize anything. That
    prohibition inverts here. Records persisted under the released v0.18.1 by a
@@ -273,7 +284,7 @@ wave 2.
    (`orchestrators/reconcile/backfill.ts:76`); the bump is what releases it, and
    `backfill.ts:343` then re-materializes through `reinstallPlugin`. Without the
    bump those records stay stale permanently.
-8. **The install-window assertion is inverted.**
+9. **The install-window assertion is inverted.**
    `tests/integration/workflow-kind-inversion.test.ts` currently asserts
    `~/.pi/workflows` does NOT exist -- the D-109-06 window. Once the bridge
    lands it must assert the envelopes ARE written. Its positive precondition
