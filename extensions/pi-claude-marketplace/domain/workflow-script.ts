@@ -364,9 +364,9 @@ function generateOrRefuse(
  *
  * Declared with NO flags on purpose: the literal stays diffable against
  * upstream, and a module-level `g` regex would retain `lastIndex` between calls
- * and silently skip an early match on the second invocation. Match positions
- * come from a per-call `g` clone of this same pattern text -- one pattern, two
- * uses.
+ * and silently skip an early match on the second invocation. The literal is
+ * never matched against directly -- every scan goes through the per-call clone
+ * `determinismScanner` builds, so no call can leave state behind for the next.
  *
  * This is the ONLY engine gate replicated. `parseWorkflowScript` carries further
  * structural rules, but they are unexported internals of a 0.x package, and
@@ -376,13 +376,19 @@ function generateOrRefuse(
 const DETERMINISM_BLOCKLIST = /\bDate\s*\.\s*now\b|\bMath\s*\.\s*random\b|\bnew\s+Date\s*\(\s*\)/;
 
 /**
- * WVAL-01: the position-scanning half of the ONE vendored pattern -- the same
- * literal with `g` added, never a flag string of its own. `.test()` runs the
- * literal itself, so any flag the literal carries applies there; a clone that
- * hard-coded `"g"` would drop that flag here, and the two halves would then
- * disagree about whether a script matched. The disagreement admits rather than
- * refuses, so it must be impossible by construction: the literal is re-checked
- * against upstream on every engine upgrade, and a flag may arrive with it.
+ * WVAL-01: the ONE matcher for the vendored pattern -- the same literal with `g`
+ * added, carrying whatever other flags the literal carries rather than a flag
+ * string of its own. Every flag arrives here, because the literal is re-checked
+ * against upstream on every engine upgrade and a flag may arrive with it.
+ *
+ * Fresh per call, so `lastIndex` can never survive one scan into the next. That
+ * matters in one direction only: a retained position makes a later scan miss an
+ * earlier match and ADMIT a script the engine refuses, which is the failure this
+ * module must not have.
+ *
+ * Whether a script matches at all is decided from this clone's matches too, not
+ * by a second `.test()` against the bare literal. Two matchers can disagree; one
+ * cannot.
  */
 function determinismScanner(): RegExp {
   return new RegExp(DETERMINISM_BLOCKLIST, `${DETERMINISM_BLOCKLIST.flags.replaceAll("g", "")}g`);
@@ -413,10 +419,6 @@ function findDeterminismViolation(
   source: string,
   parsed: ParsedScript,
 ): DeterminismViolation | undefined {
-  if (!DETERMINISM_BLOCKLIST.test(source)) {
-    return undefined;
-  }
-
   const commentRanges: Range[] = parsed.comments.map((c) => [c.start, c.end]);
   let nonExecutable: DeterminismViolation | undefined;
 

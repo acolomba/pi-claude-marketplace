@@ -545,11 +545,14 @@ const stamped = Date.now();
     assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
   });
 
-  test("refuses the same source on a second scan, so no match position is carried over", () => {
+  test("refuses the same source on every scan, so no match position is carried over", () => {
     // arrange
+    // ONE occurrence and THREE scans. A matcher that retained `lastIndex` finds
+    // nothing on the second pass -- admitting a script the engine refuses -- and
+    // resets, so it matches again on the third. A two-occurrence fixture or a
+    // two-scan test stays green through exactly that bug.
     const source = `const stamped = Date.now();
 export const meta = { name: "ship" };
-const restamped = Date.now();
 `;
     const expectedVerdict = {
       outcome: "refused",
@@ -557,12 +560,14 @@ const restamped = Date.now();
     } satisfies NonAdmission;
 
     // act
-    const firstVerdict = admitWorkflowScript("acme", "clock.js", source);
-    const secondVerdict = admitWorkflowScript("acme", "clock.js", source);
+    const verdicts = [1, 2, 3].map(() => admitWorkflowScript("acme", "clock.js", source));
 
     // assert
-    assert.deepStrictEqual(nonAdmission(firstVerdict), expectedVerdict);
-    assert.deepStrictEqual(nonAdmission(secondVerdict), expectedVerdict);
+    assert.deepStrictEqual(verdicts.map(nonAdmission), [
+      expectedVerdict,
+      expectedVerdict,
+      expectedVerdict,
+    ]);
   });
 
   test("gives one source the same verdict whether or not another source was read between", () => {
