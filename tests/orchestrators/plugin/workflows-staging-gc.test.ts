@@ -65,6 +65,18 @@ async function backdate(target: string): Promise<void> {
   await utimes(target, stamp, stamp);
 }
 
+/**
+ * WR-08: `chmod` denial is inert for uid 0 -- a 0o444/0o555 mode restricts
+ * nothing for root, so `lstat` and `rm` both succeed and the case fails against
+ * the sweep logic instead of naming the environment. Refuse up front, matching
+ * `denyWrites` in tests/orchestrators/reconcile/apply.test.ts.
+ */
+function requireNonRoot(): void {
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("chmod-based denial cannot deny root; run this suite as a non-root user");
+  }
+}
+
 async function seedStagingTree(
   locations: ScopedLocations,
   name: string,
@@ -170,6 +182,7 @@ test("skips an aged staging entry that is not a directory", async (t) => {
 
 test("records a leak for a staging entry it cannot inspect", async (t) => {
   // arrange
+  requireNonRoot();
   const { locations } = await createStagingScope(t, "workflows-staging-gc-unreadable-");
   await seedStagingTree(locations, "unreachable", { aged: true });
   // Read-but-not-search: `readdir` reports the entry and the per-entry `lstat`
@@ -190,6 +203,7 @@ test("records a leak for a staging entry it cannot inspect", async (t) => {
 
 test("continues past a staging tree it cannot remove and names it once", async (t) => {
   // arrange
+  requireNonRoot();
   const { locations } = await createStagingScope(t, "workflows-staging-gc-leak-");
   const blocked = await seedStagingTree(locations, "aaa-blocked", { aged: true });
   const locked = path.join(blocked, "locked");
@@ -212,31 +226,82 @@ test("continues past a staging tree it cannot remove and names it once", async (
   assert.deepStrictEqual(await stagingEntries(locations), ["aaa-blocked"]);
 });
 
-test("rejects when the staging segment itself is a symbolic link", async (t) => {
+test("WR-01: refuses a symlinked staging segment per entry without ending the sweep", async (t) => {
   // arrange
+  // Two aged entries behind the same symlinked segment. Both must be refused:
+  // a refusal that escaped the loop would abort the pass at the first one, and
+  // both call sites discard the escape in a bare `catch {}`, so the sweep would
+  // die silently for every remaining tree.
   const { home, locations } = await createStagingScope(t, "workflows-staging-gc-symlink-");
   const external = path.join(home, "external-staging");
-  const externalOrphan = path.join(external, "abandoned");
-  await mkdir(externalOrphan, { recursive: true });
-  await writeFile(path.join(externalOrphan, "acme_greet.json"), "{}\n");
-  await backdate(externalOrphan);
-  await mkdir(locations.workflowsHomeDir, { recursive: true });
-  await symlink(external, locations.workflowsStagingDir, "dir");
-  let caught: unknown;
-
-  // act
-  try {
-    await garbageCollectWorkflowsStaging(locations);
-  } catch (error) {
-    caught = error;
+  const first = path.join(external, "aaa-abandoned");
+  const second = path.join(external, "bbb-abandoned");
+  for (const orphan of [first, second]) {
+    await mkdir(orphan, { recursive: true });
+    await writeFile(path.join(orphan, "acme_greet.json"), "{}\n");
+    await backdate(orphan);
   }
 
+  await mkdir(locations.workflowsHomeDir, { recursive: true });
+  await symlink(external, locations.workflowsStagingDir, "dir");
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
   // assert
-  assert.ok(caught instanceof Error);
-  assert.strictEqual(caught.name, "SymlinkRefusedError");
+  assert.strictEqual(leaks.length, 2);
   assert.strictEqual(
-    caught.message,
-    `workflows staging root abandoned contains symlink ${locations.workflowsStagingDir} -> ${external} (parent: ${locations.workflowsHomeDir}, target: ${path.join(locations.workflowsStagingDir, "abandoned")}).`,
+    leaks[0],
+    `aaa-abandoned: workflows staging root aaa-abandoned contains symlink ${locations.workflowsStagingDir} -> ${external} (parent: ${locations.workflowsHomeDir}, target: ${path.join(locations.workflowsStagingDir, "aaa-abandoned")}).`,
   );
-  assert.deepStrictEqual(await readdir(externalOrphan), ["acme_greet.json"]);
+  assert.match(
+    leaks[1] ?? "",
+    /^bbb-abandoned: workflows staging root bbb-abandoned contains symlink/,
+  );
+  // NFR-10: refused, so neither tree outside the home was removed.
+  assert.deepStrictEqual(await readdir(first), ["acme_greet.json"]);
+  assert.deepStrictEqual(await readdir(second), ["acme_greet.json"]);
+});
+
+test("WR-02: keeps an aged staging tree whose .previous still holds displaced envelopes", async (t) => {
+  // arrange
+  // `retained` models the commit's failed-restore path: the restore could not
+  // put the previous envelope back, so the commit KEPT the staging root because
+  // `.previous/` is the only copy left and the operator was told to move it back
+  // by hand. `swept` is an ordinary crash orphan of the same age with no
+  // displacement, and proves the skip is targeted rather than a blanket bail.
+  const { locations } = await createStagingScope(t, "workflows-staging-gc-retained-");
+  const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
+  const displaced = path.join(retained, ".previous");
+  await mkdir(displaced);
+  await writeFile(path.join(displaced, "acme_greet.json"), `{"name":"acme:previous"}\n`);
+  await backdate(retained);
+  await seedStagingTree(locations, "bbb-swept", { aged: true });
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await stagingEntries(locations), ["aaa-retained"]);
+  // The bytes themselves, not just the directory: this is the only copy.
+  assert.deepStrictEqual(await readdir(displaced), ["acme_greet.json"]);
+});
+
+test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) => {
+  // arrange
+  // An empty `.previous/` holds no bytes, so nothing is at risk and the tree is
+  // an ordinary orphan. Pins the predicate on the CONTENTS rather than on the
+  // directory's mere presence.
+  const { locations } = await createStagingScope(t, "workflows-staging-gc-empty-prev-");
+  const root = await seedStagingTree(locations, "abandoned", { aged: false });
+  await mkdir(path.join(root, ".previous"));
+  await backdate(root);
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await stagingEntries(locations), []);
 });

@@ -210,7 +210,7 @@ export async function prepareStageWorkflows(
  * so a suffix-less directory name cannot collide with one whatever the plugin
  * is called.
  */
-const DISPLACED_DIR = ".previous";
+export const DISPLACED_DIR = ".previous";
 
 /**
  * Move every previously-named target aside into the staging root, recording
