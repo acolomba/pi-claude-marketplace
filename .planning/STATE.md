@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-27-PLAN.md
-last_updated: "2026-09-05T00:06:09.983Z"
+stopped_at: Completed 01-28-PLAN.md
+last_updated: "2026-09-05T00:31:00.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 96c82ee256efcf4be72c29c59cbd1f4476901c08
+state_head: cc4082fb31599a65e5c8908c7a98424d75aacaa4
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 27
+  completed_plans: 28
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 28 of 69
+Plan: 29 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -211,6 +211,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P25 | 5min | 1 tasks | 2 files |
 | Phase 01 P26 | 27min | 2 tasks | 2 files |
 | Phase 01 P27 | 18min | 2 tasks | 1 files |
+| Phase 01 P28 | 25min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -474,6 +475,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Plan 01-26: exact assignment validity requires the two corpus records to share one artifact commit.
 - [Phase 01]: Plan 01-27 keeps evidence status independent from remediation routing for every preserved historical claim.
 - [Phase 01]: Plan 01-27 closes claims only with positive current replacement or removal proof and routes surviving findings by concern.
+- [Phase 01]: Plan 01-28 keeps direct owner-pair gaps live when related edge-handler coverage does not kill the focused mutation.
+- [Phase 01]: Plan 01-28 routes the cross-suite filesystem injection seam to an operator decision and localized defects to their owning remediation phases.
 
 ### Pending Todos
 
@@ -526,7 +529,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-27-PLAN.md
+**Stopped at:** Completed 01-28-PLAN.md
 phase are complete.
 
 **Resume file:** None
