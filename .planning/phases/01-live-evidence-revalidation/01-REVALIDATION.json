@@ -90709,8 +90709,46 @@
     },
     {
       "id": "MF-DEC-07",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "BSKL-019",
+        "HHD-011",
+        "HSA-026",
+        "OPEF-F04",
+        "OPEF-F09",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F05",
+        "OPIC-F27",
+        "OPLU-B-F10",
+        "OPR-B-F14",
+        "ORA-F15",
+        "SHC-F003"
+      ],
+      "proof": "All 11 premise findings are confirmed terminal canonical roots. The current live census still finds syncBuiltinESMExports() in exactly 13 test files, with 80 call sites across command discovery, hook event routing and staging, skill staging and unstaging, plugin enable-disable/fetch/info/install/reinstall/uninstall, reconcile apply, and shared path safety. Current CodeGraph and source/test inspection confirm that the cases replace node:fs/promises methods and republish the changed bindings process-wide; tests/orchestrators/plugin/scope-tree-inventory.ts still binds readdir before those mutations specifically to avoid observing them. The affected roots cover the current terminal records for every directly modeled flow: BSKL-019, HHD-011, HSA-026, OPEF-F04, OPEF-F09, the full-path OPIA-F05 root, OPIC-F27, OPLU-B-F10, OPR-B-F14, ORA-F15, and SHC-F003. The live uses divide into behavior reproducible through a case-owned temporary filesystem and irreproducible timing, schedule, rollback, probe, hydration, or read-fault behavior that needs a narrow consumer-owned production port. HHD-020 and BHD-F008 remain duplicates of HHD-011, while BHAS-F012 remains a duplicate of HSA-026. MF-009, OPEF-F16, and SHC-F045 remain supporting-only records rather than additional premises. BC-004 is excluded because MF-DEC-01 already governs removal of its dead coalesce and artificial case, with BC-012 retained as its duplicate. BSFP-F008 is excluded as a superseded clean-list record. The current bridges/skills/stage.test.ts census evidence has no dedicated terminal finding, so that source context alone authorizes no file-specific change until a dedicated terminal finding exists.",
+      "options": [
+        "Classify each use and eliminate global patching",
+        "Introduce filesystem ports uniformly",
+        "Convert named imports and retain serialized builtin stubs"
+      ],
+      "selectedOption": "Classify each use and eliminate global patching",
+      "rejectedOptions": [
+        "Introduce filesystem ports uniformly — rejected because adding a production port for every ordinary filesystem failure would expand public and adapter surfaces primarily for tests, creating unnecessary seam and maintenance cost where case-owned real filesystem behavior is deterministic.",
+        "Convert named imports and retain serialized builtin stubs — rejected because removing syncBuiltinESMExports without removing mutation of the shared builtin object leaves process-global state, prevents safe concurrency, and would require an explicit TREF-08 hermeticity exception rather than resolving the underlying defect."
+      ],
+      "affectedIds": [
+        "BSKL-019",
+        "HHD-011",
+        "HSA-026",
+        "OPEF-F04",
+        "OPEF-F09",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F05",
+        "OPIC-F27",
+        "OPLU-B-F10",
+        "OPR-B-F14",
+        "ORA-F15",
+        "SHC-F003"
+      ],
+      "recommendation": "Apply the selected D-17 policy case by case: make a case-owned real temporary filesystem the default proof, use a narrow consumer-owned production port only where an irreproducible fault, timing edge, probe sequence, rollback, hydration read, or operation schedule must be controlled, and eliminate every authorized process-global builtin mutation without adding test-only exports or dead injection seams.",
+      "downstreamConsequences": "Phase 5 TREF-04 must classify every affected use before changing it. Ordinary portable filesystem behavior uses a fresh case-owned temporary tree; permission-based cases must remain deterministic across supported users and platforms rather than assuming chmod denial under privileged execution. Only irreproducible faults, timing, schedules, rollback points, probe sequences, hydration reads, or state-read races receive narrow consumer-owned production ports wired to real adapters by production composition. Those ports must not be __deps members, test-only exports, unused defaults, or dead seams. Phase 6 TREF-08 then removes the authorized createRequire and syncBuiltinESMExports machinery, replaces each case with its classified real-filesystem proof or fresh port double, and removes the scope-tree inventory pre-binding workaround when its consumers no longer mutate the builtin. Preserve all existing public-result, complete state/configuration/tree, exact notification, failure-classification, retry-order, and cleanup assertions; no interaction check may replace them. Preserve the previously selected reconcile-apply behavioral-composition exception: the owner suite continues to drive real orchestrators while only its independent state-read race boundary is corrected. Coordinate install and reinstall port placement with the Phase 6 TREF-09 split sequence and its mandatory gate, documentation, ownership, and completeness checklist, and rerun each changed direct source-test pair plus the affected command-flow proofs. BC-004 and duplicate BC-012 remain governed only by MF-DEC-01 and are not reopened here. bridges/skills/stage.test.ts receives no file-specific authorization from this decision until a dedicated terminal finding is recorded. MF-009, OPEF-F16, and SHC-F045 retain their supporting or independent routes, and HHD-020, BHD-F008, and BHAS-F012 retain their existing duplicate chains."
     },
     {
       "id": "MF-DEC-08",

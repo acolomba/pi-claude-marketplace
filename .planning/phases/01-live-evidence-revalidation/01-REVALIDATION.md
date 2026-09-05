@@ -2569,7 +2569,7 @@
 - `MF-DEC-04` — resolved
 - `MF-DEC-05` — resolved
 - `MF-DEC-06` — resolved
-- `MF-DEC-07` — pending
+- `MF-DEC-07` — resolved
 - `MF-DEC-08` — pending
 - `MF-DEC-09` — pending
 
