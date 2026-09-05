@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { watch } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -153,10 +163,48 @@ async function projectCase(
   testContext: TestContext,
 ): Promise<{ cwd: string; locations: ScopedLocations }> {
   const cwd = await mkdtemp(path.join(tmpdir(), "marketplace-remove-"));
+  // WPTH-04: `workflowsSavedDir` is rooted at `os.homedir()` and honors no
+  // override, so a cascade unlinking a recorded envelope would reach the real
+  // user's saved workflows unless HOME is relocated before the bundle is built.
+  const home = await mkdtemp(path.join(tmpdir(), "marketplace-remove-home-"));
+  const previousHome = process.env.HOME;
+  const homeExisted = Object.hasOwn(process.env, "HOME");
+  process.env.HOME = home;
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
-  testContext.after(() => rm(cwd, { recursive: true, force: true }));
+  testContext.after(async () => {
+    if (homeExisted) {
+      process.env.HOME = previousHome;
+    } else {
+      delete process.env.HOME;
+    }
+
+    await rm(cwd, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  });
   return { cwd, locations };
+}
+
+/**
+ * Write one saved workflow envelope at its recorded name. Composed with
+ * `path.join` rather than the asynchronous `locations.workflowArtifactPath`, so
+ * a forgotten `await` cannot yield a leaf named after a promise.
+ */
+async function seedWorkflowEnvelope(
+  locations: ScopedLocations,
+  generatedName: string,
+): Promise<string> {
+  const target = path.join(locations.workflowsSavedDir, `${generatedName}.json`);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(
+    target,
+    JSON.stringify({
+      name: generatedName,
+      description: "greets",
+      script: 'export const meta = { name: "greet", description: "greets" };\n',
+    }),
+  );
+  return target;
 }
 
 async function dualScopeCase(testContext: TestContext): Promise<{
@@ -1167,6 +1215,81 @@ test("subtracts a dropped workflow envelope from the persisted row and leaves ho
   assert.deepStrictEqual(resources.workflows, ["beta:farewell"]);
   assert.deepStrictEqual(resources.skills, []);
   assert.deepStrictEqual(resources.hooks, ["beta"]);
+  notification.verifyInteractions();
+});
+
+test("WLIF-03: a cascade removal takes every plugin's workflow envelope off disk", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "workflow-cascade";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./workflow-cascade"),
+    plugins: {
+      alpha: pluginRecord({ workflows: ["alpha:greet"] }),
+      beta: pluginRecord({ workflows: ["beta:greet"] }),
+    },
+  });
+  const alphaEnvelope = await seedWorkflowEnvelope(locations, "alpha:greet");
+  const betaEnvelope = await seedWorkflowEnvelope(locations, "beta:greet");
+  await stat(alphaEnvelope);
+  await stat(betaEnvelope);
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeMarketplace({
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+  });
+
+  // assert
+  await assert.rejects(() => stat(alphaEnvelope), { code: "ENOENT" });
+  await assert.rejects(() => stat(betaEnvelope), { code: "ENOENT" });
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+  notification.verifyInteractions();
+});
+
+test("WLIF-03: one plugin's cascade failure strands only its own envelope", async (testContext) => {
+  // arrange -- beta's skill name carries a separator, so its cascade throws on
+  // the FIRST arm and never reaches its workflows arm. alpha's cascade is
+  // unaffected, and a hand-saved file the user owns shares the directory.
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "workflow-adjacency";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./workflow-adjacency"),
+    plugins: {
+      alpha: pluginRecord({ workflows: ["alpha:greet"] }),
+      beta: pluginRecord({ skills: ["../escape"], workflows: ["beta:greet"] }),
+    },
+  });
+  const alphaEnvelope = await seedWorkflowEnvelope(locations, "alpha:greet");
+  const betaEnvelope = await seedWorkflowEnvelope(locations, "beta:greet");
+  const userOwned = path.join(locations.workflowsSavedDir, "my-own.json");
+  await writeFile(userOwned, '{"name":"my-own"}');
+  const userOwnedBytes = await readFile(userOwned, "utf8");
+  await stat(alphaEnvelope);
+  await stat(betaEnvelope);
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeMarketplace({
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+  });
+
+  // assert
+  await assert.rejects(() => stat(alphaEnvelope), { code: "ENOENT" });
+  await stat(betaEnvelope);
+  assert.strictEqual(await readFile(userOwned, "utf8"), userOwnedBytes);
   notification.verifyInteractions();
 });
 

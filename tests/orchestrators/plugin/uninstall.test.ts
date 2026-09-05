@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -150,6 +160,28 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Write one saved workflow envelope at its recorded name. The path is composed
+ * with `path.join` rather than the asynchronous `locations.workflowArtifactPath`
+ * so a forgotten `await` cannot yield a leaf named after a promise.
+ */
+async function seedWorkflowEnvelope(
+  locations: ReturnType<typeof locationsFor>,
+  generatedName: string,
+): Promise<string> {
+  const target = path.join(locations.workflowsSavedDir, `${generatedName}.json`);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(
+    target,
+    JSON.stringify({
+      name: generatedName,
+      description: "greets",
+      script: 'export const meta = { name: "greet", description: "greets" };\n',
+    }),
+  );
+  return target;
+}
+
 /** Build a minimum-viable owned agent file (basename prefix + body marker). */
 function makeOwnedAgentFile(name: string): string {
   return `---\nname: ${name}\ntools: read\n---\n\n<!--\n${GENERATED_AGENT_MARKER}\n-->\n\nBody.\n`;
@@ -168,6 +200,8 @@ async function seedFullPlugin(
   agentFile: string;
   hooksFile: string;
   mcpJson: string;
+  workflowName: string;
+  workflowEnvelope: string;
 }> {
   await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -228,6 +262,11 @@ async function seedFullPlugin(
     }),
   );
 
+  // workflow: <workflowsSavedDir>/<plugin>:<name>.json -- outside every scope
+  // root, so only the cascade's recorded-name removal will ever find it.
+  const workflowName = `${plugin}:greet`;
+  const workflowEnvelope = await seedWorkflowEnvelope(locations, workflowName);
+
   // Seed state record referencing each resource.
   await seedState(locations.extensionRoot, {
     schemaVersion: 1,
@@ -249,14 +288,14 @@ async function seedFullPlugin(
             agents: [agentName],
             mcpServers: [mcpServerName],
             hooks: [plugin],
-            workflows: [],
+            workflows: [workflowName],
           }),
         },
       },
     },
   });
 
-  return { skillDir, commandFile, agentFile, hooksFile, mcpJson };
+  return { skillDir, commandFile, agentFile, hooksFile, mcpJson, workflowName, workflowEnvelope };
 }
 
 // PU-1 + PU-8 (success path, hint emitted) ---------------------------
@@ -299,6 +338,71 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
         notifications[0]?.message,
         "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-03: a successful uninstall takes the plugin's workflow envelope off disk", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-workflows-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+      // Precondition: without it a fixture that stages nothing makes the
+      // absence assertion below pass having removed nothing.
+      assert.equal(await pathExists(seeded.workflowEnvelope), true, "envelope present before");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications[0]?.severity, undefined);
+      await assert.rejects(() => stat(seeded.workflowEnvelope), { code: "ENOENT" });
+      assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-03: uninstalling a plugin with an empty workflow inventory touches no saved file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-workflows-empty-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      // Overwrite the seeded record with one naming no workflows, while a
+      // foreign envelope stays in the shared directory.
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces["mp"]?.plugins["solo"];
+      assert.ok(record);
+      record.resources.workflows = [];
+      await seedState(locations.extensionRoot, state);
+      const foreign = await seedWorkflowEnvelope(locations, "someone-else:greet");
+      const before = await readdir(locations.workflowsSavedDir);
+      assert.deepStrictEqual(before.sort(), ["solo:greet.json", "someone-else:greet.json"]);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "solo",
+      });
+
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.deepStrictEqual((await readdir(locations.workflowsSavedDir)).sort(), before.sort());
+      await stat(foreign);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2234,12 +2338,15 @@ async function seedGitPlugin(
   marketplace: string,
   plugins: Record<string, string>, // pluginName -> cloneKey
   cwd: string,
-): Promise<void> {
+): Promise<Record<string, string>> {
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const pluginRecords: Record<string, PluginRecord> = {};
+  const envelopes: Record<string, string> = {};
   for (const [pluginName, cloneKey] of Object.entries(plugins)) {
-    const record = makePluginRecord();
+    const workflowName = `${pluginName}:greet`;
+    envelopes[pluginName] = await seedWorkflowEnvelope(locations, workflowName);
+    const record = makePluginRecord({ workflows: [workflowName] });
     record.resolvedSource = path.join(locations.pluginClonesDir, cloneKey);
     record.resolvedSha = GIT_SHA_A;
     pluginRecords[pluginName] = record;
@@ -2260,6 +2367,8 @@ async function seedGitPlugin(
       },
     },
   });
+
+  return envelopes;
 }
 
 test("uninstalling the last referencer of a git clone deletes its plugin-clones dir", async () => {
@@ -3029,7 +3138,10 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         mcpServers: ["uni-server"],
         prompts: [],
         skills: [],
-        workflows: [],
+        // The refusal lands on the hooks arm, which the cascade reaches BEFORE
+        // the workflows arm, so the envelope is untouched and the record still
+        // names it. The retry below is what removes both.
+        workflows: [seeded.workflowName],
       });
       assert.deepStrictEqual(firstSchedule, [
         `unstage:skill:uni-skill`,

@@ -304,6 +304,12 @@ async function seedRealDisabledMarketplace(
     /** Give the plugin real MCP server declarations for companion/cascade cases. */
     mcpServers?: Record<string, unknown>;
     /**
+     * WLIF-03: give the plugin a runnable workflow script so an enable
+     * materializes one envelope under the host engine's saved directory, which
+     * is what a later disable has to take back off disk.
+     */
+    withWorkflow?: boolean;
+    /**
      * DFEN-07: spread `defaultEnabled` onto the plugin's MARKETPLACE ENTRY.
      * The entry is the side that WINS the resolution (`resolveDefaultEnabled`
      * consults it before `plugin.json`), so a fixture that declared the field
@@ -373,6 +379,16 @@ async function seedRealDisabledMarketplace(
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
       JSON.stringify({ mcpServers: opts.mcpServers }),
+    );
+  }
+
+  if (opts.withWorkflow === true) {
+    // A NAMED meta export -- a default-export body classifies as skipped and
+    // stages nothing, so a case built on it would pass having removed nothing.
+    await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "workflows", "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
     );
   }
 
@@ -1021,6 +1037,64 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
       true,
       "config entry should carry enabled:true",
     );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-03: disable takes the workflow envelope off disk and KEEPS its name
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WLIF-03: disable removes the workflow envelope while the record keeps naming it", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      withWorkflow: true,
+    });
+    const args = {
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      scope: "user" as const,
+    };
+    const locations = locationsFor("user", cwd);
+    const envelopePath = path.join(locations.workflowsSavedDir, "foo-plugin:greet.json");
+
+    // act -- the enable materializes the envelope, the disable takes it back
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const recordAfterEnable = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        { plugins: Record<string, { enabled: boolean; resources: { workflows: string[] } }> }
+      >;
+    };
+    assert.deepStrictEqual(
+      recordAfterEnable.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources
+        .workflows,
+      ["foo-plugin:greet"],
+      "precondition: the enable must actually record an envelope",
+    );
+    await stat(envelopePath);
+
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    // assert -- ENBL-18: a disabled record keeps its DESCRIPTION of the
+    // installation, not its artifacts. The retained name is what the next
+    // enable reads to displace its own envelopes aside rather than hitting the
+    // occupancy refusal.
+    await assert.rejects(() => stat(envelopePath), { code: "ENOENT" });
+    const after = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        { plugins: Record<string, { enabled: boolean; resources: { workflows: string[] } }> }
+      >;
+    };
+    const record = after.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"];
+    assert.equal(record?.enabled, false);
+    assert.deepStrictEqual(record?.resources.workflows, ["foo-plugin:greet"]);
   });
 });
 
