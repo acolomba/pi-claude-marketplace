@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-58-PLAN.md
-last_updated: "2026-09-05T16:26:46.000Z"
+stopped_at: Completed 01-59-PLAN.md
+last_updated: "2026-09-05T16:34:11.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-58 resolved MF-DEC-01 with trace-preserving removal; eight operator decisions remain
-state_head: 7c47dce111ad65efaf28f51cafa671a2118516c1
+last_activity_desc: Plan 01-59 closed stale MF-DEC-04 evidence-only; seven decision dossiers remain pending
+state_head: ffefe623b2d7ed52838e5d6bfc05a914e101c04e
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 58
+  completed_plans: 59
   percent: 0
 ---
 
@@ -33,9 +33,9 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 58 of 69
+Plan: 59 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-58 resolved MF-DEC-01 with trace-preserving removal; eight operator decisions remain
+Last activity: 2026-09-05 — Plan 01-59 closed stale MF-DEC-04 evidence-only; seven decision dossiers remain pending
 
 ## Performance Metrics
 
@@ -241,6 +241,7 @@ Last activity: 2026-09-05 — Plan 01-58 resolved MF-DEC-01 with trace-preservin
 | Phase 01 P56 | 12min | 1 tasks | 3 files |
 | Phase 01 P57 | 1h 43m | 1 tasks | 3 files |
 | Phase 01 P58 | 58min | 1 tasks | 5 files |
+| Phase 01 P59 | 3min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -570,6 +571,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Preserve exactly MF-DEC-01 through MF-DEC-09 as pending and validate the terminal ledger with only the pending-decision allowance.
 - [Phase 01]: Select trace-preserving removal for MF-DEC-01: remove dead or no-producer branches and dishonest cases, preserve only compiler-required or genuinely safety-critical checks with current evidence, and replace reachable surgery with case-owned behavior.
 - [Phase 01]: Route MF-DEC-01 through PDEF-01/PDEF-07, TREF-03, TREF-06, TREF-08, and RCOV-02; pid-table source context authorizes no change without a dedicated terminal finding.
+- [Phase 01]: Close MF-DEC-04 without an operator choice because its sole specific premise SNC-F001 is stale and current install/update/reinstall cascade paths disprove the historical 18-of-19 census.
+- [Phase 01]: MF-DEC-04 authorizes no global renderer change; preserve SNA-F010, SNC-F002, OPM-F04, and SNC-F019 in Phase 2 and OPM-F05 in Phase 6 under their existing destinations.
 
 ### Pending Todos
 
@@ -622,16 +625,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-58-PLAN.md
+**Stopped at:** Completed 01-59-PLAN.md
 
-Phase 01 remains active. MF-DEC-01 is resolved, and eight operator decisions remain.
+Phase 01 remains active. MF-DEC-01 and MF-DEC-04 are resolved, and seven decision dossiers remain pending.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-58-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-59-SUMMARY.md` and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T16:26:46.000Z
+Last session: 2026-09-05T16:34:11.000Z
 
-**Next:** Execute `01-59-PLAN.md` and present only `MF-DEC-04` from its terminal current
-premises. Record the operator's selection before opening MF-DEC-05.
+**Next:** Execute `01-60-PLAN.md` and evaluate only `MF-DEC-05` from its terminal current
+premises before opening another dossier.
