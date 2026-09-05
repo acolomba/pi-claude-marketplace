@@ -216,7 +216,31 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 6. The project-key derivation reproduces the engine's across the Spike 025 case
    set, proved by a test that fails when the hash width is changed.
 
-**Plans**: TBD
+**Plans**: 3 plans in 3 waves, one per commit boundary. The waves are serialized
+deliberately: `use_worktrees` is `false` here, so same-wave plans share one
+working tree, and every gate this phase leans on (`typecheck`, `fallow`,
+`format:check`, `npm test`) scans the whole tree rather than the staged diff.
+Wave 3 additionally carries a real code dependency — `domain/workflow-script.ts`
+imports `generatedWorkflowName` and `WorkflowNameCollisionError`, both landed in
+wave 2.
+
+**Wave 1**
+
+- [ ] 110-01-PLAN.md — Tracer: land `platform/workflow-home.ts` seam-free and
+  `domain/workflow-project-key.ts` with their owner tests, proving the
+  path-scoped checkout leaves Phase 109 intact
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 110-02-PLAN.md — Land `generatedWorkflowName` and
+  `WorkflowNameCollisionError`, and complete the engine-parity gate red-first so
+  every generated name passes the real `isSafeSavedWorkflowName`
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 110-03-PLAN.md — Declare `acorn`, land `domain/workflow-script.ts` with the
+  owner test that is also its only consumer, and take the phase through the full
+  gate in one atomic commit
 
 ### Phase 111: Workflows bridge
 
@@ -426,7 +450,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
-| 110. Domain and platform modules | 0/? | Not started | - |
+| 110. Domain and platform modules | 0/3 | Planned | - |
 | 111. Workflows bridge | 0/? | Not started | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
