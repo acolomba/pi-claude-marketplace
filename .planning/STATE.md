@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-57-PLAN.md
-last_updated: "2026-09-05T15:25:10.000Z"
+stopped_at: Completed 01-58-PLAN.md
+last_updated: "2026-09-05T16:26:46.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-57 closed all 109 evidence gaps; nine operator decisions remain
-state_head: fd45670fa53fae7b4caa605b846a078e11939b15
+last_activity_desc: Plan 01-58 resolved MF-DEC-01 with trace-preserving removal; eight operator decisions remain
+state_head: 7c47dce111ad65efaf28f51cafa671a2118516c1
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 57
+  completed_plans: 58
   percent: 0
 ---
 
@@ -33,9 +33,9 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 57 of 69
+Plan: 58 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-57 closed all 109 evidence gaps; nine operator decisions remain
+Last activity: 2026-09-05 — Plan 01-58 resolved MF-DEC-01 with trace-preserving removal; eight operator decisions remain
 
 ## Performance Metrics
 
@@ -240,6 +240,7 @@ Last activity: 2026-09-05 — Plan 01-57 closed all 109 evidence gaps; nine oper
 | Phase 01 P55 | 18min | 3 tasks | 21 files |
 | Phase 01 P56 | 12min | 1 tasks | 3 files |
 | Phase 01 P57 | 1h 43m | 1 tasks | 3 files |
+| Phase 01 P58 | 58min | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -567,6 +568,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Resolve every one of the 109 remaining evidence gaps with bounded case-owned-copy probes or stronger current proof, without altering live production or test source.
 - [Phase 01]: Classify the 109 gaps strictly from proof as 103 confirmed, four duplicate, and two stale; never treat a green baseline alone as terminal test-strength evidence.
 - [Phase 01]: Preserve exactly MF-DEC-01 through MF-DEC-09 as pending and validate the terminal ledger with only the pending-decision allowance.
+- [Phase 01]: Select trace-preserving removal for MF-DEC-01: remove dead or no-producer branches and dishonest cases, preserve only compiler-required or genuinely safety-critical checks with current evidence, and replace reachable surgery with case-owned behavior.
+- [Phase 01]: Route MF-DEC-01 through PDEF-01/PDEF-07, TREF-03, TREF-06, TREF-08, and RCOV-02; pid-table source context authorizes no change without a dedicated terminal finding.
 
 ### Pending Todos
 
@@ -619,86 +622,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-57-PLAN.md
-phase are complete.
+**Stopped at:** Completed 01-58-PLAN.md
+
+Phase 01 remains active. MF-DEC-01 is resolved, and eight operator decisions remain.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
-BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
-per-plan wave list and its phase-117 forward-look are spent.
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-58-SUMMARY.md` and
+`.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T15:25:10.000Z
+Last session: 2026-09-05T16:26:46.000Z
 
-**Next:** Execute `01-58-PLAN.md` and present only `MF-DEC-01`, whose current premises are now
-terminal. Record the operator's selection before opening the next decision dossier.
-
-Plan counts here are MEASURED, not carried: 220 total and 220 complete, counted by `find` over
-`1??-??-{PLAN,SUMMARY}.md` after this plan's SUMMARY landed. Every phase 108-117 has a SUMMARY for
-every PLAN.
-
-### What Phase 117 delivered, and what it left open
-
-- **The last pair is closed.** `extensions/pi-claude-marketplace/index.ts` → `tests/index.test.ts`
-  landed in 117-08 and the pair total is 204 of 204.
-- **The `tests/edge/index-handler.test.ts` orphan is gone** — 117-08 deleted both legacy proxies
-  while writing the entry owner, so the edge tier carries no unmirrored test and none of the 7
-  `as any` / `as unknown as` casts it held.
-- **The all-pair duration blocker is discharged.** Plan 117-11 measured 533.2 s for all 204 rows on
-  Node v26.8.1, read from the runner's own printed line, and decided NOT to add concurrency against
-  that number. No Node 24 is installed on this machine; CI pins it.
-- **22 open Broken Windows entries** out of 29 rows, counted in 117-12 by a script that tallies the
-  rows rather than reading the header. Seven are the D-116-01a coverage shortfalls (15-19, 21, 22),
-  pinned by identity and closable only by a production rewrite; they must stay open. Entry 20 is the
-  two `edge/register.ts` comments (18-20 and 104-106) asserting a registration-time `process.cwd()`
-  capture the code does not make — it is read inside the completion arrow, per invocation. Entries
-  23-26 and 29 are stale documentation references this phase created or found; entries 27 and 28,
-  opened and closed by 117-11, are the all-pair reading and the errno hardening.
-- **`BOOLEAN_FLAGS` is still re-exported from `edge/handlers/plugin/list.ts`** solely for
-  `tests/architecture/flag-catalog-drift.test.ts` (`list.ts:82`, consumed at
-  `flag-catalog-drift.test.ts:48`). Verified still present in 117-12 and left alone under D-117-13,
-  which opened no production licence.
-- **`tests/orchestrators/edge-deps.test.ts` still watches `globalThis.fetch`** — the precedent that
-  spread the wrong door across twelve edge suites. It sits outside the edge tier so phase 116 left it;
-  the git transport reaches the wire through `simple-get` → `https.request`, and `globalThis.fetch` has
-  exactly one production caller (`domain/github-auth.ts`'s device flow, correctly watched by
-  `tests/domain/github-auth.test.ts`).
-
-### One open operator decision
-
-1. **The tool's `available` / `unavailable` parameter DESCRIPTIONS** now admit a bucket their wording
-   does not mention, after D-116-15's CR-01 fix made the `remote` and `partially-available` arms
-   reachable. Changing them alters the LLM-facing contract and the pinned registration schema. Held
-   open deliberately by D-117-14: the change is ONE-WAY, so a later revert is a second contract
-   change rather than an undo. 117-12 records it and does NOT decide it.
-
-**Closed by 117-12:** the REQUIREMENTS.md status drift. Measured before the sweep at **154** rows
-reading `Open` — across phases 110, 111, 112, 113, 114, **116** and the phase-117 entry row, not the
-~115 across 110-114 the earlier estimate claimed, because phase 116's own 30 rows were missed
-entirely. All 154 are closed, and MOD-07 and MOD-10 are closed in both the checklist and the
-requirement-to-phase mapping.
-
-### Standing environment debts — all still true
-
-- **`npm run check` NEVER runs the tests.** `format:check` fails on the operator's pre-existing
-  untracked files and short-circuits before `test`. Run `npm run typecheck`, `npm run lint`,
-  `npm run fallow`, `npm test` and `npm run test:integration` SEPARATELY, checking each exit code.
-- **Git hooks are not installed in this checkout** — a successful commit is not evidence hooks passed.
-  Use the operator-approved recipe: filesystem trufflehog, per-file `prettier --check`, then
-  `SKIP=trufflehog,npm-format-check pre-commit run --files <explicit paths>`.
-- **This is a linked worktree**, so trufflehog needs the filesystem route.
-- **This shell does not word-split**, and backticks inside `git commit -m` execute — use `git commit -F`.
-- **`workflow.use_worktrees=false`**, so executors run sequentially on the shared tree, one at a time.
-- **`phase.complete` cannot write the root planning files** under workstream mode — neither workstream
-  holds v1.19 — so every phase transition is hand-applied. 114, 115, 116 and 117 all were, and the
-  milestone close will be too.
-- **`roadmap.update-plan-progress` mangles ROADMAP.md every single time** (31 for 31 in phase 116):
-  hand-edit instead. ROADMAP carries the plan count in TWO places that drift independently.
-- **`state.record-metric` double-increments `completed_plans`**; `state.update-progress` writes nothing;
-  `state.advance-plan` increments without appending the plan id.
-- **NEVER name a non-plan artifact `*-SUMMARY.md`** — that glob is counted as a plan summary by
-  `find-phase`, `phase-plan-index` and `progress.bar`, and it silently inflates the phase count.
-
-## Operator Next Steps
-
-- Start the next milestone with /gsd-new-milestone
+**Next:** Execute `01-59-PLAN.md` and present only `MF-DEC-04` from its terminal current
+premises. Record the operator's selection before opening MF-DEC-05.
