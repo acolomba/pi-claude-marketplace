@@ -40,12 +40,18 @@ function makeCtx(): {
   return { ctx, pi, notifications };
 }
 
-async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
+/**
+ * Hand the temp home to the callback rather than making it re-read the global
+ * that was just written. A caller reading `process.env.HOME` back needs a
+ * `?? ""` to satisfy `strictNullChecks`, and that fallback turns a broken
+ * precondition into a silent cwd-relative probe instead of a failure.
+ */
+async function withHermeticHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
   const hermeticHome = await mkdtemp(path.join(tmpdir(), "workflow-inversion-home-"));
   const prevHome = process.env.HOME;
   process.env.HOME = hermeticHome;
   try {
-    return await fn();
+    return await fn(hermeticHome);
   } finally {
     if (prevHome === undefined) {
       delete process.env.HOME;
@@ -125,7 +131,7 @@ async function seedWorkflowPlugin(opts: {
 }
 
 test("WINV-02 / D-109-06: a workflow-bearing plugin installs with no partial flag and writes no workflow artifact", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async (home) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-inversion-"));
     try {
       // arrange
@@ -155,7 +161,7 @@ test("WINV-02 / D-109-06: a workflow-bearing plugin installs with no partial fla
 
       // assert -- D-109-06: the workflows kind resolves supported, and no bridge
       // materializes it, so the host engine's storage root is never created.
-      await assert.rejects(stat(path.join(process.env.HOME ?? "", ".pi", "workflows")), {
+      await assert.rejects(stat(path.join(home, ".pi", "workflows")), {
         code: "ENOENT",
       });
     } finally {
