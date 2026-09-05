@@ -18,6 +18,19 @@ export class PathContainmentError extends Error {
 }
 
 /**
+ * Refuses a raw child spelling that contains a parent-traversal component.
+ * Normalized fields describe the rejected operands without claiming that the
+ * normalized target escaped its parent.
+ */
+export class LexicalTraversalError extends PathContainmentError {
+  constructor(parent: string, child: string, label: string) {
+    super(parent, child, label);
+    this.name = "LexicalTraversalError";
+    this.message = `${label} contains forbidden lexical traversal (parent: ${parent}, target: ${child}).`;
+  }
+}
+
+/**
  * Strict subclass: a symlink was found in the path components walked from
  * `parent` down to `child`. D-14 refuses ALL symlinks -- the strictest
  * defense against a malicious or careless plugin author using a symlink to
@@ -51,6 +64,10 @@ function isPathInside(parent: string, child: string): boolean {
   );
 }
 
+function hasLexicalTraversal(child: string): boolean {
+  return child.split(path.sep).includes("..");
+}
+
 /**
  * Refuse if `child` is not contained by `parent`, OR if any path component
  * from `parent` down to `child` (inclusive of `child` if it exists) is a
@@ -79,21 +96,36 @@ export async function assertPathInside(
   child: string,
   label: string,
 ): Promise<void> {
+  // This raw-spelling decision must precede normalization and filesystem work.
+  if (hasLexicalTraversal(child)) {
+    const normalizedParent = path.resolve(parent);
+    const normalizedChild = path.resolve(child);
+    throw new LexicalTraversalError(normalizedParent, normalizedChild, label);
+  }
+
+  const normalizedParent = path.resolve(parent);
+  const normalizedChild = path.resolve(child);
+
   // String-level containment check first -- cheap, no FS touch.
-  if (!isPathInside(parent, child)) {
-    throw new PathContainmentError(parent, child, label);
+  if (!isPathInside(normalizedParent, normalizedChild)) {
+    throw new PathContainmentError(normalizedParent, normalizedChild, label);
   }
 
   // Walk every parent component from `parent` down to `child` (inclusive).
   // Start AT `parent` (the boundary itself is trusted) and descend toward
   // `child`, lstat'ing each intermediate path.
-  const relative = path.relative(parent, child);
+  const relative = path.relative(normalizedParent, normalizedChild);
   const segments = relative === "" ? [] : relative.split(path.sep);
 
-  let current = parent;
+  let current = normalizedParent;
   for (const segment of segments) {
     current = path.join(current, segment);
-    const canContinue = await assertNoSymlinkSegment(parent, child, label, current);
+    const canContinue = await assertNoSymlinkSegment(
+      normalizedParent,
+      normalizedChild,
+      label,
+      current,
+    );
     if (!canContinue) {
       return;
     }
