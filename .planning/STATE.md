@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-66-PLAN.md
-last_updated: "2026-09-05T20:00:06.000Z"
+stopped_at: Completed 01-67-PLAN.md
+last_updated: "2026-09-05T20:14:51.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-66 selected local and CI changed-pair enforcement for MF-DEC-09; all nine decisions are resolved
-state_head: 9a558f3620341421629ca91d1e920b9deaef1c48
+last_activity_desc: Plan 01-67 derived the complete 40-row evidence-backed scope-impact crosswalk
+state_head: 00ef1a526827d54b6f957145d276d9098d5202a1
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 66
+  completed_plans: 67
   percent: 0
 ---
 
@@ -33,17 +33,17 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 66 of 69
+Plan: 67 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-66 selected local and CI changed-pair enforcement for MF-DEC-09; all nine decisions are resolved
+Last activity: 2026-09-05 — Plan 01-67 derived the complete 40-row evidence-backed scope-impact crosswalk
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 167
+- Total plans completed: 168
 - Average recorded duration: 12.3 min
-- Total recorded execution time: 34 hr 16 min
+- Total recorded execution time: 34 hr 30 min
 
 **By Phase:**
 
@@ -249,6 +249,7 @@ Last activity: 2026-09-05 — Plan 01-66 selected local and CI changed-pair enfo
 | Phase 01 P64 | 1h 17m | 1 tasks | 3 files |
 | Phase 01 P65 | 19min | 1 tasks | 3 files |
 | Phase 01 P66 | 23min | 1 tasks | 3 files |
+| Phase 01 P67 | 14min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -594,6 +595,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Route MF-DEC-08 through Phase 4 TREF-02 and TREF-03, align project conventions and production comments, and require separate terminal trace before renaming makeMockPi or unrelated *Fake families.
 - [Phase 01]: Enforce the strict changed-pair direct-coverage gate through both a scoped local pre-commit hook and a dedicated CI job with shared fail-closed selection.
 - [Phase 01]: Route MF-DEC-09 through GGAT-01, RCOV-01, RCOV-02, RCOV-03, and CLOSE-01. Keep all-pair reports honest and keep assertion-strength evidence independent from numeric coverage.
+- [Phase 01]: Cover all 32 current requirement IDs and all eight stable Phase 2-9 routes exactly once in the terminal evidence-backed scope-impact crosswalk.
+- [Phase 01]: Narrow or split mixed scope in place, move unsupported AGCOL-01 and superseded standalone COV-01 work to evidence, and preserve every stable requirement ID and later phase number.
+- [Phase 01]: Do not activate the folded unused-type-member todo or named GAUTH-01 wiring without a dedicated terminal canonical finding inside the unit-test-quality boundary.
 
 ### Pending Todos
 
@@ -646,16 +650,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-66-PLAN.md
+**Stopped at:** Completed 01-67-PLAN.md
 
-Phase 01 remains active. MF-DEC-01 through MF-DEC-09 are resolved, and no decision dossier remains pending.
+Phase 01 remains active. Its terminal ledger now contains a validated 40-row scope-impact crosswalk covering all 32 requirements and all eight Phase 2-9 routes.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-66-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-67-SUMMARY.md` and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T20:00:06.000Z
+Last session: 2026-09-05T20:14:51.000Z
 
-**Next:** Execute `01-67-PLAN.md` and derive the complete evidence-backed scope-impact
-crosswalk before any planning contract changes.
+**Next:** Execute `01-68-PLAN.md` and apply the validated crosswalk to the active
+requirements and Phase 2-9 roadmap contracts without changing stable IDs or phase numbers.

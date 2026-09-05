@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 66/69 plans executed
+**Plans:** 67/69 plans executed
 
 **Success Criteria**:
 
@@ -190,7 +190,7 @@ Plans:
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
-- [ ] 01-67-PLAN.md — Rewrite the active milestone scope from the completed ledger and seal Phase 1 as the hard evidence gate
+- [x] 01-67-PLAN.md — Derive the complete evidence-backed scope-impact crosswalk before editing planning contracts
 
 **Wave 16** *(blocked on Wave 15 completion)*
 
@@ -350,7 +350,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 66/69 | In Progress|  |
+| 1. Live Evidence Revalidation | 67/69 | In Progress|  |
 | 2. Containment and Input Safety | 0/0 | Not started | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
