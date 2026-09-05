@@ -445,9 +445,7 @@
   "findings": [
     {
       "id": "SNFP-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-001"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "SNA-F012",
@@ -620,9 +618,7 @@
     },
     {
       "id": "SNFP-F007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-017"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "SNA-F017",
@@ -702,9 +698,7 @@
     },
     {
       "id": "SNFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-022"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-022"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "SNA-F019",
@@ -728,9 +722,7 @@
     },
     {
       "id": "SNFP-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-023"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-023"],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -754,9 +746,7 @@
     },
     {
       "id": "SNFP-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-024"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-024"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "SNA-F020",
@@ -872,9 +862,7 @@
     },
     {
       "id": "TXFP-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-001"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "TXA-F012",
@@ -1171,9 +1159,7 @@
     },
     {
       "id": "TXFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-013"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-013"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "TXA-F020",

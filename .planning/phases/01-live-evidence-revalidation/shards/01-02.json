@@ -1406,8 +1406,8 @@
       "route": "deferred backlog",
       "sourceRefs": [
         {
-        "path": "N/A",
-        "reason": "The historical coverage report is not present in the current checkout; the claim is retained as a known evidence gap, not treated as current coverage proof."
+          "path": "N/A",
+          "reason": "The historical coverage report is not present in the current checkout; the claim is retained as a known evidence gap, not treated as current coverage proof."
         }
       ],
       "testRefs": [
@@ -1472,7 +1472,12 @@
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "sourceRefs": [{ "path": ".planning/BACKLOG.md" }],
-      "testRefs": [{ "path": "N/A", "reason": "Repository provenance and tracking claims do not describe executable test behavior." }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Repository provenance and tracking claims do not describe executable test behavior."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "git cat-file plus current planning-state inspection",
@@ -1491,7 +1496,12 @@
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/README.md" }],
-      "testRefs": [{ "path": "N/A", "reason": "Corpus inventory and legacy path mapping are documentary structure claims." }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Corpus inventory and legacy path mapping are documentary structure claims."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "revalidation inventory and filesystem census",
@@ -1503,9 +1513,7 @@
     },
     {
       "id": "README-003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "sourceRefs": [

@@ -69,262 +69,911 @@
     }
   ],
   "sourceClaims": [
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-001", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-001", "findingId": "ACF-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-002", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-002", "findingId": "ACF-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-003", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-003", "findingId": "ACF-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-004", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-004", "findingId": "ACF-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-005", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-005", "findingId": "ACF-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-006", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-006", "findingId": "ACF-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-007", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-007", "findingId": "ACF-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-008", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-008", "findingId": "ACF-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-009", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-009", "findingId": "ACF-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-010", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-010", "findingId": "ACF-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-011", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-011", "findingId": "ACF-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-012", "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md", "label": "CLAIM-012", "findingId": "ACF-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-001", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-001", "findingId": "AHF-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-002", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-002", "findingId": "AHF-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-003", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-003", "findingId": "AHF-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-004", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-004", "findingId": "AHF-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-005", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-005", "findingId": "AHF-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-006", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-006", "findingId": "AHF-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-007", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-007", "findingId": "AHF-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-008", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-008", "findingId": "AHF-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-009", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-009", "findingId": "AHF-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-010", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-010", "findingId": "AHF-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-011", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-011", "findingId": "AHF-F011" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-012", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-012", "findingId": "AHF-F012" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-013", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-013", "findingId": "AHF-F013" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-014", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-014", "findingId": "AHF-F014" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-015", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-015", "findingId": "AHF-F015" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-016", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-016", "findingId": "AHF-F016" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-017", "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md", "label": "CLAIM-017", "findingId": "AHF-F017" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-001", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-001", "findingId": "ANF-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-002", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-002", "findingId": "ANF-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-003", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-003", "findingId": "ANF-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-004", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-004", "findingId": "ANF-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-005", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-005", "findingId": "ANF-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-006", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-006", "findingId": "ANF-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-007", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-007", "findingId": "ANF-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-008", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-008", "findingId": "ANF-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-009", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-009", "findingId": "ANF-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-010", "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md", "label": "CLAIM-010", "findingId": "ANF-F010" }
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-001",
+      "findingId": "ACF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-002",
+      "findingId": "ACF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-003",
+      "findingId": "ACF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-004",
+      "findingId": "ACF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-005",
+      "findingId": "ACF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-006",
+      "findingId": "ACF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-007",
+      "findingId": "ACF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-008",
+      "findingId": "ACF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-009",
+      "findingId": "ACF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-010",
+      "findingId": "ACF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-011",
+      "findingId": "ACF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md",
+      "label": "CLAIM-012",
+      "findingId": "ACF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-001",
+      "findingId": "AHF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-002",
+      "findingId": "AHF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-003",
+      "findingId": "AHF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-004",
+      "findingId": "AHF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-005",
+      "findingId": "AHF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-006",
+      "findingId": "AHF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-007",
+      "findingId": "AHF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-008",
+      "findingId": "AHF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-009",
+      "findingId": "AHF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-010",
+      "findingId": "AHF-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-011",
+      "findingId": "AHF-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-012",
+      "findingId": "AHF-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-013",
+      "findingId": "AHF-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-014",
+      "findingId": "AHF-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-015",
+      "findingId": "AHF-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-016",
+      "findingId": "AHF-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md",
+      "label": "CLAIM-017",
+      "findingId": "AHF-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-001",
+      "findingId": "ANF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-002",
+      "findingId": "ANF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-003",
+      "findingId": "ANF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-004",
+      "findingId": "ANF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-005",
+      "findingId": "ANF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-006",
+      "findingId": "ANF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-007",
+      "findingId": "ANF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-008",
+      "findingId": "ANF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-009",
+      "findingId": "ANF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md",
+      "label": "CLAIM-010",
+      "findingId": "ANF-F010"
+    }
   ],
   "findings": [
     {
-      "id": "ACF-F001", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-001"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph plus focused node:test rerun","observed":"The current gate still parses the independent output catalog, pins 182 examples, drives real notification renderers, and checks both catalog-to-fixture and fixture-to-catalog directions; the focused suite passed."},
-      "rationale":"The report's positive gate-design assessment remains supported by current code and execution.", "destination":"Retain as positive evidence for the catalog UAT gate."
+      "id": "ACF-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus focused node:test rerun",
+        "observed": "The current gate still parses the independent output catalog, pins 182 examples, drives real notification renderers, and checks both catalog-to-fixture and fixture-to-catalog directions; the focused suite passed."
+      },
+      "rationale": "The report's positive gate-design assessment remains supported by current code and execution.",
+      "destination": "Retain as positive evidence for the catalog UAT gate."
     },
     {
-      "id": "ACF-F002", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-002",".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-003"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"},{"path":"extensions/pi-claude-marketplace/shared/notify-context.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current source inspection","observed":"catalog-uat.test.ts still imports process-wide mock and still passes minimal MockCtx/MockPi values through nine as-never casts; notify and context entry points still expose broad SDK-facing parameter types."},
-      "rationale":"Both the unsafe-double symptom and its broad-port production cause remain present.", "destination":"Phase 2 should narrow the consumer ports and replace process-wide doubles with case-owned typed doubles."
+      "id": "ACF-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/notify.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/notify-context.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "catalog-uat.test.ts still imports process-wide mock and still passes minimal MockCtx/MockPi values through nine as-never casts; notify and context entry points still expose broad SDK-facing parameter types."
+      },
+      "rationale": "Both the unsafe-double symptom and its broad-port production cause remain present.",
+      "destination": "Phase 2 should narrow the consumer ports and replace process-wide doubles with case-owned typed doubles."
     },
     {
-      "id": "ACF-F003", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-004",".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-005"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test inspection","observed":"The bare local named actual remains and each of the six top-level cases still lacks the required lowercase arrange/act/assert phase comments."},
-      "rationale":"These are current readability and convention violations, not behavioral failures.", "destination":"Retain as test-structure cleanup backlog."
+      "id": "ACF-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test inspection",
+        "observed": "The bare local named actual remains and each of the six top-level cases still lacks the required lowercase arrange/act/assert phase comments."
+      },
+      "rationale": "These are current readability and convention violations, not behavioral failures.",
+      "destination": "Retain as test-structure cleanup backlog."
     },
     {
-      "id": "ACF-F004", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-006",".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-007"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test inspection plus focused rerun","observed":"The 182 examples still execute inside one aggregate test, and two FIXTURES entries still compute reasons through narrowUnsupportedKinds despite the pure-data header invariant; the suite passes."},
-      "rationale":"The aggregate reporting and fixture-independence findings remain current without making the byte-parity gate vacuous.", "destination":"Split data rows into sibling cases and use literal fixture reasons when the gate is next revised."
+      "id": "ACF-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection plus focused rerun",
+        "observed": "The 182 examples still execute inside one aggregate test, and two FIXTURES entries still compute reasons through narrowUnsupportedKinds despite the pure-data header invariant; the suite passes."
+      },
+      "rationale": "The aggregate reporting and fixture-independence findings remain current without making the byte-parity gate vacuous.",
+      "destination": "Split data rows into sibling cases and use literal fixture reasons when the gate is next revised."
     },
     {
-      "id": "ACF-F005", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-008"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/platform/pi-api.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test inspection","observed":"MockTool still declares sourceInfo, but the three catalog Pi factories exercise only name-based tool detection; no sourceInfo-only catalog fixture exists."},
-      "rationale":"The field remains dead in this local harness; branch ownership primarily belongs to the platform pair.", "destination":"Remove the dead field or add only a catalog-relevant sourceInfo fixture."
+      "id": "ACF-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-008"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test inspection",
+        "observed": "MockTool still declares sourceInfo, but the three catalog Pi factories exercise only name-based tool detection; no sourceInfo-only catalog fixture exists."
+      },
+      "rationale": "The field remains dead in this local harness; branch ownership primarily belongs to the platform pair.",
+      "destination": "Remove the dead field or add only a catalog-relevant sourceInfo fixture."
     },
     {
-      "id": "ACF-F006", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-009"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph file-structure inspection","observed":"The file remains over 5,400 lines and still combines its markdown scanner, approximately 4,750-line fixture map, and gate driver in one module."},
-      "rationale":"The historical three-way split recommendation still follows the current internal section boundaries.", "destination":"Defer the mechanical parser/fixtures/driver split to a focused maintenance change."
+      "id": "ACF-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-009"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph file-structure inspection",
+        "observed": "The file remains over 5,400 lines and still combines its markdown scanner, approximately 4,750-line fixture map, and gate driver in one module."
+      },
+      "rationale": "The historical three-way split recommendation still follows the current internal section boundaries.",
+      "destination": "Defer the mechanical parser/fixtures/driver split to a focused maintenance change."
     },
     {
-      "id": "ACF-F007", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-010"], "evidenceStatus": "stale", "route": "evidence-only closure", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current full-file pattern scan and focused rerun","observed":"The positive assertion that the test has no substantive weaknesses is superseded by current evidence of broad as-never casts, process-wide mock use, aggregate row execution, and computed fixture input; the same suite still passes."},
-      "rationale":"Positive replacement proof identifies the current violations and confirms execution, so the old broad cleanliness claim is no longer accurate.", "destination":"Preserve as stale historical praise; use ACF-F002 through ACF-F006 as replacement evidence."
+      "id": "ACF-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-010"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current full-file pattern scan and focused rerun",
+        "observed": "The positive assertion that the test has no substantive weaknesses is superseded by current evidence of broad as-never casts, process-wide mock use, aggregate row execution, and computed fixture input; the same suite still passes."
+      },
+      "rationale": "Positive replacement proof identifies the current violations and confirms execution, so the old broad cleanliness claim is no longer accurate.",
+      "destination": "Preserve as stale historical praise; use ACF-F002 through ACF-F006 as replacement evidence."
     },
     {
-      "id": "ACF-F008", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-011"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify-context.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph source inspection","observed":"Multi-line notify-context functions and callbacks still use the single-letter parameter p; the localized severity mutation remains inside its explained catch boundary."},
-      "rationale":"The low-priority naming issue remains while the previously accepted error handling is intact.", "destination":"Retain as deferred style cleanup, not a correctness fix."
+      "id": "ACF-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-011"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify-context.ts" }],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph source inspection",
+        "observed": "Multi-line notify-context functions and callbacks still use the single-letter parameter p; the localized severity mutation remains inside its explained catch boundary."
+      },
+      "rationale": "The low-priority naming issue remains while the previously accepted error handling is intact.",
+      "destination": "Retain as deferred style cleanup, not a correctness fix."
     },
     {
-      "id": "ACF-F009", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-012"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/probe-classifiers.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts"}], "testRefs": [{"path":"tests/architecture/catalog-uat.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current source inspection","observed":"The three historically clean supporting modules retain narrow, typed roles; no contrary issue from this report's stated checks was found and the catalog gate passes."},
-      "rationale":"The scoped positive assessment remains current.", "destination":"Close as retained positive evidence."
+      "id": "ACF-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-catalog-uat.md#CLAIM-012"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/probe-classifiers.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/catalog-uat.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "The three historically clean supporting modules retain narrow, typed roles; no contrary issue from this report's stated checks was found and the catalog gate passes."
+      },
+      "rationale": "The scoped positive assessment remains current.",
+      "destination": "Close as retained positive evidence."
     },
     {
-      "id": "AHF-F001", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-001"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}], "testRefs": [{"path":"tests/architecture/hooks-async-rewake.test.ts"},{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test comparison","observed":"The architecture stale-child case and the paired registry stale-epoch case remain, with the paired case additionally checking timer cleanup; both current suites pass."},
-      "rationale":"The duplicate architecture case remains redundant while the two cross-lane environment parity cases remain legitimate.", "destination":"Remove only the duplicate stale-child architecture case."
+      "id": "AHF-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-async-rewake.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test comparison",
+        "observed": "The architecture stale-child case and the paired registry stale-epoch case remain, with the paired case additionally checking timer cleanup; both current suites pass."
+      },
+      "rationale": "The duplicate architecture case remains redundant while the two cross-lane environment parity cases remain legitimate.",
+      "destination": "Remove only the duplicate stale-child architecture case."
     },
     {
-      "id": "AHF-F002", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-002"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/hooks-lifecycle.test.ts"}], "testRefs": [{"path":"tests/architecture/hooks-lifecycle.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test inspection and focused rerun","observed":"All six lifecycle source-scan cases still omit arrange/act/assert comments; their bounded source checks remain active and the suite passes."},
-      "rationale":"The formatting issue and the positive assessment of the planted lifecycle checks both remain current.", "destination":"Add phase comments without weakening the lifecycle gates."
+      "id": "AHF-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/hooks-lifecycle.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/hooks-lifecycle.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection and focused rerun",
+        "observed": "All six lifecycle source-scan cases still omit arrange/act/assert comments; their bounded source checks remain active and the suite passes."
+      },
+      "rationale": "The formatting issue and the positive assessment of the planted lifecycle checks both remain current.",
+      "destination": "Add phase comments without weakening the lifecycle gates."
     },
     {
-      "id": "AHF-F003", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-003"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/persistence/state-io.ts"}], "testRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"},{"path":"tests/persistence/state-io.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test comparison","observed":"hooks-foundation still introspects schemaVersion anyOf/const representation while state-io.test.ts drives versions 1, 2, and 3 through the published validator."},
-      "rationale":"The representation-level duplicate remains less robust than existing paired behavior coverage.", "destination":"Delete the duplicate foundation schema-shape block."
+      "id": "AHF-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-003"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-foundation.test.ts" },
+        { "path": "tests/persistence/state-io.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test comparison",
+        "observed": "hooks-foundation still introspects schemaVersion anyOf/const representation while state-io.test.ts drives versions 1, 2, and 3 through the published validator."
+      },
+      "rationale": "The representation-level duplicate remains less robust than existing paired behavior coverage.",
+      "destination": "Delete the duplicate foundation schema-shape block."
     },
     {
-      "id": "AHF-F004", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-004"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/persistence/state-io.ts"}], "testRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"},{"path":"tests/persistence/state-io.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test comparison","observed":"The architecture block still introspects the resources.hooks schema shape while paired state-io tests reject missing and non-array hooks through the validator."},
-      "rationale":"The duplicate schema-representation block remains unnecessary.", "destination":"Delete the duplicate hooks-required shape block."
+      "id": "AHF-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-004"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-foundation.test.ts" },
+        { "path": "tests/persistence/state-io.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test comparison",
+        "observed": "The architecture block still introspects the resources.hooks schema shape while paired state-io tests reject missing and non-array hooks through the validator."
+      },
+      "rationale": "The duplicate schema-representation block remains unnecessary.",
+      "destination": "Delete the duplicate hooks-required shape block."
     },
     {
-      "id": "AHF-F005", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-005"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"}], "testRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"},{"path":"tests/domain/components/hooks/schema.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current pair inspection","observed":"The two lenient unknown-field assertions remain in hooks-foundation, while schema.test.ts still has no equivalent additionalProperties/future-field coverage."},
-      "rationale":"Unique single-module behavior is still stranded outside its owning source-test pair.", "destination":"Move the two HOOK-03 cases into the schema pair."
+      "id": "AHF-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-005"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-foundation.test.ts" },
+        { "path": "tests/domain/components/hooks/schema.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current pair inspection",
+        "observed": "The two lenient unknown-field assertions remain in hooks-foundation, while schema.test.ts still has no equivalent additionalProperties/future-field coverage."
+      },
+      "rationale": "Unique single-module behavior is still stranded outside its owning source-test pair.",
+      "destination": "Move the two HOOK-03 cases into the schema pair."
     },
     {
-      "id": "AHF-F006", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-006"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/domain/components/hooks.ts"}], "testRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current architecture test inspection","observed":"The supported and unsupported component-kind closed-tuple locks remain present and are appropriate cross-set architecture assertions."},
-      "rationale":"The report correctly retained these inventory locks.", "destination":"Keep the closed-set architecture checks."
+      "id": "AHF-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-006"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/architecture/hooks-foundation.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current architecture test inspection",
+        "observed": "The supported and unsupported component-kind closed-tuple locks remain present and are appropriate cross-set architecture assertions."
+      },
+      "rationale": "The report correctly retained these inventory locks.",
+      "destination": "Keep the closed-set architecture checks."
     },
     {
-      "id": "AHF-F007", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-007"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/domain/resolver.ts"}], "testRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"},{"path":"tests/domain/resolver.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current pair inspection","observed":"Hook-only strict/loose resolver coverage remains exclusively in hooks-foundation; the paired resolver test still lacks an equivalent hook-only case."},
-      "rationale":"The pairing gap remains live.", "destination":"Move the hook-only resolver cases and type guard into resolver.test.ts."
+      "id": "AHF-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-007"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-foundation.test.ts" },
+        { "path": "tests/domain/resolver.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current pair inspection",
+        "observed": "Hook-only strict/loose resolver coverage remains exclusively in hooks-foundation; the paired resolver test still lacks an equivalent hook-only case."
+      },
+      "rationale": "The pairing gap remains live.",
+      "destination": "Move the hook-only resolver cases and type guard into resolver.test.ts."
     },
     {
-      "id": "AHF-F008", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-008"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"}], "testRefs": [{"path":"tests/architecture/hooks-foundation.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test inspection","observed":"The hooks-foundation cases continue to omit the required phase comments."},
-      "rationale":"The convention violation remains current.", "destination":"Add phase comments during the pairing cleanup."
+      "id": "AHF-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-008"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/hooks-foundation.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/hooks-foundation.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection",
+        "observed": "The hooks-foundation cases continue to omit the required phase comments."
+      },
+      "rationale": "The convention violation remains current.",
+      "destination": "Add phase comments during the pairing cleanup."
     },
     {
-      "id": "AHF-F009", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-009"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts"}], "testRefs": [{"path":"tests/architecture/hooks-translators.test.ts"},{"path":"tests/bridges/hooks/payloads/pre-tool-use.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test comparison","observed":"The architecture sample mapping test remains duplicated across the paired payload tests, and loadTranslator still concatenates its dynamic import string and casts the imported shape."},
-      "rationale":"Both redundancy and the hand-typed dynamic import remain current; the inventory completeness case is still legitimate.", "destination":"Remove the duplicate mapping case and modernize the loader when touched."
+      "id": "AHF-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-009"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-translators.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/pre-tool-use.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test comparison",
+        "observed": "The architecture sample mapping test remains duplicated across the paired payload tests, and loadTranslator still concatenates its dynamic import string and casts the imported shape."
+      },
+      "rationale": "Both redundancy and the hand-typed dynamic import remain current; the inventory completeness case is still legitimate.",
+      "destination": "Remove the duplicate mapping case and modernize the loader when touched."
     },
     {
-      "id": "AHF-F010", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-010"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}], "testRefs": [{"path":"tests/architecture/hooks-if-field.test.ts"},{"path":"tests/bridges/hooks/event-router.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current pair inspection","observed":"The realistic predicate side-map identity/order pipeline remains only in hooks-if-field.test.ts; paired event-router coverage still uses simplified predicate inputs."},
-      "rationale":"This unique behavior still belongs in the event-router pair.", "destination":"Relocate the case into event-router.test.ts."
+      "id": "AHF-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-010"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-if-field.test.ts" },
+        { "path": "tests/bridges/hooks/event-router.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current pair inspection",
+        "observed": "The realistic predicate side-map identity/order pipeline remains only in hooks-if-field.test.ts; paired event-router coverage still uses simplified predicate inputs."
+      },
+      "rationale": "This unique behavior still belongs in the event-router pair.",
+      "destination": "Relocate the case into event-router.test.ts."
     },
     {
-      "id": "AHF-F011", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-011"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/debug-log.ts"},{"path":"extensions/pi-claude-marketplace/domain/components/hooks.ts"}], "testRefs": [{"path":"tests/architecture/hooks-dispatch.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and focused rerun","observed":"The file still contains OBS-01 console/debug-log source gates rather than hook dispatch behavior; its exact offender-list and debug-log routing assertions pass."},
-      "rationale":"Only the misleading filename remains a problem; the gates themselves remain sound.", "destination":"Rename the architecture file without changing its checks."
+      "id": "AHF-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-011"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/debug-log.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/hooks-dispatch.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and focused rerun",
+        "observed": "The file still contains OBS-01 console/debug-log source gates rather than hook dispatch behavior; its exact offender-list and debug-log routing assertions pass."
+      },
+      "rationale": "Only the misleading filename remains a problem; the gates themselves remain sound.",
+      "destination": "Rename the architecture file without changing its checks."
     },
     {
-      "id": "AHF-F012", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-012"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/hooks-cap-notify.test.ts"},{"path":"tests/shared/notify.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test comparison and focused rerun","observed":"hooks-cap-notify still imports process-wide mock; its first two assertions remain subsumed by the paired exact-message/severity case, while its catalog byte-parity case remains unique."},
-      "rationale":"The double ownership and redundant cases remain current.", "destination":"Use t.mock and retain only the documentation parity case."
+      "id": "AHF-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-012"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-cap-notify.test.ts" },
+        { "path": "tests/shared/notify.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test comparison and focused rerun",
+        "observed": "hooks-cap-notify still imports process-wide mock; its first two assertions remain subsumed by the paired exact-message/severity case, while its catalog byte-parity case remains unique."
+      },
+      "rationale": "The double ownership and redundant cases remain current.",
+      "destination": "Use t.mock and retain only the documentation parity case."
     },
     {
-      "id": "AHF-F013", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-013"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"}], "testRefs": [{"path":"tests/architecture/no-hooks-strict-additional-properties.test.ts"}],
-      "validation": {"method":"surviving-mutation","command":"node --test tests/architecture/no-hooks-strict-additional-properties.test.ts in repository-local isolated copy","exitCode":0,"observed":"A planted additionalProperties: false token in hooks/schema.ts survived because the gate still scans hooks.ts. The isolated copy was removed, and live source/test files remained unchanged."},
-      "rationale":"A plausible forbidden schema change still passes the advertised defense-in-depth gate.", "destination":"Phase 2 must point the source scan at hooks/schema.ts or both definition and re-export modules."
+      "id": "AHF-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-013"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/architecture/no-hooks-strict-additional-properties.test.ts in repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "A planted additionalProperties: false token in hooks/schema.ts survived because the gate still scans hooks.ts. The isolated copy was removed, and live source/test files remained unchanged."
+      },
+      "rationale": "A plausible forbidden schema change still passes the advertised defense-in-depth gate.",
+      "destination": "Phase 2 must point the source scan at hooks/schema.ts or both definition and re-export modules."
     },
     {
-      "id": "AHF-F014", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-014"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/persistence/migrate.ts"}], "testRefs": [{"path":"tests/architecture/no-hooks-strict-additional-properties.test.ts"},{"path":"tests/persistence/migrate.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current pair inspection","observed":"The two-pass hooks default-fill idempotency case remains in the architecture file and remains absent from migrate.test.ts."},
-      "rationale":"Unique single-module migration behavior is still outside its paired owner.", "destination":"Move the idempotency case into migrate.test.ts."
+      "id": "AHF-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-014"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/migrate.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts" },
+        { "path": "tests/persistence/migrate.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current pair inspection",
+        "observed": "The two-pass hooks default-fill idempotency case remains in the architecture file and remains absent from migrate.test.ts."
+      },
+      "rationale": "Unique single-module migration behavior is still outside its paired owner.",
+      "destination": "Move the idempotency case into migrate.test.ts."
     },
     {
-      "id": "AHF-F015", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-015"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}], "testRefs": [{"path":"tests/architecture/hooks-if-field.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph call-site inspection","observed":"resetEpoch and resetRoutingState remain exported, and current non-test extension code still has no external caller for either reset seam."},
-      "rationale":"The test-only production exports remain live design debt.", "destination":"Remove or explicitly justify the test-support seam during routing-state redesign."
+      "id": "AHF-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-015"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [{ "path": "tests/architecture/hooks-if-field.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-site inspection",
+        "observed": "resetEpoch and resetRoutingState remain exported, and current non-test extension code still has no external caller for either reset seam."
+      },
+      "rationale": "The test-only production exports remain live design debt.",
+      "destination": "Remove or explicitly justify the test-support seam during routing-state redesign."
     },
     {
-      "id": "AHF-F016", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-016"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}], "testRefs": [{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph source and paired-test inspection","observed":"spawnAndRegister still evaluates new Date().toISOString() inline, and the paired tests still rely on process-wide timer faking for deterministic timestamps."},
-      "rationale":"The hidden clock dependency remains current.", "destination":"Inject a role-named clock/now collaborator into SpawnDeps."
+      "id": "AHF-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-016"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph source and paired-test inspection",
+        "observed": "spawnAndRegister still evaluates new Date().toISOString() inline, and the paired tests still rely on process-wide timer faking for deterministic timestamps."
+      },
+      "rationale": "The hidden clock dependency remains current.",
+      "destination": "Inject a role-named clock/now collaborator into SpawnDeps."
     },
     {
-      "id": "AHF-F017", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-017"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}], "testRefs": [{"path":"tests/bridges/hooks/event-router.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph source and paired-test inspection","observed":"event-router.ts still calls os.homedir() directly at the three reported business-logic sites, and its tests still manipulate HOME to control the result."},
-      "rationale":"The hidden home-directory dependency remains current.", "destination":"Inject the home-directory value through the existing options boundary."
+      "id": "AHF-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/architecture-hooks-gates.md#CLAIM-017"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph source and paired-test inspection",
+        "observed": "event-router.ts still calls os.homedir() directly at the three reported business-logic sites, and its tests still manipulate HOME to control the result."
+      },
+      "rationale": "The hidden home-directory dependency remains current.",
+      "destination": "Inject the home-directory value through the existing options boundary."
     },
     {
-      "id": "ANF-F001", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-001"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/notify-grammar-invariant.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test inspection","observed":"notify-grammar-invariant still imports process-wide mock, defines partial MockCtx/MockPi types, and uses as-never at every notification call."},
-      "rationale":"The unsafe-double and ownership findings remain current.", "destination":"Replace broad casts with case-owned typed ports or strict interaction doubles."
+      "id": "ANF-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-grammar-invariant.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test inspection",
+        "observed": "notify-grammar-invariant still imports process-wide mock, defines partial MockCtx/MockPi types, and uses as-never at every notification call."
+      },
+      "rationale": "The unsafe-double and ownership findings remain current.",
+      "destination": "Replace broad casts with case-owned typed ports or strict interaction doubles."
     },
     {
-      "id": "ANF-F002", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-002"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/notify-grammar-invariant.test.ts"}], "testRefs": [{"path":"tests/architecture/notify-grammar-invariant.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test inspection and focused rerun","observed":"Each of seven fixture groups still loops inside one test case, so one early assertion masks later row results; the suite currently passes."},
-      "rationale":"The data-driven structure violation remains without disproving current behavior.", "destination":"Generate sibling test cases per fixture row."
+      "id": "ANF-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/notify-grammar-invariant.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-grammar-invariant.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection and focused rerun",
+        "observed": "Each of seven fixture groups still loops inside one test case, so one early assertion masks later row results; the suite currently passes."
+      },
+      "rationale": "The data-driven structure violation remains without disproving current behavior.",
+      "destination": "Generate sibling test cases per fixture row."
     },
     {
-      "id": "ANF-F003", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-003"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/notify-grammar-invariant.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current header and grammar inspection","observed":"The file header still narrates the retired numeric failed/skipped summary grammar while SUMMARY_GRAMMAR and production summaryPhrase implement article/some plus has/have failed or needs/need attention."},
-      "rationale":"The explanatory header remains stale even though executable assertions target the current grammar.", "destination":"Update the header to describe the grammar actually enforced."
+      "id": "ANF-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-grammar-invariant.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current header and grammar inspection",
+        "observed": "The file header still narrates the retired numeric failed/skipped summary grammar while SUMMARY_GRAMMAR and production summaryPhrase implement article/some plus has/have failed or needs/need attention."
+      },
+      "rationale": "The explanatory header remains stale even though executable assertions target the current grammar.",
+      "destination": "Update the header to describe the grammar actually enforced."
     },
     {
-      "id": "ANF-F004", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-004"], "evidenceStatus": "confirmed", "route": "Phase 2", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/notify-will-reload-agreement.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current test inspection","observed":"notify-will-reload-agreement still imports process-wide mock, defines duplicated partial harness types, and forces both notification arguments through as-never."},
-      "rationale":"The second unsafe-double site remains live and duplicates the first harness.", "destination":"Replace it with the same narrow typed harness adopted for the grammar gate."
+      "id": "ANF-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-will-reload-agreement.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test inspection",
+        "observed": "notify-will-reload-agreement still imports process-wide mock, defines duplicated partial harness types, and forces both notification arguments through as-never."
+      },
+      "rationale": "The second unsafe-double site remains live and duplicates the first harness.",
+      "destination": "Replace it with the same narrow typed harness adopted for the grammar gate."
     },
     {
-      "id": "ANF-F005", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-005"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/notify-will-reload-agreement.test.ts"}], "testRefs": [{"path":"tests/architecture/notify-will-reload-agreement.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current test inspection and focused rerun","observed":"Both reload-deferred and immediate fixture arrays remain loops inside aggregate tests; the current suite passes."},
-      "rationale":"The row-level reporting weakness remains current.", "destination":"Generate one sibling test per labeled fixture."
+      "id": "ANF-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/notify-will-reload-agreement.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-will-reload-agreement.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection and focused rerun",
+        "observed": "Both reload-deferred and immediate fixture arrays remain loops inside aggregate tests; the current suite passes."
+      },
+      "rationale": "The row-level reporting weakness remains current.",
+      "destination": "Generate one sibling test per labeled fixture."
     },
     {
-      "id": "ANF-F006", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-006"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"tests/architecture/notify-stamp-coverage.test.ts"}], "testRefs": [{"path":"tests/architecture/notify-stamp-coverage.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current assertion inspection and focused rerun","observed":"The three whole-value stamp assertions still call assert.deepEqual rather than assert.deepStrictEqual; the suite passes."},
-      "rationale":"The strict assertion convention remains violated.", "destination":"Use deepStrictEqual for all three stamp arrays."
+      "id": "ANF-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/notify-stamp-coverage.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-stamp-coverage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assertion inspection and focused rerun",
+        "observed": "The three whole-value stamp assertions still call assert.deepEqual rather than assert.deepStrictEqual; the suite passes."
+      },
+      "rationale": "The strict assertion convention remains violated.",
+      "destination": "Use deepStrictEqual for all three stamp arrays."
     },
     {
-      "id": "ANF-F007", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-007"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/notify-closed-set-locks.test.ts"}],
-      "validation": {"method":"static-proof","tool":"Current comment inspection","observed":"The closed-set lock comments retain the historical increment arithmetic, while the executable exact-size tripwires remain current and pass."},
-      "rationale":"This remains low-priority narration debt, not a gate defect.", "destination":"Condense comments to current members and durable decision identifiers when touched."
+      "id": "ANF-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-closed-set-locks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current comment inspection",
+        "observed": "The closed-set lock comments retain the historical increment arithmetic, while the executable exact-size tripwires remain current and pass."
+      },
+      "rationale": "This remains low-priority narration debt, not a gate defect.",
+      "destination": "Condense comments to current members and durable decision identifiers when touched."
     },
     {
-      "id": "ANF-F008", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-008"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"},{"path":"extensions/pi-claude-marketplace/shared/markers.ts"}], "testRefs": [{"path":"tests/architecture/notify-producer-wire-coverage.test.ts"},{"path":"tests/architecture/cross-surface-reason-parity.test.ts"},{"path":"tests/architecture/partial-vocabulary-guard.test.ts"},{"path":"tests/architecture/markers-snapshot.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph plus focused node:test rerun","observed":"The four positively assessed gates retain strict whole-value checks, sibling row cases where applicable, strict mocks in the producer wire harness, and planted source scans; all focused suites pass."},
-      "rationale":"The scoped clean-file assessment remains supported by current evidence.", "destination":"Retain as positive evidence."
+      "id": "ANF-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/notify.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/markers.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/notify-producer-wire-coverage.test.ts" },
+        { "path": "tests/architecture/cross-surface-reason-parity.test.ts" },
+        { "path": "tests/architecture/partial-vocabulary-guard.test.ts" },
+        { "path": "tests/architecture/markers-snapshot.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus focused node:test rerun",
+        "observed": "The four positively assessed gates retain strict whole-value checks, sibling row cases where applicable, strict mocks in the producer wire harness, and planted source scans; all focused suites pass."
+      },
+      "rationale": "The scoped clean-file assessment remains supported by current evidence.",
+      "destination": "Retain as positive evidence."
     },
     {
-      "id": "ANF-F009", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-009"], "evidenceStatus": "confirmed", "route": "deferred backlog", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify.ts"}], "testRefs": [{"path":"tests/architecture/notify-closed-set-locks.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph file-structure inspection","observed":"notify.ts remains over 4,200 lines and still combines vocabulary declarations, low-level composition, row rendering, and public dispatch despite existing topic-view extraction precedent."},
-      "rationale":"The reviewability concern remains current but is not a functional defect.", "destination":"Defer a behavior-preserving vocabulary/topic extraction to a dedicated maintenance plan."
+      "id": "ANF-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/notify-closed-set-locks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph file-structure inspection",
+        "observed": "notify.ts remains over 4,200 lines and still combines vocabulary declarations, low-level composition, row rendering, and public dispatch despite existing topic-view extraction precedent."
+      },
+      "rationale": "The reviewability concern remains current but is not a functional defect.",
+      "destination": "Defer a behavior-preserving vocabulary/topic extraction to a dedicated maintenance plan."
     },
     {
-      "id": "ANF-F010", "claimIds": [".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-010"], "evidenceStatus": "confirmed", "route": "evidence-only closure", "duplicateOf": null,
-      "sourceRefs": [{"path":"extensions/pi-claude-marketplace/shared/notify-context.ts"},{"path":"extensions/pi-claude-marketplace/shared/notify-reasons.ts"},{"path":"extensions/pi-claude-marketplace/shared/probe-classifiers.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"}], "testRefs": [{"path":"tests/architecture/notify-producer-wire-coverage.test.ts"}],
-      "validation": {"method":"static-proof","tool":"CodeGraph and current source inspection","observed":"The historically clean supporting modules retain typed projections, exhaustive vocabulary checks, and narrow rendering contexts; the full focused notify gate set passes."},
-      "rationale":"No contrary evidence was found for the report's scoped positive production assessment.", "destination":"Close as retained positive evidence."
+      "id": "ANF-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-notify-gates.md#CLAIM-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/notify-context.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/probe-classifiers.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/notify-producer-wire-coverage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "The historically clean supporting modules retain typed projections, exhaustive vocabulary checks, and narrow rendering contexts; the full focused notify gate set passes."
+      },
+      "rationale": "No contrary evidence was found for the report's scoped positive production assessment.",
+      "destination": "Close as retained positive evidence."
     }
   ],
   "decisions": [],

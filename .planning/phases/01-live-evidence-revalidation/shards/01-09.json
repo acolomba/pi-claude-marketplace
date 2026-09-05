@@ -412,9 +412,7 @@
     },
     {
       "id": "BA-002",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-003"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-003"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -438,9 +436,7 @@
     },
     {
       "id": "BA-003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-004"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-004"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -465,9 +461,7 @@
     },
     {
       "id": "BA-004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-005"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -531,9 +525,7 @@
     },
     {
       "id": "BA-006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-008"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-008"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -560,9 +552,7 @@
     },
     {
       "id": "BA-007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-009"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-009"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -587,9 +577,7 @@
     },
     {
       "id": "BA-008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-010"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -613,9 +601,7 @@
     },
     {
       "id": "BA-009",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-011"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-011"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "sourceRefs": [
@@ -639,9 +625,7 @@
     },
     {
       "id": "BA-010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-012"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-012"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -665,9 +649,7 @@
     },
     {
       "id": "BA-011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-013"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-013"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -691,9 +673,7 @@
     },
     {
       "id": "BA-012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-014"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-014"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "sourceRefs": [
@@ -717,9 +697,7 @@
     },
     {
       "id": "BA-013",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-015"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-015"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -774,9 +752,7 @@
     },
     {
       "id": "BA-015",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-018"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "sourceRefs": [
@@ -809,9 +785,7 @@
     },
     {
       "id": "BA-016",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-019"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-019"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -835,9 +809,7 @@
     },
     {
       "id": "BA-017",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-020"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-020"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "sourceRefs": [
@@ -862,9 +834,7 @@
     },
     {
       "id": "BA-018",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-021"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-021"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -889,9 +859,7 @@
     },
     {
       "id": "BA-019",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-022"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-022"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -916,9 +884,7 @@
     },
     {
       "id": "BA-020",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-023"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-023"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -942,9 +908,7 @@
     },
     {
       "id": "BA-021",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-024"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-024"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -968,9 +932,7 @@
     },
     {
       "id": "BA-022",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-025"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-025"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "sourceRefs": [
@@ -997,9 +959,7 @@
     },
     {
       "id": "BA-023",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-026"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-026"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [
@@ -1023,9 +983,7 @@
     },
     {
       "id": "BA-024",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-027"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-027"],
       "evidenceStatus": "confirmed",
       "route": "Phase 3",
       "sourceRefs": [

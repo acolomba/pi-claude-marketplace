@@ -113,91 +113,506 @@
     }
   ],
   "sourceClaims": [
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-001", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-001", "findingId": "OPIFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-002", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-002", "findingId": "OPIFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-003", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-003", "findingId": "OPIFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-004", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-004", "findingId": "OPIFP-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-005", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-005", "findingId": "OPIFP-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-006", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-006", "findingId": "OPIFP-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-007", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-007", "findingId": "OPIFP-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-008", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-008", "findingId": "OPIFP-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-009", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-009", "findingId": "OPIFP-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-010", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-010", "findingId": "OPIFP-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-011", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-011", "findingId": "OPIFP-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-012", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-012", "findingId": "OPIFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-013", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-013", "findingId": "OPIFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-014", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-014", "findingId": "OPIFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-015", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-015", "findingId": "OPIFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-016", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-016", "findingId": "OPIFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-017", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-017", "findingId": "OPIFP-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-018", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-018", "findingId": "OPIFP-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-019", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-019", "findingId": "OPIFP-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-020", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-020", "findingId": "OPIFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-021", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-021", "findingId": "OPIFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-022", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-022", "findingId": "OPIFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-023", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-023", "findingId": "OPIFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-024", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-024", "findingId": "OPIFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-025", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-025", "findingId": "OPIFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-026", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-026", "findingId": "OPIFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-027", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-027", "findingId": "OPIFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-028", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md", "label": "CLAIM-028", "findingId": "OPIFP-F011" },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-001",
+      "findingId": "OPIFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-002",
+      "findingId": "OPIFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-003",
+      "findingId": "OPIFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-004",
+      "findingId": "OPIFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-005",
+      "findingId": "OPIFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-006",
+      "findingId": "OPIFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-007",
+      "findingId": "OPIFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-008",
+      "findingId": "OPIFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-009",
+      "findingId": "OPIFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-010",
+      "findingId": "OPIFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-011",
+      "findingId": "OPIFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-012",
+      "findingId": "OPIFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-013",
+      "findingId": "OPIFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-014",
+      "findingId": "OPIFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-015",
+      "findingId": "OPIFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-016",
+      "findingId": "OPIFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-017",
+      "findingId": "OPIFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-018",
+      "findingId": "OPIFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-019",
+      "findingId": "OPIFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-020",
+      "findingId": "OPIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-021",
+      "findingId": "OPIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-022",
+      "findingId": "OPIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-023",
+      "findingId": "OPIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-024",
+      "findingId": "OPIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-025",
+      "findingId": "OPIFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-026",
+      "findingId": "OPIFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-027",
+      "findingId": "OPIFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md",
+      "label": "CLAIM-028",
+      "findingId": "OPIFP-F011"
+    },
 
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-001", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-001", "findingId": "OPINFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-002", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-002", "findingId": "OPINFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-003", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-003", "findingId": "OPINFP-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-004", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-004", "findingId": "OPINFP-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-005", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-005", "findingId": "OPINFP-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-006", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-006", "findingId": "OPINFP-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-007", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-007", "findingId": "OPINFP-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-008", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-008", "findingId": "OPINFP-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-009", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-009", "findingId": "OPINFP-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-010", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-010", "findingId": "OPINFP-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-011", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-011", "findingId": "OPINFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-012", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-012", "findingId": "OPINFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-013", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-013", "findingId": "OPINFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-014", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-014", "findingId": "OPINFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-015", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-015", "findingId": "OPINFP-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-016", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-016", "findingId": "OPINFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-017", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-017", "findingId": "OPINFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-018", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-018", "findingId": "OPINFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-019", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-019", "findingId": "OPINFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-020", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-020", "findingId": "OPINFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-021", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-021", "findingId": "OPINFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-022", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-022", "findingId": "OPINFP-F011" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-023", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-023", "findingId": "OPINFP-F011" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-024", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md", "label": "CLAIM-024", "findingId": "OPINFP-F001" },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-001",
+      "findingId": "OPINFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-002",
+      "findingId": "OPINFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-003",
+      "findingId": "OPINFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-004",
+      "findingId": "OPINFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-005",
+      "findingId": "OPINFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-006",
+      "findingId": "OPINFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-007",
+      "findingId": "OPINFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-008",
+      "findingId": "OPINFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-009",
+      "findingId": "OPINFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-010",
+      "findingId": "OPINFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-011",
+      "findingId": "OPINFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-012",
+      "findingId": "OPINFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-013",
+      "findingId": "OPINFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-014",
+      "findingId": "OPINFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-015",
+      "findingId": "OPINFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-016",
+      "findingId": "OPINFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-017",
+      "findingId": "OPINFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-018",
+      "findingId": "OPINFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-019",
+      "findingId": "OPINFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-020",
+      "findingId": "OPINFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-021",
+      "findingId": "OPINFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-022",
+      "findingId": "OPINFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-023",
+      "findingId": "OPINFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md",
+      "label": "CLAIM-024",
+      "findingId": "OPINFP-F001"
+    },
 
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-001", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-001", "findingId": "OPLUFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-002", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-002", "findingId": "OPLUFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-003", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-003", "findingId": "OPLUFP-F002" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-004", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-004", "findingId": "OPLUFP-F003" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-005", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-005", "findingId": "OPLUFP-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-006", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-006", "findingId": "OPLUFP-F004" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-007", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-007", "findingId": "OPLUFP-F005" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-008", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-008", "findingId": "OPLUFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-009", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-009", "findingId": "OPLUFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-010", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-010", "findingId": "OPLUFP-F007" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-011", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-011", "findingId": "OPLUFP-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-012", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-012", "findingId": "OPLUFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-013", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-013", "findingId": "OPLUFP-F009" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-014", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-014", "findingId": "OPLUFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-015", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-015", "findingId": "OPLUFP-F010" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-016", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-016", "findingId": "OPLUFP-F011" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-017", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-017", "findingId": "OPLUFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-018", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-018", "findingId": "OPLUFP-F012" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-019", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-019", "findingId": "OPLUFP-F012" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-020", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-020", "findingId": "OPLUFP-F008" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-021", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-021", "findingId": "OPLUFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-022", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-022", "findingId": "OPLUFP-F013" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-023", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-023", "findingId": "OPLUFP-F013" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-024", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-024", "findingId": "OPLUFP-F013" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-025", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-025", "findingId": "OPLUFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-026", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-026", "findingId": "OPLUFP-F001" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-027", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-027", "findingId": "OPLUFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-028", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-028", "findingId": "OPLUFP-F006" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-029", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-029", "findingId": "OPLUFP-F014" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-030", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-030", "findingId": "OPLUFP-F014" },
-    { "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-031", "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md", "label": "CLAIM-031", "findingId": "OPLUFP-F014" }
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-001",
+      "findingId": "OPLUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-002",
+      "findingId": "OPLUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-003",
+      "findingId": "OPLUFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-004",
+      "findingId": "OPLUFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-005",
+      "findingId": "OPLUFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-006",
+      "findingId": "OPLUFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-007",
+      "findingId": "OPLUFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-008",
+      "findingId": "OPLUFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-009",
+      "findingId": "OPLUFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-010",
+      "findingId": "OPLUFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-011",
+      "findingId": "OPLUFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-012",
+      "findingId": "OPLUFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-013",
+      "findingId": "OPLUFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-014",
+      "findingId": "OPLUFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-015",
+      "findingId": "OPLUFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-016",
+      "findingId": "OPLUFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-017",
+      "findingId": "OPLUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-018",
+      "findingId": "OPLUFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-019",
+      "findingId": "OPLUFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-020",
+      "findingId": "OPLUFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-021",
+      "findingId": "OPLUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-022",
+      "findingId": "OPLUFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-023",
+      "findingId": "OPLUFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-024",
+      "findingId": "OPLUFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-025",
+      "findingId": "OPLUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-026",
+      "findingId": "OPLUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-027",
+      "findingId": "OPLUFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-028",
+      "findingId": "OPLUFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-029",
+      "findingId": "OPLUFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-030",
+      "findingId": "OPLUFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md",
+      "label": "CLAIM-031",
+      "findingId": "OPLUFP-F014"
+    }
   ],
   "findings": [
     {
@@ -281,7 +696,9 @@
     },
     {
       "id": "OPIFP-F005",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-011"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-011"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "OPIC-F24",
@@ -392,7 +809,10 @@
       "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts" }],
       "testRefs": [
         { "path": "tests/orchestrators/plugin/info.test.ts" },
-        { "path": "N/A", "reason": "Support-helper review is explicitly outside this assigned owner pair." }
+        {
+          "path": "N/A",
+          "reason": "Support-helper review is explicitly outside this assigned owner pair."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -404,7 +824,9 @@
     },
     {
       "id": "OPIFP-F011",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-028"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-info.md#CLAIM-028"
+      ],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -429,7 +851,9 @@
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -441,11 +865,15 @@
     },
     {
       "id": "OPINFP-F002",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-003"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-003"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "surviving-mutation",
@@ -466,7 +894,9 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "surviving-mutation",
@@ -486,7 +916,9 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -505,7 +937,9 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 8",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [
         { "path": "tests/orchestrators/plugin/install.test.ts" },
         { "path": "tests/architecture/no-orchestrator-network.test.ts" }
@@ -527,7 +961,9 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 8",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -546,10 +982,15 @@
       "evidenceStatus": "confirmed",
       "route": "deferred backlog",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [
         { "path": "tests/orchestrators/plugin/install.test.ts" },
-        { "path": "N/A", "reason": "Support-helper review is explicitly outside this assigned owner pair." }
+        {
+          "path": "N/A",
+          "reason": "Support-helper review is explicitly outside this assigned owner pair."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -561,11 +1002,15 @@
     },
     {
       "id": "OPINFP-F008",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-015"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md#CLAIM-015"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 8",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -584,7 +1029,9 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 8",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -605,7 +1052,9 @@
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/install.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -624,10 +1073,15 @@
       "evidenceStatus": "confirmed",
       "route": "deferred backlog",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
       "testRefs": [
         { "path": "tests/orchestrators/plugin/install.test.ts" },
-        { "path": "N/A", "reason": "Support-helper review is explicitly outside this assigned owner pair." }
+        {
+          "path": "N/A",
+          "reason": "Support-helper review is explicitly outside this assigned owner pair."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -669,7 +1123,9 @@
     },
     {
       "id": "OPLUFP-F002",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-003"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-003"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "OPLU-A-F01",
@@ -686,7 +1142,9 @@
     },
     {
       "id": "OPLUFP-F003",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-004"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-004"
+      ],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -734,7 +1192,9 @@
     },
     {
       "id": "OPLUFP-F005",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-007"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-007"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -797,7 +1257,9 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "OPLU-B-F12",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/uninstall.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -816,7 +1278,9 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "OPLU-B-F07",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/uninstall.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -835,7 +1299,9 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "OPLU-B-F12",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }
+      ],
       "testRefs": [{ "path": "tests/orchestrators/plugin/uninstall.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -847,11 +1313,15 @@
     },
     {
       "id": "OPLUFP-F011",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-016"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-list-uninstall.md#CLAIM-016"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }
+      ],
       "testRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }],
       "validation": {
         "method": "static-proof",
@@ -890,7 +1360,9 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 8",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts" }
+      ],
       "testRefs": [
         { "path": "tests/orchestrators/plugin/uninstall.test.ts" },
         { "path": "tests/architecture/no-orchestrator-network.test.ts" }

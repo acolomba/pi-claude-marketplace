@@ -82,9 +82,7 @@
   "findings": [
     {
       "id": "CLR-001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#REPAIR-SCOPE"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#REPAIR-SCOPE"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "sourceRefs": [
@@ -92,7 +90,10 @@
         { "path": ".planning/reviews/unit-test-adversarial" }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "Repair scope and repository history are non-executable corpus metadata." }
+        {
+          "path": "N/A",
+          "reason": "Repair scope and repository history are non-executable corpus metadata."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -139,7 +140,10 @@
         { "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md" }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "Clean-set derivation is a static relation between report scope, findings, and clean-list prose." }
+        {
+          "path": "N/A",
+          "reason": "Clean-set derivation is a static relation between report scope, findings, and clean-list prose."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -170,7 +174,10 @@
         { "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md" }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "The nine repaired lists and their entry count are static corpus metadata." }
+        {
+          "path": "N/A",
+          "reason": "The nine repaired lists and their entry count are static corpus metadata."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -188,11 +195,12 @@
       ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
-      "sourceRefs": [
-        { "path": ".planning/reviews/unit-test-adversarial/edge-handlers-plugin.md" }
-      ],
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/edge-handlers-plugin.md" }],
       "testRefs": [
-        { "path": "N/A", "reason": "Clean-list membership versus a report-local finding is a static corpus consistency claim." }
+        {
+          "path": "N/A",
+          "reason": "Clean-list membership versus a report-local finding is a static corpus consistency claim."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -205,9 +213,7 @@
     },
     {
       "id": "CLR-006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#META-EXCLUSION"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#META-EXCLUSION"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "sourceRefs": [
@@ -215,7 +221,10 @@
         { "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md" }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "META-FINDINGS classification is a static document-structure property." }
+        {
+          "path": "N/A",
+          "reason": "META-FINDINGS classification is a static document-structure property."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -239,7 +248,10 @@
         { "path": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md" }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "Indeterminate-status accounting is a static corpus metadata property." }
+        {
+          "path": "N/A",
+          "reason": "Indeterminate-status accounting is a static corpus metadata property."
+        }
       ],
       "validation": {
         "method": "static-proof",

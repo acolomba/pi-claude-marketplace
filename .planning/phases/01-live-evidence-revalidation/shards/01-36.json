@@ -69,70 +69,353 @@
     }
   ],
   "sourceClaims": [
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-001","findingId":"SHC-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-002","findingId":"SHC-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-003","findingId":"SHC-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-004","findingId":"SHC-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-005","findingId":"SHC-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-006","findingId":"SHC-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-007","findingId":"SHC-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-008","findingId":"SHC-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-009","findingId":"SHC-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-010","findingId":"SHC-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-011","findingId":"SHC-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-012","findingId":"SHC-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-013","findingId":"SHC-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-014","findingId":"SHC-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-015","findingId":"SHC-F015"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-016","findingId":"SHC-F016"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-017","findingId":"SHC-F017"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-018","findingId":"SHC-F018"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-019","findingId":"SHC-F019"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-020","findingId":"SHC-F020"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-021","findingId":"SHC-F021"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-022","findingId":"SHC-F022"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-023","findingId":"SHC-F023"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-024","findingId":"SHC-F024"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-025","findingId":"SHC-F025"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-026","findingId":"SHC-F026"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-027","findingId":"SHC-F027"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-028","findingId":"SHC-F028"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-029","findingId":"SHC-F029"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-030","findingId":"SHC-F030"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-031","findingId":"SHC-F031"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-032","findingId":"SHC-F032"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-033","findingId":"SHC-F033"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-034","findingId":"SHC-F034"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-035","findingId":"SHC-F035"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-036","findingId":"SHC-F036"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-037","findingId":"SHC-F037"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-038","findingId":"SHC-F038"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-039","findingId":"SHC-F039"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-040","findingId":"SHC-F040"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-041","findingId":"SHC-F041"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-042","findingId":"SHC-F042"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-043","findingId":"SHC-F043"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-044","findingId":"SHC-F044"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-045","findingId":"SHC-F045"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-046","findingId":"SHC-F046"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-047","findingId":"SHC-F047"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-048","findingId":"SHC-F048"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-049","findingId":"SHC-F049"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-050","findingId":"SHC-F050"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-051","findingId":"SHC-F051"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-052","findingId":"SHC-F052"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-053","findingId":"SHC-F053"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-054","findingId":"SHC-F054"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-055","findingId":"SHC-F055"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-056","findingId":"SHC-F056"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057","filePath":".planning/reviews/unit-test-adversarial/adversarial/shared-core.md","label":"CLAIM-057","findingId":"SHC-F057"}
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-001",
+      "findingId": "SHC-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-002",
+      "findingId": "SHC-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-003",
+      "findingId": "SHC-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-004",
+      "findingId": "SHC-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-005",
+      "findingId": "SHC-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-006",
+      "findingId": "SHC-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-007",
+      "findingId": "SHC-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-008",
+      "findingId": "SHC-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-009",
+      "findingId": "SHC-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-010",
+      "findingId": "SHC-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-011",
+      "findingId": "SHC-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-012",
+      "findingId": "SHC-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-013",
+      "findingId": "SHC-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-014",
+      "findingId": "SHC-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-015",
+      "findingId": "SHC-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-016",
+      "findingId": "SHC-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-017",
+      "findingId": "SHC-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-018",
+      "findingId": "SHC-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-019",
+      "findingId": "SHC-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-020",
+      "findingId": "SHC-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-021",
+      "findingId": "SHC-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-022",
+      "findingId": "SHC-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-023",
+      "findingId": "SHC-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-024",
+      "findingId": "SHC-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-025",
+      "findingId": "SHC-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-026",
+      "findingId": "SHC-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-027",
+      "findingId": "SHC-F027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-028",
+      "findingId": "SHC-F028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-029",
+      "findingId": "SHC-F029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-030",
+      "findingId": "SHC-F030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-031",
+      "findingId": "SHC-F031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-032",
+      "findingId": "SHC-F032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-033",
+      "findingId": "SHC-F033"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-034",
+      "findingId": "SHC-F034"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-035",
+      "findingId": "SHC-F035"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-036",
+      "findingId": "SHC-F036"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-037",
+      "findingId": "SHC-F037"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-038",
+      "findingId": "SHC-F038"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-039",
+      "findingId": "SHC-F039"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-040",
+      "findingId": "SHC-F040"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-041",
+      "findingId": "SHC-F041"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-042",
+      "findingId": "SHC-F042"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-043",
+      "findingId": "SHC-F043"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-044",
+      "findingId": "SHC-F044"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-045",
+      "findingId": "SHC-F045"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-046",
+      "findingId": "SHC-F046"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-047",
+      "findingId": "SHC-F047"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-048",
+      "findingId": "SHC-F048"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-049",
+      "findingId": "SHC-F049"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-050",
+      "findingId": "SHC-F050"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-051",
+      "findingId": "SHC-F051"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-052",
+      "findingId": "SHC-F052"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-053",
+      "findingId": "SHC-F053"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-054",
+      "findingId": "SHC-F054"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-055",
+      "findingId": "SHC-F055"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-056",
+      "findingId": "SHC-F056"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md",
+      "label": "CLAIM-057",
+      "findingId": "SHC-F057"
+    }
   ],
   "findings": [
     {
       "id": "SHC-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-001"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -157,9 +440,7 @@
     },
     {
       "id": "SHC-F002",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-002"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -183,9 +464,7 @@
     },
     {
       "id": "SHC-F003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-003"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -209,9 +488,7 @@
     },
     {
       "id": "SHC-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-004"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -235,9 +512,7 @@
     },
     {
       "id": "SHC-F005",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-005"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -261,9 +536,7 @@
     },
     {
       "id": "SHC-F006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-006"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -287,9 +560,7 @@
     },
     {
       "id": "SHC-F007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-007"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -313,9 +584,7 @@
     },
     {
       "id": "SHC-F008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-008"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -339,9 +608,7 @@
     },
     {
       "id": "SHC-F009",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-009"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -365,9 +632,7 @@
     },
     {
       "id": "SHC-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-010"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -392,9 +657,7 @@
     },
     {
       "id": "SHC-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-011"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -418,9 +681,7 @@
     },
     {
       "id": "SHC-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-012"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -444,9 +705,7 @@
     },
     {
       "id": "SHC-F013",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-013"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -470,9 +729,7 @@
     },
     {
       "id": "SHC-F014",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-014"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -496,9 +753,7 @@
     },
     {
       "id": "SHC-F015",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-015"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -522,9 +777,7 @@
     },
     {
       "id": "SHC-F016",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-016"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -548,9 +801,7 @@
     },
     {
       "id": "SHC-F017",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-017"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -574,9 +825,7 @@
     },
     {
       "id": "SHC-F018",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-018"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -600,9 +849,7 @@
     },
     {
       "id": "SHC-F019",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-019"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -626,9 +873,7 @@
     },
     {
       "id": "SHC-F020",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-020"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -650,12 +895,10 @@
       "rationale": "Current live evidence supports the preserved historical claim.",
       "destination": "Simplify both branches with behavioral coverage."
     },
-  
+
     {
       "id": "SHC-F021",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-021"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -679,9 +922,7 @@
     },
     {
       "id": "SHC-F022",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-022"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -705,9 +946,7 @@
     },
     {
       "id": "SHC-F023",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-023"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -731,9 +970,7 @@
     },
     {
       "id": "SHC-F024",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-024"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -757,9 +994,7 @@
     },
     {
       "id": "SHC-F025",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-025"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -783,9 +1018,7 @@
     },
     {
       "id": "SHC-F026",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-026"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -809,9 +1042,7 @@
     },
     {
       "id": "SHC-F027",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-027"],
       "evidenceStatus": "inconclusive",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -835,9 +1066,7 @@
     },
     {
       "id": "SHC-F028",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-028"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -861,9 +1090,7 @@
     },
     {
       "id": "SHC-F029",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-029"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -887,9 +1114,7 @@
     },
     {
       "id": "SHC-F030",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-030"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -913,9 +1138,7 @@
     },
     {
       "id": "SHC-F031",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-031"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -939,9 +1162,7 @@
     },
     {
       "id": "SHC-F032",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-032"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -965,9 +1186,7 @@
     },
     {
       "id": "SHC-F033",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-033"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -991,9 +1210,7 @@
     },
     {
       "id": "SHC-F034",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-034"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1017,9 +1234,7 @@
     },
     {
       "id": "SHC-F035",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-035"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1043,9 +1258,7 @@
     },
     {
       "id": "SHC-F036",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-036"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1069,9 +1282,7 @@
     },
     {
       "id": "SHC-F037",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-037"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1095,9 +1306,7 @@
     },
     {
       "id": "SHC-F038",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-038"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1121,9 +1330,7 @@
     },
     {
       "id": "SHC-F039",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-039"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1147,9 +1354,7 @@
     },
     {
       "id": "SHC-F040",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-040"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1171,12 +1376,10 @@
       "rationale": "Named rollback and errno mutations were not run. D-11 prevents confirmation from the green suite alone.",
       "destination": "No change pending mutation evidence."
     },
-  
+
     {
       "id": "SHC-F041",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-041"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1200,9 +1403,7 @@
     },
     {
       "id": "SHC-F042",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-042"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1226,9 +1427,7 @@
     },
     {
       "id": "SHC-F043",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-043"],
       "evidenceStatus": "inconclusive",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1252,9 +1451,7 @@
     },
     {
       "id": "SHC-F044",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-044"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1280,9 +1477,7 @@
     },
     {
       "id": "SHC-F045",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-045"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -1306,9 +1501,7 @@
     },
     {
       "id": "SHC-F046",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-046"],
       "evidenceStatus": "confirmed",
       "route": "Phase 7",
       "duplicateOf": null,
@@ -1332,9 +1525,7 @@
     },
     {
       "id": "SHC-F047",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-047"],
       "evidenceStatus": "confirmed",
       "route": "Phase 7",
       "duplicateOf": null,
@@ -1358,9 +1549,7 @@
     },
     {
       "id": "SHC-F048",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-048"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1384,9 +1573,7 @@
     },
     {
       "id": "SHC-F049",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-049"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1410,9 +1597,7 @@
     },
     {
       "id": "SHC-F050",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-050"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -1436,9 +1621,7 @@
     },
     {
       "id": "SHC-F051",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-051"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -1463,9 +1646,7 @@
     },
     {
       "id": "SHC-F052",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-052"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -1489,9 +1670,7 @@
     },
     {
       "id": "SHC-F053",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-053"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1515,9 +1694,7 @@
     },
     {
       "id": "SHC-F054",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-054"],
       "evidenceStatus": "confirmed",
       "route": "operator decision",
       "duplicateOf": null,
@@ -1541,9 +1718,7 @@
     },
     {
       "id": "SHC-F055",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-055"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1567,9 +1742,7 @@
     },
     {
       "id": "SHC-F056",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-056"],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
@@ -1593,9 +1766,7 @@
     },
     {
       "id": "SHC-F057",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/shared-core.md#CLAIM-057"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1617,6 +1788,5 @@
       "rationale": "Current live evidence supports the preserved historical claim.",
       "destination": "Retain green run as supporting context only."
     }
-  
   ]
 }

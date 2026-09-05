@@ -87,118 +87,1411 @@
     }
   ],
   "sourceClaims": [
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-001","findingId":"BHAS-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-002","findingId":"BHAS-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-003","findingId":"BHAS-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-004","findingId":"BHAS-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-005","findingId":"BHAS-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-006","findingId":"BHAS-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-007","findingId":"BHAS-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-008","findingId":"BHAS-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-009","findingId":"BHAS-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-010","findingId":"BHAS-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-011","findingId":"BHAS-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-012","findingId":"BHAS-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-013","findingId":"BHAS-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-014","findingId":"BHAS-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-015","findingId":"BHAS-F015"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-016","findingId":"BHAS-F016"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-017","findingId":"BHAS-F017"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md","label":"CLAIM-018","findingId":"BHAS-F018"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-001","findingId":"BHAR-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-002","findingId":"BHAR-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-003","findingId":"BHAR-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-004","findingId":"BHAR-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-005","findingId":"BHAR-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-006","findingId":"BHAR-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-007","findingId":"BHAR-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-008","findingId":"BHAR-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-009","findingId":"BHAR-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-010","findingId":"BHAR-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-011","findingId":"BHAR-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-012","findingId":"BHAR-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-013","findingId":"BHAR-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-014","findingId":"BHAR-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-015","findingId":"BHAR-F015"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-016","findingId":"BHAR-F016"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-017","findingId":"BHAR-F017"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md","label":"CLAIM-018","findingId":"BHAR-F018"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-001","findingId":"BHD-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-002","findingId":"BHD-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-003","findingId":"BHD-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-004","findingId":"BHD-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-005","findingId":"BHD-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-006","findingId":"BHD-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-007","findingId":"BHD-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-008","findingId":"BHD-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-009","findingId":"BHD-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-010","findingId":"BHD-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-011","findingId":"BHD-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-012","findingId":"BHD-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-013","findingId":"BHD-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-014","findingId":"BHD-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-015","findingId":"BHD-F015"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-016","findingId":"BHD-F016"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-017","findingId":"BHD-F017"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-018","findingId":"BHD-F018"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-019","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md","label":"CLAIM-019","findingId":"BHD-F019"}
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-001",
+      "findingId": "BHAS-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-002",
+      "findingId": "BHAS-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-003",
+      "findingId": "BHAS-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-004",
+      "findingId": "BHAS-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-005",
+      "findingId": "BHAS-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-006",
+      "findingId": "BHAS-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-007",
+      "findingId": "BHAS-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-008",
+      "findingId": "BHAS-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-009",
+      "findingId": "BHAS-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-010",
+      "findingId": "BHAS-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-011",
+      "findingId": "BHAS-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-012",
+      "findingId": "BHAS-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-013",
+      "findingId": "BHAS-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-014",
+      "findingId": "BHAS-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-015",
+      "findingId": "BHAS-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-016",
+      "findingId": "BHAS-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-017",
+      "findingId": "BHAS-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md",
+      "label": "CLAIM-018",
+      "findingId": "BHAS-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-001",
+      "findingId": "BHAR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-002",
+      "findingId": "BHAR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-003",
+      "findingId": "BHAR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-004",
+      "findingId": "BHAR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-005",
+      "findingId": "BHAR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-006",
+      "findingId": "BHAR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-007",
+      "findingId": "BHAR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-008",
+      "findingId": "BHAR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-009",
+      "findingId": "BHAR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-010",
+      "findingId": "BHAR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-011",
+      "findingId": "BHAR-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-012",
+      "findingId": "BHAR-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-013",
+      "findingId": "BHAR-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-014",
+      "findingId": "BHAR-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-015",
+      "findingId": "BHAR-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-016",
+      "findingId": "BHAR-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-017",
+      "findingId": "BHAR-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md",
+      "label": "CLAIM-018",
+      "findingId": "BHAR-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-001",
+      "findingId": "BHD-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-002",
+      "findingId": "BHD-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-003",
+      "findingId": "BHD-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-004",
+      "findingId": "BHD-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-005",
+      "findingId": "BHD-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-006",
+      "findingId": "BHD-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-007",
+      "findingId": "BHD-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-008",
+      "findingId": "BHD-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-009",
+      "findingId": "BHD-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-010",
+      "findingId": "BHD-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-011",
+      "findingId": "BHD-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-012",
+      "findingId": "BHD-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-013",
+      "findingId": "BHD-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-014",
+      "findingId": "BHD-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-015",
+      "findingId": "BHD-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-016",
+      "findingId": "BHD-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-017",
+      "findingId": "BHD-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-018",
+      "findingId": "BHD-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md",
+      "label": "CLAIM-019",
+      "findingId": "BHD-F019"
+    }
   ],
   "findings": [
-    {"id":"BHAS-F001","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-001"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/settle.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/event-adapters.test.ts"},{"path":"tests/bridges/hooks/settle.test.ts"},{"path":"tests/bridges/hooks/stage.test.ts"},{"path":"tests/bridges/hooks/routing-state.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test four assigned hook adapter/state owner suites","exitCode":0,"observed":"All four current owner suites passed; whole-value assertions, case-owned filesystem roots, and scoped double cleanup remain present outside separately routed findings."},"rationale":"The report's broad positive assessment remains current with its specific exceptions preserved separately.","destination":"Retain as positive evidence."},
-    {"id":"BHAS-F002","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-002"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-021","sourceRefs":[{"path":"N/A","reason":"Duplicated setup is test-only."}],"testRefs":[{"path":"tests/bridges/hooks/event-adapters.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"Four PI_CLAUDE_MARKETPLACE_DEBUG save, restore, and console-error spy blocks remain."},"rationale":"The file-local diagnostic helper cleanup remains live.","destination":"Use canonical finding HSA-021."},
-    {"id":"BHAS-F003","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-003"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-021","sourceRefs":[{"path":"N/A","reason":"The redundant assertion is test-only."}],"testRefs":[{"path":"tests/bridges/hooks/event-adapters.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion inspection","observed":"The complete event deep comparison is still followed by an Object.hasOwn check for key 0."},"rationale":"The second assertion cannot distinguish any implementation that passes the preceding whole-value assertion.","destination":"Use canonical finding HSA-021."},
-    {"id":"BHAS-F004","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-004"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/settle.ts"}],"testRefs":[{"path":"tests/bridges/hooks/settle.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph call path plus current fixture inspection","observed":"settle handlers do not read pi.isIdle, while makePi still returns an always-true isIdle field."},"rationale":"The unused field neither narrows the dependency contract nor proves non-use.","destination":"Delete the field or replace it with a throw-if-called guard."},
-    {"id":"BHAS-F005","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-005"],"evidenceStatus":"confirmed","route":"deferred backlog","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Case composition is test-only."}],"testRefs":[{"path":"tests/bridges/hooks/settle.test.ts"}],"validation":{"method":"static-proof","tool":"current case inspection","observed":"One case still combines cache miss, one-shot consumption, repeated drain, and stale-epoch behavior in one arrange-act-assert sequence."},"rationale":"The case remains behaviorally dense, but current whole-value assertions prevent it from being a lying test.","destination":"Split during nearby readability cleanup."},
-    {"id":"BHAS-F006","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-006"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HSA-022","sourceRefs":[{"path":"N/A","reason":"The claim is a test-organization preference."}],"testRefs":[{"path":"tests/bridges/hooks/settle.test.ts"}],"validation":{"method":"static-proof","tool":"current project skill and test structure inspection","observed":"The active rule permits describe when several exports exist but does not require it; descriptive independent cases remain valid."},"rationale":"The first-pass prescription overstates the current project rule.","destination":"Use stale canonical finding HSA-022; no work."},
-    {"id":"BHAS-F007","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-007"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-023","sourceRefs":[{"path":"extensions/pi-claude-marketplace/domain/name.ts"}],"testRefs":[{"path":"tests/bridges/hooks/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current error and assertion inspection","observed":"The two unsafe-name cases still compare the complete message of a bare Error because no structured domain error exists."},"rationale":"The assertion limitation remains, while the production contract cannot yet support the prescribed structured check.","destination":"Use canonical finding HSA-023."},
-    {"id":"BHAS-F008","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-008"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/routing-state.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/routing-state.test.ts","exitCode":0,"observed":"The current owner passed and retains dedicated full-value cases for the exported state operations; state-ownership concerns are routed separately."},"rationale":"The bounded positive assessment of the test file remains supported.","destination":"Retain as positive evidence."},
-    {"id":"BHAS-F009","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-009"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-024","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/routing-state.test.ts"},{"path":"tests/bridges/hooks/dispatch.test.ts"},{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph caller census","observed":"resetEpoch, resetRoutingState, and routingTableEntries still have no production callers, while resetRoutingState remains broadly imported by tests and its comment still misstates private clears as public."},"rationale":"The reset-hook and inaccurate-comment finding remains live across several owners.","destination":"Use canonical finding HSA-024."},
-    {"id":"BHAS-F010","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-010"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-025","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/settle.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}],"testRefs":[{"path":"tests/bridges/hooks/settle.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph state and caller trace","observed":"Four mutable cells remain at module scope and resetSettleState remains a real reload caller, so per-registration ownership is still viable without deleting reload hygiene."},"rationale":"The factory-owned settle-state design remains live.","destination":"Use canonical finding HSA-025."},
-    {"id":"BHAS-F011","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-011"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-025","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/settle.ts"}],"testRefs":[{"path":"N/A","reason":"Catch-binding naming is production style."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"The reenter containment block still uses catch (err) rather than catch (error: unknown)."},"rationale":"The house-style warning remains alongside the state-ownership finding.","destination":"Use canonical finding HSA-025."},
-    {"id":"BHAS-F012","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-012"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-026","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/stage.ts"}],"testRefs":[{"path":"tests/bridges/hooks/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current import and monkeypatch census","observed":"Stage still imports filesystem operations directly; four cases still patch node:fs/promises and synchronize builtin ESM exports."},"rationale":"The hidden filesystem boundary still forces process-global patching.","destination":"Use canonical finding HSA-026."},
-    {"id":"BHAS-F013","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-013"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-027","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/stage.ts"}],"testRefs":[{"path":"N/A","reason":"The idiom is production readability."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"assertNoSymlinkEscapeInHooksSubtree still reads the last stack item with slice(-1).join before pop."},"rationale":"The obscure safe-pop workaround remains.","destination":"Use canonical finding HSA-027."},
-    {"id":"BHAS-F014","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-014"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HSA-027","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/stage.ts"}],"testRefs":[{"path":"N/A","reason":"Catch structure is production style."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"Two catches still bind err and one discarded readlink catch still lacks an inline discard rationale."},"rationale":"The catch-style claims remain current.","destination":"Use canonical finding HSA-027."},
-    {"id":"BHAS-F015","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-015"],"evidenceStatus":"confirmed","route":"deferred backlog","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts"}],"testRefs":[{"path":"N/A","reason":"The repeated cast is production readability."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"applyToolResultPatch still uses two separate inline casts to write readonly content and isError fields."},"rationale":"A named writable view can reduce duplication, but the current casts are documented and behaviorally sound.","destination":"Consider a local writable helper during nearby cleanup."},
-    {"id":"BHAS-F016","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-016"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/settle.ts"}],"testRefs":[{"path":"tests/bridges/hooks/settle.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/settle.test.ts","exitCode":0,"observed":"The current owner passed; exhaustive StopReason handling, post-await epoch checks, and bounded reentry remain present outside separately routed state and style findings."},"rationale":"The report's bounded clean-production assessment remains supported.","destination":"Retain as positive evidence."},
-    {"id":"BHAS-F017","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-017"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HSA-028","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/stage.ts"},{"path":"extensions/pi-claude-marketplace/shared/path-safety.ts"}],"testRefs":[{"path":"tests/bridges/hooks/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/stage.test.ts","exitCode":0,"observed":"The current owner includes an unexpected-walk-failure case that reaches the final propagation arm and asserts the same Error object; the suite passed."},"rationale":"Positive replacement and rerun proof invalidates the historical missing-case premise.","destination":"Use stale canonical finding HSA-028; no work."},
-    {"id":"BHAS-F018","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-018"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical run-status and review-boundary metadata."}],"testRefs":[{"path":"tests/bridges/hooks/event-adapters.test.ts"},{"path":"tests/bridges/hooks/settle.test.ts"},{"path":"tests/bridges/hooks/stage.test.ts"},{"path":"tests/bridges/hooks/routing-state.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test four assigned hook adapter/state owner suites","exitCode":0,"observed":"Current focused execution supersedes the historical no-command caveat; adjacent-module exclusions remain provenance rather than implementation findings."},"rationale":"The process caveat no longer describes current evidence.","destination":"Evidence-only closure."},
-    {"id":"BHAR-F001","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-001"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/pid-table.test.ts"},{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"},{"path":"tests/bridges/hooks/async-rewake/ring-buffer.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test three assigned async-rewake owner suites","exitCode":0,"observed":"All three current suites passed and retain exact state, filesystem, timer, and ordered persistence assertions outside separately routed findings."},"rationale":"The broad positive assessment remains supported.","destination":"Retain as positive evidence."},
-    {"id":"BHAR-F002","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-002"],"evidenceStatus":"duplicate","route":"Phase 2","duplicateOf":"HRA-011","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/pid-table.test.ts"}],"validation":{"method":"behavioral-probe","command":"repository-local temporary root: start writePidTable, synchronously append a second row, await, then read","exitCode":0,"observed":"The persisted table contained both rows because the snapshot still occurs after the first await; the historical post-completion mutation cannot prove the documented copy contract."},"rationale":"Current control flow turns the weak aliasing case into a live production snapshot defect.","destination":"Use canonical finding HRA-011."},
-    {"id":"BHAR-F003","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-003"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-007","sourceRefs":[{"path":"N/A","reason":"Helper duplication is test-only."}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/pid-table.test.ts"},{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current helper comparison","observed":"filesystemErrorCode remains duplicated verbatim in both sibling tests."},"rationale":"The concern-local support duplication remains live.","destination":"Use canonical finding HRA-007."},
-    {"id":"BHAR-F004","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-004"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-012","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph state ownership plus current reset census","observed":"asyncRewakeRegistry and pidTableOperations remain module-level Maps; registry cases still perform repeated shutdown and routing reset choreography."},"rationale":"Fresh case-owned registry state remains unavailable.","destination":"Use canonical finding HRA-012."},
-    {"id":"BHAR-F005","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-005"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-013","sourceRefs":[{"path":"N/A","reason":"Polling helper is test-only."}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current helper and call-site inspection","observed":"waitForPidTable still loops against process.hrtime.bigint with setImmediate and remains used across the registry suite despite the injected writer seam."},"rationale":"The owner still uses a real-clock polling anti-pattern.","destination":"Use canonical finding HRA-013."},
-    {"id":"BHAR-F006","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-006"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-014","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"},{"path":"tests/bridges/hooks/dispatch-exec.test.ts"}],"validation":{"method":"static-proof","tool":"current double comparison against project skill","observed":"createPi and createContext still hand-roll sendMessage and notify recorders while the sibling demonstrates exact mocks for the same interactions."},"rationale":"Promised notification and reentry interactions remain represented by unsanctioned doubles.","destination":"Use canonical finding HRA-014."},
-    {"id":"BHAR-F007","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-007"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-015","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current recorder and assertion census","observed":"createSpawn still pushes into a plain array and several cases still assert only call count or one option field."},"rationale":"Wrong command or argument values can preserve those projections.","destination":"Use canonical finding HRA-015."},
-    {"id":"BHAR-F008","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-008"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-016","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current orphan-probe fixture inspection","observed":"Several reapOrphans cases still implement cross-method ordered recorder logs without exact mock expectations and verification."},"rationale":"The ordered interaction contract remains incompletely specified.","destination":"Use canonical finding HRA-016."},
-    {"id":"BHAR-F009","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-009"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HRA-021","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/ring-buffer.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/async-rewake/ring-buffer.test.ts","exitCode":0,"observed":"The complete current owner passed and retains distinct exact cases for the named capacity, wrap, truncation, empty-write, and UTF-8 behaviors."},"rationale":"The clean test assessment remains accurate.","destination":"Use canonical finding HRA-021; no implementation work."},
-    {"id":"BHAR-F010","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-010"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-012","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph state and production caller trace","observed":"The two registry Maps remain module globals, while shutdownInMemoryChildren remains a legitimate reload operation called by event-router."},"rationale":"Factory ownership remains the coherent fix without deleting production shutdown semantics.","destination":"Use canonical finding HRA-012."},
-    {"id":"BHAR-F011","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-011"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-017","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"N/A","reason":"Repeated typing is production structure."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"The child exit outcome object shape remains repeated across three closure and helper signatures."},"rationale":"The local type duplication remains.","destination":"Use canonical finding HRA-017."},
-    {"id":"BHAR-F012","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-012"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-018","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"N/A","reason":"Closure form is production style."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"onSpawnError, finalizeOnce, and finalizeAfterOwnedStreams remain named const-arrow closures without a this dependency."},"rationale":"The house-style warning remains.","destination":"Use canonical finding HRA-018."},
-    {"id":"BHAR-F013","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-013"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HRA-019","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current source and timer-control inspection","observed":"new Date remains inline, but deterministic cases control Date through the required test context and no exact default-time value is public behavior."},"rationale":"The report itself names no required action, so this remains informational rather than active remediation.","destination":"Use stale canonical finding HRA-019."},
-    {"id":"BHAR-F014","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-014"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HRA-020","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/pid-table.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph persisted-row consumer trace","observed":"readPidTable still validates only envelope version and entries array before casting rows; reapOrphans checks pid first and fails closed for malformed values."},"rationale":"The unchecked row shape remains a warning rather than a demonstrated crash.","destination":"Use canonical finding HRA-020."},
-    {"id":"BHAR-F015","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-015"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HRA-021","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/ring-buffer.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/async-rewake/ring-buffer.test.ts","exitCode":0,"observed":"The pure current production pair and its complete behavior matrix passed; the separate header wording issue remains owned by HRA-001."},"rationale":"The bounded clean-production claim remains accurate.","destination":"Use canonical finding HRA-021."},
-    {"id":"BHAR-F016","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-016"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HRA-022","sourceRefs":[{"path":"N/A","reason":"Historical run-status metadata."}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/pid-table.test.ts"},{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"},{"path":"tests/bridges/hooks/async-rewake/ring-buffer.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test three assigned async-rewake owner suites","exitCode":0,"observed":"All three current owners passed, positively superseding the historical statement that no commands ran."},"rationale":"Current execution closes the old process caveat.","destination":"Use canonical finding HRA-022."},
-    {"id":"BHAR-F017","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-017"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HRA-023","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current assignment boundary and caller inspection","observed":"The routing-state note remains provenance for this report; its actionable shared-state premise is independently owned by HRA-012 and HSA-024."},"rationale":"An explicit non-audit boundary is not a separate implementation defect.","destination":"Use canonical provenance finding HRA-023."},
-    {"id":"BHAR-F018","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-018"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical process metadata about an unrun complexity gate."}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"}],"validation":{"method":"static-proof","tool":"current project gate and scope inspection","observed":"The report's unverified complexity caveat records review process only; no specific current complexity failure was established by that claim."},"rationale":"Absence of a historical measurement does not create an implementation finding.","destination":"Preserve as provenance only."},
-    {"id":"BHD-F001","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-001"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"},{"path":"tests/bridges/hooks/dispatch-exec.test.ts"},{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test three assigned dispatch and router owner suites","exitCode":0,"observed":"All three owners passed, while current CodeGraph and structural evidence still show shared routing state, a cross-module reload case, and several interaction-double concerns."},"rationale":"The report's broad quality assessment and three remediation themes remain current.","destination":"Carry the themes into Phase 3 sequencing."},
-    {"id":"BHD-F002","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-002"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-014","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"}],"validation":{"method":"static-proof","tool":"current reset call-site census","observed":"dispatch.test.ts still resets the same module-global routing state before and after every case."},"rationale":"The owner remains coupled to shared mutable production state.","destination":"Use canonical finding HHD-014."},
-    {"id":"BHD-F003","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-003"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-004","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"}],"validation":{"method":"static-proof","tool":"current recorder contract inspection","observed":"The loud-failing HookExecutor recorders remain, but their prevalent recorded tuple omits context and pi, leaving pi threading undiscriminated."},"rationale":"The broad strong-mock prescription is overstated; the surviving exact defect is the incomplete interaction tuple.","destination":"Use canonical finding HHD-004."},
-    {"id":"BHD-F004","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-004"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-016","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"}],"validation":{"method":"static-proof","tool":"current describe census","observed":"Composite handler evidence remains spread across four scenario-category describe blocks instead of one group per exported entrypoint."},"rationale":"The public-entrypoint grouping rule remains violated.","destination":"Use canonical finding HHD-016."},
-    {"id":"BHD-F005","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-005"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-017","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch-exec.test.ts"}],"validation":{"method":"static-proof","tool":"current case and dependency inspection","observed":"The portability case still uses a real child to prove literal shell metacharacters and still wraps global timers manually without documenting why this boundary is exceptional."},"rationale":"The real subprocess is justified, but the bespoke timer observation and missing rationale remain.","destination":"Use canonical finding HHD-017."},
-    {"id":"BHD-F006","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-006"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-003","sourceRefs":[{"path":"N/A","reason":"The recorder implementation is test support."}],"testRefs":[{"path":"tests/bridges/hooks/dispatch-exec.test.ts"}],"validation":{"method":"static-proof","tool":"current observeSpawn inspection","observed":"observeSpawn still wraps spawn in a Proxy and then t.mock.fn; exact call values are asserted, but isSpawnOptions accepts any object and the wrapper's mock log is unread."},"rationale":"The first-pass demand for strong-mock is broader than needed; the surviving guard and unused-wrapper defects belong to HHD-003.","destination":"Use canonical finding HHD-003."},
-    {"id":"BHD-F007","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-007"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-019","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"current setup and call-site census","observed":"event-router.test.ts retains file-level beforeEach(resetRoutingState), disabled concurrency on the reload case, ownRoutingState, and direct resets."},"rationale":"The suite remains coupled to process-global routing state.","destination":"Use canonical finding HHD-019."},
-    {"id":"BHD-F008","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-008"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-011","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}],"testRefs":[{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"current reload-case and builtin interception inspection","observed":"The roughly 500-line reload case still spans async-rewake, pid-table, settle, real process, platform mutation, and hook hydration; it also patches builtin filesystem bindings."},"rationale":"The cross-module case and non-hermetic interception share the canonical HHD-011 remediation.","destination":"Use canonical finding HHD-011."},
-    {"id":"BHD-F009","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-009"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-021","sourceRefs":[{"path":"N/A","reason":"The cast and recorder are test-only."}],"testRefs":[{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"current makeRecordingPi inspection","observed":"makeRecordingPi still casts a two-method object to the full ExtensionAPI and records on and sendMessage interactions by hand."},"rationale":"The cast hides an invalid over-wide boundary double.","destination":"Use canonical finding HHD-021."},
-    {"id":"BHD-F010","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-010"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-022","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"current import and setup inspection","observed":"beforeAgentStartHandlerFor cases still seed pending context through adaptObservationResultForEvent instead of the direct appendPendingSessionStartContext contract."},"rationale":"Expected setup remains computed through sibling production behavior.","destination":"Use canonical finding HHD-022."},
-    {"id":"BHD-F011","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-011"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"This claim reports the absence of clean assigned test files."}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"},{"path":"tests/bridges/hooks/dispatch-exec.test.ts"},{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"Each assigned test file still carries at least one separately linked live finding; none qualifies for an unqualified clean-file record."},"rationale":"The administrative clean-file assessment remains accurate.","destination":"Evidence-only closure."},
-    {"id":"BHD-F012","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-012"],"evidenceStatus":"duplicate","route":"operator decision","duplicateOf":"HHD-023","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/routing-state.test.ts"},{"path":"tests/bridges/hooks/dispatch.test.ts"},{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph caller census plus current source inspection","observed":"resetEpoch and resetRoutingState remain test-only exports and the state has a broad consumer graph; the comment still incorrectly says all composed clears are public."},"rationale":"Removing the seams requires an explicit cross-owner state-lifetime decision.","destination":"Use canonical decision finding HHD-023."},
-    {"id":"BHD-F013","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-013"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-024","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}],"testRefs":[{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph and current source inspection","observed":"Hook parsing and hydration still call homedir inline, while tests still mutate HOME to control that hidden boundary."},"rationale":"The environment dependency remains live.","destination":"Use canonical finding HHD-024."},
-    {"id":"BHD-F014","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-014"],"evidenceStatus":"duplicate","route":"Phase 3","duplicateOf":"HHD-021","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"}],"testRefs":[{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph direct-use census","observed":"registerHooksBridge still accepts the full ExtensionAPI while its local registrar and downstream message needs can be expressed by a narrow consumer-owned port."},"rationale":"The broad signature and invalid recorder are two sides of the same boundary defect.","destination":"Use canonical finding HHD-021."},
-    {"id":"BHD-F015","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-015"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/dispatch.test.ts","exitCode":0,"observed":"The owner passed; dispatch still uses an injected HookExecutor production default and current evidence found no production defect outside linked state ownership."},"rationale":"The bounded clean-production assessment remains supported.","destination":"Retain as positive dependency-injection evidence."},
-    {"id":"BHD-F016","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-016"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"}],"testRefs":[{"path":"tests/bridges/hooks/dispatch-exec.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/dispatch-exec.test.ts","exitCode":0,"observed":"The owner passed; dispatch-exec still exposes SpawnDeps for spawn and dispatch-id injection and no separate production defect was established by this report."},"rationale":"The bounded dependency-injection strength remains current.","destination":"Retain as positive evidence."},
-    {"id":"BHD-F017","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-017"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"}],"testRefs":[{"path":"tests/bridges/hooks/routing-state.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/hooks/routing-state.test.ts","exitCode":0,"observed":"The excluded owner now has current focused execution; its reset-seam finding remains independently preserved under HSA-024 and HHD-023."},"rationale":"The old review-boundary caveat is no longer an evidence gap.","destination":"Evidence-only closure."},
-    {"id":"BHD-F018","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-018"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical assignment exclusions for adjacent modules."}],"testRefs":[{"path":"tests/bridges/hooks/async-rewake/registry.test.ts"},{"path":"tests/bridges/hooks/async-rewake/pid-table.test.ts"},{"path":"tests/bridges/hooks/settle.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test current async-rewake registry, pid-table, and settle owner suites","exitCode":0,"observed":"The adjacent owners now have current focused execution and their live claims are preserved in dedicated corpus records rather than this boundary note."},"rationale":"Assignment provenance does not create a separate implementation defect.","destination":"Evidence-only closure."},
-    {"id":"BHD-F019","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-019"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical no-command process claim."}],"testRefs":[{"path":"tests/bridges/hooks/dispatch.test.ts"},{"path":"tests/bridges/hooks/dispatch-exec.test.ts"},{"path":"tests/bridges/hooks/event-router.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test three assigned dispatch and router owner suites","exitCode":0,"observed":"All three current owners passed, positively superseding the historical statement that no tests were run."},"rationale":"Current execution closes the old process caveat.","destination":"Evidence-only closure."}
+    {
+      "id": "BHAS-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/event-adapters.test.ts" },
+        { "path": "tests/bridges/hooks/settle.test.ts" },
+        { "path": "tests/bridges/hooks/stage.test.ts" },
+        { "path": "tests/bridges/hooks/routing-state.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test four assigned hook adapter/state owner suites",
+        "exitCode": 0,
+        "observed": "All four current owner suites passed; whole-value assertions, case-owned filesystem roots, and scoped double cleanup remain present outside separately routed findings."
+      },
+      "rationale": "The report's broad positive assessment remains current with its specific exceptions preserved separately.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHAS-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-002"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-021",
+      "sourceRefs": [{ "path": "N/A", "reason": "Duplicated setup is test-only." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-adapters.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "Four PI_CLAUDE_MARKETPLACE_DEBUG save, restore, and console-error spy blocks remain."
+      },
+      "rationale": "The file-local diagnostic helper cleanup remains live.",
+      "destination": "Use canonical finding HSA-021."
+    },
+    {
+      "id": "BHAS-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-003"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-021",
+      "sourceRefs": [{ "path": "N/A", "reason": "The redundant assertion is test-only." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-adapters.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The complete event deep comparison is still followed by an Object.hasOwn check for key 0."
+      },
+      "rationale": "The second assertion cannot distinguish any implementation that passes the preceding whole-value assertion.",
+      "destination": "Use canonical finding HSA-021."
+    },
+    {
+      "id": "BHAS-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/settle.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call path plus current fixture inspection",
+        "observed": "settle handlers do not read pi.isIdle, while makePi still returns an always-true isIdle field."
+      },
+      "rationale": "The unused field neither narrows the dependency contract nor proves non-use.",
+      "destination": "Delete the field or replace it with a throw-if-called guard."
+    },
+    {
+      "id": "BHAS-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Case composition is test-only." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/settle.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case inspection",
+        "observed": "One case still combines cache miss, one-shot consumption, repeated drain, and stale-epoch behavior in one arrange-act-assert sequence."
+      },
+      "rationale": "The case remains behaviorally dense, but current whole-value assertions prevent it from being a lying test.",
+      "destination": "Split during nearby readability cleanup."
+    },
+    {
+      "id": "BHAS-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HSA-022",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim is a test-organization preference." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/settle.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current project skill and test structure inspection",
+        "observed": "The active rule permits describe when several exports exist but does not require it; descriptive independent cases remain valid."
+      },
+      "rationale": "The first-pass prescription overstates the current project rule.",
+      "destination": "Use stale canonical finding HSA-022; no work."
+    },
+    {
+      "id": "BHAS-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/name.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current error and assertion inspection",
+        "observed": "The two unsafe-name cases still compare the complete message of a bare Error because no structured domain error exists."
+      },
+      "rationale": "The assertion limitation remains, while the production contract cannot yet support the prescribed structured check.",
+      "destination": "Use canonical finding HSA-023."
+    },
+    {
+      "id": "BHAS-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/routing-state.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/routing-state.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passed and retains dedicated full-value cases for the exported state operations; state-ownership concerns are routed separately."
+      },
+      "rationale": "The bounded positive assessment of the test file remains supported.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHAS-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/routing-state.test.ts" },
+        { "path": "tests/bridges/hooks/dispatch.test.ts" },
+        { "path": "tests/bridges/hooks/event-router.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph caller census",
+        "observed": "resetEpoch, resetRoutingState, and routingTableEntries still have no production callers, while resetRoutingState remains broadly imported by tests and its comment still misstates private clears as public."
+      },
+      "rationale": "The reset-hook and inaccurate-comment finding remains live across several owners.",
+      "destination": "Use canonical finding HSA-024."
+    },
+    {
+      "id": "BHAS-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-025",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/settle.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph state and caller trace",
+        "observed": "Four mutable cells remain at module scope and resetSettleState remains a real reload caller, so per-registration ownership is still viable without deleting reload hygiene."
+      },
+      "rationale": "The factory-owned settle-state design remains live.",
+      "destination": "Use canonical finding HSA-025."
+    },
+    {
+      "id": "BHAS-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-025",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Catch-binding naming is production style." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The reenter containment block still uses catch (err) rather than catch (error: unknown)."
+      },
+      "rationale": "The house-style warning remains alongside the state-ownership finding.",
+      "destination": "Use canonical finding HSA-025."
+    },
+    {
+      "id": "BHAS-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-026",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import and monkeypatch census",
+        "observed": "Stage still imports filesystem operations directly; four cases still patch node:fs/promises and synchronize builtin ESM exports."
+      },
+      "rationale": "The hidden filesystem boundary still forces process-global patching.",
+      "destination": "Use canonical finding HSA-026."
+    },
+    {
+      "id": "BHAS-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-027",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The idiom is production readability." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "assertNoSymlinkEscapeInHooksSubtree still reads the last stack item with slice(-1).join before pop."
+      },
+      "rationale": "The obscure safe-pop workaround remains.",
+      "destination": "Use canonical finding HSA-027."
+    },
+    {
+      "id": "BHAS-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HSA-027",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Catch structure is production style." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Two catches still bind err and one discarded readlink catch still lacks an inline discard rationale."
+      },
+      "rationale": "The catch-style claims remain current.",
+      "destination": "Use canonical finding HSA-027."
+    },
+    {
+      "id": "BHAS-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "The repeated cast is production readability." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "applyToolResultPatch still uses two separate inline casts to write readonly content and isError fields."
+      },
+      "rationale": "A named writable view can reduce duplication, but the current casts are documented and behaviorally sound.",
+      "destination": "Consider a local writable helper during nearby cleanup."
+    },
+    {
+      "id": "BHAS-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/settle.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/settle.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passed; exhaustive StopReason handling, post-await epoch checks, and bounded reentry remain present outside separately routed state and style findings."
+      },
+      "rationale": "The report's bounded clean-production assessment remains supported.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHAS-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HSA-028",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/path-safety.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/stage.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner includes an unexpected-walk-failure case that reaches the final propagation arm and asserts the same Error object; the suite passed."
+      },
+      "rationale": "Positive replacement and rerun proof invalidates the historical missing-case premise.",
+      "destination": "Use stale canonical finding HSA-028; no work."
+    },
+    {
+      "id": "BHAS-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-adapters-state.md#CLAIM-018"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "Historical run-status and review-boundary metadata." }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/event-adapters.test.ts" },
+        { "path": "tests/bridges/hooks/settle.test.ts" },
+        { "path": "tests/bridges/hooks/stage.test.ts" },
+        { "path": "tests/bridges/hooks/routing-state.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test four assigned hook adapter/state owner suites",
+        "exitCode": 0,
+        "observed": "Current focused execution supersedes the historical no-command caveat; adjacent-module exclusions remain provenance rather than implementation findings."
+      },
+      "rationale": "The process caveat no longer describes current evidence.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHAR-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/async-rewake/pid-table.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/registry.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/ring-buffer.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test three assigned async-rewake owner suites",
+        "exitCode": 0,
+        "observed": "All three current suites passed and retain exact state, filesystem, timer, and ordered persistence assertions outside separately routed findings."
+      },
+      "rationale": "The broad positive assessment remains supported.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHAR-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-002"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "HRA-011",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/pid-table.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "repository-local temporary root: start writePidTable, synchronously append a second row, await, then read",
+        "exitCode": 0,
+        "observed": "The persisted table contained both rows because the snapshot still occurs after the first await; the historical post-completion mutation cannot prove the documented copy contract."
+      },
+      "rationale": "Current control flow turns the weak aliasing case into a live production snapshot defect.",
+      "destination": "Use canonical finding HRA-011."
+    },
+    {
+      "id": "BHAR-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-003"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-007",
+      "sourceRefs": [{ "path": "N/A", "reason": "Helper duplication is test-only." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/async-rewake/pid-table.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current helper comparison",
+        "observed": "filesystemErrorCode remains duplicated verbatim in both sibling tests."
+      },
+      "rationale": "The concern-local support duplication remains live.",
+      "destination": "Use canonical finding HRA-007."
+    },
+    {
+      "id": "BHAR-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-004"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-012",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph state ownership plus current reset census",
+        "observed": "asyncRewakeRegistry and pidTableOperations remain module-level Maps; registry cases still perform repeated shutdown and routing reset choreography."
+      },
+      "rationale": "Fresh case-owned registry state remains unavailable.",
+      "destination": "Use canonical finding HRA-012."
+    },
+    {
+      "id": "BHAR-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-005"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-013",
+      "sourceRefs": [{ "path": "N/A", "reason": "Polling helper is test-only." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current helper and call-site inspection",
+        "observed": "waitForPidTable still loops against process.hrtime.bigint with setImmediate and remains used across the registry suite despite the injected writer seam."
+      },
+      "rationale": "The owner still uses a real-clock polling anti-pattern.",
+      "destination": "Use canonical finding HRA-013."
+    },
+    {
+      "id": "BHAR-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-014",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/async-rewake/registry.test.ts" },
+        { "path": "tests/bridges/hooks/dispatch-exec.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current double comparison against project skill",
+        "observed": "createPi and createContext still hand-roll sendMessage and notify recorders while the sibling demonstrates exact mocks for the same interactions."
+      },
+      "rationale": "Promised notification and reentry interactions remain represented by unsanctioned doubles.",
+      "destination": "Use canonical finding HRA-014."
+    },
+    {
+      "id": "BHAR-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-015",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current recorder and assertion census",
+        "observed": "createSpawn still pushes into a plain array and several cases still assert only call count or one option field."
+      },
+      "rationale": "Wrong command or argument values can preserve those projections.",
+      "destination": "Use canonical finding HRA-015."
+    },
+    {
+      "id": "BHAR-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-016",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current orphan-probe fixture inspection",
+        "observed": "Several reapOrphans cases still implement cross-method ordered recorder logs without exact mock expectations and verification."
+      },
+      "rationale": "The ordered interaction contract remains incompletely specified.",
+      "destination": "Use canonical finding HRA-016."
+    },
+    {
+      "id": "BHAR-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HRA-021",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/ring-buffer.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/async-rewake/ring-buffer.test.ts",
+        "exitCode": 0,
+        "observed": "The complete current owner passed and retains distinct exact cases for the named capacity, wrap, truncation, empty-write, and UTF-8 behaviors."
+      },
+      "rationale": "The clean test assessment remains accurate.",
+      "destination": "Use canonical finding HRA-021; no implementation work."
+    },
+    {
+      "id": "BHAR-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-012",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph state and production caller trace",
+        "observed": "The two registry Maps remain module globals, while shutdownInMemoryChildren remains a legitimate reload operation called by event-router."
+      },
+      "rationale": "Factory ownership remains the coherent fix without deleting production shutdown semantics.",
+      "destination": "Use canonical finding HRA-012."
+    },
+    {
+      "id": "BHAR-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-017",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "Repeated typing is production structure." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The child exit outcome object shape remains repeated across three closure and helper signatures."
+      },
+      "rationale": "The local type duplication remains.",
+      "destination": "Use canonical finding HRA-017."
+    },
+    {
+      "id": "BHAR-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-018",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "Closure form is production style." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "onSpawnError, finalizeOnce, and finalizeAfterOwnedStreams remain named const-arrow closures without a this dependency."
+      },
+      "rationale": "The house-style warning remains.",
+      "destination": "Use canonical finding HRA-018."
+    },
+    {
+      "id": "BHAR-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HRA-019",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source and timer-control inspection",
+        "observed": "new Date remains inline, but deterministic cases control Date through the required test context and no exact default-time value is public behavior."
+      },
+      "rationale": "The report itself names no required action, so this remains informational rather than active remediation.",
+      "destination": "Use stale canonical finding HRA-019."
+    },
+    {
+      "id": "BHAR-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HRA-020",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/pid-table.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph persisted-row consumer trace",
+        "observed": "readPidTable still validates only envelope version and entries array before casting rows; reapOrphans checks pid first and fails closed for malformed values."
+      },
+      "rationale": "The unchecked row shape remains a warning rather than a demonstrated crash.",
+      "destination": "Use canonical finding HRA-020."
+    },
+    {
+      "id": "BHAR-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HRA-021",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/ring-buffer.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/async-rewake/ring-buffer.test.ts",
+        "exitCode": 0,
+        "observed": "The pure current production pair and its complete behavior matrix passed; the separate header wording issue remains owned by HRA-001."
+      },
+      "rationale": "The bounded clean-production claim remains accurate.",
+      "destination": "Use canonical finding HRA-021."
+    },
+    {
+      "id": "BHAR-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HRA-022",
+      "sourceRefs": [{ "path": "N/A", "reason": "Historical run-status metadata." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/async-rewake/pid-table.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/registry.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/ring-buffer.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test three assigned async-rewake owner suites",
+        "exitCode": 0,
+        "observed": "All three current owners passed, positively superseding the historical statement that no commands ran."
+      },
+      "rationale": "Current execution closes the old process caveat.",
+      "destination": "Use canonical finding HRA-022."
+    },
+    {
+      "id": "BHAR-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HRA-023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assignment boundary and caller inspection",
+        "observed": "The routing-state note remains provenance for this report; its actionable shared-state premise is independently owned by HRA-012 and HSA-024."
+      },
+      "rationale": "An explicit non-audit boundary is not a separate implementation defect.",
+      "destination": "Use canonical provenance finding HRA-023."
+    },
+    {
+      "id": "BHAR-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md#CLAIM-018"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "Historical process metadata about an unrun complexity gate." }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/async-rewake/registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current project gate and scope inspection",
+        "observed": "The report's unverified complexity caveat records review process only; no specific current complexity failure was established by that claim."
+      },
+      "rationale": "Absence of a historical measurement does not create an implementation finding.",
+      "destination": "Preserve as provenance only."
+    },
+    {
+      "id": "BHD-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/dispatch.test.ts" },
+        { "path": "tests/bridges/hooks/dispatch-exec.test.ts" },
+        { "path": "tests/bridges/hooks/event-router.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test three assigned dispatch and router owner suites",
+        "exitCode": 0,
+        "observed": "All three owners passed, while current CodeGraph and structural evidence still show shared routing state, a cross-module reload case, and several interaction-double concerns."
+      },
+      "rationale": "The report's broad quality assessment and three remediation themes remain current.",
+      "destination": "Carry the themes into Phase 3 sequencing."
+    },
+    {
+      "id": "BHD-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-002"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-014",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current reset call-site census",
+        "observed": "dispatch.test.ts still resets the same module-global routing state before and after every case."
+      },
+      "rationale": "The owner remains coupled to shared mutable production state.",
+      "destination": "Use canonical finding HHD-014."
+    },
+    {
+      "id": "BHD-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-004",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current recorder contract inspection",
+        "observed": "The loud-failing HookExecutor recorders remain, but their prevalent recorded tuple omits context and pi, leaving pi threading undiscriminated."
+      },
+      "rationale": "The broad strong-mock prescription is overstated; the surviving exact defect is the incomplete interaction tuple.",
+      "destination": "Use canonical finding HHD-004."
+    },
+    {
+      "id": "BHD-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-016",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current describe census",
+        "observed": "Composite handler evidence remains spread across four scenario-category describe blocks instead of one group per exported entrypoint."
+      },
+      "rationale": "The public-entrypoint grouping rule remains violated.",
+      "destination": "Use canonical finding HHD-016."
+    },
+    {
+      "id": "BHD-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-017",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case and dependency inspection",
+        "observed": "The portability case still uses a real child to prove literal shell metacharacters and still wraps global timers manually without documenting why this boundary is exceptional."
+      },
+      "rationale": "The real subprocess is justified, but the bespoke timer observation and missing rationale remain.",
+      "destination": "Use canonical finding HHD-017."
+    },
+    {
+      "id": "BHD-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-003",
+      "sourceRefs": [{ "path": "N/A", "reason": "The recorder implementation is test support." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current observeSpawn inspection",
+        "observed": "observeSpawn still wraps spawn in a Proxy and then t.mock.fn; exact call values are asserted, but isSpawnOptions accepts any object and the wrapper's mock log is unread."
+      },
+      "rationale": "The first-pass demand for strong-mock is broader than needed; the surviving guard and unused-wrapper defects belong to HHD-003.",
+      "destination": "Use canonical finding HHD-003."
+    },
+    {
+      "id": "BHD-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-019",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current setup and call-site census",
+        "observed": "event-router.test.ts retains file-level beforeEach(resetRoutingState), disabled concurrency on the reload case, ownRoutingState, and direct resets."
+      },
+      "rationale": "The suite remains coupled to process-global routing state.",
+      "destination": "Use canonical finding HHD-019."
+    },
+    {
+      "id": "BHD-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-011",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current reload-case and builtin interception inspection",
+        "observed": "The roughly 500-line reload case still spans async-rewake, pid-table, settle, real process, platform mutation, and hook hydration; it also patches builtin filesystem bindings."
+      },
+      "rationale": "The cross-module case and non-hermetic interception share the canonical HHD-011 remediation.",
+      "destination": "Use canonical finding HHD-011."
+    },
+    {
+      "id": "BHD-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-021",
+      "sourceRefs": [{ "path": "N/A", "reason": "The cast and recorder are test-only." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current makeRecordingPi inspection",
+        "observed": "makeRecordingPi still casts a two-method object to the full ExtensionAPI and records on and sendMessage interactions by hand."
+      },
+      "rationale": "The cast hides an invalid over-wide boundary double.",
+      "destination": "Use canonical finding HHD-021."
+    },
+    {
+      "id": "BHD-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-022",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import and setup inspection",
+        "observed": "beforeAgentStartHandlerFor cases still seed pending context through adaptObservationResultForEvent instead of the direct appendPendingSessionStartContext contract."
+      },
+      "rationale": "Expected setup remains computed through sibling production behavior.",
+      "destination": "Use canonical finding HHD-022."
+    },
+    {
+      "id": "BHD-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-011"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "This claim reports the absence of clean assigned test files." }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/dispatch.test.ts" },
+        { "path": "tests/bridges/hooks/dispatch-exec.test.ts" },
+        { "path": "tests/bridges/hooks/event-router.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "Each assigned test file still carries at least one separately linked live finding; none qualifies for an unqualified clean-file record."
+      },
+      "rationale": "The administrative clean-file assessment remains accurate.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHD-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "HHD-023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/routing-state.test.ts" },
+        { "path": "tests/bridges/hooks/dispatch.test.ts" },
+        { "path": "tests/bridges/hooks/event-router.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph caller census plus current source inspection",
+        "observed": "resetEpoch and resetRoutingState remain test-only exports and the state has a broad consumer graph; the comment still incorrectly says all composed clears are public."
+      },
+      "rationale": "Removing the seams requires an explicit cross-owner state-lifetime decision.",
+      "destination": "Use canonical decision finding HHD-023."
+    },
+    {
+      "id": "BHD-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "Hook parsing and hydration still call homedir inline, while tests still mutate HOME to control that hidden boundary."
+      },
+      "rationale": "The environment dependency remains live.",
+      "destination": "Use canonical finding HHD-024."
+    },
+    {
+      "id": "BHD-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-021",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph direct-use census",
+        "observed": "registerHooksBridge still accepts the full ExtensionAPI while its local registrar and downstream message needs can be expressed by a narrow consumer-owned port."
+      },
+      "rationale": "The broad signature and invalid recorder are two sides of the same boundary defect.",
+      "destination": "Use canonical finding HHD-021."
+    },
+    {
+      "id": "BHD-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-015"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/dispatch.test.ts",
+        "exitCode": 0,
+        "observed": "The owner passed; dispatch still uses an injected HookExecutor production default and current evidence found no production defect outside linked state ownership."
+      },
+      "rationale": "The bounded clean-production assessment remains supported.",
+      "destination": "Retain as positive dependency-injection evidence."
+    },
+    {
+      "id": "BHD-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-016"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/dispatch-exec.test.ts",
+        "exitCode": 0,
+        "observed": "The owner passed; dispatch-exec still exposes SpawnDeps for spawn and dispatch-id injection and no separate production defect was established by this report."
+      },
+      "rationale": "The bounded dependency-injection strength remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHD-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-017"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/routing-state.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/hooks/routing-state.test.ts",
+        "exitCode": 0,
+        "observed": "The excluded owner now has current focused execution; its reset-seam finding remains independently preserved under HSA-024 and HHD-023."
+      },
+      "rationale": "The old review-boundary caveat is no longer an evidence gap.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHD-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-018"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "Historical assignment exclusions for adjacent modules." }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/async-rewake/registry.test.ts" },
+        { "path": "tests/bridges/hooks/async-rewake/pid-table.test.ts" },
+        { "path": "tests/bridges/hooks/settle.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test current async-rewake registry, pid-table, and settle owner suites",
+        "exitCode": 0,
+        "observed": "The adjacent owners now have current focused execution and their live claims are preserved in dedicated corpus records rather than this boundary note."
+      },
+      "rationale": "Assignment provenance does not create a separate implementation defect.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHD-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md#CLAIM-019"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Historical no-command process claim." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/dispatch.test.ts" },
+        { "path": "tests/bridges/hooks/dispatch-exec.test.ts" },
+        { "path": "tests/bridges/hooks/event-router.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test three assigned dispatch and router owner suites",
+        "exitCode": 0,
+        "observed": "All three current owners passed, positively superseding the historical statement that no tests were run."
+      },
+      "rationale": "Current execution closes the old process caveat.",
+      "destination": "Evidence-only closure."
+    }
   ],
   "decisions": [],
   "scopeChanges": []

@@ -48,40 +48,210 @@
     }
   ],
   "sourceClaims": [
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-001", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-001", "findingId": "EHP-001" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-002", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-002", "findingId": "EHP-002" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-003", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-003", "findingId": "EHP-003" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-004", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-004", "findingId": "EHP-004" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-005", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-005", "findingId": "EHP-005" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-006", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-006", "findingId": "EHP-006" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-007", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-007", "findingId": "EHP-007" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-008", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-008", "findingId": "EHP-008" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-009", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-009", "findingId": "EHP-009" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-010", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-010", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-011", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-011", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-012", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-012", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-013", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-013", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-014", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-014", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-015", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-015", "findingId": "EHP-011" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-016", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-016", "findingId": "EHP-012" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-017", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-017", "findingId": "EHP-013" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-018", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-018", "findingId": "EHP-014" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-019", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-019", "findingId": "EHP-015" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-020", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-020", "findingId": "EHP-016" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-021", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-021", "findingId": "EHP-017" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-022", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-022", "findingId": "EHP-018" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-023", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-023", "findingId": "EHP-019" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-024", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-024", "findingId": "EHP-001" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-025", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-025", "findingId": "EHP-001" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-026", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-026", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-027", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-027", "findingId": "EHP-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-028", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-028", "findingId": "EHP-006" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-029", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-029", "findingId": "EHP-011" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-030", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-030", "findingId": "EHP-001" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-031", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-031", "findingId": "EHP-020" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-032", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-032", "findingId": "EHP-019" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-033", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-033", "findingId": "EHP-021" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-034", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md", "label": "EHP-034", "findingId": "EHP-021" }
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-001",
+      "findingId": "EHP-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-002",
+      "findingId": "EHP-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-003",
+      "findingId": "EHP-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-004",
+      "findingId": "EHP-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-005",
+      "findingId": "EHP-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-006",
+      "findingId": "EHP-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-007",
+      "findingId": "EHP-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-008",
+      "findingId": "EHP-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-009",
+      "findingId": "EHP-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-010",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-011",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-012",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-013",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-014",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-015",
+      "findingId": "EHP-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-016",
+      "findingId": "EHP-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-017",
+      "findingId": "EHP-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-018",
+      "findingId": "EHP-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-019",
+      "findingId": "EHP-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-020",
+      "findingId": "EHP-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-021",
+      "findingId": "EHP-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-022",
+      "findingId": "EHP-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-023",
+      "findingId": "EHP-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-024",
+      "findingId": "EHP-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-025",
+      "findingId": "EHP-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-026",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-027",
+      "findingId": "EHP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-028",
+      "findingId": "EHP-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-029",
+      "findingId": "EHP-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-030",
+      "findingId": "EHP-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-031",
+      "findingId": "EHP-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-032",
+      "findingId": "EHP-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-033",
+      "findingId": "EHP-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md",
+      "label": "EHP-034",
+      "findingId": "EHP-021"
+    }
   ],
   "findings": [
     {
@@ -95,7 +265,10 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" }, { "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }
+      ],
       "testRefs": [{ "path": "tests/architecture/flag-catalog-drift.test.ts" }],
       "validation": {
         "method": "surviving-mutation",
@@ -108,97 +281,175 @@
     },
     {
       "id": "EHP-002",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-002"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-002"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/fetch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore parseFetchTarget ParsedFetchTarget", "observed": "Both symbols remain exported, are consumed only by fetch.ts and its paired suite, and the suite still has separate parser and handler describe blocks." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore parseFetchTarget ParsedFetchTarget",
+        "observed": "Both symbols remain exported, are consumed only by fetch.ts and its paired suite, and the suite still has separate parser and handler describe blocks."
+      },
       "rationale": "The parser export remains a test-only production surface and duplicates behavior observable through makeFetchHandler.",
       "destination": "Make the parser and result type private and move unique rejection coverage through the handler in Phase 2."
     },
     {
       "id": "EHP-003",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-003"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-003"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts" }
+      ],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/list.test.ts" }],
-      "validation": { "method": "surviving-mutation", "command": "node --test tests/edge/handlers/plugin/list.test.ts in repository-local isolated copy after changing startsWith('--') to startsWith('-')", "exitCode": 0, "observed": "The complete list handler suite passed, confirming no single-dash case discriminates the boundary; current source retains the same boundary at all six cited scanners." },
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/edge/handlers/plugin/list.test.ts in repository-local isolated copy after changing startsWith('--') to startsWith('-')",
+        "exitCode": 0,
+        "observed": "The complete list handler suite passed, confirming no single-dash case discriminates the boundary; current source retains the same boundary at all six cited scanners."
+      },
       "rationale": "A one-character semantic change survives and single-dash behavior remains unspecified across seven handlers.",
       "destination": "Add explicit single-dash cases for each affected handler in Phase 2."
     },
     {
       "id": "EHP-004",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-004"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-004"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts" }, { "path": "extensions/pi-claude-marketplace/edge/types.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/types.ts" }
+      ],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/bootstrap.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore makeBootstrapHandler EdgeDeps", "observed": "makeBootstrapHandler still accepts all EdgeDeps but reads only gitOps; the suite still constructs PluginUpdate solely to satisfy the broad type." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore makeBootstrapHandler EdgeDeps",
+        "observed": "makeBootstrapHandler still accepts all EdgeDeps but reads only gitOps; the suite still constructs PluginUpdate solely to satisfy the broad type."
+      },
       "rationale": "The consumer contract remains wider than the handler uses, forcing irrelevant mock setup.",
       "destination": "Narrow the dependency type to gitOps and remove irrelevant mocks in Phase 2."
     },
     {
       "id": "EHP-005",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-005"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-005"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" }, { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }
+      ],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/import.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore makeImportHandler errorMessage", "observed": "import.ts still contains the inline Error/String ternary while the shared errorMessage helper owns the same branch elsewhere." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore makeImportHandler errorMessage",
+        "observed": "import.ts still contains the inline Error/String ternary while the shared errorMessage helper owns the same branch elsewhere."
+      },
       "rationale": "The duplicate branch remains assigned to the wrong source-test pair.",
       "destination": "Call errorMessage from import.ts and remove the obsolete local branch justification in Phase 2."
     },
     {
       "id": "EHP-006",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-006", ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-028"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-028"
+      ],
       "evidenceStatus": "confirmed",
       "route": "deferred backlog",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns repeated test support, not production behavior." }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/install.test.ts" }, { "path": "tests/edge/handlers/plugin/update.test.ts" }, { "path": "tests/edge/notification-boundary.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore and current text search", "observed": "Eleven plugin suites still own local hermetic workspace setup; install and update still duplicate readGeneratedAgents and no concern-local hermetic-workspace.ts exists." },
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns repeated test support, not production behavior."
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/install.test.ts" },
+        { "path": "tests/edge/handlers/plugin/update.test.ts" },
+        { "path": "tests/edge/notification-boundary.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore and current text search",
+        "observed": "Eleven plugin suites still own local hermetic workspace setup; install and update still duplicate readGeneratedAgents and no concern-local hermetic-workspace.ts exists."
+      },
       "rationale": "The duplication and drift risk remain, while the broader repo-wide count requested by the corpus was not needed to establish this local finding.",
       "destination": "Backlog a concern-local helper extraction after injection-seam work determines which filesystem setup remains necessary."
     },
     {
       "id": "EHP-007",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-007"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-007"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "N/A", "reason": "The defect is in test projection support." }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/install.test.ts" }, { "path": "tests/edge/handlers/plugin/update.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore readGeneratedAgents", "observed": "Both helpers still use an unrestricted catch that maps every readdir failure to an empty agents projection." },
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/install.test.ts" },
+        { "path": "tests/edge/handlers/plugin/update.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore readGeneratedAgents",
+        "observed": "Both helpers still use an unrestricted catch that maps every readdir failure to an empty agents projection."
+      },
       "rationale": "Unexpected filesystem errors remain indistinguishable from the expected missing-directory state.",
       "destination": "Restrict the catch to ENOENT and rethrow other failures in Phase 2."
     },
     {
       "id": "EHP-008",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-008"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-008"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" }],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/info.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore info networkCallCount", "observed": "networkCallCount remains asserted only for the flag-absent case; the two --fetch cases still omit the positive-control count promised by the header." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore info networkCallCount",
+        "observed": "networkCallCount remains asserted only for the flag-absent case; the two --fetch cases still omit the positive-control count promised by the header."
+      },
       "rationale": "The zero-network assertion still lacks its claimed live positive control.",
       "destination": "Measure and assert the transport attempt count in both --fetch cases in Phase 2."
     },
     {
       "id": "EHP-009",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-009"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-009"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts" }, { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" }
+      ],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/enable-disable.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore enable-disable omitted scope", "observed": "The handler still stamps pre-resolution failures as user while the orchestrator resolves omitted scope project-first; the paired suite still lacks an explanation reconciling its two expectations." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore enable-disable omitted scope",
+        "observed": "The handler still stamps pre-resolution failures as user while the orchestrator resolves omitted scope project-first; the paired suite still lacks an explanation reconciling its two expectations."
+      },
       "rationale": "Both behaviors remain deliberate but their apparent contradiction remains undocumented.",
       "destination": "Add the concise scope-semantics explanation to the test header in Phase 2."
     },
@@ -216,141 +467,299 @@
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts" }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/fetch.test.ts" }, { "path": "tests/edge/handlers/plugin/info.test.ts" }, { "path": "tests/edge/handlers/plugin/pending.test.ts" }, { "path": "tests/edge/handlers/plugin/reinstall.test.ts" }, { "path": "tests/edge/handlers/plugin/uninstall.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore plus current text search", "observed": "All five suites still assert complete hand-written orchestrator messages; pending, reinstall, and uninstall headers still deny re-deriving grammar that their constants reproduce. Whole-value assertions remain necessary until seams replace orchestration." },
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/fetch.test.ts" },
+        { "path": "tests/edge/handlers/plugin/info.test.ts" },
+        { "path": "tests/edge/handlers/plugin/pending.test.ts" },
+        { "path": "tests/edge/handlers/plugin/reinstall.test.ts" },
+        { "path": "tests/edge/handlers/plugin/uninstall.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current text search",
+        "observed": "All five suites still assert complete hand-written orchestrator messages; pending, reinstall, and uninstall headers still deny re-deriving grammar that their constants reproduce. Whole-value assertions remain necessary until seams replace orchestration."
+      },
       "rationale": "The ownership duplication and misleading documentation remain; weakening whole-value assertions would create a new test defect.",
       "destination": "Fix the headers immediately and dissolve duplicated workflow ownership through narrow injection seams in Phase 2."
     },
     {
       "id": "EHP-011",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-015", ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-029"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-029"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }
+      ],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/import.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph call graph and current import search", "observed": "Nine handlers still directly import their orchestrator; import.ts remains the local narrow optional-dependency reference pattern." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph call graph and current import search",
+        "observed": "Nine handlers still directly import their orchestrator; import.ts remains the local narrow optional-dependency reference pattern."
+      },
       "rationale": "Handler suites still own downstream workflow effects instead of exact handler-to-port calls, affecting nine plugin handlers and six analogous marketplace handlers recorded elsewhere.",
       "destination": "Implement one narrow defaulted orchestration port per handler as a coordinated Phase 2 work item."
     },
     {
       "id": "EHP-012",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-016"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-016"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }],
-      "testRefs": [{ "path": "N/A", "reason": "The claim is a production documentation-style issue." }],
-      "validation": { "method": "static-proof", "tool": "current source text search", "observed": "All five factory comments still begin with the noun label 'Factory:' rather than a third-person verb phrase." },
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is a production documentation-style issue." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source text search",
+        "observed": "All five factory comments still begin with the noun label 'Factory:' rather than a third-person verb phrase."
+      },
       "rationale": "The mechanical documentation warning remains unchanged.",
       "destination": "Rewrite the five existing factory summaries in Phase 2 without adding unnecessary comments elsewhere."
     },
     {
       "id": "EHP-013",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-017"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-017"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }],
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }
+      ],
       "testRefs": [{ "path": "N/A", "reason": "The claim is about exported API documentation." }],
-      "validation": { "method": "static-proof", "tool": "current exported-interface search", "observed": "PluginMarketplaceRef, ParsedPluginMarketplaceRef, ParsedMapModelArgs, ImportHandlerDeps, and ParsedFetchTarget remain undocumented exported interfaces; ParsedFetchTarget should instead become private with its parser." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "current exported-interface search",
+        "observed": "PluginMarketplaceRef, ParsedPluginMarketplaceRef, ParsedMapModelArgs, ImportHandlerDeps, and ParsedFetchTarget remain undocumented exported interfaces; ParsedFetchTarget should instead become private with its parser."
+      },
       "rationale": "Four retained API types still lack summaries and the fifth remains part of the test-only export defect.",
       "destination": "Document the four retained interfaces and privatize ParsedFetchTarget in Phase 2."
     },
     {
       "id": "EHP-014",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-018"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-018"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/shared.test.ts" }, { "path": "tests/edge/handlers/plugin/install.test.ts" }, { "path": "tests/edge/handlers/plugin/info.test.ts" }, { "path": "tests/edge/handlers/plugin/pending.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph branch/source inspection", "observed": "The three noUncheckedIndexedAccess defensive sites remain compiler-forced, and no new reachable untested production branch was found in the twelve handler modules." },
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/shared.test.ts" },
+        { "path": "tests/edge/handlers/plugin/install.test.ts" },
+        { "path": "tests/edge/handlers/plugin/info.test.ts" },
+        { "path": "tests/edge/handlers/plugin/pending.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph branch/source inspection",
+        "observed": "The three noUncheckedIndexedAccess defensive sites remain compiler-forced, and no new reachable untested production branch was found in the twelve handler modules."
+      },
       "rationale": "The historical branch census remains accurate and identifies no implementation work beyond separately recorded findings.",
       "destination": "Close as evidence; retain direct pair coverage as the implementation gate."
     },
     {
       "id": "EHP-015",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-019"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-019"
+      ],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" }],
-      "testRefs": [{ "path": "tests/architecture/flag-catalog-drift.test.ts" }, { "path": "tests/edge/handlers/plugin/bootstrap.test.ts" }, { "path": "tests/edge/handlers/plugin/enable-disable.test.ts" }, { "path": "tests/edge/handlers/plugin/fetch.test.ts" }, { "path": "tests/edge/handlers/plugin/import.test.ts" }, { "path": "tests/edge/handlers/plugin/info.test.ts" }, { "path": "tests/edge/handlers/plugin/install.test.ts" }, { "path": "tests/edge/handlers/plugin/list.test.ts" }, { "path": "tests/edge/handlers/plugin/pending.test.ts" }, { "path": "tests/edge/handlers/plugin/reinstall.test.ts" }, { "path": "tests/edge/handlers/plugin/shared.test.ts" }, { "path": "tests/edge/handlers/plugin/uninstall.test.ts" }, { "path": "tests/edge/handlers/plugin/update.test.ts" }],
-      "validation": { "method": "behavioral-probe", "command": "node --test tests/edge/handlers/plugin/*.test.ts tests/architecture/flag-catalog-drift.test.ts", "exitCode": 0, "observed": "Replacement proof: all thirteen current suites passed on the live tree; the prior review's statement that no tests or gates were run no longer describes this revalidation." },
+      "testRefs": [
+        { "path": "tests/architecture/flag-catalog-drift.test.ts" },
+        { "path": "tests/edge/handlers/plugin/bootstrap.test.ts" },
+        { "path": "tests/edge/handlers/plugin/enable-disable.test.ts" },
+        { "path": "tests/edge/handlers/plugin/fetch.test.ts" },
+        { "path": "tests/edge/handlers/plugin/import.test.ts" },
+        { "path": "tests/edge/handlers/plugin/info.test.ts" },
+        { "path": "tests/edge/handlers/plugin/install.test.ts" },
+        { "path": "tests/edge/handlers/plugin/list.test.ts" },
+        { "path": "tests/edge/handlers/plugin/pending.test.ts" },
+        { "path": "tests/edge/handlers/plugin/reinstall.test.ts" },
+        { "path": "tests/edge/handlers/plugin/shared.test.ts" },
+        { "path": "tests/edge/handlers/plugin/uninstall.test.ts" },
+        { "path": "tests/edge/handlers/plugin/update.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/handlers/plugin/*.test.ts tests/architecture/flag-catalog-drift.test.ts",
+        "exitCode": 0,
+        "observed": "Replacement proof: all thirteen current suites passed on the live tree; the prior review's statement that no tests or gates were run no longer describes this revalidation."
+      },
       "rationale": "The historical limitation is preserved but positively superseded by a current focused rerun.",
       "destination": "No implementation route; use the current passing run as baseline evidence, not as closure of confirmed strength findings."
     },
     {
       "id": "EHP-016",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-020"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-020"
+      ],
       "evidenceStatus": "confirmed",
       "route": "deferred backlog",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts" }],
       "testRefs": [{ "path": "tests/edge/handlers/plugin/update.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph call-path inspection", "observed": "The suite still distinguishes bare update from @marketplace update with omitted scope; resolution occurs in the orchestrator, outside the handler pair's ownership." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph call-path inspection",
+        "observed": "The suite still distinguishes bare update from @marketplace update with omitted scope; resolution occurs in the orchestrator, outside the handler pair's ownership."
+      },
       "rationale": "The observation remains real, but it is not evidence of a handler defect and needs adjudication with the update orchestrator review corpus.",
       "destination": "Preserve for the orchestrator-update revalidation owner; do not alter handler behavior here."
     },
     {
       "id": "EHP-017",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-021"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-021"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns a shared test fixture." }],
       "testRefs": [{ "path": "tests/edge/handlers/marketplace-seed.ts" }],
-      "validation": { "method": "static-proof", "tool": "current source text search", "observed": "marketplace-seed.ts still contains the double assertion through unknown to Parameters<typeof saveState>[1]." },
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source text search",
+        "observed": "marketplace-seed.ts still contains the double assertion through unknown to Parameters<typeof saveState>[1]."
+      },
       "rationale": "The broad cast remains beneath state setup used across handler suites.",
       "destination": "Replace the cast with a type-correct seed builder in the fixture's owning Phase 2 work."
     },
     {
       "id": "EHP-018",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-022"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-022"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/bootstrap.test.ts" }, { "path": "tests/edge/handlers/plugin/import.test.ts" }, { "path": "tests/edge/handlers/plugin/shared.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current test/source inspection plus focused passing run", "observed": "The named high-quality plants, exact interaction expectations, and whole-value assertions remain present, and the focused suites pass." },
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/bootstrap.test.ts" },
+        { "path": "tests/edge/handlers/plugin/import.test.ts" },
+        { "path": "tests/edge/handlers/plugin/shared.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test/source inspection plus focused passing run",
+        "observed": "The named high-quality plants, exact interaction expectations, and whole-value assertions remain present, and the focused suites pass."
+      },
       "rationale": "These clean patterns remain valid positive evidence and require no corrective work.",
       "destination": "Retain as reference patterns for Phase 2 revisions."
     },
     {
       "id": "EHP-019",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-023", ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-032"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-032"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }],
-      "testRefs": [{ "path": "tests/architecture/flag-catalog-drift.test.ts" }, { "path": "tests/edge/handlers/plugin/fetch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph export-consumer census", "observed": "The census remains 22 exports with BOOLEAN_FLAGS and the fetch parser/type as the two test-only production surfaces; the catalog assertion mutation also survived." },
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/flag-catalog-drift.test.ts" },
+        { "path": "tests/edge/handlers/plugin/fetch.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph export-consumer census",
+        "observed": "The census remains 22 exports with BOOLEAN_FLAGS and the fetch parser/type as the two test-only production surfaces; the catalog assertion mutation also survived."
+      },
       "rationale": "The export-ownership method remains useful cross-cutting evidence and confirms both live defects.",
       "destination": "Apply the census when sizing Phase 2 and remove the two identified test-only surfaces."
     },
     {
       "id": "EHP-020",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-031"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-031"
+      ],
       "evidenceStatus": "confirmed",
       "route": "Phase 2",
       "duplicateOf": null,
       "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/import.test.ts" }, { "path": "tests/edge/handlers/plugin/bootstrap.test.ts" }, { "path": "tests/edge/handlers/plugin/shared.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current strong-mock usage search", "observed": "Only import, bootstrap, and shared use strong-mock in this directory; import remains the exact narrow-port reference and nine handlers still lack such a seam." },
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/import.test.ts" },
+        { "path": "tests/edge/handlers/plugin/bootstrap.test.ts" },
+        { "path": "tests/edge/handlers/plugin/shared.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current strong-mock usage search",
+        "observed": "Only import, bootstrap, and shared use strong-mock in this directory; import remains the exact narrow-port reference and nine handlers still lack such a seam."
+      },
       "rationale": "The corpus correction to narrow the reference glob remains accurate.",
       "destination": "Use import.test.ts specifically as the interaction-test pattern in Phase 2."
     },
     {
       "id": "EHP-021",
-      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-033", ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-034"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-plugin.md#EHP-034"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" }, { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }],
-      "testRefs": [{ "path": "tests/edge/handlers/plugin/bootstrap.test.ts" }, { "path": "tests/edge/handlers/plugin/import.test.ts" }, { "path": "tests/edge/handlers/plugin/pending.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current source/test inspection and focused test run", "observed": "Bootstrap still asserts both recorder and network-counter halves of its plant; import and pending retain their explicit branch evidence; all three focused suites passed." },
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/plugin/bootstrap.test.ts" },
+        { "path": "tests/edge/handlers/plugin/import.test.ts" },
+        { "path": "tests/edge/handlers/plugin/pending.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test inspection and focused test run",
+        "observed": "Bootstrap still asserts both recorder and network-counter halves of its plant; import and pending retain their explicit branch evidence; all three focused suites passed."
+      },
       "rationale": "The positive examples of falsifiable gates remain valid and should guide fixes rather than be rewritten.",
       "destination": "Close as retained evidence and use these cases as Phase 2 exemplars."
     }

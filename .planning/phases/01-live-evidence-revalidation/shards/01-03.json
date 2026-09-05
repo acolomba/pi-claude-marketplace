@@ -3,50 +3,362 @@
   "inventoryMode": "shard",
   "plan": "01-03",
   "files": [
-    {"path":".planning/reviews/unit-test-adversarial/_ADVERSARIAL-BRIEF.md","category":"control","assignedPlan":"01-03","claimIds":[],"reviewStatus":"complete","outcome":"control document"},
-    {"path":".planning/reviews/unit-test-adversarial/_AREAS.md","category":"control","assignedPlan":"01-03","claimIds":[],"reviewStatus":"complete","outcome":"control document"},
-    {"path":".planning/reviews/unit-test-adversarial/_AUDIT.md","category":"control","assignedPlan":"01-03","claimIds":[
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#TALLY",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#PER-AREA",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#CLEAN-CALIBRATION",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#DUPLICATES",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#RECONCILIATIONS",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#INJECTION-CONFLICT",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#MCP-HOME-ESCAPE",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#SCOPE-AND-POINTER-GAPS",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#RESET-AND-DOC-COUNTS",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-REPORT",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-SHORTFALLS",
-      ".planning/reviews/unit-test-adversarial/_AUDIT.md#FIXING-PASS"
-    ],"reviewStatus":"complete","outcome":"live findings"}
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_ADVERSARIAL-BRIEF.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "complete",
+      "outcome": "control document"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_AREAS.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [],
+      "reviewStatus": "complete",
+      "outcome": "control document"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "category": "control",
+      "assignedPlan": "01-03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#TALLY",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#PER-AREA",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#CLEAN-CALIBRATION",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#DUPLICATES",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#RECONCILIATIONS",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#INJECTION-CONFLICT",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#MCP-HOME-ESCAPE",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#SCOPE-AND-POINTER-GAPS",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#RESET-AND-DOC-COUNTS",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-REPORT",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-SHORTFALLS",
+        ".planning/reviews/unit-test-adversarial/_AUDIT.md#FIXING-PASS"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
   ],
   "sourceClaims": [
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#TALLY","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"TALLY","findingId":"AUDIT-001"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#PER-AREA","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"PER-AREA","findingId":"AUDIT-002"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#CLEAN-CALIBRATION","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"CLEAN-CALIBRATION","findingId":"AUDIT-003"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#DUPLICATES","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"DUPLICATES","findingId":"AUDIT-004"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#RECONCILIATIONS","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"RECONCILIATIONS","findingId":"AUDIT-005"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#INJECTION-CONFLICT","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"INJECTION-CONFLICT","findingId":"AUDIT-006"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#MCP-HOME-ESCAPE","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"MCP-HOME-ESCAPE","findingId":"AUDIT-007"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#SCOPE-AND-POINTER-GAPS","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"SCOPE-AND-POINTER-GAPS","findingId":"AUDIT-008"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#RESET-AND-DOC-COUNTS","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"RESET-AND-DOC-COUNTS","findingId":"AUDIT-009"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-REPORT","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"COVERAGE-REPORT","findingId":"AUDIT-010"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-SHORTFALLS","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"COVERAGE-SHORTFALLS","findingId":"AUDIT-011"},
-    {"id":".planning/reviews/unit-test-adversarial/_AUDIT.md#FIXING-PASS","filePath":".planning/reviews/unit-test-adversarial/_AUDIT.md","label":"FIXING-PASS","findingId":"AUDIT-012"}
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#TALLY",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "TALLY",
+      "findingId": "AUDIT-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#PER-AREA",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "PER-AREA",
+      "findingId": "AUDIT-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#CLEAN-CALIBRATION",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "CLEAN-CALIBRATION",
+      "findingId": "AUDIT-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#DUPLICATES",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "DUPLICATES",
+      "findingId": "AUDIT-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#RECONCILIATIONS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "RECONCILIATIONS",
+      "findingId": "AUDIT-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#INJECTION-CONFLICT",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "INJECTION-CONFLICT",
+      "findingId": "AUDIT-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#MCP-HOME-ESCAPE",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "MCP-HOME-ESCAPE",
+      "findingId": "AUDIT-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#SCOPE-AND-POINTER-GAPS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "SCOPE-AND-POINTER-GAPS",
+      "findingId": "AUDIT-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#RESET-AND-DOC-COUNTS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "RESET-AND-DOC-COUNTS",
+      "findingId": "AUDIT-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-REPORT",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "COVERAGE-REPORT",
+      "findingId": "AUDIT-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-SHORTFALLS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "COVERAGE-SHORTFALLS",
+      "findingId": "AUDIT-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_AUDIT.md#FIXING-PASS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_AUDIT.md",
+      "label": "FIXING-PASS",
+      "findingId": "AUDIT-012"
+    }
   ],
   "findings": [
-    {"id":"AUDIT-001","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#TALLY"],"evidenceStatus":"confirmed","route":"evidence-only closure","sourceRefs":[{"path":".planning/reviews/unit-test-adversarial"}],"testRefs":[{"path":"N/A","reason":"Corpus arithmetic is non-executable."}],"validation":{"method":"static-proof","tool":"independent Node marker census","observed":"Current corpus has 45 first-pass files with 78 BLOCKER and 378 WARNING markers and 58 adversarial files with 231 BLOCKER and 708 WARNING markers, confirming refreshed totals and header undercount."},"rationale":"Measured totals remain exact historical calibration, not implementation scope.","destination":"Retain marker counts as evidence-only calibration.","duplicateOf":null},
-    {"id":"AUDIT-002","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#PER-AREA"],"evidenceStatus":"confirmed","route":"evidence-only closure","sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/adversarial"}],"testRefs":[{"path":"N/A","reason":"Area verdicts and severity footnotes are corpus metadata."}],"validation":{"method":"static-proof","tool":"current per-file corpus census","observed":"The retained reports reproduce the eleven zero-BLOCKER overturns, per-area table, and thirteen explicit severity/ownership footnotes."},"rationale":"The reconciliations remain necessary because original tags alone misroute work.","destination":"Preserve per-area calibration and revalidate individual claims later.","duplicateOf":null},
-    {"id":"AUDIT-003","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#CLEAN-CALIBRATION"],"evidenceStatus":"confirmed","route":"evidence-only closure","sourceRefs":[{"path":"extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts"}],"testRefs":[{"path":"tests/domain/components/hook-tool-names.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/domain/components/hook-tool-names.test.ts; node --input-type=module -e <prototype-name probe>","exitCode":1,"observed":"The focused suite passes, but mapPiToClaudeToolName returns Object.prototype.toString for input toString. This live counterexample confirms a defect hidden by a prior clean verdict."},"rationale":"Named probes are evidence; clean lists, summary reassurances, and unnamed cases are not.","destination":"Apply the audit's trust/collapse lists and four predictors only as review guidance.","duplicateOf":null},
-    {"id":"AUDIT-004","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#DUPLICATES"],"evidenceStatus":"confirmed","route":"evidence-only closure","sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/META-FINDINGS.md"},{"path":".planning/reviews/unit-test-adversarial/adversarial"}],"testRefs":[{"path":"N/A","reason":"Duplicate ownership is a corpus-linkage property."}],"validation":{"method":"static-proof","tool":"retained corpus cross-reference inspection","observed":"Five first-pass duplicate chains and sixteen adversarial DUPLICATE-OF declarations retain named owners."},"rationale":"Settled ownership does not permit historical source claims to be dropped or merged.","destination":"Preserve individual identities with duplicate links in later ledger shards.","duplicateOf":null},
-    {"id":"AUDIT-005","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#RECONCILIATIONS"],"evidenceStatus":"confirmed","route":"deferred backlog","sourceRefs":[{"path":"package.json"},{"path":"tests/shared/notify.test.ts"},{"path":"extensions/pi-claude-marketplace"}],"testRefs":[{"path":"tests"}],"validation":{"method":"static-proof","tool":"CodeGraph plus current ripgrep census","observed":"Current tree has 13 withHermeticHome definitions; 382 as-never tokens on 187 notify.test.ts lines and 453 repo-wide; zero node:assert imports versus 262 node:assert/strict files; zero catch(error: unknown) and 191 catch(err). npm run check includes the coverage negative control but not test:coverage:direct. CodeGraph preserves the named dynamic-import, catalog/notify, and injection surfaces."},"rationale":"The six reconciliations and two additional counts remain materially correct, while routes must follow their individual defects.","destination":"Use current counts for sizing; close the loose-assert class and retain the positive coverage-gate gap.","duplicateOf":null},
-    {"id":"AUDIT-006","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#INJECTION-CONFLICT"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/META-FINDINGS.md"}],"testRefs":[{"path":"N/A","reason":"This is a severity and ticket-granularity conflict."}],"validation":{"method":"static-proof","tool":"current META-FINDINGS comparison","observed":"The grouped WARNING ruling and ownership-based BLOCKER escalation still coexist, leaving affected edge-handler severity undetermined."},"rationale":"A one-way prioritization choice must not be inferred from route metadata.","destination":"Feed the existing operator-decision dossier.","duplicateOf":null},
-    {"id":"AUDIT-007","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#MCP-HOME-ESCAPE"],"evidenceStatus":"stale","route":"evidence-only closure","sourceRefs":[{"path":"extensions/pi-claude-marketplace/persistence/locations.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/mcp/stage.test.ts","exitCode":0,"observed":"The current passing suite contains no homedir/user-home MCP path construction and creates project locations under a per-case temporary cwd, positively replacing the historic escape."},"rationale":"The BLOCKER was repaired after the audit and must not generate duplicate work.","destination":"Evidence-only stale closure.","duplicateOf":null},
-    {"id":"AUDIT-008","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#SCOPE-AND-POINTER-GAPS"],"evidenceStatus":"confirmed","route":"deferred backlog","sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md"},{"path":".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md"}],"testRefs":[{"path":"tests/orchestrators/marketplace/list.test.ts"},{"path":"tests/integration/transaction-lifecycle-cascade.test.ts"}],"validation":{"method":"static-proof","tool":"current reference and path census","observed":"Three marketplace helpers still neutralize PI_CODING_AGENT_DIR; the loose-assert contradiction remains at the substantive lines rather than META's pointers; exactly one of 13 withHermeticHome definitions remains in integration scope."},"rationale":"The one-sided scope class needs an owner, pointer repair is evidence maintenance, and counts must state scope.","destination":"Assign scope-coverage ownership; defer corpus pointer cleanup.","duplicateOf":null},
-    {"id":"AUDIT-009","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#RESET-AND-DOC-COUNTS"],"evidenceStatus":"confirmed","route":"deferred backlog","sourceRefs":[{"path":"extensions/pi-claude-marketplace/shared/completion-cache.ts"},{"path":"extensions/pi-claude-marketplace/shared/notify.ts"},{"path":"extensions/pi-claude-marketplace/domain/resolver.ts"}],"testRefs":[{"path":"tests/architecture/flag-catalog-drift.test.ts"},{"path":"tests/shared/completion-cache.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph and current ripgrep/wc census","observed":"resetCompletionCache remains an export with zero production callers and 18 calls across nine tests, including flag-catalog-drift. notify.ts is 4,217 lines and resolver.ts 1,757."},"rationale":"The test-only export and stale architecture counts remain live lower-priority debt.","destination":"Route export cleanup with its owner; defer documentation refresh.","duplicateOf":null},
-    {"id":"AUDIT-010","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-REPORT"],"evidenceStatus":"stale","route":"evidence-only closure","sourceRefs":[{"path":"scripts/test-coverage-direct.mjs"}],"testRefs":[{"path":"N/A","reason":"The claimed retained report is absent at HEAD."}],"validation":{"method":"static-proof","tool":"filesystem and git-path inspection","observed":"coverage/all-pairs-report.ndjson no longer exists. The runner still supports explicit --all --report output, but no retained artifact positively replaces the historical 204-row report."},"rationale":"Report-specific totals cannot serve as current evidence; focused reruns separately settle the shortfalls.","destination":"Close the retained-report claim as stale.","duplicateOf":null},
-    {"id":"AUDIT-011","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-SHORTFALLS"],"evidenceStatus":"confirmed","route":"deferred backlog","sourceRefs":[{"path":"extensions/pi-claude-marketplace/edge/args.ts"},{"path":"extensions/pi-claude-marketplace/edge/completions/data.ts"},{"path":"extensions/pi-claude-marketplace/edge/completions/provider.ts"},{"path":"extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts"},{"path":"extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts"},{"path":"extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts"},{"path":"extensions/pi-claude-marketplace/edge/handlers/shared.ts"}],"testRefs":[{"path":"tests/edge/args.test.ts"},{"path":"tests/edge/completions/data.test.ts"},{"path":"tests/edge/completions/provider.test.ts"},{"path":"tests/edge/handlers/marketplace/update.test.ts"},{"path":"tests/edge/handlers/plugin/import.test.ts"},{"path":"tests/edge/handlers/plugin/pending.test.ts"},{"path":"tests/edge/handlers/shared.test.ts"}],"validation":{"method":"behavioral-probe","command":"node scripts/test-coverage-direct.mjs <each named source path>","exitCode":1,"observed":"All seven focused owner tests pass and each direct gate reproduces its one-branch shortfall; args also reports lines 86/89 and shared lines 83/85. The two dense index-loop structures remain removable production candidates."},"rationale":"The shortfalls remain live despite loss of the retained aggregate report; coverage still does not establish assertion strength.","destination":"Carry seven measured shortfalls and two loop rewrites into scoped remediation.","duplicateOf":null},
-    {"id":"AUDIT-012","claimIds":[".planning/reviews/unit-test-adversarial/_AUDIT.md#FIXING-PASS"],"evidenceStatus":"confirmed","route":"deferred backlog","sourceRefs":[{"path":".planning/reviews/unit-test-adversarial/_AUDIT.md"}],"testRefs":[{"path":"N/A","reason":"This is planning workflow guidance."}],"validation":{"method":"static-proof","tool":"current claim-by-claim revalidation","observed":"The action list remains directionally sound with two qualifications: the MCP home escape and retained report are stale, while all seven focused shortfalls remain live."},"rationale":"Later work should use reconciled evidence, settle decisions, assign owners, and avoid coverage or headers as done signals.","destination":"Use as planning guidance after applying this shard's stale closures.","duplicateOf":null}
+    {
+      "id": "AUDIT-001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#TALLY"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial" }],
+      "testRefs": [{ "path": "N/A", "reason": "Corpus arithmetic is non-executable." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "independent Node marker census",
+        "observed": "Current corpus has 45 first-pass files with 78 BLOCKER and 378 WARNING markers and 58 adversarial files with 231 BLOCKER and 708 WARNING markers, confirming refreshed totals and header undercount."
+      },
+      "rationale": "Measured totals remain exact historical calibration, not implementation scope.",
+      "destination": "Retain marker counts as evidence-only calibration.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#PER-AREA"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/adversarial" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "Area verdicts and severity footnotes are corpus metadata." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current per-file corpus census",
+        "observed": "The retained reports reproduce the eleven zero-BLOCKER overturns, per-area table, and thirteen explicit severity/ownership footnotes."
+      },
+      "rationale": "The reconciliations remain necessary because original tags alone misroute work.",
+      "destination": "Preserve per-area calibration and revalidate individual claims later.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#CLEAN-CALIBRATION"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-tool-names.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/domain/components/hook-tool-names.test.ts; node --input-type=module -e <prototype-name probe>",
+        "exitCode": 1,
+        "observed": "The focused suite passes, but mapPiToClaudeToolName returns Object.prototype.toString for input toString. This live counterexample confirms a defect hidden by a prior clean verdict."
+      },
+      "rationale": "Named probes are evidence; clean lists, summary reassurances, and unnamed cases are not.",
+      "destination": "Apply the audit's trust/collapse lists and four predictors only as review guidance.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#DUPLICATES"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/adversarial" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "Duplicate ownership is a corpus-linkage property." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "retained corpus cross-reference inspection",
+        "observed": "Five first-pass duplicate chains and sixteen adversarial DUPLICATE-OF declarations retain named owners."
+      },
+      "rationale": "Settled ownership does not permit historical source claims to be dropped or merged.",
+      "destination": "Preserve individual identities with duplicate links in later ledger shards.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#RECONCILIATIONS"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [
+        { "path": "package.json" },
+        { "path": "tests/shared/notify.test.ts" },
+        { "path": "extensions/pi-claude-marketplace" }
+      ],
+      "testRefs": [{ "path": "tests" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current ripgrep census",
+        "observed": "Current tree has 13 withHermeticHome definitions; 382 as-never tokens on 187 notify.test.ts lines and 453 repo-wide; zero node:assert imports versus 262 node:assert/strict files; zero catch(error: unknown) and 191 catch(err). npm run check includes the coverage negative control but not test:coverage:direct. CodeGraph preserves the named dynamic-import, catalog/notify, and injection surfaces."
+      },
+      "rationale": "The six reconciliations and two additional counts remain materially correct, while routes must follow their individual defects.",
+      "destination": "Use current counts for sizing; close the loose-assert class and retain the positive coverage-gate gap.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#INJECTION-CONFLICT"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "This is a severity and ticket-granularity conflict." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current META-FINDINGS comparison",
+        "observed": "The grouped WARNING ruling and ownership-based BLOCKER escalation still coexist, leaving affected edge-handler severity undetermined."
+      },
+      "rationale": "A one-way prioritization choice must not be inferred from route metadata.",
+      "destination": "Feed the existing operator-decision dossier.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#MCP-HOME-ESCAPE"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/mcp/stage.test.ts",
+        "exitCode": 0,
+        "observed": "The current passing suite contains no homedir/user-home MCP path construction and creates project locations under a per-case temporary cwd, positively replacing the historic escape."
+      },
+      "rationale": "The BLOCKER was repaired after the audit and must not generate duplicate work.",
+      "destination": "Evidence-only stale closure.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#SCOPE-AND-POINTER-GAPS"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-boundary-gates.md"
+        },
+        {
+          "path": ".planning/reviews/unit-test-adversarial/adversarial/architecture-notify-gates.md"
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/list.test.ts" },
+        { "path": "tests/integration/transaction-lifecycle-cascade.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current reference and path census",
+        "observed": "Three marketplace helpers still neutralize PI_CODING_AGENT_DIR; the loose-assert contradiction remains at the substantive lines rather than META's pointers; exactly one of 13 withHermeticHome definitions remains in integration scope."
+      },
+      "rationale": "The one-sided scope class needs an owner, pointer repair is evidence maintenance, and counts must state scope.",
+      "destination": "Assign scope-coverage ownership; defer corpus pointer cleanup.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#RESET-AND-DOC-COUNTS"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/notify.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/flag-catalog-drift.test.ts" },
+        { "path": "tests/shared/completion-cache.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current ripgrep/wc census",
+        "observed": "resetCompletionCache remains an export with zero production callers and 18 calls across nine tests, including flag-catalog-drift. notify.ts is 4,217 lines and resolver.ts 1,757."
+      },
+      "rationale": "The test-only export and stale architecture counts remain live lower-priority debt.",
+      "destination": "Route export cleanup with its owner; defer documentation refresh.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-REPORT"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": "scripts/test-coverage-direct.mjs" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claimed retained report is absent at HEAD." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "filesystem and git-path inspection",
+        "observed": "coverage/all-pairs-report.ndjson no longer exists. The runner still supports explicit --all --report output, but no retained artifact positively replaces the historical 204-row report."
+      },
+      "rationale": "Report-specific totals cannot serve as current evidence; focused reruns separately settle the shortfalls.",
+      "destination": "Close the retained-report claim as stale.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#COVERAGE-SHORTFALLS"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/args.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/completions/data.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/completions/data.test.ts" },
+        { "path": "tests/edge/completions/provider.test.ts" },
+        { "path": "tests/edge/handlers/marketplace/update.test.ts" },
+        { "path": "tests/edge/handlers/plugin/import.test.ts" },
+        { "path": "tests/edge/handlers/plugin/pending.test.ts" },
+        { "path": "tests/edge/handlers/shared.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node scripts/test-coverage-direct.mjs <each named source path>",
+        "exitCode": 1,
+        "observed": "All seven focused owner tests pass and each direct gate reproduces its one-branch shortfall; args also reports lines 86/89 and shared lines 83/85. The two dense index-loop structures remain removable production candidates."
+      },
+      "rationale": "The shortfalls remain live despite loss of the retained aggregate report; coverage still does not establish assertion strength.",
+      "destination": "Carry seven measured shortfalls and two loop rewrites into scoped remediation.",
+      "duplicateOf": null
+    },
+    {
+      "id": "AUDIT-012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_AUDIT.md#FIXING-PASS"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md" }],
+      "testRefs": [{ "path": "N/A", "reason": "This is planning workflow guidance." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current claim-by-claim revalidation",
+        "observed": "The action list remains directionally sound with two qualifications: the MCP home escape and retained report are stale, while all seven focused shortfalls remain live."
+      },
+      "rationale": "Later work should use reconciled evidence, settle decisions, assign owners, and avoid coverage or headers as done signals.",
+      "destination": "Use as planning guidance after applying this shard's stale closures.",
+      "duplicateOf": null
+    }
   ],
   "decisions": [],
   "scopeChanges": []

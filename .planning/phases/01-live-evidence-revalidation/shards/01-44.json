@@ -512,9 +512,7 @@
   "findings": [
     {
       "id": "BMFP-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-001"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -550,9 +548,7 @@
     },
     {
       "id": "BMFP-F002",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-002"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-002"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -582,9 +578,7 @@
     },
     {
       "id": "BMFP-F003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-003"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-003"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -620,9 +614,7 @@
     },
     {
       "id": "BMFP-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-004"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-004"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -653,9 +645,7 @@
     },
     {
       "id": "BMFP-F005",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-005"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -679,9 +669,7 @@
     },
     {
       "id": "BMFP-F006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-006"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-006"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-020",
@@ -712,9 +700,7 @@
     },
     {
       "id": "BMFP-F007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-007"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-007"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-019",
@@ -744,9 +730,7 @@
     },
     {
       "id": "BMFP-F008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-008"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-008"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-020",
@@ -777,9 +761,7 @@
     },
     {
       "id": "BMFP-F009",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-009"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-009"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-019",
@@ -809,9 +791,7 @@
     },
     {
       "id": "BMFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-010"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-020",
@@ -842,9 +822,7 @@
     },
     {
       "id": "BMFP-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-011"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-011"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-020",
@@ -875,9 +853,7 @@
     },
     {
       "id": "BMFP-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-012"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-012"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-021",
@@ -902,9 +878,7 @@
     },
     {
       "id": "BMFP-F013",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-013"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-013"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BMCP-022",
@@ -932,9 +906,7 @@
     },
     {
       "id": "BMFP-F014",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-014"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-014"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-023",
@@ -959,9 +931,7 @@
     },
     {
       "id": "BMFP-F015",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-015"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-015"],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -991,9 +961,7 @@
     },
     {
       "id": "BMFP-F016",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-016"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-016"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-020",
@@ -1024,9 +992,7 @@
     },
     {
       "id": "BMFP-F017",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-017"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-024",
@@ -1051,9 +1017,7 @@
     },
     {
       "id": "BMFP-F018",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-018"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-020",
@@ -1084,9 +1048,7 @@
     },
     {
       "id": "BMFP-F019",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-019"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-019"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "BMCP-001",
@@ -1110,9 +1072,7 @@
     },
     {
       "id": "BMFP-F020",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-020"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-020"],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1142,9 +1102,7 @@
     },
     {
       "id": "BMFP-F021",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-021"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-021"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1181,9 +1139,7 @@
     },
     {
       "id": "BMFP-F022",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-022"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-022"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1214,9 +1170,7 @@
     },
     {
       "id": "BSFP-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-001"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1252,9 +1206,7 @@
     },
     {
       "id": "BSFP-F002",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-002"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-002"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1278,9 +1230,7 @@
     },
     {
       "id": "BSFP-F003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-003"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-003"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1310,9 +1260,7 @@
     },
     {
       "id": "BSFP-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-004"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-004"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "BSKL-028",
@@ -1340,9 +1288,7 @@
     },
     {
       "id": "BSFP-F005",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-005"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1382,9 +1328,7 @@
     },
     {
       "id": "BSFP-F006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-006"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-006"],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1420,9 +1364,7 @@
     },
     {
       "id": "BSFP-F007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-007"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-007"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "BSKL-028",
@@ -1450,9 +1392,7 @@
     },
     {
       "id": "BSFP-F008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-008"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-008"],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1497,9 +1437,7 @@
     },
     {
       "id": "BSFP-F009",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-009"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-009"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1539,9 +1477,7 @@
     },
     {
       "id": "BSFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-010"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1581,9 +1517,7 @@
     },
     {
       "id": "BSFP-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-011"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-011"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1623,9 +1557,7 @@
     },
     {
       "id": "BSFP-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-012"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-012"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1665,9 +1597,7 @@
     },
     {
       "id": "BSFP-F013",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-013"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-013"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "BSKL-027",
@@ -1697,9 +1627,7 @@
     },
     {
       "id": "BSFP-F014",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-014"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-014"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1739,9 +1667,7 @@
     },
     {
       "id": "BSFP-F015",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-015"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-015"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "BSKL-029",
@@ -1765,9 +1691,7 @@
     },
     {
       "id": "BSFP-F016",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-016"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-016"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "BSKL-030",
@@ -1792,9 +1716,7 @@
     },
     {
       "id": "BSFP-F017",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-017"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "BSKL-031",
@@ -1834,9 +1756,7 @@
     },
     {
       "id": "BSFP-F018",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-018"],
       "evidenceStatus": "superseded",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1866,9 +1786,7 @@
     },
     {
       "id": "BSFP-F019",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-019"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-019"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1905,9 +1823,7 @@
     },
     {
       "id": "DCHF-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-001"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "DCH-038",
@@ -1943,9 +1859,7 @@
     },
     {
       "id": "DCHF-F002",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-002"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-002"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-035",
@@ -1970,9 +1884,7 @@
     },
     {
       "id": "DCHF-F003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-003"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-003"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-014",
@@ -1996,9 +1908,7 @@
     },
     {
       "id": "DCHF-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-004"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-004"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "DCH-018",
@@ -2025,9 +1935,7 @@
     },
     {
       "id": "DCHF-F005",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-005"],
       "evidenceStatus": "duplicate",
       "route": "operator decision",
       "duplicateOf": "DCH-021",
@@ -2051,9 +1959,7 @@
     },
     {
       "id": "DCHF-F006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-006"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-006"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-034",
@@ -2089,9 +1995,7 @@
     },
     {
       "id": "DCHF-F007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-007"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-007"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-014",
@@ -2115,9 +2019,7 @@
     },
     {
       "id": "DCHF-F008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-008"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-008"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-015",
@@ -2142,9 +2044,7 @@
     },
     {
       "id": "DCHF-F009",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-009"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-009"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-016",
@@ -2169,9 +2069,7 @@
     },
     {
       "id": "DCHF-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-010"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-017",
@@ -2195,9 +2093,7 @@
     },
     {
       "id": "DCHF-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-011"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-011"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-035",
@@ -2222,9 +2118,7 @@
     },
     {
       "id": "DCHF-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-012"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-012"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "DCH-018",
@@ -2251,9 +2145,7 @@
     },
     {
       "id": "DCHF-F013",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-013"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-013"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "DCH-019",
@@ -2278,9 +2170,7 @@
     },
     {
       "id": "DCHF-F014",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-014"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-014"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-020",
@@ -2305,9 +2195,7 @@
     },
     {
       "id": "DCHF-F015",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-015"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-015"],
       "evidenceStatus": "duplicate",
       "route": "operator decision",
       "duplicateOf": "DCH-021",
@@ -2331,9 +2219,7 @@
     },
     {
       "id": "DCHF-F016",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-016"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-016"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-022",
@@ -2358,9 +2244,7 @@
     },
     {
       "id": "DCHF-F017",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-017"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-023",
@@ -2384,9 +2268,7 @@
     },
     {
       "id": "DCHF-F018",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-018"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-024",
@@ -2411,9 +2293,7 @@
     },
     {
       "id": "DCHF-F019",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-019"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-019"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-025",
@@ -2438,9 +2318,7 @@
     },
     {
       "id": "DCHF-F020",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-020"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-020"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-026",
@@ -2468,9 +2346,7 @@
     },
     {
       "id": "DCHF-F021",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-021"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-021"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-027",
@@ -2495,9 +2371,7 @@
     },
     {
       "id": "DCHF-F022",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-022"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-022"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-028",
@@ -2522,9 +2396,7 @@
     },
     {
       "id": "DCHF-F023",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-023"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-023"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-029",
@@ -2549,9 +2421,7 @@
     },
     {
       "id": "DCHF-F024",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-024"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-024"],
       "evidenceStatus": "duplicate",
       "route": "Phase 3",
       "duplicateOf": "DCH-030",
@@ -2579,9 +2449,7 @@
     },
     {
       "id": "DCHF-F025",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-025"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-025"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -2617,9 +2485,7 @@
     },
     {
       "id": "DCHF-F026",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-026"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-026"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "DCH-037",
@@ -2656,9 +2522,7 @@
     },
     {
       "id": "DCHF-F027",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-027"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-027"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,

@@ -92,128 +92,1532 @@
     }
   ],
   "sourceClaims": [
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-001","findingId":"BHEP-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-002","findingId":"BHEP-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-003","findingId":"BHEP-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-004","findingId":"BHEP-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-005","findingId":"BHEP-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-006","findingId":"BHEP-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-007","findingId":"BHEP-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-008","findingId":"BHEP-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-009","findingId":"BHEP-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-010","findingId":"BHEP-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-011","findingId":"BHEP-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-012","findingId":"BHEP-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-013","findingId":"BHEP-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md","label":"CLAIM-014","findingId":"BHEP-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-001","findingId":"BHIF-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-002","findingId":"BHIF-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-003","findingId":"BHIF-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-004","findingId":"BHIF-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-005","findingId":"BHIF-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-006","findingId":"BHIF-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-007","findingId":"BHIF-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-008","findingId":"BHIF-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-009","findingId":"BHIF-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-010","findingId":"BHIF-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-011","findingId":"BHIF-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-012","findingId":"BHIF-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-013","findingId":"BHIF-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-014","findingId":"BHIF-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-015","findingId":"BHIF-F015"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-016","findingId":"BHIF-F016"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-017","findingId":"BHIF-F017"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-018","findingId":"BHIF-F018"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-019","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-019","findingId":"BHIF-F019"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-020","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-020","findingId":"BHIF-F020"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-021","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-021","findingId":"BHIF-F021"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-022","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-022","findingId":"BHIF-F022"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-023","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md","label":"CLAIM-023","findingId":"BHIF-F023"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-001","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-001","findingId":"BHPF-F001"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-002","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-002","findingId":"BHPF-F002"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-003","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-003","findingId":"BHPF-F003"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-004","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-004","findingId":"BHPF-F004"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-005","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-005","findingId":"BHPF-F005"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-006","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-006","findingId":"BHPF-F006"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-007","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-007","findingId":"BHPF-F007"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-008","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-008","findingId":"BHPF-F008"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-009","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-009","findingId":"BHPF-F009"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-010","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-010","findingId":"BHPF-F010"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-011","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-011","findingId":"BHPF-F011"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-012","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-012","findingId":"BHPF-F012"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-013","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-013","findingId":"BHPF-F013"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-014","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-014","findingId":"BHPF-F014"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-015","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-015","findingId":"BHPF-F015"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-016","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-016","findingId":"BHPF-F016"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-017","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-017","findingId":"BHPF-F017"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-018","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-018","findingId":"BHPF-F018"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-019","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-019","findingId":"BHPF-F019"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-020","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-020","findingId":"BHPF-F020"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-021","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-021","findingId":"BHPF-F021"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-022","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-022","findingId":"BHPF-F022"},
-    {"id":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-023","filePath":".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md","label":"CLAIM-023","findingId":"BHPF-F023"}
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-001",
+      "findingId": "BHEP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-002",
+      "findingId": "BHEP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-003",
+      "findingId": "BHEP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-004",
+      "findingId": "BHEP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-005",
+      "findingId": "BHEP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-006",
+      "findingId": "BHEP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-007",
+      "findingId": "BHEP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-008",
+      "findingId": "BHEP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-009",
+      "findingId": "BHEP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-010",
+      "findingId": "BHEP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-011",
+      "findingId": "BHEP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-012",
+      "findingId": "BHEP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-013",
+      "findingId": "BHEP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md",
+      "label": "CLAIM-014",
+      "findingId": "BHEP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-001",
+      "findingId": "BHIF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-002",
+      "findingId": "BHIF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-003",
+      "findingId": "BHIF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-004",
+      "findingId": "BHIF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-005",
+      "findingId": "BHIF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-006",
+      "findingId": "BHIF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-007",
+      "findingId": "BHIF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-008",
+      "findingId": "BHIF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-009",
+      "findingId": "BHIF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-010",
+      "findingId": "BHIF-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-011",
+      "findingId": "BHIF-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-012",
+      "findingId": "BHIF-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-013",
+      "findingId": "BHIF-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-014",
+      "findingId": "BHIF-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-015",
+      "findingId": "BHIF-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-016",
+      "findingId": "BHIF-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-017",
+      "findingId": "BHIF-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-018",
+      "findingId": "BHIF-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-019",
+      "findingId": "BHIF-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-020",
+      "findingId": "BHIF-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-021",
+      "findingId": "BHIF-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-022",
+      "findingId": "BHIF-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md",
+      "label": "CLAIM-023",
+      "findingId": "BHIF-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-001",
+      "findingId": "BHPF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-002",
+      "findingId": "BHPF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-003",
+      "findingId": "BHPF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-004",
+      "findingId": "BHPF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-005",
+      "findingId": "BHPF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-006",
+      "findingId": "BHPF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-007",
+      "findingId": "BHPF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-008",
+      "findingId": "BHPF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-009",
+      "findingId": "BHPF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-010",
+      "findingId": "BHPF-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-011",
+      "findingId": "BHPF-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-012",
+      "findingId": "BHPF-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-013",
+      "findingId": "BHPF-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-014",
+      "findingId": "BHPF-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-015",
+      "findingId": "BHPF-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-016",
+      "findingId": "BHPF-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-017",
+      "findingId": "BHPF-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-018",
+      "findingId": "BHPF-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-019",
+      "findingId": "BHPF-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-020",
+      "findingId": "BHPF-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-021",
+      "findingId": "BHPF-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-022",
+      "findingId": "BHPF-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md",
+      "label": "CLAIM-023",
+      "findingId": "BHPF-F023"
+    }
   ],
   "findings": [
-    {"id":"BHEP-F001","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-001"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"}],"testRefs":[{"path":"tests/bridges/hooks/spawn-helpers.test.ts"},{"path":"tests/bridges/hooks/hook-env.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/{wire-protocol,exec-timer,spawn-helpers,timeout,hook-env,translation-context,index,exec-result}.test.ts","exitCode":0,"observed":"All eight current owners passed in the repository-local isolated copy; the two named assertion-strength defects survived separate mutations and remain linked below."},"rationale":"The report's broad strong-area assessment remains current without erasing its exceptions.","destination":"Retain as positive evidence."},
-    {"id":"BHEP-F002","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-002"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/index.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph and current mirrored-path inventory","observed":"Each of the fifteen direct bridges/hooks TypeScript modules still has a mirrored owner test, with subdirectories assigned separately."},"rationale":"The exact direct-directory pairing claim remains true.","destination":"Retain as pairing evidence."},
-    {"id":"BHEP-F003","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-003"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HEP-017","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"}],"testRefs":[{"path":"tests/bridges/hooks/hook-env.test.ts"}],"validation":{"method":"surviving-mutation","command":"node --test --test-name-pattern='restores exact process properties after containment failure' <isolated-copy>/tests/bridges/hooks/hook-env.test.ts after leaking P112_HOOK_ENV_FAILURE","exitCode":0,"observed":"The focused case passed after prepareHookEnv mutated the live process property because restoreEnvironment ran before the non-mutation assertion; the isolated copy was removed and live files were unchanged."},"rationale":"The test still erases the evidence before asserting global non-mutation.","destination":"Use canonical finding HEP-017."},
-    {"id":"BHEP-F004","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-004"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HEP-018","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"}],"testRefs":[{"path":"tests/bridges/hooks/spawn-helpers.test.ts"}],"validation":{"method":"surviving-mutation","command":"node --test <isolated-copy>/tests/bridges/hooks/spawn-helpers.test.ts after replacing largestFittingString with an empty-prefix implementation","exitCode":0,"observed":"All six named truncation cases passed a drastically over-truncating implementation; the isolated copy was removed and live files were unchanged."},"rationale":"The cases still prove only bounded prefix truncation, not maximal use of the byte budget.","destination":"Use canonical finding HEP-018."},
-    {"id":"BHEP-F005","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-005"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HEP-019","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/timeout.ts"}],"testRefs":[{"path":"tests/bridges/hooks/timeout.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion census","observed":"Each of the six unusable-timeout diagnostics is still asserted through four partial regular expressions rather than one exact expected line."},"rationale":"The deterministic diagnostic remains under-specified.","destination":"Use canonical finding HEP-019."},
-    {"id":"BHEP-F006","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-006"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"HEP-020","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts"}],"testRefs":[{"path":"tests/bridges/hooks/translation-context.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection against canonical adversarial adjudication","observed":"The two complete satisfies-checked ExtensionContext literals remain, but the current rubric does not require replacing a strict poison-pill literal with strong-mock; canonical HEP-020 positively supersedes that prescription."},"rationale":"The historical library-specific remedy is no longer authoritative.","destination":"Use superseded canonical finding HEP-020."},
-    {"id":"BHEP-F007","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-007"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts"}],"testRefs":[{"path":"tests/bridges/hooks/wire-protocol.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/wire-protocol.test.ts","exitCode":0,"observed":"The current owner passed and retains complete HookExecResult comparisons for every parser branch; separate diagnostic-strength claims remain canonically routed."},"rationale":"The bounded clean assessment remains accurate.","destination":"Retain as positive whole-value evidence."},
-    {"id":"BHEP-F008","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-008"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts"}],"testRefs":[{"path":"tests/bridges/hooks/exec-timer.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/exec-timer.test.ts","exitCode":0,"observed":"The owner passed with t.mock.timers driving the SIGTERM-to-SIGKILL ladder and no real-time wait."},"rationale":"The deterministic timer-control strength remains current.","destination":"Retain as positive evidence."},
-    {"id":"BHEP-F009","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-009"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts"}],"testRefs":[{"path":"tests/bridges/hooks/exec-result.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/exec-result.test.ts","exitCode":0,"observed":"The type evidence and exact assertNever runtime case passed unchanged."},"rationale":"The clean type-only/runtime assessment remains true.","destination":"Retain as positive evidence."},
-    {"id":"BHEP-F010","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-010"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/index.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/index.test.ts","exitCode":0,"observed":"The current barrel owner passed and still compares every runtime re-export by binding identity while preserving internal-name negatives."},"rationale":"The hooks barrel assessment remains current.","destination":"Retain as positive evidence."},
-    {"id":"BHEP-F011","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-011"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HEP-021","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"}],"testRefs":[{"path":"tests/bridges/hooks/hook-env.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph prepareHookEnv caller graph and current source inspection","observed":"prepareHookEnv still spreads process.env inside its body; both production lanes call it without an explicit base environment and the owner mutates process globals to control inputs."},"rationale":"The hidden ambient dependency remains live.","destination":"Use canonical finding HEP-021."},
-    {"id":"BHEP-F012","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-012"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/timeout.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/index.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts"}],"testRefs":[{"path":"tests/bridges/hooks/wire-protocol.test.ts"},{"path":"tests/bridges/hooks/exec-timer.test.ts"},{"path":"tests/bridges/hooks/spawn-helpers.test.ts"},{"path":"tests/bridges/hooks/timeout.test.ts"},{"path":"tests/bridges/hooks/translation-context.test.ts"},{"path":"tests/bridges/hooks/index.test.ts"},{"path":"tests/bridges/hooks/exec-result.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph and current source inspection","observed":"No independent production correctness defect was established in the seven modules the report marked clean; the test-strength and hidden-environment exceptions are preserved separately."},"rationale":"The bounded clean-production list remains valid.","destination":"Retain as positive evidence."},
-    {"id":"BHEP-F013","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-013"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical review-scope boundary."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"},{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current corpus assignment and mirrored-path inspection","observed":"The async-rewake, if-field, and payload subdirectories remain separate corpus assignments; this plan reviews the latter two through their dedicated first-pass records."},"rationale":"The scope note remains provenance, not an implementation defect.","destination":"Evidence-only closure."},
-    {"id":"BHEP-F014","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-014"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical no-command process metadata."}],"testRefs":[{"path":"tests/bridges/hooks/wire-protocol.test.ts"},{"path":"tests/bridges/hooks/exec-timer.test.ts"},{"path":"tests/bridges/hooks/spawn-helpers.test.ts"},{"path":"tests/bridges/hooks/timeout.test.ts"},{"path":"tests/bridges/hooks/hook-env.test.ts"},{"path":"tests/bridges/hooks/translation-context.test.ts"},{"path":"tests/bridges/hooks/index.test.ts"},{"path":"tests/bridges/hooks/exec-result.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test eight assigned exec-protocol owners in a repository-local isolated copy","exitCode":0,"observed":"All eight current owners passed, positively superseding the historical statement that no toolchain commands ran."},"rationale":"Current focused execution closes the old process caveat.","destination":"Evidence-only closure."},
-    {"id":"BHIF-F001","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-001"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"},{"path":"tests/bridges/hooks/if-field/glob.test.ts"},{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph dependency and call-path inspection","observed":"The three production modules remain synchronous and dependency-free apart from explicit arguments and local imports; bash.ts parses strings and never invokes a shell."},"rationale":"The production testability and no-shell assessment remains current outside separately routed structure decisions.","destination":"Retain as positive evidence."},
-    {"id":"BHIF-F002","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-002"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns assertion forms in tests."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"},{"path":"tests/bridges/hooks/if-field/glob.test.ts"},{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion and async census","observed":"The owners still use strict whole-value comparisons for their returned structures and contain no unawaited async assertions; the exact-error exception is linked separately."},"rationale":"The broad assertion-strength claim remains accurate with its enumerated exception.","destination":"Retain as positive evidence."},
-    {"id":"BHIF-F003","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-003"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-020","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"surviving-mutation","command":"node --test <isolated-copy>/tests/bridges/hooks/if-field/index.test.ts after exporting compileBashGlob under the compilePathGlob name","exitCode":0,"observed":"The owner passed an incorrect runtime re-export because its Same checks are erased and it never compares the bindings; the isolated copy was removed and live files were unchanged."},"rationale":"Runtime barrel identity remains unprotected.","destination":"Use canonical finding HIF-020."},
-    {"id":"BHIF-F004","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-004"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-021","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"The Bash compiler and missing-prefix cases still patch String.prototype.endsWith and RegExp.prototype.exec to force otherwise unreachable catches."},"rationale":"The process-wide prototype mutation remains a hermeticity defect.","destination":"Use canonical finding HIF-021."},
-    {"id":"BHIF-F005","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-005"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-039","sourceRefs":[{"path":"N/A","reason":"The claim concerns cross-owner test structure."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"},{"path":"tests/bridges/hooks/if-field/glob.test.ts"},{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current test-shape comparison","observed":"Scenario bundling remains uneven across the three sibling owners, with object aggregation and map-inside-case patterns preserved."},"rationale":"The report's dominant structural theme remains current.","destination":"Use canonical cross-owner finding HIF-039."},
-    {"id":"BHIF-F006","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-006"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-032","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/architecture/hooks-if-field.test.ts"}],"validation":{"method":"static-proof","tool":"current production-header census","observed":"All three named production files still contain follow-up or future-plan attribution for behavior already implemented in the same concern."},"rationale":"The aggregate stale-documentation theme remains live.","destination":"Use canonical finding HIF-032."},
-    {"id":"BHIF-F007","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-007"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-017","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"}],"validation":{"method":"static-proof","tool":"current case inspection","observed":"The two bashSubcommandFires owners still aggregate two independent outcomes into one object assertion per case."},"rationale":"The bundled-scenario structure remains.","destination":"Use canonical finding HIF-017."},
-    {"id":"BHIF-F008","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-008"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-018","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"}],"validation":{"method":"static-proof","tool":"current expected-literal census","observed":"The parse-result expected literals remain unannotated by satisfies ParseResult throughout the owner."},"rationale":"The compile-time shape evidence is still absent.","destination":"Use canonical finding HIF-018."},
-    {"id":"BHIF-F009","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-009"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-019","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/glob.test.ts"}],"validation":{"method":"static-proof","tool":"current case and row-loop inspection","observed":"Glob owners still bundle two to four match/miss scenarios inside single test bodies and row cases."},"rationale":"The per-scenario structure warning remains current.","destination":"Use canonical finding HIF-019."},
-    {"id":"BHIF-F010","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-010"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-020","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"surviving-mutation","command":"node --test <isolated-copy>/tests/bridges/hooks/if-field/index.test.ts after an incorrect runtime re-export","exitCode":0,"observed":"The focused wrong-export mutation survived, confirming the detailed barrel finding as well as the summary claim."},"rationale":"The type-only identity proof does not constrain runtime binding identity.","destination":"Use canonical finding HIF-020."},
-    {"id":"BHIF-F011","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-011"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-021","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current global-mock inspection","observed":"The two detailed cases still mutate shared built-in prototypes while the neighboring cwd getter demonstrates case-owned corruption."},"rationale":"The specific hermeticity finding remains live.","destination":"Use canonical finding HIF-021."},
-    {"id":"BHIF-F012","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-012"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-022","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"},{"path":"tests/bridges/hooks/if-field/glob.test.ts"}],"validation":{"method":"static-proof","tool":"current sibling assertion comparison","observed":"The exhaustive-dispatch case still matches only a message prefix regex while glob.test.ts asserts the same assertNever failure with the full serialized corrupted value."},"rationale":"The weaker error assertion remains current.","destination":"Use canonical finding HIF-022."},
-    {"id":"BHIF-F013","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-013"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-023","sourceRefs":[{"path":"N/A","reason":"The claim concerns data-driven test structure."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current row-table inspection","observed":"Seven named cases still execute row arrays through map inside one test instead of declaring one sibling test per typed row."},"rationale":"The data-driven structure defect remains.","destination":"Use canonical finding HIF-023."},
-    {"id":"BHIF-F014","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-014"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-024","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current cast census","observed":"All seven behavioral call sites still cast a cwd-only object to the full ExtensionContext."},"rationale":"The broad casts remain coupled to an over-wide production signature.","destination":"Use canonical finding HIF-024."},
-    {"id":"BHIF-F015","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-015"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-025","sourceRefs":[{"path":"N/A","reason":"The claim concerns a test assertion spelling."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion inspection","observed":"The recursion-limit case still uses assert.equal while neighboring cases use assert.strictEqual."},"rationale":"The consistency warning remains present.","destination":"Use canonical finding HIF-025."},
-    {"id":"BHIF-F016","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-016"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim reports the absence of clean assigned tests."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"},{"path":"tests/bridges/hooks/if-field/glob.test.ts"},{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current finding-to-file census","observed":"Each of the three owners still carries at least one separately linked live finding."},"rationale":"The administrative no-clean-files assessment remains correct.","destination":"Evidence-only closure."},
-    {"id":"BHIF-F017","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-017"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-026","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"Both Bash parser comments still refer to ifFires as a follow-up-plan dispatch consult."},"rationale":"The stale documentation remains live.","destination":"Use canonical finding HIF-026."},
-    {"id":"BHIF-F018","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-018"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-027","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/glob.test.ts"}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"The path-glob header still says the ctx.cwd projectRoot fallback is supplied in a future plan even though compileIfPredicate already does so."},"rationale":"The stale projectRoot documentation remains.","destination":"Use canonical finding HIF-027."},
-    {"id":"BHIF-F019","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-019"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-028","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"The file header still describes compileIfPredicate and ifFires as future work despite both functions being implemented in the file."},"rationale":"The index header remains materially stale.","destination":"Use canonical finding HIF-028."},
-    {"id":"BHIF-F020","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-020"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-029","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph caller graph and current body inspection","observed":"ifFires and resolveTarget still accept ExtensionContext while reading only cwd, forcing every owner call through a cast."},"rationale":"The over-wide boundary remains live.","destination":"Use canonical finding HIF-029."},
-    {"id":"BHIF-F021","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-021"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-030","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"The set-membership call still casts arbitrary toolName text to PiToolName without explaining that a runtime equality miss is safe."},"rationale":"The cast's intent remains obscured.","destination":"Use canonical finding HIF-030."},
-    {"id":"BHIF-F022","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-022"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"HIF-031","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"}],"testRefs":[{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph compile call paths and current source/test inspection","observed":"compileIfPrefixForm still catches functions documented pure-and-total and the only owner reachability comes from the two shared-prototype patches."},"rationale":"The dead defensive catches and dishonest coverage remain linked to the canonical policy decision.","destination":"Use canonical finding HIF-031; operator dossier HIF-037 owns the final policy."},
-    {"id":"BHIF-F023","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-023"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"Historical no-command process metadata."}],"testRefs":[{"path":"tests/bridges/hooks/if-field/bash.test.ts"},{"path":"tests/bridges/hooks/if-field/glob.test.ts"},{"path":"tests/bridges/hooks/if-field/index.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test three assigned if-field owners in a repository-local isolated copy","exitCode":0,"observed":"All three current owner suites passed, positively superseding the historical statement that no tests or coverage commands ran; structural findings remain independently preserved."},"rationale":"Current focused execution closes the process caveat without treating green tests as mutation proof.","destination":"Evidence-only closure."},
-    {"id":"BHPF-F001","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-001"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current mirrored-path inventory","observed":"All ten payload translator modules still have exactly one identically named mirrored owner test, with no orphan in either direction."},"rationale":"The exact pairing claim remains current.","destination":"Retain as pairing evidence."},
-    {"id":"BHPF-F002","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-002"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/user-prompt-submit.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion and expected-value census","observed":"Every translator case still compares the complete payload to an independently written expected literal; no case computes its oracle through the translator."},"rationale":"The core whole-payload assertion strength remains true, distinct from key-order and optional-field gaps.","destination":"Retain as positive evidence."},
-    {"id":"BHPF-F003","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-003"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"},{"path":"tests/bridges/hooks/payloads/user-prompt-submit.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph dependency inspection","observed":"All ten translate functions remain deterministic functions of event and TranslationContext, with no ambient time, randomness, environment, or assertion casts in production."},"rationale":"The production testability assessment remains current.","destination":"Retain as positive evidence."},
-    {"id":"BHPF-F004","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-004"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/payloads/*.test.ts","exitCode":0,"observed":"All ten owners passed; current adversarial records identify warnings and a cross-layer contract decision but no standalone BLOCKER in this first-pass structural set."},"rationale":"The first-pass no-BLOCKER classification remains a bounded severity claim.","destination":"Evidence-only closure."},
-    {"id":"BHPF-F005","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-005"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-010","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current case census plus canonical mutation evidence","observed":"The 31 classifier cases remain hand-copied and canonical deletion mutations show matcher coverage must expand before consolidation."},"rationale":"The report's highest-priority structure recommendation remains valid with adversarial sequencing.","destination":"Use canonical finding BHP-010."},
-    {"id":"BHPF-F006","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-006"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-015","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/session-end.test.ts"}],"validation":{"method":"static-proof","tool":"current test structure inspection","observed":"The five SessionEnd reason cases remain near-identical siblings suitable for a typed row loop."},"rationale":"The reason-enumeration cleanup remains live.","destination":"Use canonical finding BHP-015."},
-    {"id":"BHPF-F007","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-007"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-016","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/session-start.test.ts"}],"validation":{"method":"static-proof","tool":"current test structure inspection","observed":"The five SessionStart source cases remain near-identical siblings suitable for a typed row loop after optional-field evidence is added."},"rationale":"The source-enumeration cleanup remains live.","destination":"Use canonical finding BHP-016."},
-    {"id":"BHPF-F008","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-008"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-011","sourceRefs":[{"path":"N/A","reason":"The claim concerns test organization."}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"Two ASCII banner blocks still partition translate and classifyStopFailure instead of one-level exported-entrypoint describe groups."},"rationale":"The box-comment and grouping defect remains.","destination":"Use canonical finding BHP-011."},
-    {"id":"BHPF-F009","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-009"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"BHP-012","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current canonical rule and neighboring type-evidence inspection","observed":"The module-scope satisfies and @ts-expect-error statements remain valid compile-time evidence; wrapping them in runtime test() would add no discrimination."},"rationale":"The historical relocation prescription is positively superseded.","destination":"Use stale canonical finding BHP-012."},
-    {"id":"BHPF-F010","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-010"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"BHP-013","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop.test.ts"}],"validation":{"method":"static-proof","tool":"current canonical rule and neighboring type-evidence inspection","observed":"The Stop module's compile-time shape checks remain intentionally at module scope and continue to typecheck."},"rationale":"The historical runtime-wrapper prescription is superseded.","destination":"Use stale canonical finding BHP-013."},
-    {"id":"BHPF-F011","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-011"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-010","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current 31-case census and canonical deletion-mutation record","observed":"The detailed classifier-loop prescription remains structurally sound, but BHP-002 proves missing matcher cases must land first."},"rationale":"Consolidation remains sequenced after discriminating matcher evidence.","destination":"Use canonical finding BHP-010."},
-    {"id":"BHPF-F012","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-012"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-011","sourceRefs":[{"path":"N/A","reason":"The claim concerns test organization."}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current banner and export inspection","observed":"The two detailed box banners remain and the module still has two exported runtime entrypoints."},"rationale":"The missing describe organization remains.","destination":"Use canonical finding BHP-011."},
-    {"id":"BHPF-F013","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-013"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"BHP-012","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"static-proof","tool":"current typecheck-backed source inspection","observed":"The four type-shape statements remain module-scope compile-time evidence and do not need runtime visibility to fail the type gate."},"rationale":"The detailed first-pass claim is refuted by the current type-evidence contract.","destination":"Use canonical finding BHP-012."},
-    {"id":"BHPF-F014","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-014"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"BHP-013","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop.test.ts"}],"validation":{"method":"static-proof","tool":"current typecheck-backed source inspection","observed":"The three Stop type-shape statements remain module-scope compile-time evidence and do not need runtime visibility."},"rationale":"The detailed first-pass relocation claim remains stale.","destination":"Use canonical finding BHP-013."},
-    {"id":"BHPF-F015","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-015"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-014","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion comparison","observed":"The inactive and empty-text cases still follow complete deepStrictEqual payload checks with redundant Object.hasOwn negatives."},"rationale":"The redundant ownership assertions remain live.","destination":"Use canonical finding BHP-014."},
-    {"id":"BHPF-F016","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-016"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-015","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/session-end.test.ts"}],"validation":{"method":"static-proof","tool":"current reason-case census","observed":"All five detailed reason cases and their redundant quit-field assertions remain unchanged."},"rationale":"The data-driven SessionEnd cleanup remains current.","destination":"Use canonical finding BHP-015."},
-    {"id":"BHPF-F017","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-017"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-016","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/session-start.test.ts"}],"validation":{"method":"static-proof","tool":"current source-case census","observed":"All five detailed source cases and their redundant startup-field assertions remain unchanged."},"rationale":"The data-driven SessionStart cleanup remains current.","destination":"Use canonical finding BHP-016."},
-    {"id":"BHPF-F018","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-018"],"evidenceStatus":"duplicate","route":"evidence-only closure","duplicateOf":"BHP-017","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/user-prompt-submit.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/payloads/user-prompt-submit.test.ts","exitCode":0,"observed":"The current owner passes four separately named behavior classes—plain, multiline, empty, and multibyte text—so the premise that these are one closed-vocabulary row table does not hold; only repeated setup is shared."},"rationale":"Positive current structure and rerun proof supersede the proposed consolidation.","destination":"Use stale canonical finding BHP-017."},
-    {"id":"BHPF-F019","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-019"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/post-compact.test.ts"},{"path":"tests/bridges/hooks/payloads/post-tool-use-failure.test.ts"},{"path":"tests/bridges/hooks/payloads/post-tool-use.test.ts"},{"path":"tests/bridges/hooks/payloads/pre-compact.test.ts"},{"path":"tests/bridges/hooks/payloads/pre-tool-use.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test five named clean payload owner suites in a repository-local isolated copy","exitCode":0,"observed":"All five owners passed; each retains complete independently authored payload comparisons, with broader wire-key and type-proof concerns preserved canonically."},"rationale":"The bounded clean-test list remains useful positive evidence.","destination":"Evidence-only closure."},
-    {"id":"BHPF-F020","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-020"],"evidenceStatus":"duplicate","route":"deferred backlog","duplicateOf":"BHP-018","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns production JSDoc grammar."}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"The classifyStopFailure JSDoc still begins with imperative 'Classify' rather than third-person 'Classifies'."},"rationale":"The production style violation remains present.","destination":"Use canonical finding BHP-018."},
-    {"id":"BHPF-F021","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-021"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts"},{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/post-compact.test.ts"},{"path":"tests/bridges/hooks/payloads/session-end.test.ts"},{"path":"tests/bridges/hooks/payloads/stop.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph production dependency inspection","observed":"The nine modules listed clean remain pure translators with no independently demonstrated production defect from this record; stop-failure's JSDoc is preserved separately."},"rationale":"The bounded clean-production list remains current.","destination":"Evidence-only closure."},
-    {"id":"BHPF-F022","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-022"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts"},{"path":"extensions/pi-claude-marketplace/domain/components/hook-events.ts"},{"path":"extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts"}],"testRefs":[{"path":"N/A","reason":"The claim records a historical review boundary for dependency modules."}],"validation":{"method":"static-proof","tool":"current corpus assignment inspection","observed":"The four named dependency modules remain outside the payloads directory and have their own owner/corpus assignments; no payload file was omitted because of that boundary."},"rationale":"The dependency-scope note is provenance rather than a payload defect.","destination":"Evidence-only closure."},
-    {"id":"BHPF-F023","claimIds":[".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-023"],"evidenceStatus":"confirmed","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"}],"testRefs":[{"path":"tests/bridges/hooks/payloads/stop-failure.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test <isolated-copy>/tests/bridges/hooks/payloads/*.test.ts","exitCode":0,"observed":"All ten production files and all ten owners were included in the current isolated run; none was skipped or partially read."},"rationale":"The report's completeness statement remains true.","destination":"Evidence-only closure."}
+    {
+      "id": "BHEP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/spawn-helpers.test.ts" },
+        { "path": "tests/bridges/hooks/hook-env.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/{wire-protocol,exec-timer,spawn-helpers,timeout,hook-env,translation-context,index,exec-result}.test.ts",
+        "exitCode": 0,
+        "observed": "All eight current owners passed in the repository-local isolated copy; the two named assertion-strength defects survived separate mutations and remain linked below."
+      },
+      "rationale": "The report's broad strong-area assessment remains current without erasing its exceptions.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHEP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/index.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current mirrored-path inventory",
+        "observed": "Each of the fifteen direct bridges/hooks TypeScript modules still has a mirrored owner test, with subdirectories assigned separately."
+      },
+      "rationale": "The exact direct-directory pairing claim remains true.",
+      "destination": "Retain as pairing evidence."
+    },
+    {
+      "id": "BHEP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-003"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HEP-017",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/hook-env.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test --test-name-pattern='restores exact process properties after containment failure' <isolated-copy>/tests/bridges/hooks/hook-env.test.ts after leaking P112_HOOK_ENV_FAILURE",
+        "exitCode": 0,
+        "observed": "The focused case passed after prepareHookEnv mutated the live process property because restoreEnvironment ran before the non-mutation assertion; the isolated copy was removed and live files were unchanged."
+      },
+      "rationale": "The test still erases the evidence before asserting global non-mutation.",
+      "destination": "Use canonical finding HEP-017."
+    },
+    {
+      "id": "BHEP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-004"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HEP-018",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/spawn-helpers.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/spawn-helpers.test.ts after replacing largestFittingString with an empty-prefix implementation",
+        "exitCode": 0,
+        "observed": "All six named truncation cases passed a drastically over-truncating implementation; the isolated copy was removed and live files were unchanged."
+      },
+      "rationale": "The cases still prove only bounded prefix truncation, not maximal use of the byte budget.",
+      "destination": "Use canonical finding HEP-018."
+    },
+    {
+      "id": "BHEP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-005"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HEP-019",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/timeout.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/timeout.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion census",
+        "observed": "Each of the six unusable-timeout diagnostics is still asserted through four partial regular expressions rather than one exact expected line."
+      },
+      "rationale": "The deterministic diagnostic remains under-specified.",
+      "destination": "Use canonical finding HEP-019."
+    },
+    {
+      "id": "BHEP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "HEP-020",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/translation-context.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection against canonical adversarial adjudication",
+        "observed": "The two complete satisfies-checked ExtensionContext literals remain, but the current rubric does not require replacing a strict poison-pill literal with strong-mock; canonical HEP-020 positively supersedes that prescription."
+      },
+      "rationale": "The historical library-specific remedy is no longer authoritative.",
+      "destination": "Use superseded canonical finding HEP-020."
+    },
+    {
+      "id": "BHEP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/wire-protocol.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/wire-protocol.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passed and retains complete HookExecResult comparisons for every parser branch; separate diagnostic-strength claims remain canonically routed."
+      },
+      "rationale": "The bounded clean assessment remains accurate.",
+      "destination": "Retain as positive whole-value evidence."
+    },
+    {
+      "id": "BHEP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/exec-timer.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/exec-timer.test.ts",
+        "exitCode": 0,
+        "observed": "The owner passed with t.mock.timers driving the SIGTERM-to-SIGKILL ladder and no real-time wait."
+      },
+      "rationale": "The deterministic timer-control strength remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHEP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/exec-result.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/exec-result.test.ts",
+        "exitCode": 0,
+        "observed": "The type evidence and exact assertNever runtime case passed unchanged."
+      },
+      "rationale": "The clean type-only/runtime assessment remains true.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHEP-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/index.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/index.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/index.test.ts",
+        "exitCode": 0,
+        "observed": "The current barrel owner passed and still compares every runtime re-export by binding identity while preserving internal-name negatives."
+      },
+      "rationale": "The hooks barrel assessment remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHEP-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HEP-021",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/hook-env.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph prepareHookEnv caller graph and current source inspection",
+        "observed": "prepareHookEnv still spreads process.env inside its body; both production lanes call it without an explicit base environment and the owner mutates process globals to control inputs."
+      },
+      "rationale": "The hidden ambient dependency remains live.",
+      "destination": "Use canonical finding HEP-021."
+    },
+    {
+      "id": "BHEP-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/timeout.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/index.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/wire-protocol.test.ts" },
+        { "path": "tests/bridges/hooks/exec-timer.test.ts" },
+        { "path": "tests/bridges/hooks/spawn-helpers.test.ts" },
+        { "path": "tests/bridges/hooks/timeout.test.ts" },
+        { "path": "tests/bridges/hooks/translation-context.test.ts" },
+        { "path": "tests/bridges/hooks/index.test.ts" },
+        { "path": "tests/bridges/hooks/exec-result.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "No independent production correctness defect was established in the seven modules the report marked clean; the test-strength and hidden-environment exceptions are preserved separately."
+      },
+      "rationale": "The bounded clean-production list remains valid.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHEP-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Historical review-scope boundary." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current corpus assignment and mirrored-path inspection",
+        "observed": "The async-rewake, if-field, and payload subdirectories remain separate corpus assignments; this plan reviews the latter two through their dedicated first-pass records."
+      },
+      "rationale": "The scope note remains provenance, not an implementation defect.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHEP-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-hooks-exec-protocol.md#CLAIM-014"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Historical no-command process metadata." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/wire-protocol.test.ts" },
+        { "path": "tests/bridges/hooks/exec-timer.test.ts" },
+        { "path": "tests/bridges/hooks/spawn-helpers.test.ts" },
+        { "path": "tests/bridges/hooks/timeout.test.ts" },
+        { "path": "tests/bridges/hooks/hook-env.test.ts" },
+        { "path": "tests/bridges/hooks/translation-context.test.ts" },
+        { "path": "tests/bridges/hooks/index.test.ts" },
+        { "path": "tests/bridges/hooks/exec-result.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test eight assigned exec-protocol owners in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All eight current owners passed, positively superseding the historical statement that no toolchain commands ran."
+      },
+      "rationale": "Current focused execution closes the old process caveat.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHIF-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/bash.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/glob.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency and call-path inspection",
+        "observed": "The three production modules remain synchronous and dependency-free apart from explicit arguments and local imports; bash.ts parses strings and never invokes a shell."
+      },
+      "rationale": "The production testability and no-shell assessment remains current outside separately routed structure decisions.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHIF-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns assertion forms in tests." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/bash.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/glob.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion and async census",
+        "observed": "The owners still use strict whole-value comparisons for their returned structures and contain no unawaited async assertions; the exact-error exception is linked separately."
+      },
+      "rationale": "The broad assertion-strength claim remains accurate with its enumerated exception.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHIF-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-020",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/if-field/index.test.ts after exporting compileBashGlob under the compilePathGlob name",
+        "exitCode": 0,
+        "observed": "The owner passed an incorrect runtime re-export because its Same checks are erased and it never compares the bindings; the isolated copy was removed and live files were unchanged."
+      },
+      "rationale": "Runtime barrel identity remains unprotected.",
+      "destination": "Use canonical finding HIF-020."
+    },
+    {
+      "id": "BHIF-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-021",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The Bash compiler and missing-prefix cases still patch String.prototype.endsWith and RegExp.prototype.exec to force otherwise unreachable catches."
+      },
+      "rationale": "The process-wide prototype mutation remains a hermeticity defect.",
+      "destination": "Use canonical finding HIF-021."
+    },
+    {
+      "id": "BHIF-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-039",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns cross-owner test structure." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/bash.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/glob.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test-shape comparison",
+        "observed": "Scenario bundling remains uneven across the three sibling owners, with object aggregation and map-inside-case patterns preserved."
+      },
+      "rationale": "The report's dominant structural theme remains current.",
+      "destination": "Use canonical cross-owner finding HIF-039."
+    },
+    {
+      "id": "BHIF-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-032",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/hooks-if-field.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current production-header census",
+        "observed": "All three named production files still contain follow-up or future-plan attribution for behavior already implemented in the same concern."
+      },
+      "rationale": "The aggregate stale-documentation theme remains live.",
+      "destination": "Use canonical finding HIF-032."
+    },
+    {
+      "id": "BHIF-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-017",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/bash.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case inspection",
+        "observed": "The two bashSubcommandFires owners still aggregate two independent outcomes into one object assertion per case."
+      },
+      "rationale": "The bundled-scenario structure remains.",
+      "destination": "Use canonical finding HIF-017."
+    },
+    {
+      "id": "BHIF-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-018",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/bash.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current expected-literal census",
+        "observed": "The parse-result expected literals remain unannotated by satisfies ParseResult throughout the owner."
+      },
+      "rationale": "The compile-time shape evidence is still absent.",
+      "destination": "Use canonical finding HIF-018."
+    },
+    {
+      "id": "BHIF-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-019",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/glob.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case and row-loop inspection",
+        "observed": "Glob owners still bundle two to four match/miss scenarios inside single test bodies and row cases."
+      },
+      "rationale": "The per-scenario structure warning remains current.",
+      "destination": "Use canonical finding HIF-019."
+    },
+    {
+      "id": "BHIF-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-020",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/if-field/index.test.ts after an incorrect runtime re-export",
+        "exitCode": 0,
+        "observed": "The focused wrong-export mutation survived, confirming the detailed barrel finding as well as the summary claim."
+      },
+      "rationale": "The type-only identity proof does not constrain runtime binding identity.",
+      "destination": "Use canonical finding HIF-020."
+    },
+    {
+      "id": "BHIF-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-021",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current global-mock inspection",
+        "observed": "The two detailed cases still mutate shared built-in prototypes while the neighboring cwd getter demonstrates case-owned corruption."
+      },
+      "rationale": "The specific hermeticity finding remains live.",
+      "destination": "Use canonical finding HIF-021."
+    },
+    {
+      "id": "BHIF-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-022",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/glob.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current sibling assertion comparison",
+        "observed": "The exhaustive-dispatch case still matches only a message prefix regex while glob.test.ts asserts the same assertNever failure with the full serialized corrupted value."
+      },
+      "rationale": "The weaker error assertion remains current.",
+      "destination": "Use canonical finding HIF-022."
+    },
+    {
+      "id": "BHIF-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-023",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns data-driven test structure." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current row-table inspection",
+        "observed": "Seven named cases still execute row arrays through map inside one test instead of declaring one sibling test per typed row."
+      },
+      "rationale": "The data-driven structure defect remains.",
+      "destination": "Use canonical finding HIF-023."
+    },
+    {
+      "id": "BHIF-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-024",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current cast census",
+        "observed": "All seven behavioral call sites still cast a cwd-only object to the full ExtensionContext."
+      },
+      "rationale": "The broad casts remain coupled to an over-wide production signature.",
+      "destination": "Use canonical finding HIF-024."
+    },
+    {
+      "id": "BHIF-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-025",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns a test assertion spelling." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The recursion-limit case still uses assert.equal while neighboring cases use assert.strictEqual."
+      },
+      "rationale": "The consistency warning remains present.",
+      "destination": "Use canonical finding HIF-025."
+    },
+    {
+      "id": "BHIF-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-016"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim reports the absence of clean assigned tests." }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/bash.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/glob.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current finding-to-file census",
+        "observed": "Each of the three owners still carries at least one separately linked live finding."
+      },
+      "rationale": "The administrative no-clean-files assessment remains correct.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHIF-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-026",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/bash.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Both Bash parser comments still refer to ifFires as a follow-up-plan dispatch consult."
+      },
+      "rationale": "The stale documentation remains live.",
+      "destination": "Use canonical finding HIF-026."
+    },
+    {
+      "id": "BHIF-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-018"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-027",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/glob.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The path-glob header still says the ctx.cwd projectRoot fallback is supplied in a future plan even though compileIfPredicate already does so."
+      },
+      "rationale": "The stale projectRoot documentation remains.",
+      "destination": "Use canonical finding HIF-027."
+    },
+    {
+      "id": "BHIF-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-019"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-028",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The file header still describes compileIfPredicate and ifFires as future work despite both functions being implemented in the file."
+      },
+      "rationale": "The index header remains materially stale.",
+      "destination": "Use canonical finding HIF-028."
+    },
+    {
+      "id": "BHIF-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-020"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-029",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph caller graph and current body inspection",
+        "observed": "ifFires and resolveTarget still accept ExtensionContext while reading only cwd, forcing every owner call through a cast."
+      },
+      "rationale": "The over-wide boundary remains live.",
+      "destination": "Use canonical finding HIF-029."
+    },
+    {
+      "id": "BHIF-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-021"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-030",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The set-membership call still casts arbitrary toolName text to PiToolName without explaining that a runtime equality miss is safe."
+      },
+      "rationale": "The cast's intent remains obscured.",
+      "destination": "Use canonical finding HIF-030."
+    },
+    {
+      "id": "BHIF-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-022"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "HIF-031",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/if-field/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph compile call paths and current source/test inspection",
+        "observed": "compileIfPrefixForm still catches functions documented pure-and-total and the only owner reachability comes from the two shared-prototype patches."
+      },
+      "rationale": "The dead defensive catches and dishonest coverage remain linked to the canonical policy decision.",
+      "destination": "Use canonical finding HIF-031; operator dossier HIF-037 owns the final policy."
+    },
+    {
+      "id": "BHIF-F023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md#CLAIM-023"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Historical no-command process metadata." }],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/if-field/bash.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/glob.test.ts" },
+        { "path": "tests/bridges/hooks/if-field/index.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test three assigned if-field owners in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All three current owner suites passed, positively superseding the historical statement that no tests or coverage commands ran; structural findings remain independently preserved."
+      },
+      "rationale": "Current focused execution closes the process caveat without treating green tests as mutation proof.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHPF-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current mirrored-path inventory",
+        "observed": "All ten payload translator modules still have exactly one identically named mirrored owner test, with no orphan in either direction."
+      },
+      "rationale": "The exact pairing claim remains current.",
+      "destination": "Retain as pairing evidence."
+    },
+    {
+      "id": "BHPF-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/user-prompt-submit.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion and expected-value census",
+        "observed": "Every translator case still compares the complete payload to an independently written expected literal; no case computes its oracle through the translator."
+      },
+      "rationale": "The core whole-payload assertion strength remains true, distinct from key-order and optional-field gaps.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHPF-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-003"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/user-prompt-submit.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency inspection",
+        "observed": "All ten translate functions remain deterministic functions of event and TranslationContext, with no ambient time, randomness, environment, or assertion casts in production."
+      },
+      "rationale": "The production testability assessment remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BHPF-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-004"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/payloads/*.test.ts",
+        "exitCode": 0,
+        "observed": "All ten owners passed; current adversarial records identify warnings and a cross-layer contract decision but no standalone BLOCKER in this first-pass structural set."
+      },
+      "rationale": "The first-pass no-BLOCKER classification remains a bounded severity claim.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHPF-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-010",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case census plus canonical mutation evidence",
+        "observed": "The 31 classifier cases remain hand-copied and canonical deletion mutations show matcher coverage must expand before consolidation."
+      },
+      "rationale": "The report's highest-priority structure recommendation remains valid with adversarial sequencing.",
+      "destination": "Use canonical finding BHP-010."
+    },
+    {
+      "id": "BHPF-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-015",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/session-end.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test structure inspection",
+        "observed": "The five SessionEnd reason cases remain near-identical siblings suitable for a typed row loop."
+      },
+      "rationale": "The reason-enumeration cleanup remains live.",
+      "destination": "Use canonical finding BHP-015."
+    },
+    {
+      "id": "BHPF-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-016",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/session-start.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test structure inspection",
+        "observed": "The five SessionStart source cases remain near-identical siblings suitable for a typed row loop after optional-field evidence is added."
+      },
+      "rationale": "The source-enumeration cleanup remains live.",
+      "destination": "Use canonical finding BHP-016."
+    },
+    {
+      "id": "BHPF-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-011",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test organization." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "Two ASCII banner blocks still partition translate and classifyStopFailure instead of one-level exported-entrypoint describe groups."
+      },
+      "rationale": "The box-comment and grouping defect remains.",
+      "destination": "Use canonical finding BHP-011."
+    },
+    {
+      "id": "BHPF-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BHP-012",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current canonical rule and neighboring type-evidence inspection",
+        "observed": "The module-scope satisfies and @ts-expect-error statements remain valid compile-time evidence; wrapping them in runtime test() would add no discrimination."
+      },
+      "rationale": "The historical relocation prescription is positively superseded.",
+      "destination": "Use stale canonical finding BHP-012."
+    },
+    {
+      "id": "BHPF-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BHP-013",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current canonical rule and neighboring type-evidence inspection",
+        "observed": "The Stop module's compile-time shape checks remain intentionally at module scope and continue to typecheck."
+      },
+      "rationale": "The historical runtime-wrapper prescription is superseded.",
+      "destination": "Use stale canonical finding BHP-013."
+    },
+    {
+      "id": "BHPF-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-010",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current 31-case census and canonical deletion-mutation record",
+        "observed": "The detailed classifier-loop prescription remains structurally sound, but BHP-002 proves missing matcher cases must land first."
+      },
+      "rationale": "Consolidation remains sequenced after discriminating matcher evidence.",
+      "destination": "Use canonical finding BHP-010."
+    },
+    {
+      "id": "BHPF-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-011",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test organization." }],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current banner and export inspection",
+        "observed": "The two detailed box banners remain and the module still has two exported runtime entrypoints."
+      },
+      "rationale": "The missing describe organization remains.",
+      "destination": "Use canonical finding BHP-011."
+    },
+    {
+      "id": "BHPF-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BHP-012",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current typecheck-backed source inspection",
+        "observed": "The four type-shape statements remain module-scope compile-time evidence and do not need runtime visibility to fail the type gate."
+      },
+      "rationale": "The detailed first-pass claim is refuted by the current type-evidence contract.",
+      "destination": "Use canonical finding BHP-012."
+    },
+    {
+      "id": "BHPF-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BHP-013",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current typecheck-backed source inspection",
+        "observed": "The three Stop type-shape statements remain module-scope compile-time evidence and do not need runtime visibility."
+      },
+      "rationale": "The detailed first-pass relocation claim remains stale.",
+      "destination": "Use canonical finding BHP-013."
+    },
+    {
+      "id": "BHPF-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-014",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts" }],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion comparison",
+        "observed": "The inactive and empty-text cases still follow complete deepStrictEqual payload checks with redundant Object.hasOwn negatives."
+      },
+      "rationale": "The redundant ownership assertions remain live.",
+      "destination": "Use canonical finding BHP-014."
+    },
+    {
+      "id": "BHPF-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-015",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/session-end.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current reason-case census",
+        "observed": "All five detailed reason cases and their redundant quit-field assertions remain unchanged."
+      },
+      "rationale": "The data-driven SessionEnd cleanup remains current.",
+      "destination": "Use canonical finding BHP-015."
+    },
+    {
+      "id": "BHPF-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-016",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/session-start.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source-case census",
+        "observed": "All five detailed source cases and their redundant startup-field assertions remain unchanged."
+      },
+      "rationale": "The data-driven SessionStart cleanup remains current.",
+      "destination": "Use canonical finding BHP-016."
+    },
+    {
+      "id": "BHPF-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-018"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BHP-017",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/user-prompt-submit.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/payloads/user-prompt-submit.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passes four separately named behavior classes—plain, multiline, empty, and multibyte text—so the premise that these are one closed-vocabulary row table does not hold; only repeated setup is shared."
+      },
+      "rationale": "Positive current structure and rerun proof supersede the proposed consolidation.",
+      "destination": "Use stale canonical finding BHP-017."
+    },
+    {
+      "id": "BHPF-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-019"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts" },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts"
+        },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/payloads/post-compact.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/post-tool-use-failure.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/post-tool-use.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/pre-compact.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/pre-tool-use.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test five named clean payload owner suites in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All five owners passed; each retains complete independently authored payload comparisons, with broader wire-key and type-proof concerns preserved canonically."
+      },
+      "rationale": "The bounded clean-test list remains useful positive evidence.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHPF-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-020"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "BHP-018",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns production JSDoc grammar." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The classifyStopFailure JSDoc still begins with imperative 'Classify' rather than third-person 'Classifies'."
+      },
+      "rationale": "The production style violation remains present.",
+      "destination": "Use canonical finding BHP-018."
+    },
+    {
+      "id": "BHPF-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-021"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts" },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts"
+        },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/hooks/payloads/post-compact.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/session-end.test.ts" },
+        { "path": "tests/bridges/hooks/payloads/stop.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph production dependency inspection",
+        "observed": "The nine modules listed clean remain pure translators with no independently demonstrated production defect from this record; stop-failure's JSDoc is preserved separately."
+      },
+      "rationale": "The bounded clean-production list remains current.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHPF-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-022"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim records a historical review boundary for dependency modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current corpus assignment inspection",
+        "observed": "The four named dependency modules remain outside the payloads directory and have their own owner/corpus assignments; no payload file was omitted because of that boundary."
+      },
+      "rationale": "The dependency-scope note is provenance rather than a payload defect.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BHPF-F023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-hooks-payloads.md#CLAIM-023"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/hooks/payloads/stop-failure.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/bridges/hooks/payloads/*.test.ts",
+        "exitCode": 0,
+        "observed": "All ten production files and all ten owners were included in the current isolated run; none was skipped or partially read."
+      },
+      "rationale": "The report's completeness statement remains true.",
+      "destination": "Evidence-only closure."
+    }
   ],
   "decisions": [],
   "scopeChanges": []

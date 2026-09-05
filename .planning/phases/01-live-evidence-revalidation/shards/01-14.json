@@ -41,124 +41,1443 @@
       "category": "adversarial",
       "assignedPlan": "01-14",
       "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-001", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-002", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-003", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-004", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-005", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-006", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-007", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-008", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-009", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-010", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-011", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-012", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-013", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-014", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-015", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-016", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-017", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-018", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-019", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-020", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-021", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-022", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-023", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-024", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-025", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-026", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-027", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-028", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-029", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-030", ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-031"
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-031"
       ],
       "reviewStatus": "complete",
       "outcome": "live findings"
     }
   ],
   "sourceClaims": [
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-001","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-001","findingId":"BMCP-001"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-002","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-002","findingId":"BMCP-002"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-003","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-003","findingId":"BMCP-003"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-004","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-004","findingId":"BMCP-004"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-005","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-005","findingId":"BMCP-005"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-006","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-006","findingId":"BMCP-006"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-007","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-007","findingId":"BMCP-007"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-008","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-008","findingId":"BMCP-008"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-009","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-009","findingId":"BMCP-009"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-010","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-010","findingId":"BMCP-010"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-011","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-011","findingId":"BMCP-011"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-012","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-012","findingId":"BMCP-012"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-013","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-013","findingId":"BMCP-013"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-014","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-014","findingId":"BMCP-014"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-015","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-015","findingId":"BMCP-015"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-016","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-016","findingId":"BMCP-016"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-017","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-017","findingId":"BMCP-017"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-018","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-018","findingId":"BMCP-018"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-019","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-019","findingId":"BMCP-019"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-020","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-020","findingId":"BMCP-020"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-021","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-021","findingId":"BMCP-021"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-022","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-022","findingId":"BMCP-022"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-023","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-023","findingId":"BMCP-023"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-024","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md","label":"BMCP-024","findingId":"BMCP-024"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-001","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-001","findingId":"BSKL-001"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-002","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-002","findingId":"BSKL-002"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-003","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-003","findingId":"BSKL-003"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-004","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-004","findingId":"BSKL-004"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-005","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-005","findingId":"BSKL-005"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-006","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-006","findingId":"BSKL-006"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-007","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-007","findingId":"BSKL-007"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-008","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-008","findingId":"BSKL-008"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-009","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-009","findingId":"BSKL-009"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-010","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-010","findingId":"BSKL-010"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-011","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-011","findingId":"BSKL-011"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-012","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-012","findingId":"BSKL-012"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-013","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-013","findingId":"BSKL-013"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-014","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-014","findingId":"BSKL-014"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-015","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-015","findingId":"BSKL-015"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-016","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-016","findingId":"BSKL-016"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-017","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-017","findingId":"BSKL-017"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-018","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-018","findingId":"BSKL-018"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-019","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-019","findingId":"BSKL-019"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-020","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-020","findingId":"BSKL-020"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-021","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-021","findingId":"BSKL-021"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-022","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-022","findingId":"BSKL-022"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-023","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-023","findingId":"BSKL-023"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-024","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-024","findingId":"BSKL-024"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-025","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-025","findingId":"BSKL-025"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-026","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-026","findingId":"BSKL-026"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-027","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-027","findingId":"BSKL-027"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-028","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-028","findingId":"BSKL-028"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-029","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-029","findingId":"BSKL-029"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-030","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-030","findingId":"BSKL-030"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-031","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md","label":"BSKL-031","findingId":"BSKL-031"}
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-001",
+      "findingId": "BMCP-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-002",
+      "findingId": "BMCP-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-003",
+      "findingId": "BMCP-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-004",
+      "findingId": "BMCP-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-005",
+      "findingId": "BMCP-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-006",
+      "findingId": "BMCP-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-007",
+      "findingId": "BMCP-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-008",
+      "findingId": "BMCP-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-009",
+      "findingId": "BMCP-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-010",
+      "findingId": "BMCP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-011",
+      "findingId": "BMCP-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-012",
+      "findingId": "BMCP-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-013",
+      "findingId": "BMCP-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-014",
+      "findingId": "BMCP-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-015",
+      "findingId": "BMCP-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-016",
+      "findingId": "BMCP-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-017",
+      "findingId": "BMCP-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-018",
+      "findingId": "BMCP-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-019",
+      "findingId": "BMCP-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-020",
+      "findingId": "BMCP-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-021",
+      "findingId": "BMCP-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-022",
+      "findingId": "BMCP-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-023",
+      "findingId": "BMCP-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md",
+      "label": "BMCP-024",
+      "findingId": "BMCP-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-001",
+      "findingId": "BSKL-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-002",
+      "findingId": "BSKL-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-003",
+      "findingId": "BSKL-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-004",
+      "findingId": "BSKL-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-005",
+      "findingId": "BSKL-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-006",
+      "findingId": "BSKL-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-007",
+      "findingId": "BSKL-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-008",
+      "findingId": "BSKL-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-009",
+      "findingId": "BSKL-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-010",
+      "findingId": "BSKL-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-011",
+      "findingId": "BSKL-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-012",
+      "findingId": "BSKL-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-013",
+      "findingId": "BSKL-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-014",
+      "findingId": "BSKL-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-015",
+      "findingId": "BSKL-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-016",
+      "findingId": "BSKL-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-017",
+      "findingId": "BSKL-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-018",
+      "findingId": "BSKL-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-019",
+      "findingId": "BSKL-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-020",
+      "findingId": "BSKL-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-021",
+      "findingId": "BSKL-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-022",
+      "findingId": "BSKL-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-023",
+      "findingId": "BSKL-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-024",
+      "findingId": "BSKL-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-025",
+      "findingId": "BSKL-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-026",
+      "findingId": "BSKL-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-027",
+      "findingId": "BSKL-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-028",
+      "findingId": "BSKL-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-029",
+      "findingId": "BSKL-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-030",
+      "findingId": "BSKL-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md",
+      "label": "BSKL-031",
+      "findingId": "BSKL-031"
+    }
   ],
   "findings": [
-    {"id":"BMCP-001","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-001"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph plus current source/test inspection","observed":"prepareStageMcpServers still reaches homedir/getAgentDir through loadEffectiveServerNames, while createProjectScope does not pin HOME and only one case pins PI_CODING_AGENT_DIR."},"rationale":"The MCP staging suite remains dependent on developer home configuration.","destination":"Hermeticize the staging test boundary in Phase 2."},
-    {"id":"BMCP-002","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-002"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"surviving-mutation","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/stage.ts; inspect prototype-name inputs","exitCode":0,"observed":"The focused owner passes, but its current cases still never stage a prototype-named server; safeSet is reached only on ordinary names in this owner."},"rationale":"Both stage safeSet call sites remain behaviorally undiscriminated for __proto__.","destination":"Add direct prototype-key staging coverage in Phase 2."},
-    {"id":"BMCP-003","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-003"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/types.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current source/test inspection","observed":"The only multi-server preparation still omits whole-value recorded and stagedNames assertions, although types.ts promises order parity."},"rationale":"A reorder of the two result arrays can evade the semantic assertions.","destination":"Strengthen the multi-entry result assertion in Phase 2."},
-    {"id":"BMCP-004","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-004"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current test input census","observed":"No current case combines malformed stored JSON with malformed server-value warnings, leaving doc-warning before stamp-warning order unproved."},"rationale":"The concatenation order is public result behavior.","destination":"Add a combined-warning case in Phase 2."},
-    {"id":"BMCP-005","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-005"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion census","observed":"Object.isFrozen assertions remain confined to noop and leak arrays; staged result arrays are not checked."},"rationale":"Readonly types do not prove runtime freezing.","destination":"Add staged-result freeze assertions in Phase 2."},
-    {"id":"BMCP-006","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-006"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/stage.ts","exitCode":0,"observed":"The current owner reaches 100% branch/function/line coverage and includes an explicit unknown replacement-handle case covering rollback/finalize handle validation."},"rationale":"Phase 117 replacement coverage superseded the historical missing rollback-handle case.","destination":"Close as stale after current replacement and focused rerun."},
-    {"id":"BMCP-007","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-007"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns unexplained test setup rather than production source."}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"The unknown-handle case still registers finalizeMcpReplacement in t.after without explaining the lifetime/cleanup purpose."},"rationale":"The production call in cleanup remains opaque.","destination":"Clarify or remove the hook in Phase 2."},
-    {"id":"BMCP-008","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-008"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/types.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"}],"testRefs":[{"path":"tests/bridges/mcp/types.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph plus current type/source inspection","observed":"RawMcpDoc.mcpServers is still declared Record<string, unknown> although both consumers obtain it by casting JSON.parse output; null and scalar values are not narrowed by the type."},"rationale":"The raw JSON type still hides the two runtime defects from TypeScript.","destination":"Type raw mcpServers as unknown and narrow consumers in Phase 2."},
-    {"id":"BMCP-009","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-009"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns type-test fixtures."}],"testRefs":[{"path":"tests/bridges/mcp/types.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"Current type fixtures still contain repeated locations: undefined! values that bypass the ScopedLocations brand without a rationale."},"rationale":"The fixtures conceal why a branded value is fabricated.","destination":"Use one documented binding or genuine constructor in Phase 2."},
-    {"id":"BMCP-010","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-010"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/marker.ts"}],"testRefs":[{"path":"tests/bridges/mcp/marker.test.ts"}],"validation":{"method":"static-proof","tool":"current source/test inspection","observed":"No marker fixture carries an extra stored field and ClaudeMarketplaceMarker still lacks explicit readonly negative evidence."},"rationale":"Projection behavior and the exported marker type remain incompletely owned.","destination":"Add projection and type-contract cases in Phase 2."},
-    {"id":"BMCP-011","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-011"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/substitute.ts"}],"testRefs":[{"path":"tests/bridges/mcp/substitute.test.ts"},{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current ownership inspection","observed":"The non-plain declared env arm remains reached only through stage.test.ts, not substitute.test.ts."},"rationale":"The substitute module does not own its own branch.","destination":"Move/add direct owner coverage in Phase 2."},
-    {"id":"BMCP-012","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-012"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim is test-support duplication."}],"testRefs":[{"path":"tests/bridges/mcp/collision-slots.test.ts"},{"path":"tests/bridges/mcp/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"HOME and PI_CODING_AGENT_DIR save/set/restore blocks remain duplicated per collision-slots case and are not shared with stage tests."},"rationale":"Duplicated hermetic setup enabled the stage-suite omission.","destination":"Centralize case-local collision paths in Phase 2."},
-    {"id":"BMCP-013","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-013"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim is duplicated test structure."}],"testRefs":[{"path":"tests/bridges/mcp/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"The top-level-non-object and nothing-removed preservation loops still repeat the same filesystem assertion body."},"rationale":"The duplicated proof should use one concern-local helper without merging case titles.","destination":"Extract the test helper in Phase 2."},
-    {"id":"BMCP-014","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-014"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"}],"testRefs":[{"path":"tests/bridges/mcp/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"current source/test inspection","observed":"EMPTY_RESULT remains a mutable module-level object reused by six returns; only its arrays are frozen and identity independence is not asserted."},"rationale":"One caller can mutate later noop results.","destination":"Freeze the object or allocate fresh results in Phase 2."},
-    {"id":"BMCP-015","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-015"],"evidenceStatus":"confirmed","route":"operator decision","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/marker.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/parse.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/substitute.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"},{"path":"tests/bridges/mcp/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph current symbol census","observed":"Plain-object predicates remain repeated throughout bridges/mcp while the two raw-document consumers omit scalar/null narrowing."},"rationale":"Whether to add a new shared module is an architectural ownership choice; the drift mechanism is live.","destination":"Choose shared predicate ownership before the Phase 2 fix."},
-    {"id":"BMCP-016","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-016"],"evidenceStatus":"confirmed","route":"operator decision","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/marker.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/parse.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/substitute.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"}],"testRefs":[{"path":"tests/bridges/mcp/marker.test.ts"},{"path":"tests/bridges/mcp/parse.test.ts"},{"path":"tests/bridges/mcp/substitute.test.ts"},{"path":"tests/bridges/mcp/collision-slots.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph importer census","observed":"readMarker, parseMcpServers, deepSubstitute, and MCP_COLLISION_SLOTS still have no production importer outside their defining module, while tests import them directly."},"rationale":"The public-surface versus test-only-export choice remains unresolved.","destination":"Operator decides which exports are contractual."},
-    {"id":"BMCP-017","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-017"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"}],"testRefs":[{"path":"tests/bridges/mcp/collision-slots.test.ts"}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"MCP_COLLISION_SLOTS remains a parameterized function in CONSTANT_CASE and its comment still calls it a constant."},"rationale":"The function violates the local naming contract and misdescribes its shape.","destination":"Rename and update ownership test in Phase 2."},
-    {"id":"BMCP-018","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-018"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/parse.ts"}],"testRefs":[{"path":"tests/bridges/mcp/parse.test.ts"}],"validation":{"method":"static-proof","tool":"current source/test inspection","observed":"Standalone {mcpServers:string} still follows the unwrapped map path, and the test table continues to expect the misleading server mcpServers must be an object diagnostic."},"rationale":"The dedicated MCPR-01 wrapper-shape error is bypassed.","destination":"Unify the string-wrapper diagnostic in Phase 2."},
-    {"id":"BMCP-019","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-019"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/types.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"},{"path":"tests/bridges/mcp/types.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph production caller census","observed":"sourcePath remains optional with a synthetic fallback, although install/update/reinstall production callers all provide it; current type tests retain the optional branch."},"rationale":"The fallback is production-unreachable and test-maintained dead behavior.","destination":"Require sourcePath and delete the fallback in Phase 2."},
-    {"id":"BMCP-020","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-020"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"}],"testRefs":[{"path":"tests/bridges/mcp/stage.test.ts"},{"path":"tests/bridges/mcp/unstage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection","exitCode":0,"observed":"Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."},"rationale":"The null crash and string corruption remain live production defects despite numeric coverage.","destination":"Fix before test-only improvements in Phase 2."},
-    {"id":"BMCP-021","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-021"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns a test helper signature."}],"testRefs":[{"path":"tests/bridges/mcp/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"current test inspection","observed":"The local unstage scope helper still has no explicit Promise return annotation."},"rationale":"This remains an ungated local convention defect.","destination":"Annotate during Phase 2 test cleanup."},
-    {"id":"BMCP-022","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-022"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns import style rather than production source."}],"testRefs":[{"path":"tests/bridges/mcp/unstage.test.ts"},{"path":"tests/bridges/skills/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"current repository import census","observed":"Default node:test imports remain common across bridge owner suites, including sibling unstage tests; named import is not a repository-wide convention."},"rationale":"The original claim inferred a local-directory pattern as a global rule.","destination":"Close with the current counterexample census."},
-    {"id":"BMCP-023","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-023"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns assertion strength."}],"testRefs":[{"path":"tests/bridges/mcp/collision-slots.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion inspection","observed":"The final collision-slot I/O case still asserts only code EISDIR rather than error class/name plus syscall."},"rationale":"A plausible wrong filesystem error can satisfy the current assertion.","destination":"Use the sibling structured errno projection in Phase 2."},
-    {"id":"BMCP-024","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-024"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/mcp/stage.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns missing API documentation."}],"validation":{"method":"static-proof","tool":"current exported-function inspection","observed":"replacePreparedMcp, rollbackMcpReplacement, and finalizeMcpReplacement remain exported without their own API comments."},"rationale":"Replacement handle lifecycle and leak-return semantics remain undocumented.","destination":"Document the exported lifecycle functions in Phase 2."},
-    {"id":"BSKL-001","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-001"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The current owner passes with 100% branch/function/line coverage, including the cleanup-only previous-name branch that historically had no case."},"rationale":"Phase 117 supplied positive replacement coverage for the noop-gate branch.","destination":"Close as stale after focused rerun."},
-    {"id":"BSKL-002","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-002"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"Current stage owner reaches all cp option branches and passes; Phase 117 added source-tree symlink preservation evidence."},"rationale":"The historical zero-coverage premise no longer holds.","destination":"Close with current source location and focused rerun."},
-    {"id":"BSKL-003","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-003"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The owner now exercises every commit/replace containment branch and reaches 100% direct branch coverage."},"rationale":"The missing containment cases were replaced during Phase 117.","destination":"Close as stale."},
-    {"id":"BSKL-004","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-004"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The ENOENT removal race is now executed in the 100% branch-complete owner suite."},"rationale":"Current replacement plus rerun invalidates the historical missing-arm premise.","destination":"Close as stale."},
-    {"id":"BSKL-005","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-005"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The current owner reaches the regular-file target error path and all stage branches."},"rationale":"The ENOTDIR behavior now has focused owner evidence.","destination":"Close as stale."},
-    {"id":"BSKL-006","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-006"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"Current abort/cleanup leak branches are covered and the owner passes."},"rationale":"The historical leak-return gap was replaced.","destination":"Close as stale."},
-    {"id":"BSKL-007","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-007"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"},{"path":"extensions/pi-claude-marketplace/shared/errors.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The ManualRecoveryError construction and cause path are now exercised in the complete owner suite."},"rationale":"Current test replacement invalidates the missing-cause assertion premise.","destination":"Close as stale."},
-    {"id":"BSKL-008","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-008"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The current suite reaches the cap-before-substitution branch and passes at 100% direct branch coverage."},"rationale":"The missing ordering input has been supplied.","destination":"Close as stale."},
-    {"id":"BSKL-009","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-009"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"Non-string description and when_to_use narrowing branches are now exercised by the current owner."},"rationale":"The historical input omission is stale.","destination":"Close as stale."},
-    {"id":"BSKL-010","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-010"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion inspection","observed":"Staging and backup directory discovery still normalizes random UUIDs through fragment/membership checks rather than an injected deterministic identifier and whole-value comparison."},"rationale":"Numeric coverage does not make the current weak inventory assertions discriminating.","destination":"Inject identifiers or compare a normalized whole inventory in Phase 3."},
-    {"id":"BSKL-011","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-011"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns filesystem-test ordering."}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"},{"path":"tests/bridges/skills/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion inspection","observed":"Skills stage and unstage still compare readdir output without sorting at the cited inventory checks, unlike sibling bridge owners."},"rationale":"Filesystem enumeration order is not a portable contract.","destination":"Sort before comparison in Phase 3."},
-    {"id":"BSKL-012","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-012"],"evidenceStatus":"confirmed","route":"operator decision","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/platform/pi-api.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"},{"path":"tests/bridges/skills/rewrite-frontmatter.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion inspection","observed":"Current cases continue to pin YAML package message text on user-visible degradation and backstop paths."},"rationale":"Whether parser wording is contractual differs between the notification and internal backstop paths.","destination":"Decide which error text is product-owned before revising assertions."},
-    {"id":"BSKL-013","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-013"],"evidenceStatus":"confirmed","route":"operator decision","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"}],"testRefs":[{"path":"tests/bridges/skills/frontmatter-degrade.test.ts"},{"path":"tests/bridges/skills/rewrite-frontmatter.test.ts"}],"validation":{"method":"static-proof","tool":"current test and tsconfig inspection","observed":"Five cases still replace String.prototype.split to fabricate sparse arrays that native split cannot return; the guarded branches remain compiler-forced under noUncheckedIndexedAccess."},"rationale":"Deleting artificial coverage versus accepting compiler-forced shortfall is an existing operator policy decision.","destination":"Resolve with the cross-cutting prototype-surgery dossier."},
-    {"id":"BSKL-014","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-014"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"}],"testRefs":[{"path":"tests/bridges/skills/frontmatter-degrade.test.ts"}],"validation":{"method":"static-proof","tool":"current row inspection","observed":"No current firstBodyParagraph row distinguishes #hashtag prose or seven-hash text from an ATX heading."},"rationale":"The heading regex boundary remains undiscriminated.","destination":"Add the two literal rows in Phase 3."},
-    {"id":"BSKL-015","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-015"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"}],"testRefs":[{"path":"tests/bridges/skills/discover.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts","exitCode":0,"observed":"The current discovery owner passes with 100% branch/function/line coverage and now plants the symlinked-document path."},"rationale":"Phase 117 supplied the missing lstat-versus-stat discriminator.","destination":"Close as stale."},
-    {"id":"BSKL-016","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-016"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/discover.test.ts"},{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current assertion census","observed":"The returned arrays remain frozen in production, but discovery and staged-result owners still lack comprehensive Object.isFrozen assertions."},"rationale":"Readonly typing does not enforce the runtime promise.","destination":"Add direct freeze assertions in Phase 3."},
-    {"id":"BSKL-017","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-017"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"}],"testRefs":[{"path":"tests/bridges/skills/discover.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts","exitCode":0,"observed":"Both generated-name safety throw paths are now reached in the current branch-complete owner suite."},"rationale":"The historical unreachable-case premise is stale.","destination":"Close as stale."},
-    {"id":"BSKL-018","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-018"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns a permission-based test fixture."}],"testRefs":[{"path":"tests/bridges/skills/discover.test.ts"}],"validation":{"method":"static-proof","tool":"current fixture inspection","observed":"The opaque-directory row still relies on chmod 000 and has no root-user precondition or alternate proof."},"rationale":"Root execution can bypass permission denial and make the title misleading.","destination":"Replace with a deterministic boundary or document platform constraints."},
-    {"id":"BSKL-019","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-019"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns import style and test-double reachability."}],"testRefs":[{"path":"tests/bridges/skills/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"current import census","observed":"The skills unstage owner remains the only suite in this concern reaching the fs/promises mock target through a default import while siblings use require-based access."},"rationale":"The isolated convention drift complicates consistent context-local mocking.","destination":"Align with the proven sibling form in Phase 3."},
-    {"id":"BSKL-020","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-020"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns type-only fixtures."}],"testRefs":[{"path":"tests/bridges/skills/types.test.ts"}],"validation":{"method":"static-proof","tool":"current type-test inspection","observed":"Repeated undefined! fixtures still bypass ScopedLocations and other branded inputs without one documented binding."},"rationale":"The current fixtures hide the reason for non-null assertions.","destination":"Use documented typed fixtures in Phase 3."},
-    {"id":"BSKL-021","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-021"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"}],"testRefs":[{"path":"tests/bridges/skills/types.test.ts"}],"validation":{"method":"static-proof","tool":"current export/type ownership inspection","observed":"DiscoverPluginSkillsResult remains exported without a satisfies owner in discover.test.ts or types.test.ts."},"rationale":"This is the sole skills bridge type without explicit ownership evidence.","destination":"Add type-contract ownership in Phase 3."},
-    {"id":"BSKL-022","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-022"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts","exitCode":0,"observed":"The current suite covers finalizeSkillsReplacement's unknown-handle arm within 100% branch coverage."},"rationale":"The historical sibling-drift case gap was replaced.","destination":"Close as stale."},
-    {"id":"BSKL-023","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-023"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"},{"path":"extensions/pi-claude-marketplace/shared/fs-utils.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns contradictory production documentation."}],"validation":{"method":"static-proof","tool":"current source comparison","observed":"discover.ts still says withFileTypes follows the target while fs-utils.ts documents and uses the correct symlink entry behavior."},"rationale":"The false comment can prompt removal of a real guard.","destination":"Correct the comment in Phase 3."},
-    {"id":"BSKL-024","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-024"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns unreachable production code."}],"validation":{"method":"static-proof","tool":"current predicate inspection","observed":"hasRegularSkillFile still conjoins isFile with !isSymbolicLink even though a Dirent/stat result cannot be both a regular file and symbolic link."},"rationale":"The second conjunct remains dead code.","destination":"Delete after retaining the lstat-based behavior."},
-    {"id":"BSKL-025","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-025"],"evidenceStatus":"confirmed","route":"Phase 2","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"}],"testRefs":[{"path":"tests/bridges/skills/discover.test.ts"}],"validation":{"method":"static-proof","tool":"current source inspection","observed":"Discovery still uses localeCompare while promising deterministic order; results can differ with host locale."},"rationale":"Cross-machine order is production behavior and should use bytewise comparison.","destination":"Replace locale-sensitive ordering in Phase 2."},
-    {"id":"BSKL-026","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-026"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns dead production dataflow."}],"validation":{"method":"static-proof","tool":"current source dataflow inspection","observed":"The noop arm still spreads discoverWarnings even though discovery can return no skills with duplicate warnings only when at least one winning skill exists."},"rationale":"The warning spread remains provably empty and its comment overclaims behavior.","destination":"Simplify the noop result and comment in Phase 3."},
-    {"id":"BSKL-027","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-027"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/rewrite-frontmatter.test.ts"},{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current error construction inspection","observed":"Three skills bridge failure sites still encode structured values only in plain Error messages."},"rationale":"Tests must pin composed text instead of error fields.","destination":"Introduce a coherent typed skills-error family in Phase 3."},
-    {"id":"BSKL-028","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-028"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"N/A","reason":"The claim concerns repeated test arrangement."}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"},{"path":"tests/bridges/skills/discover.test.ts"}],"validation":{"method":"static-proof","tool":"current fixture census","observed":"ResolvedPluginInstallable literals remain repeatedly authored in stage tests while discover tests retain a suitable concern-local factory."},"rationale":"The duplication remains high-volume and obscures per-case differences.","destination":"Adopt a fresh-value seed function in Phase 3."},
-    {"id":"BSKL-029","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-029"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"tests/bridges/skills/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current dependency and assertion inspection","observed":"randomUUID remains imported inline for staging and backups, forcing nondeterministic inventory assertions."},"rationale":"The hidden dependency directly weakens two public filesystem-state assertions.","destination":"Inject an identifier source at the bridge boundary in Phase 3."},
-    {"id":"BSKL-030","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-030"],"evidenceStatus":"confirmed","route":"Phase 3","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns a style rule on production declarations."}],"validation":{"method":"static-proof","tool":"current declaration inspection","observed":"SkillsReplacementInternals remains a Readonly object-literal type alias rather than an interface."},"rationale":"The mechanical local style deviation survives.","destination":"Convert alongside related skills cleanup."},
-    {"id":"BSKL-031","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-031"],"evidenceStatus":"stale","route":"evidence-only closure","duplicateOf":null,"sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/skills/discover.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/skills/unstage.ts"}],"testRefs":[{"path":"N/A","reason":"The claim concerns JSDoc register across production modules."}],"validation":{"method":"static-proof","tool":"current repository house-style comparison","observed":"Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."},"rationale":"The historical per-file findings overstated a repository-wide documentation convention.","destination":"Close the six prescriptions as stale area findings; handle any house-style change separately."}
+    {
+      "id": "BMCP-001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-001"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "prepareStageMcpServers still reaches homedir/getAgentDir through loadEffectiveServerNames, while createProjectScope does not pin HOME and only one case pins PI_CODING_AGENT_DIR."
+      },
+      "rationale": "The MCP staging suite remains dependent on developer home configuration.",
+      "destination": "Hermeticize the staging test boundary in Phase 2."
+    },
+    {
+      "id": "BMCP-002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-002"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/stage.ts; inspect prototype-name inputs",
+        "exitCode": 0,
+        "observed": "The focused owner passes, but its current cases still never stage a prototype-named server; safeSet is reached only on ordinary names in this owner."
+      },
+      "rationale": "Both stage safeSet call sites remain behaviorally undiscriminated for __proto__.",
+      "destination": "Add direct prototype-key staging coverage in Phase 2."
+    },
+    {
+      "id": "BMCP-003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-003"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test inspection",
+        "observed": "The only multi-server preparation still omits whole-value recorded and stagedNames assertions, although types.ts promises order parity."
+      },
+      "rationale": "A reorder of the two result arrays can evade the semantic assertions.",
+      "destination": "Strengthen the multi-entry result assertion in Phase 2."
+    },
+    {
+      "id": "BMCP-004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-004"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test input census",
+        "observed": "No current case combines malformed stored JSON with malformed server-value warnings, leaving doc-warning before stamp-warning order unproved."
+      },
+      "rationale": "The concatenation order is public result behavior.",
+      "destination": "Add a combined-warning case in Phase 2."
+    },
+    {
+      "id": "BMCP-005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-005"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion census",
+        "observed": "Object.isFrozen assertions remain confined to noop and leak arrays; staged result arrays are not checked."
+      },
+      "rationale": "Readonly types do not prove runtime freezing.",
+      "destination": "Add staged-result freeze assertions in Phase 2."
+    },
+    {
+      "id": "BMCP-006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-006"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
+        "exitCode": 0,
+        "observed": "The current owner reaches 100% branch/function/line coverage and includes an explicit unknown replacement-handle case covering rollback/finalize handle validation."
+      },
+      "rationale": "Phase 117 replacement coverage superseded the historical missing rollback-handle case.",
+      "destination": "Close as stale after current replacement and focused rerun."
+    },
+    {
+      "id": "BMCP-007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-007"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns unexplained test setup rather than production source."
+        }
+      ],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The unknown-handle case still registers finalizeMcpReplacement in t.after without explaining the lifetime/cleanup purpose."
+      },
+      "rationale": "The production call in cleanup remains opaque.",
+      "destination": "Clarify or remove the hook in Phase 2."
+    },
+    {
+      "id": "BMCP-008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-008"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/mcp/types.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current type/source inspection",
+        "observed": "RawMcpDoc.mcpServers is still declared Record<string, unknown> although both consumers obtain it by casting JSON.parse output; null and scalar values are not narrowed by the type."
+      },
+      "rationale": "The raw JSON type still hides the two runtime defects from TypeScript.",
+      "destination": "Type raw mcpServers as unknown and narrow consumers in Phase 2."
+    },
+    {
+      "id": "BMCP-009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-009"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns type-test fixtures." }],
+      "testRefs": [{ "path": "tests/bridges/mcp/types.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "Current type fixtures still contain repeated locations: undefined! values that bypass the ScopedLocations brand without a rationale."
+      },
+      "rationale": "The fixtures conceal why a branded value is fabricated.",
+      "destination": "Use one documented binding or genuine constructor in Phase 2."
+    },
+    {
+      "id": "BMCP-010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-010"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/marker.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/marker.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test inspection",
+        "observed": "No marker fixture carries an extra stored field and ClaudeMarketplaceMarker still lacks explicit readonly negative evidence."
+      },
+      "rationale": "Projection behavior and the exported marker type remain incompletely owned.",
+      "destination": "Add projection and type-contract cases in Phase 2."
+    },
+    {
+      "id": "BMCP-011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-011"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/substitute.test.ts" },
+        { "path": "tests/bridges/mcp/stage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current ownership inspection",
+        "observed": "The non-plain declared env arm remains reached only through stage.test.ts, not substitute.test.ts."
+      },
+      "rationale": "The substitute module does not own its own branch.",
+      "destination": "Move/add direct owner coverage in Phase 2."
+    },
+    {
+      "id": "BMCP-012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-012"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim is test-support duplication." }],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/collision-slots.test.ts" },
+        { "path": "tests/bridges/mcp/stage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "HOME and PI_CODING_AGENT_DIR save/set/restore blocks remain duplicated per collision-slots case and are not shared with stage tests."
+      },
+      "rationale": "Duplicated hermetic setup enabled the stage-suite omission.",
+      "destination": "Centralize case-local collision paths in Phase 2."
+    },
+    {
+      "id": "BMCP-013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-013"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim is duplicated test structure." }],
+      "testRefs": [{ "path": "tests/bridges/mcp/unstage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The top-level-non-object and nothing-removed preservation loops still repeat the same filesystem assertion body."
+      },
+      "rationale": "The duplicated proof should use one concern-local helper without merging case titles.",
+      "destination": "Extract the test helper in Phase 2."
+    },
+    {
+      "id": "BMCP-014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-014"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/unstage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test inspection",
+        "observed": "EMPTY_RESULT remains a mutable module-level object reused by six returns; only its arrays are frozen and identity independence is not asserted."
+      },
+      "rationale": "One caller can mutate later noop results.",
+      "destination": "Freeze the object or allocate fresh results in Phase 2."
+    },
+    {
+      "id": "BMCP-015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-015"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/marker.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/stage.test.ts" },
+        { "path": "tests/bridges/mcp/unstage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current symbol census",
+        "observed": "Plain-object predicates remain repeated throughout bridges/mcp while the two raw-document consumers omit scalar/null narrowing."
+      },
+      "rationale": "Whether to add a new shared module is an architectural ownership choice; the drift mechanism is live.",
+      "destination": "Choose shared predicate ownership before the Phase 2 fix."
+    },
+    {
+      "id": "BMCP-016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-016"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/marker.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/marker.test.ts" },
+        { "path": "tests/bridges/mcp/parse.test.ts" },
+        { "path": "tests/bridges/mcp/substitute.test.ts" },
+        { "path": "tests/bridges/mcp/collision-slots.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph importer census",
+        "observed": "readMarker, parseMcpServers, deepSubstitute, and MCP_COLLISION_SLOTS still have no production importer outside their defining module, while tests import them directly."
+      },
+      "rationale": "The public-surface versus test-only-export choice remains unresolved.",
+      "destination": "Operator decides which exports are contractual."
+    },
+    {
+      "id": "BMCP-017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-017"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/collision-slots.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "MCP_COLLISION_SLOTS remains a parameterized function in CONSTANT_CASE and its comment still calls it a constant."
+      },
+      "rationale": "The function violates the local naming contract and misdescribes its shape.",
+      "destination": "Rename and update ownership test in Phase 2."
+    },
+    {
+      "id": "BMCP-018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-018"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/parse.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test inspection",
+        "observed": "Standalone {mcpServers:string} still follows the unwrapped map path, and the test table continues to expect the misleading server mcpServers must be an object diagnostic."
+      },
+      "rationale": "The dedicated MCPR-01 wrapper-shape error is bypassed.",
+      "destination": "Unify the string-wrapper diagnostic in Phase 2."
+    },
+    {
+      "id": "BMCP-019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-019"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/stage.test.ts" },
+        { "path": "tests/bridges/mcp/types.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph production caller census",
+        "observed": "sourcePath remains optional with a synthetic fallback, although install/update/reinstall production callers all provide it; current type tests retain the optional branch."
+      },
+      "rationale": "The fallback is production-unreachable and test-maintained dead behavior.",
+      "destination": "Require sourcePath and delete the fallback in Phase 2."
+    },
+    {
+      "id": "BMCP-020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-020"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/stage.test.ts" },
+        { "path": "tests/bridges/mcp/unstage.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "The null crash and string corruption remain live production defects despite numeric coverage.",
+      "destination": "Fix before test-only improvements in Phase 2."
+    },
+    {
+      "id": "BMCP-021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-021"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns a test helper signature." }],
+      "testRefs": [{ "path": "tests/bridges/mcp/unstage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The local unstage scope helper still has no explicit Promise return annotation."
+      },
+      "rationale": "This remains an ungated local convention defect.",
+      "destination": "Annotate during Phase 2 test cleanup."
+    },
+    {
+      "id": "BMCP-022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-022"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns import style rather than production source."
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/mcp/unstage.test.ts" },
+        { "path": "tests/bridges/skills/unstage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository import census",
+        "observed": "Default node:test imports remain common across bridge owner suites, including sibling unstage tests; named import is not a repository-wide convention."
+      },
+      "rationale": "The original claim inferred a local-directory pattern as a global rule.",
+      "destination": "Close with the current counterexample census."
+    },
+    {
+      "id": "BMCP-023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-023"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns assertion strength." }],
+      "testRefs": [{ "path": "tests/bridges/mcp/collision-slots.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The final collision-slot I/O case still asserts only code EISDIR rather than error class/name plus syscall."
+      },
+      "rationale": "A plausible wrong filesystem error can satisfy the current assertion.",
+      "destination": "Use the sibling structured errno projection in Phase 2."
+    },
+    {
+      "id": "BMCP-024",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-mcp.md#BMCP-024"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns missing API documentation." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current exported-function inspection",
+        "observed": "replacePreparedMcp, rollbackMcpReplacement, and finalizeMcpReplacement remain exported without their own API comments."
+      },
+      "rationale": "Replacement handle lifecycle and leak-return semantics remain undocumented.",
+      "destination": "Document the exported lifecycle functions in Phase 2."
+    },
+    {
+      "id": "BSKL-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-001"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The current owner passes with 100% branch/function/line coverage, including the cleanup-only previous-name branch that historically had no case."
+      },
+      "rationale": "Phase 117 supplied positive replacement coverage for the noop-gate branch.",
+      "destination": "Close as stale after focused rerun."
+    },
+    {
+      "id": "BSKL-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-002"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "Current stage owner reaches all cp option branches and passes; Phase 117 added source-tree symlink preservation evidence."
+      },
+      "rationale": "The historical zero-coverage premise no longer holds.",
+      "destination": "Close with current source location and focused rerun."
+    },
+    {
+      "id": "BSKL-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-003"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The owner now exercises every commit/replace containment branch and reaches 100% direct branch coverage."
+      },
+      "rationale": "The missing containment cases were replaced during Phase 117.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-004"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The ENOENT removal race is now executed in the 100% branch-complete owner suite."
+      },
+      "rationale": "Current replacement plus rerun invalidates the historical missing-arm premise.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-005"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The current owner reaches the regular-file target error path and all stage branches."
+      },
+      "rationale": "The ENOTDIR behavior now has focused owner evidence.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-006"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "Current abort/cleanup leak branches are covered and the owner passes."
+      },
+      "rationale": "The historical leak-return gap was replaced.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-007"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The ManualRecoveryError construction and cause path are now exercised in the complete owner suite."
+      },
+      "rationale": "Current test replacement invalidates the missing-cause assertion premise.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-008"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The current suite reaches the cap-before-substitution branch and passes at 100% direct branch coverage."
+      },
+      "rationale": "The missing ordering input has been supplied.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-009"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "Non-string description and when_to_use narrowing branches are now exercised by the current owner."
+      },
+      "rationale": "The historical input omission is stale.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "Staging and backup directory discovery still normalizes random UUIDs through fragment/membership checks rather than an injected deterministic identifier and whole-value comparison."
+      },
+      "rationale": "Numeric coverage does not make the current weak inventory assertions discriminating.",
+      "destination": "Inject identifiers or compare a normalized whole inventory in Phase 3."
+    },
+    {
+      "id": "BSKL-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns filesystem-test ordering." }],
+      "testRefs": [
+        { "path": "tests/bridges/skills/stage.test.ts" },
+        { "path": "tests/bridges/skills/unstage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "Skills stage and unstage still compare readdir output without sorting at the cited inventory checks, unlike sibling bridge owners."
+      },
+      "rationale": "Filesystem enumeration order is not a portable contract.",
+      "destination": "Sort before comparison in Phase 3."
+    },
+    {
+      "id": "BSKL-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/skills/stage.test.ts" },
+        { "path": "tests/bridges/skills/rewrite-frontmatter.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "Current cases continue to pin YAML package message text on user-visible degradation and backstop paths."
+      },
+      "rationale": "Whether parser wording is contractual differs between the notification and internal backstop paths.",
+      "destination": "Decide which error text is product-owned before revising assertions."
+    },
+    {
+      "id": "BSKL-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/skills/frontmatter-degrade.test.ts" },
+        { "path": "tests/bridges/skills/rewrite-frontmatter.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test and tsconfig inspection",
+        "observed": "Five cases still replace String.prototype.split to fabricate sparse arrays that native split cannot return; the guarded branches remain compiler-forced under noUncheckedIndexedAccess."
+      },
+      "rationale": "Deleting artificial coverage versus accepting compiler-forced shortfall is an existing operator policy decision.",
+      "destination": "Resolve with the cross-cutting prototype-surgery dossier."
+    },
+    {
+      "id": "BSKL-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/skills/frontmatter-degrade.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current row inspection",
+        "observed": "No current firstBodyParagraph row distinguishes #hashtag prose or seven-hash text from an ATX heading."
+      },
+      "rationale": "The heading regex boundary remains undiscriminated.",
+      "destination": "Add the two literal rows in Phase 3."
+    },
+    {
+      "id": "BSKL-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-015"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/discover.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts",
+        "exitCode": 0,
+        "observed": "The current discovery owner passes with 100% branch/function/line coverage and now plants the symlinked-document path."
+      },
+      "rationale": "Phase 117 supplied the missing lstat-versus-stat discriminator.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/skills/discover.test.ts" },
+        { "path": "tests/bridges/skills/stage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion census",
+        "observed": "The returned arrays remain frozen in production, but discovery and staged-result owners still lack comprehensive Object.isFrozen assertions."
+      },
+      "rationale": "Readonly typing does not enforce the runtime promise.",
+      "destination": "Add direct freeze assertions in Phase 3."
+    },
+    {
+      "id": "BSKL-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-017"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/discover.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts",
+        "exitCode": 0,
+        "observed": "Both generated-name safety throw paths are now reached in the current branch-complete owner suite."
+      },
+      "rationale": "The historical unreachable-case premise is stale.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns a permission-based test fixture." }
+      ],
+      "testRefs": [{ "path": "tests/bridges/skills/discover.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture inspection",
+        "observed": "The opaque-directory row still relies on chmod 000 and has no root-user precondition or alternate proof."
+      },
+      "rationale": "Root execution can bypass permission denial and make the title misleading.",
+      "destination": "Replace with a deterministic boundary or document platform constraints."
+    },
+    {
+      "id": "BSKL-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns import style and test-double reachability." }
+      ],
+      "testRefs": [{ "path": "tests/bridges/skills/unstage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import census",
+        "observed": "The skills unstage owner remains the only suite in this concern reaching the fs/promises mock target through a default import while siblings use require-based access."
+      },
+      "rationale": "The isolated convention drift complicates consistent context-local mocking.",
+      "destination": "Align with the proven sibling form in Phase 3."
+    },
+    {
+      "id": "BSKL-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns type-only fixtures." }],
+      "testRefs": [{ "path": "tests/bridges/skills/types.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current type-test inspection",
+        "observed": "Repeated undefined! fixtures still bypass ScopedLocations and other branded inputs without one documented binding."
+      },
+      "rationale": "The current fixtures hide the reason for non-null assertions.",
+      "destination": "Use documented typed fixtures in Phase 3."
+    },
+    {
+      "id": "BSKL-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/types.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current export/type ownership inspection",
+        "observed": "DiscoverPluginSkillsResult remains exported without a satisfies owner in discover.test.ts or types.test.ts."
+      },
+      "rationale": "This is the sole skills bridge type without explicit ownership evidence.",
+      "destination": "Add type-contract ownership in Phase 3."
+    },
+    {
+      "id": "BSKL-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-022"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+        "exitCode": 0,
+        "observed": "The current suite covers finalizeSkillsReplacement's unknown-handle arm within 100% branch coverage."
+      },
+      "rationale": "The historical sibling-drift case gap was replaced.",
+      "destination": "Close as stale."
+    },
+    {
+      "id": "BSKL-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns contradictory production documentation." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source comparison",
+        "observed": "discover.ts still says withFileTypes follows the target while fs-utils.ts documents and uses the correct symlink entry behavior."
+      },
+      "rationale": "The false comment can prompt removal of a real guard.",
+      "destination": "Correct the comment in Phase 3."
+    },
+    {
+      "id": "BSKL-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns unreachable production code." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current predicate inspection",
+        "observed": "hasRegularSkillFile still conjoins isFile with !isSymbolicLink even though a Dirent/stat result cannot be both a regular file and symbolic link."
+      },
+      "rationale": "The second conjunct remains dead code.",
+      "destination": "Delete after retaining the lstat-based behavior."
+    },
+    {
+      "id": "BSKL-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/discover.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Discovery still uses localeCompare while promising deterministic order; results can differ with host locale."
+      },
+      "rationale": "Cross-machine order is production behavior and should use bytewise comparison.",
+      "destination": "Replace locale-sensitive ordering in Phase 2."
+    },
+    {
+      "id": "BSKL-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns dead production dataflow." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source dataflow inspection",
+        "observed": "The noop arm still spreads discoverWarnings even though discovery can return no skills with duplicate warnings only when at least one winning skill exists."
+      },
+      "rationale": "The warning spread remains provably empty and its comment overclaims behavior.",
+      "destination": "Simplify the noop result and comment in Phase 3."
+    },
+    {
+      "id": "BSKL-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/skills/rewrite-frontmatter.test.ts" },
+        { "path": "tests/bridges/skills/stage.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current error construction inspection",
+        "observed": "Three skills bridge failure sites still encode structured values only in plain Error messages."
+      },
+      "rationale": "Tests must pin composed text instead of error fields.",
+      "destination": "Introduce a coherent typed skills-error family in Phase 3."
+    },
+    {
+      "id": "BSKL-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns repeated test arrangement." }],
+      "testRefs": [
+        { "path": "tests/bridges/skills/stage.test.ts" },
+        { "path": "tests/bridges/skills/discover.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture census",
+        "observed": "ResolvedPluginInstallable literals remain repeatedly authored in stage tests while discover tests retain a suitable concern-local factory."
+      },
+      "rationale": "The duplication remains high-volume and obscures per-case differences.",
+      "destination": "Adopt a fresh-value seed function in Phase 3."
+    },
+    {
+      "id": "BSKL-029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/skills/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current dependency and assertion inspection",
+        "observed": "randomUUID remains imported inline for staging and backups, forcing nondeterministic inventory assertions."
+      },
+      "rationale": "The hidden dependency directly weakens two public filesystem-state assertions.",
+      "destination": "Inject an identifier source at the bridge boundary in Phase 3."
+    },
+    {
+      "id": "BSKL-030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns a style rule on production declarations." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current declaration inspection",
+        "observed": "SkillsReplacementInternals remains a Readonly object-literal type alias rather than an interface."
+      },
+      "rationale": "The mechanical local style deviation survives.",
+      "destination": "Convert alongside related skills cleanup."
+    },
+    {
+      "id": "BSKL-031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-skills.md#BSKL-031"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns JSDoc register across production modules." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "The historical per-file findings overstated a repository-wide documentation convention.",
+      "destination": "Close the six prescriptions as stale area findings; handle any house-style change separately."
+    }
   ]
 }

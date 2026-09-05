@@ -520,9 +520,7 @@
     },
     {
       "id": "ORRFP-F002",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F030",
@@ -547,9 +545,7 @@
     },
     {
       "id": "ORRFP-F003",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F027",
@@ -573,9 +569,7 @@
     },
     {
       "id": "ORRFP-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "ORR-F031",
@@ -605,9 +599,7 @@
     },
     {
       "id": "ORRFP-F005",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F021",
@@ -632,9 +624,7 @@
     },
     {
       "id": "ORRFP-F006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007"],
       "evidenceStatus": "duplicate",
       "route": "operator decision",
       "duplicateOf": "ORR-F022",
@@ -744,9 +734,7 @@
     },
     {
       "id": "ORRFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016"],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F026",
@@ -777,9 +765,7 @@
     },
     {
       "id": "ORRFP-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -806,9 +792,7 @@
     },
     {
       "id": "ORRFP-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -952,9 +936,7 @@
     },
     {
       "id": "PERFP-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006"],
       "evidenceStatus": "duplicate",
       "route": "deferred backlog",
       "duplicateOf": "PER-F031",
@@ -984,9 +966,7 @@
     },
     {
       "id": "PERFP-F005",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PER-F022",
@@ -1013,9 +993,7 @@
     },
     {
       "id": "PERFP-F006",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PER-F024",
@@ -1069,9 +1047,7 @@
     },
     {
       "id": "PERFP-F008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012"],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PER-F026",
@@ -1136,9 +1112,7 @@
     },
     {
       "id": "PERFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014"],
       "evidenceStatus": "duplicate",
       "route": "deferred backlog",
       "duplicateOf": "PER-F027",
@@ -1166,9 +1140,7 @@
     },
     {
       "id": "PERFP-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1199,9 +1171,7 @@
     },
     {
       "id": "PERFP-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1226,9 +1196,7 @@
     },
     {
       "id": "PLTFP-F001",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1338,9 +1306,7 @@
     },
     {
       "id": "PLTFP-F004",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005"],
       "evidenceStatus": "duplicate",
       "route": "deferred backlog",
       "duplicateOf": "PLT-F034",
@@ -1425,9 +1391,7 @@
     },
     {
       "id": "PLTFP-F007",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009"],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PLT-F023",
@@ -1452,9 +1416,7 @@
     },
     {
       "id": "PLTFP-F008",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F024",
@@ -1478,9 +1440,7 @@
     },
     {
       "id": "PLTFP-F009",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016"],
       "evidenceStatus": "duplicate",
       "route": "Phase 4",
       "duplicateOf": "PLT-F031",
@@ -1513,9 +1473,7 @@
     },
     {
       "id": "PLTFP-F010",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017"],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PLT-F025",
@@ -1539,9 +1497,7 @@
     },
     {
       "id": "PLTFP-F011",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018"],
       "evidenceStatus": "duplicate",
       "route": "operator decision",
       "duplicateOf": "PLT-F026",
@@ -1566,9 +1522,7 @@
     },
     {
       "id": "PLTFP-F012",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019"],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PLT-F027",
@@ -1593,9 +1547,7 @@
     },
     {
       "id": "PLTFP-F013",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F028",
@@ -1619,9 +1571,7 @@
     },
     {
       "id": "PLTFP-F014",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F029",
@@ -1645,9 +1595,7 @@
     },
     {
       "id": "PLTFP-F015",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022"],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F030",
@@ -1671,9 +1619,7 @@
     },
     {
       "id": "PLTFP-F016",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1709,9 +1655,7 @@
     },
     {
       "id": "PLTFP-F017",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024"],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
@@ -1748,9 +1692,7 @@
     },
     {
       "id": "PLTFP-F018",
-      "claimIds": [
-        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025"
-      ],
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025"],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
