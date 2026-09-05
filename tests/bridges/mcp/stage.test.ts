@@ -8,6 +8,7 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   finalizeMcpReplacement,
+  MalformedMcpServersError,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,
@@ -200,38 +201,55 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
-  test("treats an array server map as empty while preserving top-level fields", async (t) => {
+  test("rejects a null mcpServers field without changing the scoped document", async (t) => {
     // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-array-");
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-null-");
+    const storedBytes = '{"foreignTopLevel":"keep","mcpServers":null}\n';
     await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(locations.mcpJsonPath, '{"foreignTopLevel":"keep","mcpServers":[]}');
+    await writeFile(locations.mcpJsonPath, storedBytes, "utf8");
+    const storedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
 
-    // act
-    const prepared = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot: path.join(cwd, "plugins", "acme"),
-      pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
-    });
-
-    // assert
-    assert.strictEqual(prepared.kind, "staged");
-    if (prepared.kind !== "staged") {
-      return;
-    }
-
-    assert.deepStrictEqual(prepared._nextDoc, {
-      foreignTopLevel: "keep",
-      mcpServers: {
-        server: {
-          url: "https://mcp.example.test",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
-        },
+    // act & assert
+    await assert.rejects(
+      () =>
+        prepareStageMcpServers({
+          locations,
+          cwd,
+          marketplaceName: "catalog",
+          pluginName: "acme",
+          pluginRoot: path.join(cwd, "plugins", "acme"),
+          pluginData: path.join(cwd, "data", "acme"),
+          servers: { server: { url: "https://mcp.example.test" } },
+        }),
+      (error: unknown) => {
+        assert.strictEqual(error instanceof MalformedMcpServersError, true);
+        assert.deepStrictEqual(error, {
+          constructor: MalformedMcpServersError,
+          name: "MalformedMcpServersError",
+          message: `mcpServers at ${locations.mcpJsonPath} must be an object; received null.`,
+          mcpJsonPath: locations.mcpJsonPath,
+          valueKind: "null",
+        });
+        return true;
       },
-    });
+    );
+    const retainedBytes = await readFile(locations.mcpJsonPath, "utf8");
+    const retainedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
+    assert.strictEqual(retainedBytes, storedBytes);
+    assert.deepStrictEqual(
+      {
+        ino: retainedMetadata.ino,
+        size: retainedMetadata.size,
+        mtimeNs: retainedMetadata.mtimeNs,
+        ctimeNs: retainedMetadata.ctimeNs,
+      },
+      {
+        ino: storedMetadata.ino,
+        size: storedMetadata.size,
+        mtimeNs: storedMetadata.mtimeNs,
+        ctimeNs: storedMetadata.ctimeNs,
+      },
+    );
   });
 
   test("normalizes malformed server values with complete ordered warnings", async (t) => {
