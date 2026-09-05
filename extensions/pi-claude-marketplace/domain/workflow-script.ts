@@ -701,38 +701,70 @@ function literalString(node: Property["value"]): string | undefined {
   return undefined;
 }
 
+/**
+ * Render untrusted plugin text safely inside a one-line notification.
+ *
+ * Three things reach a `reason` from third-party content: the file NAME, the
+ * blocklist text that MATCHED, and the detail of a name refusal, which quotes
+ * the declared `meta.name` back. Each carries a distinct hazard. A POSIX file
+ * name may contain a newline, so a plugin can forge what looks like an extra
+ * output line inside a refusal block. `\s` in the vendored blocklist matches a
+ * newline too, so `matched` can be long multi-line text. And a `meta.name` may
+ * carry U+202E RIGHT-TO-LEFT OVERRIDE, which visually reverses the remainder of
+ * the line and which `assertSafeName` does not screen -- it stops at 0x7F -- yet
+ * which reaches the message precisely BECAUSE the name was rejected.
+ *
+ * `shared/notify.ts` renders what it is handed without inspecting it, so the
+ * escaping belongs where the untrusted text enters the string.
+ *
+ * `\p{Cc}` and `\p{Cf}` are the two classes that carry all of this: every ASCII
+ * control including newline, and every Unicode format character including the
+ * bidi overrides and the zero-width spaces. They are the same two classes the
+ * engine's own `isSafeSavedWorkflowName` screens a saved name for. The output
+ * spelling is `\u{...}`, so a reader sees what the text actually holds.
+ *
+ * `Number` folds `codePointAt`'s out-of-range `undefined` -- impossible for a
+ * matched character -- without adding a branch no input can take.
+ */
+function forMessage(text: string): string {
+  return text.replaceAll(
+    /[\p{Cc}\p{Cf}]/gu,
+    (character) => `\\u{${Number(character.codePointAt(0)).toString(16)}}`,
+  );
+}
+
 function unparseableReason(fileName: string): string {
-  return `${fileName} is not parseable JavaScript, so no name can be read from it`;
+  return `${forMessage(fileName)} is not parseable JavaScript, so no name can be read from it`;
 }
 
 function noMetaReason(fileName: string): string {
-  return `${fileName} declares no \`meta\`, so there is nothing to install`;
+  return `${forMessage(fileName)} declares no \`meta\`, so there is nothing to install`;
 }
 
 function metaNotObjectLiteralReason(fileName: string): string {
-  return `${fileName} declares \`meta\` as something other than an object literal, so its name cannot be read without running the script`;
+  return `${forMessage(fileName)} declares \`meta\` as something other than an object literal, so its name cannot be read without running the script`;
 }
 
 function metaSpreadReason(fileName: string): string {
-  return `${fileName} declares \`meta\` with a spread that can supply or overwrite its \`name\`, so the name cannot be read without running the script`;
+  return `${forMessage(fileName)} declares \`meta\` with a spread that can supply or overwrite its \`name\`, so the name cannot be read without running the script`;
 }
 
 function unsafeNameReason(fileName: string, message: string): string {
-  return `${fileName} resolves to an unusable command name: ${message}`;
+  return `${forMessage(fileName)} resolves to an unusable command name: ${forMessage(message)}`;
 }
 
 function determinismCodeReason(fileName: string, matched: string): string {
-  return `${fileName} calls \`${matched}\`, which the workflow engine refuses as nondeterministic`;
+  return `${forMessage(fileName)} calls \`${forMessage(matched)}\`, which the workflow engine refuses as nondeterministic`;
 }
 
 function determinismCommentReason(fileName: string, matched: string): string {
-  return `${fileName} mentions \`${matched}\` in a comment; the engine screens raw text and refuses the script anyway, so reword the comment to make it load`;
+  return `${forMessage(fileName)} mentions \`${forMessage(matched)}\` in a comment; the engine screens raw text and refuses the script anyway, so reword the comment to make it load`;
 }
 
 function determinismStringReason(fileName: string, matched: string): string {
-  return `${fileName} mentions \`${matched}\` inside a string, template or regular-expression literal; the engine screens raw text and refuses the script anyway`;
+  return `${forMessage(fileName)} mentions \`${forMessage(matched)}\` inside a string, template or regular-expression literal; the engine screens raw text and refuses the script anyway`;
 }
 
 function determinismSplitReason(fileName: string, matched: string): string {
-  return `${fileName} matches \`${matched}\` across the boundary between quoted-or-commented text and code, so nothing is invoked; the engine screens raw text and refuses the script anyway, so the matching text must change to make it load`;
+  return `${forMessage(fileName)} matches \`${forMessage(matched)}\` across the boundary between quoted-or-commented text and code, so nothing is invoked; the engine screens raw text and refuses the script anyway, so the matching text must change to make it load`;
 }

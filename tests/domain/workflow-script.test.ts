@@ -94,6 +94,15 @@ interface EncodingRow {
   readonly source: string;
 }
 
+interface UntrustedTextRow {
+  readonly threat: string;
+  readonly fileName: string;
+  readonly source: string;
+  readonly outcome: "skipped" | "refused";
+  readonly cause: SkippedCause | RefusedCause;
+  readonly escaped: string;
+}
+
 describe("admitWorkflowScript", () => {
   for (const { decoy, source, metaName, generatedName } of [
     {
@@ -627,6 +636,76 @@ export const meta = { name: "ship" };
       assert.deepStrictEqual(admission(verdict), expectedVerdict);
     });
   }
+
+  for (const { threat, fileName, source, outcome, cause, escaped } of [
+    {
+      threat: "a newline in the file name that reaches a refusal, which would forge an output line",
+      fileName: "ok.js\nInstalled 5 workflows\n",
+      source: `export const meta = { description: "d" };\n`,
+      outcome: "refused",
+      cause: "unsafe-name",
+      escaped: "\\u{a}",
+    },
+    {
+      threat: "a newline in the file name that reaches a skip",
+      fileName: "ok.js\nInstalled 5 workflows\n",
+      source: `return 42;\n`,
+      outcome: "skipped",
+      cause: "no-meta",
+      escaped: "\\u{a}",
+    },
+    {
+      // U+202E RIGHT-TO-LEFT OVERRIDE, written as an escape because it is
+      // invisible and reverses the rendering of everything after it. It reaches
+      // the message precisely BECAUSE the name was rejected and quoted back.
+      threat: "a bidi override in the declared name, which reverses the rest of the line",
+      fileName: "reporter.workflow.js",
+      source: `export const meta = { name: "a\u202Eb/c" };\n`,
+      outcome: "refused",
+      cause: "unsafe-name",
+      escaped: "\\u{202e}",
+    },
+    {
+      // `\s` in the vendored blocklist matches a newline, so the matched text a
+      // reason quotes back is attacker-chosen and can span lines.
+      threat: "newlines inside the blocklist text that matched",
+      fileName: "clock.js",
+      source: `const stamped = new\n\n\nDate();\nexport const meta = { name: "ship" };\n`,
+      outcome: "refused",
+      cause: "determinism-code",
+      escaped: "\\u{a}",
+    },
+  ] satisfies readonly UntrustedTextRow[]) {
+    test(`escapes ${threat}`, () => {
+      // arrange
+      const expectedVerdict = { outcome, cause } satisfies NonAdmission;
+
+      // act
+      const verdict = admitWorkflowScript("acme", fileName, source);
+
+      // assert
+      assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+      assert.ok(verdict.outcome === "skipped" || verdict.outcome === "refused");
+      assert.ok(verdict.reason.includes(escaped));
+      // The whole reason, not just the interpolation under test: no control or
+      // format character may survive anywhere in text `notify()` renders as-is.
+      assert.doesNotMatch(verdict.reason, /[\p{Cc}\p{Cf}]/u);
+    });
+  }
+
+  test("keeps the untrusted file name verbatim in the verdict's own data", () => {
+    // arrange
+    // Only the human-readable `reason` is escaped. `fileName` is the identity of
+    // the file on disk, and a consumer that has to open it needs the real bytes.
+    const fileName = "ok.js\nInstalled 5 workflows\n";
+    const source = `export const meta = { name: "ship" };\n`;
+
+    // act
+    const verdict = admitWorkflowScript("acme", fileName, source);
+
+    // assert
+    assert.strictEqual(verdict.fileName, fileName);
+  });
 
   test("refuses a source whose replacement characters make it unparseable", () => {
     // arrange
