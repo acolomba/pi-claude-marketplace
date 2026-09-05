@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 109
-current_phase_name: kind-inversion
-current_plan: 05
-status: in_progress
-stopped_at: Completed 109-05-PLAN.md
-last_updated: "2026-09-05T00:20:00.000Z"
+current_phase: 110
+current_phase_name: Domain and platform modules
+current_plan: Not started
+status: planning
+stopped_at: Phase 109 complete, ready to plan Phase 110
+last_updated: "2026-09-05T02:14:05.944Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 109 Plan 05 executed — the install-level window test pins both halves, the WINV-05 sweep is confirmed a no-op, and the whole npm run check chain is green
-state_head: e5ae373f
+last_activity_desc: Phase 109 complete, transitioned to Phase 110
+state_head: 304f4dfe2cfb615510fd85a4021657846f862f73
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
   completed_plans: 5
-  percent: 0
+  percent: 11
 ---
 
 # Project State
@@ -35,9 +35,10 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 109 (kind-inversion) — ALL PLANS EXECUTED, awaiting verification
-Plan: 5/5 complete (109-01 through 109-05 done)
-Status: The inversion is live in production code, the whole test tree agrees with
+Phase: 110 — Domain and platform modules
+Plan: none yet — Phase 110 is not planned
+Status: Ready to plan. Phase 109 is complete and verified 12/12. The inversion is
+live in production code, the whole test tree agrees with
 it, the published contract states the post-inversion meaning, and both halves of
 the intermediate window are pinned by an assertion. `workflows` sits in both
 supported tuples and in neither unsupported structure,
@@ -47,11 +48,12 @@ drives a real `installPlugin` and asserts the clean `(installed)` row with no
 `--partial`, then asserts `<HOME>/.pi/workflows` does not exist. The whole
 `npm run check` chain is green: typecheck **0** errors, all three fallow
 sub-gates, Prettier, both corresponding-test gates, the direct-coverage negative
-gate, `npm test` at **5195 pass / 0 fail**, `npm run test:integration` at
+gate, `npm test` at **5197 pass / 0 fail**, `npm run test:integration` at
 **32 pass / 0 fail**, and ESLint exit 0. `pre-commit run --all-files` passes with
-no file left modified. Next is `/gsd-verify-work 109`.
-Last activity: 2026-09-05 — 109-05 executed; one test commit plus the metadata
-commit, and the phase taken through the full gate chain
+no file left modified. The verifier re-ran the whole chain independently and
+scored the phase 12/12.
+Last activity: 2026-09-04 — Phase 109 verified 12/12 and marked complete; the
+next step is `/gsd-plan-phase 110`
 
 **The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
 workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
@@ -85,16 +87,16 @@ that way permanently.
 
 ## Progress
 
-**Phases Complete:** 0/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 109-05 (5 of 5 complete; phase awaiting verification)
+**Phases Complete:** 1/9 (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started
 
 ```text
-[----------] 0%
+[=---------] 11%
 ```
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 109 | Kind inversion | Executed (5/5 plans), awaiting verification |
+| 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | Not started |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
@@ -198,21 +200,21 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T00:20:00.000Z
+**Last session:** 2026-09-05T02:14:05.944Z
 
-**Stopped At:** Completed 109-05-PLAN.md
+**Stopped At:** Phase 109 complete, ready to plan Phase 110
 **Resume File:** None
-**Next Action:** `/gsd-verify-work 109`. All five plans of Phase 109 are
-executed and the whole `npm run check` chain is green, so the phase is ready for
-verification. Two of the phase's obligations are manual-only and their answers
-are already recorded in `109-05-SUMMARY.md` §*Human-check answers* — the
-Success-Criterion-4 observation sequence and the WINV-05 prose read. After
-verification, plan Phase 110 with `/gsd-plan-phase 110`.
+**Next Action:** `/gsd-plan-phase 110`. Phase 109 is verified 12/12 and marked
+complete in ROADMAP.md; `109-VERIFICATION.md` carries the evidence. The phase's
+two manual-only obligations were answered in `109-05-SUMMARY.md` §*Human-check
+answers* — the Success-Criterion-4 observation sequence and the WINV-05 prose
+read — and the verifier confirmed both against the tree.
 
-**One gate note for the verifier:** `roadmap.update-plan-progress 109` wrote
-`5/5` but left the phase row `In Progress`, which is the tool's own behavior
-while phase verification has not run. It flips to `Complete` at verification;
-do not hand-edit the row.
+**Two obligations ride into Phase 111, and both now live in ROADMAP.md**
+§Phase 111 Success Criteria items 7-8 rather than only in phase-109 artifacts:
+bump `EXTENSION_VERSION` in the same change that lands `bridges/workflows/`, and
+invert the D-109-06 ENOENT assertion in
+`tests/integration/workflow-kind-inversion.test.ts`.
 
 **Where the work lives:** the worktree
 `/home/acolomba/pi-claude-marketplace-workflows` on branch `features/workflow`.
