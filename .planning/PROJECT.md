@@ -227,7 +227,13 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** nothing. v1.19 closed 2026-09-04; the next milestone is not yet defined.
+**In progress:** workstream `workflows`, milestone `workflows-replay` (Workflow Bridge Replay
+onto main, branch `features/workflow`). Phases 109-114 re-land the bridge that shipped on the
+never-merged `features/workflows-spike`; 115-117 harden it. Phase 109 of 9 is complete and
+verified 12/12: `workflows` has moved out of the unsupported kinds into both supported tuples,
+and the `{workflows}` reason is retired. Nothing is released from this branch -- `EXTENSION_VERSION`
+stays at 0.18.1 until Phase 111 lands the bridge (A-03), so a workflow-bearing plugin currently
+installs clean and materializes nothing. v1.19 closed 2026-09-04.
 
 **Just shipped:** v1.19 Unit Test Refactor (2026-09-04, Phases 108-117, 220 plans, 317 tasks;
 archived to `.planning/milestones/v1.19-*`). All 204 production modules now have exactly one

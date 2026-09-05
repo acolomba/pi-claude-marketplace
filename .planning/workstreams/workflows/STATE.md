@@ -138,8 +138,12 @@ What is on this branch right now, so a later session does not read the archived
 - **Production code:** none of it. No `bridges/workflows/`, no
   `domain/workflow-*.ts`, no `platform/workflow-home.ts`, no `acorn`
   dependency.
-- **Behavior today:** a workflow-bearing plugin resolves `partially-available`
-  and reports `{workflows}`, per #154. That is the state Phase 109 inverts.
+- **Behavior today:** Phase 109 inverted it. A workflow-bearing plugin now
+  resolves `installable`, installs with no `--partial`, and renders a clean
+  `● (installed)` row — and materializes nothing, because no bridge exists yet.
+  The `{workflows}` reason is retired from all four declaration sites. The
+  released 0.18.1 still behaves the #154 way; that difference is the D-109-06
+  window, and it is pinned by test rather than left undocumented.
 
 ## Accumulated Context
 
@@ -301,9 +305,12 @@ _Recorded per phase as the milestone proceeds._
 
 ## Operator Next Steps
 
-- Plan the first phase with `/gsd-plan-phase 106`
-- Phases 106, 107 and 108 are mutually independent; the order above is
-  execution order, not a dependency chain
+- Plan the next phase with `/gsd-plan-phase 110`
+- Phase 109 is complete and verified 12/12; 110-114 run in order, each
+  depending on the one before it
+- The hardening phases 115, 116 and 117 are mutually independent; the order
+  above is execution order, not a dependency chain (they were renumbered from
+  the spike branch's 106-108)
 - Phase 117's canary run needs a disposable scratch install of
   `@quintinshaw/pi-dynamic-workflows` — it can be primed at any point in the
   milestone
