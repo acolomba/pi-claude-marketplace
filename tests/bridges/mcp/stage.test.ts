@@ -201,69 +201,77 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
-  test("rejects a null mcpServers field without changing the scoped document", async (t) => {
-    // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-null-");
-    const storedBytes = '{"foreignTopLevel":"keep","mcpServers":null}\n';
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(locations.mcpJsonPath, storedBytes, "utf8");
-    const storedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
+  for (const { description, storedValue, valueKind } of [
+    { description: "a null", storedValue: "null", valueKind: "null" },
+    { description: "a string", storedValue: '"foreign"', valueKind: "string" },
+    { description: "an array", storedValue: '[{"command":"foreign"}]', valueKind: "array" },
+    { description: "a boolean", storedValue: "true", valueKind: "boolean" },
+    { description: "a number", storedValue: "17", valueKind: "number" },
+  ]) {
+    test(`rejects ${description} mcpServers field without changing the scoped document`, async (t) => {
+      // arrange
+      const { cwd, locations } = await createProjectScope(t, "mcp-stage-malformed-field-");
+      const storedBytes = `{"foreignTopLevel":"keep","mcpServers":${storedValue}}\n`;
+      await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+      await writeFile(locations.mcpJsonPath, storedBytes, "utf8");
+      const storedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
 
-    // act & assert
-    await assert.rejects(
-      () =>
-        prepareStageMcpServers({
-          locations,
-          cwd,
-          marketplaceName: "catalog",
-          pluginName: "acme",
-          pluginRoot: path.join(cwd, "plugins", "acme"),
-          pluginData: path.join(cwd, "data", "acme"),
-          servers: { server: { url: "https://mcp.example.test" } },
-        }),
-      (error: unknown) => {
-        assert.strictEqual(error instanceof MalformedMcpServersError, true);
-        if (!(error instanceof MalformedMcpServersError)) {
-          return false;
-        }
+      // act & assert
+      await assert.rejects(
+        () =>
+          prepareStageMcpServers({
+            locations,
+            cwd,
+            marketplaceName: "catalog",
+            pluginName: "acme",
+            pluginRoot: path.join(cwd, "plugins", "acme"),
+            pluginData: path.join(cwd, "data", "acme"),
+            servers: { server: { url: "https://mcp.example.test" } },
+          }),
+        (error: unknown) => {
+          assert.strictEqual(error instanceof MalformedMcpServersError, true);
+          if (!(error instanceof MalformedMcpServersError)) {
+            return false;
+          }
 
-        assert.deepStrictEqual(
-          {
-            constructor: error.constructor,
-            name: error.name,
-            message: error.message,
-            mcpJsonPath: error.mcpJsonPath,
-            valueKind: error.valueKind,
-          },
-          {
-            constructor: MalformedMcpServersError,
-            name: "MalformedMcpServersError",
-            message: `mcpServers at ${locations.mcpJsonPath} must be an object; received null.`,
-            mcpJsonPath: locations.mcpJsonPath,
-            valueKind: "null",
-          },
-        );
-        return true;
-      },
-    );
-    const retainedBytes = await readFile(locations.mcpJsonPath, "utf8");
-    const retainedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
-    assert.strictEqual(retainedBytes, storedBytes);
-    assert.deepStrictEqual(
-      {
-        ino: retainedMetadata.ino,
-        size: retainedMetadata.size,
-        mtimeNs: retainedMetadata.mtimeNs,
-        ctimeNs: retainedMetadata.ctimeNs,
-      },
-      {
-        ino: storedMetadata.ino,
-        size: storedMetadata.size,
-        mtimeNs: storedMetadata.mtimeNs,
-        ctimeNs: storedMetadata.ctimeNs,
-      },
-    );
-  });
+          assert.deepStrictEqual(
+            {
+              constructor: error.constructor,
+              name: error.name,
+              message: error.message,
+              mcpJsonPath: error.mcpJsonPath,
+              valueKind: error.valueKind,
+            },
+            {
+              constructor: MalformedMcpServersError,
+              name: "MalformedMcpServersError",
+              message: `mcpServers at ${locations.mcpJsonPath} must be an object; received ${valueKind}.`,
+              mcpJsonPath: locations.mcpJsonPath,
+              valueKind,
+            },
+          );
+          return true;
+        },
+      );
+      const retainedBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const retainedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
+      assert.strictEqual(retainedBytes, storedBytes);
+      assert.deepStrictEqual(
+        {
+          ino: retainedMetadata.ino,
+          size: retainedMetadata.size,
+          mtimeNs: retainedMetadata.mtimeNs,
+          ctimeNs: retainedMetadata.ctimeNs,
+        },
+        {
+          ino: storedMetadata.ino,
+          size: storedMetadata.size,
+          mtimeNs: storedMetadata.mtimeNs,
+          ctimeNs: storedMetadata.ctimeNs,
+        },
+      );
+    });
+  }
 
   test("normalizes malformed server values with complete ordered warnings", async (t) => {
     // arrange
