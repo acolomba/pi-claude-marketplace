@@ -122,7 +122,7 @@ Plans:
 - [x] 01-35-PLAN.md — Individually revalidate corpus paths 059-060 into one bounded exclusive shard
 - [x] 01-36-PLAN.md — Individually revalidate corpus path 061 into one bounded exclusive shard
 - [x] 01-37-PLAN.md — Individually revalidate corpus paths 062-063 into one bounded exclusive shard
-- [ ] 01-38-PLAN.md — Individually revalidate corpus paths 064-065 into one bounded exclusive shard
+- [x] 01-38-PLAN.md — Individually revalidate corpus paths 064-065 into one bounded exclusive shard
 - [ ] 01-39-PLAN.md — Individually revalidate corpus path 066 into one bounded exclusive shard
 - [ ] 01-40-PLAN.md — Individually revalidate corpus paths 067-069 into one bounded exclusive shard
 - [ ] 01-41-PLAN.md — Individually revalidate corpus paths 070-072 into one bounded exclusive shard
@@ -350,7 +350,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 37/69 | In Progress|  |
+| 1. Live Evidence Revalidation | 38/69 | In Progress|  |
 | 2. Containment and Input Safety | 0/0 | Not started | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
