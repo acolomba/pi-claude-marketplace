@@ -26,6 +26,7 @@ import {
   StaleSourceCloneError,
   StateLockHeldError,
   UnsupportedSourceError,
+  UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
@@ -1521,6 +1522,26 @@ describe("AggregateResourcesDiscoverError", () => {
     ]);
     assert.strictEqual(Object.isFrozen(error.failures), true);
     assert.notStrictEqual(error.failures, failures);
+  });
+});
+
+describe("UnsafeGeneratedNameError", () => {
+  test("carries the attempted join as data and the detail as its message", () => {
+    // arrange
+    const attemptedName = "acme:my name";
+    const detail =
+      'Generated workflow name "acme:my name" must not contain whitespace, path separators, or NUL.';
+
+    // act
+    const error = new UnsafeGeneratedNameError(attemptedName, detail);
+
+    // assert
+    assert.ok(error instanceof UnsafeGeneratedNameError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, attemptedName: error.attemptedName },
+      { name: "UnsafeGeneratedNameError", message: detail, attemptedName },
+    );
   });
 });
 

@@ -8,6 +8,7 @@ import {
   generatedSkillName,
   generatedWorkflowName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
+import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 describe("assertSafeName", () => {
   for (const name of ["a", "Foo.Bar_Baz-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
@@ -468,7 +469,28 @@ describe("generatedWorkflowName", () => {
     // arrange
     const plugin = "acme";
     const source = "x".repeat(124);
-    const errorMessage = `Generated workflow name "acme:${"x".repeat(124)}" must be at most 128 characters (got 129).`;
+    const attemptedName = `acme:${"x".repeat(124)}`;
+    const errorMessage = `Generated workflow name "${attemptedName}" must be at most 128 characters (got 129).`;
+
+    // act
+    const generateWorkflowName = () => generatedWorkflowName(plugin, source);
+
+    // assert
+    assert.throws(generateWorkflowName, (error: unknown) => {
+      assert.ok(error instanceof UnsafeGeneratedNameError);
+      assert.strictEqual(error.message, errorMessage);
+      assert.strictEqual(error.attemptedName, attemptedName);
+      return true;
+    });
+  });
+
+  test("throws a bare Error for an unsafe PLUGIN name, which no one file causes", () => {
+    // arrange
+    // The plugin check sits outside the typed-error conversion on purpose: it
+    // disqualifies every script in the plugin at once, so `workflow-script.ts`
+    // must let it escape rather than refuse one arbitrary file for it.
+    const plugin = "ac/me";
+    const source = "audit";
 
     // act
     const generateWorkflowName = () => generatedWorkflowName(plugin, source);
@@ -477,17 +499,13 @@ describe("generatedWorkflowName", () => {
     assert.throws(generateWorkflowName, (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.strictEqual(error.constructor, Error);
-      assert.strictEqual(error.message, errorMessage);
+      assert.ok(!(error instanceof UnsafeGeneratedNameError));
+      assert.strictEqual(error.message, 'Name "ac/me" must not contain path separators.');
       return true;
     });
   });
 
   for (const { pluginName, sourceName, errorMessage } of [
-    {
-      pluginName: "ac/me",
-      sourceName: "audit",
-      errorMessage: 'Name "ac/me" must not contain path separators.',
-    },
     {
       pluginName: "acme",
       sourceName: "",
@@ -545,8 +563,8 @@ describe("generatedWorkflowName", () => {
 
       // assert
       assert.throws(generateWorkflowName, (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.strictEqual(error.constructor, Error);
+        assert.ok(error instanceof UnsafeGeneratedNameError);
+        assert.strictEqual(error.name, "UnsafeGeneratedNameError");
         assert.strictEqual(error.message, errorMessage);
         return true;
       });

@@ -614,6 +614,30 @@ export class AggregateResourcesDiscoverError extends Error {
   }
 }
 
+/**
+ * WNAM-06: `generatedWorkflowName` could not produce a usable command name from
+ * the plugin name and the name the script supplies.
+ *
+ * A typed class rather than the bare `Error` the RN-2 validators throw, because
+ * `domain/workflow-script.ts` converts exactly this failure into a per-file
+ * `refused` verdict and must let every other throwable through. An unqualified
+ * `catch` there would report a `TypeError` from our own defect to the user as an
+ * accusation against the plugin, and nothing would surface the defect. Narrowing
+ * on `instanceof` is also the error contract every other domain failure follows,
+ * which a bare `Error` forces callers to break by matching on message text.
+ *
+ * `attemptedName` is the join that failed, carried as data so a consumer never
+ * recovers it by parsing `message`.
+ */
+export class UnsafeGeneratedNameError extends Error {
+  readonly attemptedName: string;
+  constructor(attemptedName: string, detail: string) {
+    super(detail);
+    this.name = "UnsafeGeneratedNameError";
+    this.attemptedName = attemptedName;
+  }
+}
+
 /** One generated workflow command name claimed by more than one source script. */
 export interface WorkflowNameCollision {
   readonly generatedName: string;

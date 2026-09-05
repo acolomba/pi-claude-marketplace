@@ -5,6 +5,8 @@
 // functions (one shared helper that handled all three was a recurring bug
 // surface).
 
+import { errorMessage, UnsafeGeneratedNameError } from "../shared/errors.ts";
+
 /**
  * RN-2: validate that a name is safe to use as a path basename / generated
  * resource name. Throws Error with descriptive message on failure.
@@ -166,18 +168,41 @@ export function generatedAgentName(plugin: string, source: string): string {
  * Workflow discovery is flat and non-recursive (WBRG-02), so this takes the
  * single-segment shape of `generatedSkillName` rather than
  * `generatedCommandName`'s `/`-separated path handling. Sharing a helper with
- * the command generator would mean pulling its nested-path and empty-head rules
- * into a caller that can never produce either shape.
+ * the command generator would mean pulling its nested-path handling into a
+ * caller that can never produce that shape.
+ *
+ * Every failure of the NAME leaves as `UnsafeGeneratedNameError`, never as the
+ * bare `Error` the RN-2 validators throw. `domain/workflow-script.ts` turns
+ * exactly this failure into one file's `refused` verdict, and the typed class is
+ * what lets it -- and this module's own tests -- discriminate by `instanceof`
+ * instead of by an exact message string, which is the error contract every other
+ * domain failure follows.
+ *
+ * The `plugin` check stays OUTSIDE that conversion and keeps its bare `Error`:
+ * an unsafe plugin name disqualifies every script in the plugin at once, so it
+ * is not one file's fault and must never be rendered as one file's refusal.
  */
 export function generatedWorkflowName(plugin: string, source: string): string {
   assertSafeName(plugin);
-  assertSafeName(source);
+
   const prefix = `${plugin}-`;
   const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
-  assertSafeName(elided);
   const generated = `${plugin}:${elided}`;
-  assertSafeName(generated);
+
+  // The conversion wraps the three RN-2 calls and nothing else, so what it can
+  // relabel is bounded by one pure string validator. The engine-parity gate
+  // below raises the typed class itself rather than being round-tripped
+  // through this catch.
+  try {
+    assertSafeName(source);
+    assertSafeName(elided);
+    assertSafeName(generated);
+  } catch (error) {
+    throw new UnsafeGeneratedNameError(generated, errorMessage(error));
+  }
+
   assertSafeSavedWorkflowName(generated);
+
   return generated;
 }
 
@@ -209,25 +234,29 @@ export function generatedWorkflowName(plugin: string, source: string): string {
  */
 function assertSafeSavedWorkflowName(name: string): void {
   if (name.length > 128) {
-    throw new Error(
+    throw new UnsafeGeneratedNameError(
+      name,
       `Generated workflow name "${name}" must be at most 128 characters (got ${name.length}).`,
     );
   }
 
   if (name.trim() !== name) {
-    throw new Error(
+    throw new UnsafeGeneratedNameError(
+      name,
       `Generated workflow name "${name}" must not have leading or trailing whitespace.`,
     );
   }
 
   if (/[\s/\\\0]/u.test(name)) {
-    throw new Error(
+    throw new UnsafeGeneratedNameError(
+      name,
       `Generated workflow name "${name}" must not contain whitespace, path separators, or NUL.`,
     );
   }
 
   if (/[\p{Cc}\p{Cf}]/u.test(name)) {
-    throw new Error(
+    throw new UnsafeGeneratedNameError(
+      name,
       `Generated workflow name "${name}" must not contain control or format characters.`,
     );
   }
