@@ -6,7 +6,7 @@
 - Claims: 2897
 - Findings: 2437
 - Decisions: 9
-- Scope changes: 0
+- Scope changes: 40
 
 ## Files
 
@@ -2575,4 +2575,43 @@
 
 ## Scope Changes
 
-_None._
+- `SCOPE-REQ-AUTH-01` — AUTH-01: narrow/split
+- `SCOPE-REQ-CLOSE-01` — CLOSE-01: keep
+- `SCOPE-REQ-CLOSE-02` — CLOSE-02: narrow/split
+- `SCOPE-REQ-GGAT-01` — GGAT-01: narrow/split
+- `SCOPE-REQ-GGAT-02` — GGAT-02: move-to-evidence
+- `SCOPE-REQ-GGAT-03` — GGAT-03: narrow/split
+- `SCOPE-REQ-GGAT-04` — GGAT-04: narrow/split
+- `SCOPE-REQ-PDEF-01` — PDEF-01: narrow/split
+- `SCOPE-REQ-PDEF-02` — PDEF-02: narrow/split
+- `SCOPE-REQ-PDEF-03` — PDEF-03: keep
+- `SCOPE-REQ-PDEF-04` — PDEF-04: narrow/split
+- `SCOPE-REQ-PDEF-05` — PDEF-05: narrow/split
+- `SCOPE-REQ-PDEF-06` — PDEF-06: narrow/split
+- `SCOPE-REQ-PDEF-07` — PDEF-07: narrow/split
+- `SCOPE-REQ-PDEF-08` — PDEF-08: narrow/split
+- `SCOPE-REQ-RCOV-01` — RCOV-01: narrow/split
+- `SCOPE-REQ-RCOV-02` — RCOV-02: narrow/split
+- `SCOPE-REQ-RCOV-03` — RCOV-03: keep
+- `SCOPE-REQ-RCOV-04` — RCOV-04: move-to-evidence
+- `SCOPE-REQ-RVAL-01` — RVAL-01: keep
+- `SCOPE-REQ-RVAL-02` — RVAL-02: keep
+- `SCOPE-REQ-RVAL-03` — RVAL-03: keep
+- `SCOPE-REQ-RVAL-04` — RVAL-04: keep
+- `SCOPE-REQ-TREF-01` — TREF-01: narrow/split
+- `SCOPE-REQ-TREF-02` — TREF-02: narrow/split
+- `SCOPE-REQ-TREF-03` — TREF-03: narrow/split
+- `SCOPE-REQ-TREF-04` — TREF-04: narrow/split
+- `SCOPE-REQ-TREF-05` — TREF-05: narrow/split
+- `SCOPE-REQ-TREF-06` — TREF-06: narrow/split
+- `SCOPE-REQ-TREF-07` — TREF-07: narrow/split
+- `SCOPE-REQ-TREF-08` — TREF-08: narrow/split
+- `SCOPE-REQ-TREF-09` — TREF-09: narrow/split
+- `SCOPE-ROUTE-PHASE-02` — PHASE-02: narrow/split
+- `SCOPE-ROUTE-PHASE-03` — PHASE-03: narrow/split
+- `SCOPE-ROUTE-PHASE-04` — PHASE-04: narrow/split
+- `SCOPE-ROUTE-PHASE-05` — PHASE-05: narrow/split
+- `SCOPE-ROUTE-PHASE-06` — PHASE-06: narrow/split
+- `SCOPE-ROUTE-PHASE-07` — PHASE-07: narrow/split
+- `SCOPE-ROUTE-PHASE-08` — PHASE-08: narrow/split
+- `SCOPE-ROUTE-PHASE-09` — PHASE-09: narrow/split

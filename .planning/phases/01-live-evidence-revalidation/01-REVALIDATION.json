@@ -90803,5 +90803,600 @@
       "downstreamConsequences": "Carry ORR-F028 forward with TXA-F022 rather than wiring a duplicate Phase 2 fix. Phase 7 GGAT-01 must give changed-pair discovery and CI base selection explicit target-visitation evidence plus synthetic-offender, benign-control, and zero-selection cases. Phase 8 RCOV-01 must regenerate the complete 204-pair baseline from the milestone branch, and RCOV-02 must first complete the selected honest rewrites and current-evidence reclassification of all seven carried shortfalls. Phase 8 RCOV-03 must then add a source/test-scoped local pre-commit hook and a separate dedicated CI job that both invoke the same changed-pair gate; do not bury the slow positive gate inside npm run check. CI must fetch or otherwise resolve the pull-request base deterministically, enumerate the expected changed source-test pairs, report the selected pair count, and fail closed when the base cannot be resolved or when relevant changed paths produce zero selected pairs. Preserve strict hit-equals-found enforcement with no accepted-shortfall allowlist, ledger-keyed pass, coverage ignore pragma, blanket exclusion, or other flattering suppression. A retained-shortfall pair touched by a change must continue to fail until its production shape is honestly corrected or the operator explicitly revisits its policy. Keep the full all-pair report as complete milestone evidence and state its refused rows honestly; do not describe the strict all-pair command as green while retained shortfalls remain, and do not convert the non-gating report into a false pass. Coverage remains reachability evidence only: current surviving-mutation findings, exact public-result and state assertions, byte-for-byte output proofs, ordering checks, and other assertion-strength requirements remain independently required. Preserve MF-005 and AUDIT-005 under their broader independent routes, MF-009 as umbrella provenance, and AUDIT-010 as stale evidence-only closure. Phase 9 CLOSE-01 must verify the selected local and CI controls, their negative and visitation controls, the regenerated baseline, honest all-pair reporting, and the complete project quality suite."
     }
   ],
-  "scopeChanges": []
+  "scopeChanges": [
+    {
+      "id": "SCOPE-REQ-AUTH-01",
+      "requirementId": "AUTH-01",
+      "action": "narrow/split",
+      "findingIds": [
+        "DCORE-001",
+        "ORR-F011",
+        "PLT-F020"
+      ],
+      "decisionIds": [],
+      "rationale": "Keep only terminal authentication-semantic work: exact hostile-host rejection, optional collaborator behavior, and propagation of realistic authentication failures. Do not revive the unmodeled GAUTH-01 prose prescription to wire one named sentinel through four sites; it has no dedicated terminal finding and requires fresh revalidation before activation."
+    },
+    {
+      "id": "SCOPE-REQ-CLOSE-01",
+      "requirementId": "CLOSE-01",
+      "action": "keep",
+      "findingIds": [
+        "MF-002",
+        "MF-005",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep the complete quality-suite closure gate. It must include corrected production flows, audited meta-gates, the selected direct-pair enforcement policy, and every independently routed focused test without treating coverage as assertion-strength proof."
+    },
+    {
+      "id": "SCOPE-REQ-CLOSE-02",
+      "requirementId": "CLOSE-02",
+      "action": "narrow/split",
+      "findingIds": [
+        "ABG-004",
+        "AHG-014",
+        "AUDIT-004",
+        "AUDIT-009",
+        "AUDIT-010",
+        "MF-001",
+        "OPLU-B-F01",
+        "OPU-F15",
+        "README-001"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-09"
+      ],
+      "rationale": "Split the bundled backlog by terminal evidence: retain TESTQ-01 as the traceable audit umbrella, FLOW-09 under test-only-export removal, REASON-01 under exact reason classification, and FLOW-07 under effective-config gate coverage. Move COV-01 to historical evidence because the current 204-pair baseline requirement supersedes a standalone remeasurement, and do not activate AGCOL-01, the folded unused-type-member todo, or the named GAUTH-01 sentinel wiring because none has a dedicated terminal finding. Stable backlog labels and history remain available for later revalidation; no item is claimed implemented."
+    },
+    {
+      "id": "SCOPE-REQ-GGAT-01",
+      "requirementId": "GGAT-01",
+      "action": "narrow/split",
+      "findingIds": [
+        "DCORE-030",
+        "MF-005",
+        "ORA-F32",
+        "ORR-F028",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Retain terminal export-ownership and gate-visitation work, including the current changed-pair selector. The folded unused-type-member todo is excluded from active scope: prose alone does not establish a terminal property-member gap, so D-22 forbids adding a new gate until that claim is independently revalidated."
+    },
+    {
+      "id": "SCOPE-REQ-GGAT-02",
+      "requirementId": "GGAT-02",
+      "action": "move-to-evidence",
+      "findingIds": [
+        "AUDIT-004",
+        "MF-001"
+      ],
+      "decisionIds": [],
+      "rationale": "Preserve AGCOL-01 and its historical bundled-backlog trace, but remove it from active delivery scope because exhaustive canonical mapping found no terminal finding for the asserted dead assertNoAgentCollisions gate. D-19 requires evidence-only retention rather than an implementation claim or a prose-derived task."
+    },
+    {
+      "id": "SCOPE-REQ-GGAT-03",
+      "requirementId": "GGAT-03",
+      "action": "narrow/split",
+      "findingIds": [
+        "ABG-004",
+        "AHG-014"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain FLOW-07 only for the terminal config-source and broad-override visibility gaps. The gate must vary effective configuration and prove target visitation; already settled reachability claims are not reopened."
+    },
+    {
+      "id": "SCOPE-REQ-GGAT-04",
+      "requirementId": "GGAT-04",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-005",
+        "SCN-F025"
+      ],
+      "decisionIds": [
+        "MF-DEC-02"
+      ],
+      "rationale": "Retain gate coverage for closed or delegated helpers only where a terminal finding identifies an unenrolled helper or an approved split creates a new public seam. Require target visitation, a synthetic offender, a benign control, and no test-only export solely to satisfy the gate."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-01",
+      "requirementId": "PDEF-01",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-002",
+        "MF-007"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-02",
+        "MF-DEC-05",
+        "MF-DEC-06"
+      ],
+      "rationale": "Keep terminal production-correctness repairs and the prerequisites selected by resolved decisions, including direct owner tests and fixed-point convergence where specified. Exclude stale or struck claims and forbid compatibility placeholders, test-only seams, and size-only refactors."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-02",
+      "requirementId": "PDEF-02",
+      "action": "narrow/split",
+      "findingIds": [
+        "AUDIT-007",
+        "MF-003",
+        "SHC-F001",
+        "SHC-F051"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain the current path-containment and symlink-safe terminal cluster while moving the repaired historical MCP-home escape to evidence only. Implementation must preserve the allowed root and reject traversal or symlink escape without claiming stale defects remain live."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-03",
+      "requirementId": "PDEF-03",
+      "action": "keep",
+      "findingIds": [
+        "ABG-021"
+      ],
+      "decisionIds": [],
+      "rationale": "Keep the exact terminal malformed-MCP JSON behavior gap with its typed failure contract and owner-test obligation."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-04",
+      "requirementId": "PDEF-04",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-002",
+        "RID-F004",
+        "RID-F008"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain lifecycle failure containment only for the terminal resource-discovery and mutation paths. Require exact partial-state and retry behavior without broadening into unrelated lifecycle rewrites."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-05",
+      "requirementId": "PDEF-05",
+      "action": "narrow/split",
+      "findingIds": [
+        "OPLU-B-F01",
+        "OPU-F15",
+        "OPU-F26"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain exact reason-code classification gaps for lock contention, sibling sweeps, and substring-based errors. Correct classifications must be explicit and tested without replacing unrelated stable reasons."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-06",
+      "requirementId": "PDEF-06",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-002",
+        "OPU-F14",
+        "OPU-F27"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain the terminal update-diagnostic and temporary-artifact cleanup gaps. Preserve primary errors while attaching cleanup context and prove no persistent leak on the cited failure paths."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-07",
+      "requirementId": "PDEF-07",
+      "action": "narrow/split",
+      "findingIds": [
+        "DC-029",
+        "MF-002"
+      ],
+      "decisionIds": [
+        "MF-DEC-01"
+      ],
+      "rationale": "Retain guarded dynamic lookup and honest trace-preserving removal of unreachable test-shaped branches. Preserve true safety checks and add no ignore pragma, dishonest case, or test-only export."
+    },
+    {
+      "id": "SCOPE-REQ-PDEF-08",
+      "requirementId": "PDEF-08",
+      "action": "narrow/split",
+      "findingIds": [
+        "BA-015",
+        "BHP-001",
+        "ORA-F03",
+        "ORA-F33",
+        "TXA-F001"
+      ],
+      "decisionIds": [
+        "MF-DEC-05"
+      ],
+      "rationale": "Split the operator-owned terminal choices into their selected contracts. Implement the one-to-one fail-closed alias source-claim map while preserving canonical manifest-derived state identity; retain agent discovery, compact composition, and rollback behavior only under their own terminal routes."
+    },
+    {
+      "id": "SCOPE-REQ-RCOV-01",
+      "requirementId": "RCOV-01",
+      "action": "narrow/split",
+      "findingIds": [
+        "AUDIT-010",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Move the absent historical retained report to evidence-only closure and regenerate one honest baseline over all 204 current source-test pairs from the milestone branch. Record every refusal; do not reuse stale counts or convert the report into a false pass."
+    },
+    {
+      "id": "SCOPE-REQ-RCOV-02",
+      "requirementId": "RCOV-02",
+      "action": "narrow/split",
+      "findingIds": [
+        "AUDIT-011",
+        "BC-004",
+        "SHC-F023"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-09"
+      ],
+      "rationale": "Retain the seven terminal direct-coverage shortfalls: honestly rewrite the two removable dense-index guards selected by MF-DEC-01 and preserve current evidence for the five genuinely compiler-forced cases. No allowlist, exclusion, or flattering suppression is authorized."
+    },
+    {
+      "id": "SCOPE-REQ-RCOV-03",
+      "requirementId": "RCOV-03",
+      "action": "keep",
+      "findingIds": [
+        "ORR-F028",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep the selected strict changed-pair gate in both scoped local pre-commit and dedicated authoritative CI. Base and pair selection must fail closed, and a touched retained-shortfall pair must fail until honestly corrected or explicitly reconsidered."
+    },
+    {
+      "id": "SCOPE-REQ-RCOV-04",
+      "requirementId": "RCOV-04",
+      "action": "move-to-evidence",
+      "findingIds": [
+        "AUDIT-010",
+        "OIR-F001",
+        "OMAUB-F14",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Preserve COV-01 and the two orchestrator histories, but retire their standalone remeasurement task: neither orchestrator is a terminal current shortfall, and RCOV-01 already requires a complete 204-pair baseline that includes them. This is not an exclusion from the all-pair report or a claim that coverage proves assertion quality."
+    },
+    {
+      "id": "SCOPE-REQ-RVAL-01",
+      "requirementId": "RVAL-01",
+      "action": "keep",
+      "findingIds": [
+        "AUDIT-001",
+        "README-001"
+      ],
+      "decisionIds": [],
+      "rationale": "Keep the immutable source-and-claim audit surface and TESTQ provenance already represented by the canonical files and 2,897 stable claims."
+    },
+    {
+      "id": "SCOPE-REQ-RVAL-02",
+      "requirementId": "RVAL-02",
+      "action": "keep",
+      "findingIds": [
+        "AUDIT-003",
+        "AUDIT-004",
+        "MF-001"
+      ],
+      "decisionIds": [],
+      "rationale": "Keep terminal claim classification, duplicate-root traceability, redacted evidence, and explicit implementation routing. Historical severity and prose are never substitutes for terminal proof."
+    },
+    {
+      "id": "SCOPE-REQ-RVAL-03",
+      "requirementId": "RVAL-03",
+      "action": "keep",
+      "findingIds": [
+        "MF-009"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-02",
+        "MF-DEC-03",
+        "MF-DEC-04",
+        "MF-DEC-05",
+        "MF-DEC-06",
+        "MF-DEC-07",
+        "MF-DEC-08",
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep all nine resolved decision records with exact premise and affected roots, rejected alternatives, proof, and downstream consequences. No pending decision remains."
+    },
+    {
+      "id": "SCOPE-REQ-RVAL-04",
+      "requirementId": "RVAL-04",
+      "action": "keep",
+      "findingIds": [
+        "AUDIT-010",
+        "AUDIT-011",
+        "MF-007",
+        "MF-008"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-02",
+        "MF-DEC-03",
+        "MF-DEC-04",
+        "MF-DEC-05",
+        "MF-DEC-06",
+        "MF-DEC-07",
+        "MF-DEC-08",
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep this terminal scope-impact crosswalk. D-19 moves stale-only work to evidence without claiming implementation, D-20 preserves stable later phase numbers, D-21 splits mixed requirements, and D-22 admits no new task without terminal proof inside the current unit-test-quality boundary."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-01",
+      "requirementId": "TREF-01",
+      "action": "narrow/split",
+      "findingIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F02",
+        "AUDIT-007",
+        "BMCP-001",
+        "OPLU-A-F06"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain terminal host-state isolation and user-scope gaps, while preserving the repaired MCP-home escape as evidence only. Default to real temporary filesystem state and use no production test-only seam."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-02",
+      "requirementId": "TREF-02",
+      "action": "narrow/split",
+      "findingIds": [
+        "OPEF-F13",
+        "PLT-F020"
+      ],
+      "decisionIds": [
+        "MF-DEC-08"
+      ],
+      "rationale": "Retain realistic external-failure doubles and rename only the 16 traced production factories to role-only names. Preserve behavior and typings; makeMockPi and unrelated Fake families remain outside this exact set."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-03",
+      "requirementId": "TREF-03",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-004",
+        "OMAUB-F15",
+        "OPEF-F13"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-08"
+      ],
+      "rationale": "Retain production-domain values and role-named factories where terminal evidence requires them, and remove only traced test-shaped production artifacts. Preserve true safety checks and add no dead compatibility branch."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-04",
+      "requirementId": "TREF-04",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-004",
+        "OPS-F20",
+        "ORA-F23",
+        "SHC-F003"
+      ],
+      "decisionIds": [
+        "MF-DEC-03",
+        "MF-DEC-07"
+      ],
+      "rationale": "Classify every hidden dependency and eliminate global built-in namespace patching. Use real temporary filesystem state by default and narrow production-owned ports only for irreproducible faults or timing; exempt only the two observed composition flows selected by MF-DEC-03, preserving their public-result and full-state assertions."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-05",
+      "requirementId": "TREF-05",
+      "action": "narrow/split",
+      "findingIds": [
+        "HHD-023",
+        "SHC-F028"
+      ],
+      "decisionIds": [],
+      "rationale": "Retain only terminal module-state and reset-export findings. Prefer fresh per-test factories or legitimate lifecycle ownership; do not create reset helpers solely for tests."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-06",
+      "requirementId": "TREF-06",
+      "action": "narrow/split",
+      "findingIds": [
+        "AUDIT-009",
+        "EHP-001",
+        "SHC-F028"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-02"
+      ],
+      "rationale": "Remove terminal test-only exports, reset hooks, and test-shaped branches through public-contract tests or honest production redesign. Coordinate with approved splits, and do not replace one dead seam with another."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-07",
+      "requirementId": "TREF-07",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-004",
+        "OMR-F02"
+      ],
+      "decisionIds": [
+        "MF-DEC-06"
+      ],
+      "rationale": "Retain exact-output and user-visible assertion work, including structural single/plural cardinality and newly visible plural tallies. Replace inert label-object assertions where observable and use type-only enforcement where no runtime behavior exists."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-08",
+      "requirementId": "TREF-08",
+      "action": "narrow/split",
+      "findingIds": [
+        "BC-004",
+        "SHC-F003"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-07"
+      ],
+      "rationale": "Eliminate global built-in patching and dishonest dense-index cases under the selected decisions. Preserve true guards with real state or narrow legitimate ports and add no ignore pragma or production test-only export."
+    },
+    {
+      "id": "SCOPE-REQ-TREF-09",
+      "requirementId": "TREF-09",
+      "action": "narrow/split",
+      "findingIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-a.md#OPIA-F24",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-b.md#OPIB-F24",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-install-c.md#OPIC-F17",
+        "ACUB-019",
+        "DCH-034",
+        "DRA-028",
+        "OPINFP-F010",
+        "OPLU-A-F16",
+        "OPLUFP-F003",
+        "OPR-B-F22",
+        "OPU-B-F28",
+        "SHC-F003",
+        "SNA-F021"
+      ],
+      "decisionIds": [
+        "MF-DEC-02",
+        "MF-DEC-07"
+      ],
+      "rationale": "Execute the complete sequenced split program only after Phase 2 and 3 prerequisites. Split at the approved resolver, notify, install, update, reinstall, list, and catalog seams with paired tests and one end-to-end proof per flow; exclude uninstall and the independently deferred info split, and coordinate built-in-patch removal without adding test-only seams."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-02",
+      "requirementId": "PHASE-02",
+      "action": "narrow/split",
+      "findingIds": [
+        "ABG-021",
+        "MF-002",
+        "MF-003",
+        "MF-010",
+        "RID-F008"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-05"
+      ],
+      "rationale": "Keep every terminal confirmed Phase 2 production-defect route under PDEF-01 through PDEF-08 and AUTH-01, ordered by the canonical sequencing constraint. Move stale and evidence-only records out of implementation scope; stable Phase 2 numbering remains unchanged."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-03",
+      "requirementId": "PHASE-03",
+      "action": "narrow/split",
+      "findingIds": [
+        "DC-029",
+        "MF-004",
+        "OMR-F02",
+        "OPU-F15",
+        "ORA-F03",
+        "ORA-F33"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-02",
+        "MF-DEC-05",
+        "MF-DEC-06"
+      ],
+      "rationale": "Keep terminal cross-cutting production corrections and the exact decision-selected prerequisites for PDEF-01 through PDEF-08. These must land before dependent refactors; evidence-only and unrelated style work are excluded without renumbering Phase 3."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-04",
+      "requirementId": "PHASE-04",
+      "action": "narrow/split",
+      "findingIds": [
+        "MF-005",
+        "OPEF-F13",
+        "PLT-F020"
+      ],
+      "decisionIds": [
+        "MF-DEC-08"
+      ],
+      "rationale": "Keep only terminal hermetic-infrastructure, authentication-failure, fake-shape, and typed-double work under TREF-01 through TREF-04. Preserve behavior while aligning the 16 traced factory names; stable Phase 4 numbering remains unchanged."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-05",
+      "requirementId": "PHASE-05",
+      "action": "narrow/split",
+      "findingIds": [
+        "HHD-023",
+        "MF-004",
+        "OPS-F20",
+        "ORA-F23",
+        "SHC-F028"
+      ],
+      "decisionIds": [
+        "MF-DEC-03",
+        "MF-DEC-07"
+      ],
+      "rationale": "Keep terminal factory-state, legitimate injection-port, and public-contract composition work under TREF-04 through TREF-06. Preserve the two deliberate composition exceptions and prohibit test-only reset or injection seams; stable Phase 5 numbering remains unchanged."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-06",
+      "requirementId": "PHASE-06",
+      "action": "narrow/split",
+      "findingIds": [
+        "OMR-F02",
+        "OPLU-A-F13",
+        "OPM-F05",
+        "SHC-F003"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-02",
+        "MF-DEC-06",
+        "MF-DEC-07"
+      ],
+      "rationale": "Keep terminal assertion, ordering, global-patch-removal, and approved split work under TREF-07 through TREF-09. Require the mandatory post-split checklist and direct-pair evidence; exclude size-only, uninstall, and independently deferred info splits without renumbering Phase 6."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-07",
+      "requirementId": "PHASE-07",
+      "action": "narrow/split",
+      "findingIds": [
+        "ABG-004",
+        "AHG-014",
+        "DCORE-030",
+        "MF-005",
+        "ORR-F028",
+        "SCN-F025"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep terminal gate-visitation, export ownership, effective-config, delegated-helper, and changed-pair-selection work under GGAT-01, GGAT-03, and GGAT-04. Move unsupported AGCOL-01 and the folded unused-type-member todo out of active scope until a dedicated terminal finding exists; stable Phase 7 remains in place."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-08",
+      "requirementId": "PHASE-08",
+      "action": "narrow/split",
+      "findingIds": [
+        "AUDIT-010",
+        "AUDIT-011",
+        "ORR-F028",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-01",
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep the fresh full-pair baseline, honest seven-shortfall disposition, and selected local-plus-CI changed-pair gate under RCOV-01 through RCOV-03. Fold standalone COV-01 into the complete baseline without excluding its pairs, and retain Phase 8 numbering."
+    },
+    {
+      "id": "SCOPE-ROUTE-PHASE-09",
+      "requirementId": "PHASE-09",
+      "action": "narrow/split",
+      "findingIds": [
+        "AUDIT-010",
+        "MF-001",
+        "MF-007",
+        "README-001",
+        "TXA-F022"
+      ],
+      "decisionIds": [
+        "MF-DEC-09"
+      ],
+      "rationale": "Keep the complete quality-suite closeout and an honest disposition for every carried requirement and backlog label. Phase 9 verifies selected controls and evidence but does not implement stale, unsupported, or out-of-boundary prose; its stable number remains unchanged."
+    }
+  ]
 }
