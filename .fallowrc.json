@@ -87,6 +87,7 @@
           "bridges-mcp",
           "bridges-skills",
           "bridges-hooks",
+          "bridges-workflows",
           "domain",
           "transaction",
           "persistence",

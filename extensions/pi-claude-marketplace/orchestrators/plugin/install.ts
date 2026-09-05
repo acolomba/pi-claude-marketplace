@@ -98,6 +98,11 @@ import {
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
+import {
+  commitPreparedWorkflows,
+  prepareStageWorkflows,
+  unstagePluginWorkflows,
+} from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -133,7 +138,11 @@ import {
 } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
-import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
+import {
+  cascadeUnstagePlugin,
+  crossScopeFlag,
+  WorkflowsUnstageFailureError,
+} from "../marketplace/shared.ts";
 
 import {
   canonicalCloneUrl,
@@ -168,6 +177,7 @@ import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
+import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -347,6 +357,7 @@ interface InstallCtx {
   commandsPrep?: PreparedCommandsStaging;
   agentsPrep?: PreparedAgentsStaging;
   mcpPrep?: PreparedMcpStaging;
+  workflowsPrep?: PreparedWorkflowsStaging;
   // LIFE-01 / D-63-02: hooks bridge has no staging dir (writeHookConfig is
   // the atomic write). Track whether the file was written so the phase undo
   // path knows whether to call removeHookConfig.
@@ -360,6 +371,10 @@ interface InstallCtx {
   stagedCommandNames: readonly string[];
   stagedAgentNames: readonly string[];
   stagedMcpServerNames: readonly string[];
+  // WLIF-01: the envelope names the workflows commit reported through its
+  // `onPlaced` callback. Required rather than optional so the state phase's
+  // record composition cannot forget the axis.
+  stagedWorkflowNames: readonly string[];
   // Aggregated soft warnings from the bridges (e.g. agents bridge cleanup leaks).
   bridgeWarnings: string[];
   // D-07 discovery warnings from the skills, commands and agents bridges: an
@@ -909,6 +924,7 @@ async function runInstallLedgerBody(
     stagedCommandNames: [],
     stagedAgentNames: [],
     stagedMcpServerNames: [],
+    stagedWorkflowNames: [],
     bridgeWarnings: [],
     discoveryWarnings: [],
     agentForeignFailures: [],
@@ -1146,6 +1162,74 @@ async function runInstallLedgerBody(
     },
   };
 
+  // WLIF-01: the sixth bridge phase, modelled on `mcpPhase` -- the newest
+  // sibling that carries a real prepare / commit / unstage triplet.
+  const workflowsPhase: Phase<InstallCtx> = {
+    name: "workflows",
+    do: async (c) => {
+      // The names this plugin's PREVIOUS install recorded. A fresh install
+      // finds no record and the bridge's re-stage branch stays inert; the
+      // enable path reaches the deliberately-kept disabled record, which is
+      // what lets the commit displace the plugin's own envelopes aside
+      // instead of hitting the occupancy refusal. Spread conditionally --
+      // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
+      const previousWorkflowNames =
+        c.stateSnapshot.marketplaces[c.marketplace]?.plugins[c.plugin]?.resources.workflows;
+      const prep = await prepareStageWorkflows({
+        locations: c.locations,
+        pluginName: c.plugin,
+        resolved: c.resolved,
+        ...(previousWorkflowNames !== undefined && { previousWorkflowNames }),
+      });
+      // Set BEFORE the commit: this is the point after which envelopes can
+      // exist on disk, and it is the sentinel `undo` gates on. A `do` that
+      // throws inside the commit may have placed envelopes while the name
+      // array was still empty, which is why the sentinel is the handle and
+      // not the array.
+      c.workflowsPrep = prep;
+      c.stagedWorkflowNames = [];
+      const leak = await commitPreparedWorkflows(prep, {
+        // The whole body is one assignment that cannot throw. The commit
+        // invokes this callback on the failure paths too, so anything that
+        // could raise here would mask the real failure.
+        onPlaced: (placedNames) => {
+          c.stagedWorkflowNames = placedNames;
+        },
+      });
+      // The bridge's array mixes per-file soft-fails with discovery warnings
+      // and is not separable at this site, so it rides `bridgeWarnings` (the
+      // agents-bridge shape) rather than `discoveryWarnings`.
+      c.bridgeWarnings.push(...prep.result.warnings);
+      if (leak !== undefined) {
+        c.bridgeWarnings.push(leak);
+      }
+    },
+    undo: async (c) => {
+      if (c.workflowsPrep === undefined) {
+        return;
+      }
+
+      // WLIF-01 / T-112-01: the removal payload is what `onPlaced` REPORTED,
+      // never `prep.result.stagedNames`. A foreign envelope at a colliding
+      // name, or a previous envelope the commit's own reversal restored, is
+      // not this commit's to unlink.
+      const result = await unstagePluginWorkflows({
+        locations: c.locations,
+        previousWorkflowNames: c.stagedWorkflowNames,
+      });
+      // WLIF-03 / T-112-04: unlike the five sibling phases, the result is NOT
+      // discarded. A leftover workflow envelope is executable code outside
+      // every scope root, so a silent swallow would report a clean rollback
+      // over a real leak.
+      if (result.failed.length > 0) {
+        throw new WorkflowsUnstageFailureError(
+          result.failed.map((failure) => `${failure.name}: ${failure.reason}`).join("; "),
+          result.failed,
+        );
+      }
+    },
+  };
+
   const statePhase: Phase<InstallCtx> = {
     name: "state",
     // The state-commit phase is pure in-memory mutation -- no IO. The
@@ -1218,9 +1302,10 @@ async function runInstallLedgerBody(
           // When the resolver did not surface a hooks config, the
           // inventory stays empty.
           hooks: c.resolved.hooksConfigPath === undefined ? [] : [c.plugin],
-          // WLIF-01: the workflow envelope inventory. Empty here until the
-          // workflows ledger phase exists to stage anything.
-          workflows: [],
+          // WLIF-01: the envelope names the workflows phase's commit
+          // reported. The record is the only inventory of them that survives
+          // the process.
+          workflows: [...c.stagedWorkflowNames],
         },
         // ENBL-02: always set enabled: true on install and re-materialization.
         // The disable branch sets it to false; the enable branch re-runs
@@ -1242,13 +1327,14 @@ async function runInstallLedgerBody(
   // D-01 literal-array; order is part of the contract -- never refactor
   // to a dynamic builder. D-63-01: hooks slot lands between agents and mcp.
   // The PRD-fixed sequence is
-  // [skills, commands, agents, hooks, mcp, state].
+  // [skills, commands, agents, hooks, mcp, workflows, state].
   const phases: readonly Phase<InstallCtx>[] = [
     skillsPhase,
     commandsPhase,
     agentsPhase,
     hooksPhase,
     mcpPhase,
+    workflowsPhase,
     statePhase,
   ];
 

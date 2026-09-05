@@ -22,6 +22,7 @@ import {
   refreshGitHubClone,
   resolveScopeFromState,
   resolveScopeOrNotifyNotAdded,
+  WorkflowsUnstageFailureError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -387,6 +388,28 @@ test("AgentsUnstageFailureError preserves its typed failures and standard Error 
   assert.equal(error.message, "Failed to remove 1 agent");
   assert.strictEqual(error.failedAgents, failedAgents);
   assert.ok(error instanceof Error);
+});
+
+test("WorkflowsUnstageFailureError freezes a defensive copy of its typed failures", () => {
+  // arrange
+  const failedWorkflows = [{ name: "sample:build", reason: "EPERM: operation not permitted" }];
+
+  // act
+  const error = new WorkflowsUnstageFailureError("Failed to remove 1 workflow", failedWorkflows);
+  failedWorkflows.push({ name: "sample:deploy", reason: "EACCES: permission denied" });
+
+  // assert -- WLIF-03: unlike the agents sibling next door, the payload is a
+  // FROZEN COPY. The names identify executable files left on disk and the
+  // error is read long after the bridge returned, so a later mutation of the
+  // caller's array must not reach the field.
+  assert.equal(error.name, "WorkflowsUnstageFailureError");
+  assert.equal(error.message, "Failed to remove 1 workflow");
+  assert.ok(error instanceof Error);
+  assert.notStrictEqual(error.failedWorkflows, failedWorkflows);
+  assert.deepStrictEqual(error.failedWorkflows, [
+    { name: "sample:build", reason: "EPERM: operation not permitted" },
+  ]);
+  assert.strictEqual(Object.isFrozen(error.failedWorkflows), true);
 });
 
 test("refreshGitHubClone tracks the default branch and invokes its callback after authenticated fetch", async () => {

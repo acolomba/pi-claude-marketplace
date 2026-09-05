@@ -40,6 +40,7 @@ import { errorMessage, isErrnoException, MarketplaceNotFoundError } from "../../
 import { notify } from "../../shared/notify.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
+import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
@@ -61,6 +62,29 @@ export class AgentsUnstageFailureError extends Error {
     super(message);
     this.name = "AgentsUnstageFailureError";
     this.failedAgents = failedAgents;
+  }
+}
+
+/**
+ * WLIF-03: a workflows unstage that could not remove every recorded name.
+ *
+ * Sits beside `AgentsUnstageFailureError` because this module is the one
+ * marketplace file a plugin ledger may import from, and the cascade needs the
+ * same class.
+ *
+ * Unlike its sibling next door, the payload is a FROZEN DEFENSIVE COPY. The
+ * names identify EXECUTABLE files left on disk, and the error crosses the
+ * ledger boundary into a renderer that reads it long after the bridge
+ * returned; a frozen copy is the only way the field is provably the same list
+ * at read time as at throw time. This follows `WorkflowNameCollisionError`
+ * rather than the no-copy sibling.
+ */
+export class WorkflowsUnstageFailureError extends Error {
+  readonly failedWorkflows: readonly UnstageWorkflowFailure[];
+  constructor(message: string, failedWorkflows: readonly UnstageWorkflowFailure[]) {
+    super(message);
+    this.name = "WorkflowsUnstageFailureError";
+    this.failedWorkflows = Object.freeze([...failedWorkflows]);
   }
 }
 

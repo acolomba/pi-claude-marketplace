@@ -4,16 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  commitPreparedWorkflows,
-  prepareStageWorkflows,
-} from "../../extensions/pi-claude-marketplace/bridges/workflows/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ResolvedPluginInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // WINV-02 install-level proof: a plugin carrying a `workflows/` directory
@@ -147,7 +142,7 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-inversion-"));
     try {
       // arrange
-      const { pluginRoot } = await seedWorkflowPlugin({
+      await seedWorkflowPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
       });
@@ -190,41 +185,14 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
         `workflows must not be recorded unsupported; got: ${record.compatibility.unsupported.join(" / ")}`,
       );
 
-      // assert -- the install itself materializes nothing yet: no orchestrator
-      // drives the bridge, so the engine's storage root must still be absent at
-      // this point. When WLIF-01 wires the install, this becomes the assertion
-      // that the install writes exactly the envelopes it recorded; either way
-      // the install's reach over that root is stated rather than assumed.
-      await assert.rejects(stat(path.join(home, ".pi", "workflows")), { code: "ENOENT" });
-
-      // act -- WLIF-01 is not wired, so no orchestrator drives the bridge. The
-      // two calls below stand in for the install-driven path and are replaced
-      // by it, which leaves the assertion after them unchanged.
+      // assert -- WLIF-01 / WBRG-01 / WPTH-01: the install itself now drives
+      // the bridge, so the engine's storage root exists and the script has
+      // materialized as an envelope at the project scope's canonical saved
+      // path. The whole object is compared so a missing or extra field fails
+      // the case; the byte-level key order is pinned by the staging module's
+      // own owner test.
+      await stat(path.join(home, ".pi", "workflows"));
       const locations = locationsFor("project", cwd);
-      // A hand-built installable arm is honest here: the resolver's own verdict
-      // for this exact fixture is asserted by the precondition above, which
-      // reads the record the real install wrote. This literal supplies only the
-      // plugin root and the declared component path, both seeded by this test.
-      const resolved: ResolvedPluginInstallable = {
-        installable: true,
-        state: "installable",
-        name: "hello",
-        pluginRoot,
-        supported: ["workflows"],
-        unsupported: [],
-        notes: [],
-        componentPaths: { skills: [], commands: [], agents: [], workflows: ["workflows"] },
-        mcpServers: {},
-        defaultEnabled: true,
-      };
-      const prepared = await prepareStageWorkflows({ locations, pluginName: "hello", resolved });
-
-      await commitPreparedWorkflows(prepared);
-
-      // assert -- WBRG-01 / WPTH-01: the script materializes as an envelope at
-      // the project scope's canonical saved path. The whole object is compared
-      // so a missing or extra field fails the case; the byte-level key order is
-      // pinned by the staging module's own owner test.
       const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
 
       assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
@@ -232,6 +200,9 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
         description: "greets",
         script: 'export const meta = { name: "greet", description: "greets" };\n',
       });
+      // WLIF-01: the record names exactly the envelope the install placed. It
+      // is the only inventory of it that survives the process.
+      assert.deepStrictEqual(record.resources.workflows, ["hello:greet"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
