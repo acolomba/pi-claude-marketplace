@@ -89,6 +89,11 @@ interface StemDropRow {
   readonly stem: string;
 }
 
+interface EncodingRow {
+  readonly encoding: string;
+  readonly source: string;
+}
+
 describe("admitWorkflowScript", () => {
   for (const { decoy, source, metaName, generatedName } of [
     {
@@ -513,31 +518,50 @@ const restamped = Date.now();
 
   for (const { encoding, source } of [
     {
+      // U+FEFF BYTE ORDER MARK, written as an escape because it is invisible in
+      // source. A UTF-8 BOM is common in real files, so acorn accepting it is
+      // load-bearing: were it ever to become `unparseable`, every workflow in a
+      // BOM-carrying plugin would silently stop installing.
       encoding: "a leading byte-order mark",
       source: `\uFEFFexport const meta = { name: "ship" };\n`,
     },
     {
-      encoding: "a lone surrogate",
+      // U+D800, a lone high surrogate. It sits in an unrelated string literal,
+      // so it never reaches the name and must not disturb the read.
+      encoding: "a lone surrogate in an unrelated literal",
       source: `const marker = "\uD800";\nexport const meta = { name: "ship" };\n`,
     },
-    {
-      encoding: "replacement characters",
-      source: `const \uFFFD = 1;\nexport const meta = { name: "ship" };\n`,
-    },
-  ]) {
-    test(`answers deterministically and throws nothing for a source carrying ${encoding}`, () => {
+  ] satisfies readonly EncodingRow[]) {
+    test(`reads the declared name from a source carrying ${encoding}`, () => {
       // arrange
-      const admit = (): WorkflowVerdict => admitWorkflowScript("acme", "ship.workflow.js", source);
+      const expectedVerdict = {
+        outcome: "named",
+        metaName: "ship",
+        generatedName: "acme:ship",
+      } satisfies Admission;
 
       // act
-      const firstVerdict = admit();
-      const secondVerdict = admit();
+      const verdict = admitWorkflowScript("acme", "ship.workflow.js", source);
 
       // assert
-      assert.doesNotThrow(admit);
-      assert.deepStrictEqual(firstVerdict, secondVerdict);
+      assert.deepStrictEqual(admission(verdict), expectedVerdict);
     });
   }
+
+  test("refuses a source whose replacement characters make it unparseable", () => {
+    // arrange
+    // U+FFFD REPLACEMENT CHARACTER is not a valid identifier start, so a decode
+    // that already lost bytes reaches acorn as a syntax error rather than as a
+    // name. This row is split from the two above because its outcome differs.
+    const source = `const \uFFFD = 1;\nexport const meta = { name: "ship" };\n`;
+    const expectedVerdict = { outcome: "refused", cause: "unparseable" } satisfies NonAdmission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.workflow.js", source);
+
+    // assert
+    assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+  });
 });
 
 describe("assertNoWorkflowNameCollisions", () => {
