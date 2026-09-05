@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-25-PLAN.md
-last_updated: "2026-09-04T23:49:04.191Z"
+stopped_at: Completed 01-26-PLAN.md
+last_updated: "2026-09-04T23:59:31.721Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 66da73b8345c2e8aea00c0d4005a2d2ef6fb8cff
+state_head: 9447c23c85492e17fbc4250355589459a7c8a697
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 25
+  completed_plans: 26
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 26 of 69
+Plan: 27 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -209,6 +209,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P23 | 5min | 2 tasks | 1 files |
 | Phase 01 P24 | 6min | 2 tasks | 2 files |
 | Phase 01 P25 | 5min | 1 tasks | 2 files |
+| Phase 01 P26 | 27min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -468,6 +469,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Separate green baseline evidence from surviving mutations that confirm plugin-info test-strength gaps.
 - [Phase 01]: Keep healthy direct coverage separate from surviving mutations that prove assertion-strength gaps.
 - [Phase 01]: Route the unused authMemo option through an operator decision because deletion changes a public option interface.
+- [Phase 01]: Plan 01-26: plugin-data-directory assertion gap is stale because the current equivalent mutation is killed by the owner suite.
+- [Phase 01]: Plan 01-26: exact assignment validity requires the two corpus records to share one artifact commit.
 
 ### Pending Todos
 
@@ -520,7 +523,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-25-PLAN.md
+**Stopped at:** Completed 01-26-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -529,7 +532,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-04T23:49:04.191Z
+Last session: 2026-09-04T23:59:31.620Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
