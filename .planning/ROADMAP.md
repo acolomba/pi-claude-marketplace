@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 55/69 plans executed
+**Plans:** 56/69 plans executed
 
 **Success Criteria**:
 
@@ -146,7 +146,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-56-PLAN.md — Merge all corpus evidence, resolve cross-shard identity/disposition conflicts, and clear every evidence gap before operator policy decisions
+- [x] 01-56-PLAN.md — Canonicalize duplicates and resolve every evidence-method conflict in the merged ledger
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -350,7 +350,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 55/69 | In Progress|  |
+| 1. Live Evidence Revalidation | 56/69 | In Progress|  |
 | 2. Containment and Input Safety | 0/0 | Not started | — |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |

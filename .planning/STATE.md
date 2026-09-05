@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-55-PLAN.md
-last_updated: "2026-09-05T13:24:54.365Z"
+stopped_at: Completed 01-56-PLAN.md
+last_updated: "2026-09-05T13:40:47.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 3e26c227ed1f19c48c80d3bc057c3df4ab82c0dd
+state_head: 7192277154d9574acad4a8425c903b2921bfdb00
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 55
+  completed_plans: 56
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 55 of 69
+Plan: 56 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -238,6 +238,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P53 | 8min | 3 tasks | 5 files |
 | Phase 01 P54 | 10min | 2 tasks | 5 files |
 | Phase 01 P55 | 18min | 3 tasks | 21 files |
+| Phase 01 P56 | 12min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -559,6 +560,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Keep incomplete-file, inconclusive-finding, and pending-decision allowances independent; pending decisions are allowed only when their IDs are exactly MF-DEC-01 through MF-DEC-09.
 - [Phase 01]: Preserve retired or test-only evidence as explicit N/A trace records when no live one-to-one owner exists, rather than inventing a replacement or deleting history.
 - [Phase 01]: Defer every semantic duplicate/conflict adjudication and operator evidence choice to plans 01-56 and 01-57.
+- [Phase 01]: Point every source claim and duplicate directly to its terminal canonical finding while retaining duplicate-local claim IDs and evidence records.
+- [Phase 01]: Use existing surviving-mutation or behavioral-probe evidence when it is stronger than a canonical root's static proof; preserve method-specific local evidence on duplicate records.
+- [Phase 01]: Leave 109 genuinely unresolved findings inconclusive for plan 01-57 and leave MF-DEC-01 through MF-DEC-09 pending without making operator decisions.
 
 ### Pending Todos
 
@@ -611,7 +615,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-55-PLAN.md
+**Stopped at:** Completed 01-56-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -620,7 +624,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T13:24:54.228Z
+Last session: 2026-09-05T13:40:47.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
