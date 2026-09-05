@@ -1,0 +1,1001 @@
+{
+  "plan": "01-32",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "category": "adversarial",
+      "assignedPlan": "01-32",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-035"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-001",
+      "findingId": "ORA-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-002",
+      "findingId": "ORA-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-003",
+      "findingId": "ORA-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-004",
+      "findingId": "ORA-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-005",
+      "findingId": "ORA-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-006",
+      "findingId": "ORA-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-007",
+      "findingId": "ORA-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-008",
+      "findingId": "ORA-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-009",
+      "findingId": "ORA-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-010",
+      "findingId": "ORA-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-011",
+      "findingId": "ORA-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-012",
+      "findingId": "ORA-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-013",
+      "findingId": "ORA-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-014",
+      "findingId": "ORA-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-015",
+      "findingId": "ORA-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-016",
+      "findingId": "ORA-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-017",
+      "findingId": "ORA-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-018",
+      "findingId": "ORA-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-019",
+      "findingId": "ORA-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-020",
+      "findingId": "ORA-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-021",
+      "findingId": "ORA-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-022",
+      "findingId": "ORA-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-023",
+      "findingId": "ORA-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-024",
+      "findingId": "ORA-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-025",
+      "findingId": "ORA-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-026",
+      "findingId": "ORA-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-027",
+      "findingId": "ORA-F27"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-028",
+      "findingId": "ORA-F28"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-029",
+      "findingId": "ORA-F29"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-030",
+      "findingId": "ORA-F30"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-031",
+      "findingId": "ORA-F31"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-032",
+      "findingId": "ORA-F32"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-033",
+      "findingId": "ORA-F33"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-034",
+      "findingId": "ORA-F34"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md",
+      "label": "CLAIM-035",
+      "findingId": "ORA-F35"
+    }
+  ],
+  "findings": [
+    {
+      "id": "ORA-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-001"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection",
+        "observed": "The two Pick arms and absent widening negatives remain; D-11 requires an isolated surviving compile mutation for terminal test-strength proof."
+      },
+      "rationale": "The historical widening gap remains plausible but static inspection cannot terminally confirm a test-strength claim.",
+      "destination": "Phase 2 should run the two isolated widening mutations, then add negatives if they survive."
+    },
+    {
+      "id": "ORA-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-002"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current type-test inspection",
+        "observed": "PerEntryOutcome still has sixteen members with only per-variant checks and one unknown-kind negative; no isolated membership mutation was run."
+      },
+      "rationale": "D-11 requires a surviving mutation before the claimed closed-union weakness is terminal.",
+      "destination": "Phase 2 should mutate membership in an isolated copy and add a complete Record pin if it survives."
+    },
+    {
+      "id": "ORA-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-003"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/reconcile/plan.test.ts" },
+        { "path": "tests/orchestrators/reconcile/apply.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path and current source/test inspection",
+        "observed": "Marketplace source claiming still operates only at the marketplace tier; plugin classification still uses declared keys versus recorded manifest names, and no differing-name plugin fixture exists. A failing behavioral probe was not run, so D-11 keeps the production-defect verdict inconclusive."
+      },
+      "rationale": "The alias/plugin dead-end premise survives current inspection, but its resolution changes product behavior and requires the planned operator choice.",
+      "destination": "Decide whether plugin keys resolve through claims, records use declared keys, or aliases are rejected before Phase 2."
+    },
+    {
+      "id": "ORA-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source inspection",
+        "observed": "declaredAndRecorded is populated only for keys present in merged.marketplaces, so when !merged.marketplaces[mpName] is true its membership conjunct cannot affect the skip."
+      },
+      "rationale": "The second conjunct is structurally dead in the current control flow.",
+      "destination": "Phase 2 should simplify it after the alias behavior decision, which may change the intended ownership."
+    },
+    {
+      "id": "ORA-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph reference graph plus current source inspection",
+        "observed": "surfacePostCommitWarnings remains exported, is called only inside apply.ts in production, and is directly imported only by its owner test."
+      },
+      "rationale": "The production export remains test-only by current reference graph.",
+      "destination": "Choose whether to remove the export/direct cases or document it as supported production API."
+    },
+    {
+      "id": "ORA-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current source inspection",
+        "observed": "OutcomeBase and PluginOutcomeBase remain exported without doc comments while adjacent exported outcome types are documented."
+      },
+      "rationale": "The two documentation omissions remain directly visible.",
+      "destination": "Phase 2 should document the shared subject fields or narrow their export ownership."
+    },
+    {
+      "id": "ORA-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-007"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current case and guard inspection",
+        "observed": "The cited case still conflates declared-name and different-source skip reasons; D-11 requires the isolated deletion mutation for terminal proof."
+      },
+      "rationale": "The case premise remains weak, but no current surviving mutation was executed.",
+      "destination": "Phase 2 should run the guard-deletion mutation and add the differing declared-name case if it survives."
+    },
+    {
+      "id": "ORA-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-008"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current fast-path and test inspection",
+        "observed": "Disable appears only beside enable in the present planner cases, but D-11 requires an isolated totalDisables mutation for terminal proof."
+      },
+      "rationale": "The isolated-disable coverage gap remains plausible rather than terminally proven.",
+      "destination": "Phase 2 should mutate the fast-path conjunct and add a disable-only plan case on survival."
+    },
+    {
+      "id": "ORA-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-009"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current source/test inspection",
+        "observed": "No current case combines marketplace and plugin diagnostics; an isolated spread-order mutation was not run."
+      },
+      "rationale": "D-11 leaves this ordering test-strength claim inconclusive without a surviving mutation.",
+      "destination": "Phase 2 should first establish whether planner array order is contractual, then mutate and test it."
+    },
+    {
+      "id": "ORA-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-010"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current push-site and fixture inspection",
+        "observed": "Only marketplace-add has a focused user-scope case; the omnibus remains project scope. No isolated scope-hardcoding mutation was run."
+      },
+      "rationale": "The six-bucket scope weakness requires surviving mutations under D-11.",
+      "destination": "Phase 2 should run isolated scope mutations and use one user-scope omnibus only for survivors."
+    },
+    {
+      "id": "ORA-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/config-merge.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current import and helper inspection",
+        "observed": "plan.test.ts still imports mergeScopeConfigs and uses it to construct every MergedConfig supplied to planReconcile."
+      },
+      "rationale": "The owner test continues to compute test input through production merge behavior, contrary to the project rule.",
+      "destination": "Phase 2 should replace the helper with independently authored MergedConfig literals."
+    },
+    {
+      "id": "ORA-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-012"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assertion inspection",
+        "observed": "The WR-06 assertion still applies Object.keys to optional plugins with ?? {}, so absence and an empty map compare equally; no isolated state-deletion mutation was run."
+      },
+      "rationale": "The vacuity is visible, but D-11 requires a surviving mutation for terminal test-strength proof.",
+      "destination": "Phase 2 should mutate last-plugin removal in isolation and replace the assertion with whole marketplace state proof if it survives."
+    },
+    {
+      "id": "ORA-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-013"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current add outcome and fixture inspection",
+        "observed": "All marketplace-add fixtures still make declared and manifest-derived names equal; no isolated result.name-to-op.marketplace mutation was run."
+      },
+      "rationale": "The CR-01 argument-threading test gap requires a surviving mutation under D-11.",
+      "destination": "Phase 2 should execute the mutation and add a differing-name convergence fixture if it survives."
+    },
+    {
+      "id": "ORA-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-014"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current toggle-loop and race-case inspection",
+        "observed": "The skipped toggle result is still intentionally dropped and no case drives that branch; no isolated mutation was run."
+      },
+      "rationale": "D-11 requires a surviving mutation before terminally calling the reachable branch untested.",
+      "destination": "Phase 2 should add a narrow state-read seam or isolated competitor case after mutation proof."
+    },
+    {
+      "id": "ORA-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current helper inspection",
+        "observed": "raceStateFromRead still replaces node:fs/promises.readFile through createRequire, calls syncBuiltinESMExports, and restores the process-wide binding later."
+      },
+      "rationale": "The test still mutates a process-wide module dependency; correcting it requires a production read seam decision.",
+      "destination": "Choose a narrow consumer-owned state read dependency before Phase 2 rewrites these race cases."
+    },
+    {
+      "id": "ORA-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" },
+        { "path": "tests/orchestrators/import/execute.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source inspection",
+        "observed": "dependenciesFromInstall and dependenciesFromInstalled remain separate same-order two-boolean mappers; the import copy additionally freezes its result."
+      },
+      "rationale": "The small closed-set derivation remains duplicated across owner concerns with a mutability difference.",
+      "destination": "Defer shared ownership and freeze semantics until both orchestrator owners are in scope."
+    },
+    {
+      "id": "ORA-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns test-support placement rather than production source."
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/notification-boundary.ts" },
+        { "path": "tests/platform/git-ops-fake.ts" },
+        { "path": "tests/orchestrators/plugin/scope-tree-inventory.ts" },
+        { "path": "tests/orchestrators/reconcile/apply.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current import inspection",
+        "observed": "The reconcile owner suite still imports support from edge, platform, and plugin concern directories."
+      },
+      "rationale": "Cross-concern support placement still violates the project skill's concern-local organization rule.",
+      "destination": "Defer the cross-suite support move to a coordinated test-organization pass."
+    },
+    {
+      "id": "ORA-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection",
+        "observed": "Twelve planReconcile cases still bind the public result as const result."
+      },
+      "rationale": "The placeholder naming warning remains live.",
+      "destination": "Phase 2 should rename the bindings to plan while making substantive owner-test repairs."
+    },
+    {
+      "id": "ORA-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call graph plus current suite inspection",
+        "observed": "The five orchestrators remain exercised through real behavior with hermetic boundaries; the report's qualification is the separate equal-name fixture gap, not a need for strong-mock conversion."
+      },
+      "rationale": "The historical design defense remains correct and should not itself create remediation.",
+      "destination": "Close as evidence; address ORA-F13 without converting behavioral collaborators to interaction mocks."
+    },
+    {
+      "id": "ORA-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current owner-test inspection",
+        "observed": "No case removes a materialized artifact while retaining a current installation record and asserts silent byte-identical state."
+      },
+      "rationale": "The documented config-to-record reconciliation boundary remains structurally unowned by a focused case.",
+      "destination": "Phase 2 should add the boundary case with the current extension version stamp."
+    },
+    {
+      "id": "ORA-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current closed-union switch inspection",
+        "observed": "switch(match) still has no default/exhaustiveness landing and executes only side effects, so TypeScript does not force a new union member to be handled."
+      },
+      "rationale": "The structural exhaustiveness weakness survives; its runtime landing must honor no-throw reconciliation behavior.",
+      "destination": "Decide and implement a pin-and-land fallback rather than a throwing assertNever or silent continue."
+    },
+    {
+      "id": "ORA-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current closed-union switch inspection",
+        "observed": "applySourceMismatches still has no default/exhaustiveness landing and would silently omit a new cause."
+      },
+      "rationale": "The original bare-break repair would preserve the silent-drop failure; a truthful fallback row is a contract decision.",
+      "destination": "Choose the pin-and-land outcome shape before Phase 2 implementation."
+    },
+    {
+      "id": "ORA-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph import/call inspection",
+        "observed": "The five driven orchestrators remain hardcoded imports; only gitOps is injected through ApplyReconcileOptions."
+      },
+      "rationale": "The seam observation remains accurate, but any expansion affects the orchestrator dependency surface.",
+      "destination": "Decide whether the existing behavioral suite is sufficient or a narrow dependencies object is warranted."
+    },
+    {
+      "id": "ORA-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current union and switch inspection",
+        "observed": "PluginShapeError remains a four-kind closed shape, the switch handles all four without default, and narrowProbeError remains the post-switch fallback."
+      },
+      "rationale": "The structural exhaustiveness pin remains absent while current runtime behavior is preserved by fallthrough.",
+      "destination": "Phase 2 should move the existing fallback into an explicit default arm."
+    },
+    {
+      "id": "ORA-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph references plus current JSDoc inspection",
+        "observed": "classifyOrchestratorThrow still says it is otherwise module-private although apply.ts and backfill.ts import it in production."
+      },
+      "rationale": "The cited JSDoc remains factually misleading.",
+      "destination": "Phase 2 should delete or rewrite that sentence."
+    },
+    {
+      "id": "ORA-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-026"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current pristine-gate fixture inspection",
+        "observed": "No focused case establishes a local config without a base config at the pristine scope gate; no isolated right-disjunct mutation was run."
+      },
+      "rationale": "This low-value test-strength observation remains plausible but non-terminal under D-11.",
+      "destination": "Phase 2 may close it by adjusting an existing arrange after a surviving mutation."
+    },
+    {
+      "id": "ORA-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current schema and conditional-spread inspection",
+        "observed": "Both optional version spreads remain, while persisted plugin records still require version; their undefined arms are unreachable from the orchestrator state contract."
+      },
+      "rationale": "The branches remain defensive/dead rather than honest test targets.",
+      "destination": "Decide whether to remove the spreads or explicitly retain accepted uncovered defensive code."
+    },
+    {
+      "id": "ORA-F28",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current toggle outcome flow inspection",
+        "observed": "The disable-axis degradation discard remains, while degradation is produced only for enabled status, so it cannot discard a value on the disabled success arm."
+      },
+      "rationale": "The destructuring is a defensive typing guard, not a reachable behavioral branch.",
+      "destination": "Decide whether to simplify it or preserve it as explicitly defensive code."
+    },
+    {
+      "id": "ORA-F29",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current closed-shape inspection",
+        "observed": "The implicit fallthrough after the four handled PluginShapeError kinds remains unreachable for the current closed shape and becomes reachable only if that shape grows."
+      },
+      "rationale": "This is an exhaustiveness-policy question, not missing current runtime coverage.",
+      "destination": "Resolve with ORA-F24 by making the fallback explicit."
+    },
+    {
+      "id": "ORA-F30",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/plan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current TypeScript narrowing and safe-name inspection",
+        "observed": "The record !== undefined guards remain required by noUncheckedIndexedAccess; safe marketplace names prevent the near-reachable last-at desynchronization premise."
+      },
+      "rationale": "These guards are compiler-forced and should not receive dishonest runtime cases.",
+      "destination": "Close as evidence-only accepted D-116-01a coverage structure."
+    },
+    {
+      "id": "ORA-F31",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call/data-flow inspection",
+        "observed": "The cited reorderings remain observationally equivalent because action buckets are disjoint and rendered output sorts canonically; add-before-install and project-before-user remain directly asserted."
+      },
+      "rationale": "Equivalent reorderings are not actionable coverage gaps.",
+      "destination": "Close as evidence so remediation does not chase equivalent mutants."
+    },
+    {
+      "id": "ORA-F32",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": ".fallowrc.json" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current configuration and reference inspection",
+        "observed": "Fallow still uses production false, so test imports count as consumers and surfacePostCommitWarnings is not detected as production-unowned."
+      },
+      "rationale": "The cross-cutting gate blind spot remains live beyond this one export.",
+      "destination": "Defer a repository-wide production-export ownership gate to the architecture-gate phase."
+    },
+    {
+      "id": "ORA-F33",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/reconcile/plan.test.ts" },
+        { "path": "tests/orchestrators/reconcile/apply.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current contract and fixture inspection",
+        "observed": "Production still distinguishes declared and manifest-derived marketplace names while every apply fixture makes them equal."
+      },
+      "rationale": "The report's generalized equal-fixture blind-spot diagnosis remains supported and is embodied by the alias decision.",
+      "destination": "Use the alias dossier to establish the contract, then add fixtures with distinct same-typed values."
+    },
+    {
+      "id": "ORA-F34",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim is a repository-wide assertion-pattern recommendation."
+        }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/reconcile/apply.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assertion inspection",
+        "observed": "The empty-value Object.keys assertion still uses ?? {}, while the three nonempty sibling assertions cannot hide absence in the same way."
+      },
+      "rationale": "The concrete vacuity pattern remains and justifies a later repository-wide pattern scan.",
+      "destination": "Defer the broad scan; repair the concrete owner case through ORA-F12."
+    },
+    {
+      "id": "ORA-F35",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-apply.md#CLAIM-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/reconcile/apply.test.ts" },
+        { "path": "tests/edge/notification-boundary.ts" },
+        { "path": "tests/platform/git-ops-fake.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current boundary and assertion inspection",
+        "observed": "The suite still uses an allow-nothing offline git fake, exact notification sizing, and whole authored message comparisons; no conversion to interaction mocks is warranted."
+      },
+      "rationale": "These are current positive reference patterns, not remediation items.",
+      "destination": "Retain as evidence-only guidance while fixing the isolated live weaknesses."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
