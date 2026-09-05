@@ -193,7 +193,7 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
  * `enabled` is the sole disable marker, and disabling changes `enabled` and
  * `updatedAt` and NOTHING ELSE. The record is a description of the
  * INSTALLATION, not a mirror of the current disk contents: the disable cascade
- * still unstages every artifact of all five kinds (ENBL-13 / D-100-04), but the
+ * still unstages every artifact of all six kinds (ENBL-13 / D-100-04), but the
  * record keeps naming what the install materialized, so `info` can report what
  * a disabled plugin contains -- including after its marketplace manifest entry
  * has disappeared and nothing else can answer.

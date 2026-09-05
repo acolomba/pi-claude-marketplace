@@ -2511,7 +2511,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin enable <plugin>@<marketplace>`
 
-D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 5-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
+D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 7-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
 
 ### Fresh enable
 

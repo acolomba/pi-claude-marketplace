@@ -383,9 +383,10 @@ async function runDisableBranch(
   }
 
   // SET enabled: false; BUMP updatedAt; PRESERVE everything else.
-  // ENBL-13 / D-100-04 / COMPONENT_KINDS 5-tuple: artifact removal stays
-  // symmetric across all five kinds -- the cascade above physically unstages
-  // hooks via removeHookConfig alongside skills, commands, agents and mcp.
+  // ENBL-13 / D-100-04: artifact removal stays symmetric across all six
+  // kinds -- the cascade above physically unstages hooks via removeHookConfig
+  // and workflows via unstagePluginWorkflows alongside skills, commands,
+  // agents and mcp.
   // ENBL-18 / D-100-10: what the record retains is its DESCRIPTION of the
   // installation, not the artifacts. The record answers "what does this plugin
   // contain", which stays true while the plugin is disabled and stays

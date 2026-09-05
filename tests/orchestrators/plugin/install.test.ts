@@ -259,7 +259,7 @@ function retryStagingMkdirPrefix(stagingDir: string): string {
 //   PI-6: cross-plugin name conflict -> CrossPluginConflictError.
 //   PI-7: version precedence -- entry.version then hash-<12hex> fallback.
 //   PI-8: atomic staging + cleanup warnings (skills bridge cleanup-leak fold).
-//   PI-9: 5-phase ordering + rollback on phase-N failure (end-state assertion).
+//   PI-9: 7-phase ordering + rollback on phase-N failure (end-state assertion).
 //   PI-10: ${CLAUDE_PLUGIN_ROOT} substitution observable in staged skill body.
 //   PI-11: subagents warning -- pi.getAllTools returns no "subagent" -> warning.
 //   PI-12: mcp-adapter warning -- pi.getAllTools returns no "mcp" -> warning.
@@ -2485,7 +2485,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-9 -- 5-phase order + end-state assertion
+// PI-9 -- 7-phase order + end-state assertion
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-9: happy-path install lands skills + commands + agents + mcp + state in order", async () => {
