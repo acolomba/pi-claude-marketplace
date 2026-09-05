@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 112
 current_phase_name: Install and removal lifecycle
-current_plan: 112-04 (not started)
+current_plan: 112-04 (complete)
 status: In progress
-stopped_at: Completed 112-03-PLAN.md
-last_updated: "2026-09-05T18:40:00.000Z"
+stopped_at: Completed 112-04-PLAN.md
+last_updated: "2026-09-05T19:20:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: 112-03 complete - reinstall re-materializes envelopes, records the placed names, and takes them back on a later failure
+last_activity_desc: 112-04 complete - orphaned workflow staging trees are swept under a 24-hour age bound from both lifecycle sides
 state_head: 8e2c8a54fdbdd396d771dc01513f1e124a3c3abb
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 16
-  completed_plans: 15
-  percent: 33
+  completed_plans: 16
+  percent: 44
 ---
 
 # Project State
@@ -35,9 +35,13 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 112 (Install and removal lifecycle) — IN PROGRESS, 3 of 4 plans done
-Plan: `112-01`, `112-02` and `112-03` complete; `112-04` is next
-Status: `112-01` landed the tracer in four commits — `a025d5b4` the
+Phase: 112 (Install and removal lifecycle) — ALL 4 PLANS EXECUTED, verification pending
+Plan: `112-01` through `112-04` complete; the phase is ready for `/gsd-verify-work 112`
+Status: `112-04` closed the phase in three commits — `27af6664` the age-bounded
+staging sweeper with its mirrored owner test, `b2c2b4af` the install-side and
+removal-side call sites, `85b0692b` the stale ledger and kind-count corrections.
+`npm run check` is green end to end (unit 5504/0, integration 32/0) and
+`pre-commit run --all-files` rewrote nothing. `112-01` landed the tracer in four commits — `a025d5b4` the
 `resources.workflows` record inventory, `d02db74b` the sixth ledger phase,
 `6d01ed99` the rollback evidence, `6f8e1c6a` the closed-set widening. `112-02`
 landed the removal side in three — `edb7007c` the sixth cascade slot and the
@@ -48,8 +52,19 @@ disk. `112-03` landed reinstall's bespoke re-materialization in three —
 step, the placed-names thread-through and the never-throwing recovery composer,
 `e785a865` the record and replace semantics pinned. `npm run check` is green end
 to end (unit 5423/0, integration 32/0) and every file any of the three plans
-touched holds at 100% direct coverage. Remaining: `112-04` (the age-bounded
-staging sweep).
+touched holds at 100% direct coverage.
+
+**What `112-04` settled.** `garbageCollectWorkflowsStaging` sweeps
+`<workflowsStagingDir>/<uuid>/` trees older than `WORKFLOWS_STAGING_MAX_AGE_MS`
+(24 hours, one exported constant). Nothing persists a staging identifier and the
+staging directory is scope-independent, so the age bound is the whole liveness
+mechanism rather than a refinement of the clone collector's persisted-record
+one. Containment is anchored on `workflowsHomeDir`, one level above the staging
+directory, so the staging segment itself is walked; the assertion is resolved
+outside the swallowing try so a refusal propagates instead of becoming a removal
+leak. Both `collectPostCommitWarnings` and `runPostUninstallCleanup` call it,
+silently, discarding the leak strings the way all four clone-collector call
+sites do.
 
 **What `112-03` settled for `112-04`.** Everything reachable in-process is now
 cleaned: the workflows commit removes its own staging root on success,
@@ -279,11 +294,11 @@ Phase 112 is what makes the repair actually run; the effect lands at release.
 
 ## Progress
 
-**Phases Complete:** 3/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** `112-03` not started — Phase 112 is 2/4 plans done.
+**Phases Complete:** 4/9 executed (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** none — Phase 112 is 4/4 plans done.
 
 ```text
-[===-------] 33%
+[====------] 44%
 ```
 
 | Phase | Name | Status |
@@ -291,7 +306,7 @@ Phase 112 is what makes the repair actually run; the effect lands at release.
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
 | 111 | Workflows bridge | In progress (4/4 plans executed, verification pending) |
-| 112 | Install and removal lifecycle | In progress (2/4 plans executed) |
+| 112 | Install and removal lifecycle | In progress (4/4 plans executed, verification pending) |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
 | 115 | Install-time admission-gate warnings | Not started (hardening) |
@@ -398,12 +413,21 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T17:50:00Z
+**Last session:** 2026-09-05T19:20:00Z
 
-**Stopped At:** Completed 112-02-PLAN.md
+**Stopped At:** Completed 112-04-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-verify-work 111` — all four plans are executed and the
-phase gate is green. `111-04`'s two commits are `b524524c` (the version bump at
+**Next Action:** `/gsd-verify-work 112` — all four plans are executed and the
+phase gate is green. Three stale "five kinds" statements survive OUTSIDE the six
+files `112-04` was scoped to and are the closest thing the phase leaves open:
+`tests/orchestrators/plugin/enable-disable.test.ts:869` (which mirrors the
+comment `85b0692b` corrected in `enable-disable.ts`), `tests/live-uat/README.md`
+and `docs/competitive-analysis/pi-plugins.md`. Two "five-phase" statements
+survive in `docs/competitive-analysis/` for the same reason. None is matched by
+the phase's own acceptance greps.
+
+Superseded next action: `/gsd-verify-work 111` — all four plans are executed and
+the phase gate is green. `111-04`'s two commits are `b524524c` (the version bump at
 six sites plus the `.planning/PROJECT.md` prose site) and `a3939034` (the
 install-window assertion inversion). Task 3 produced no commit, which is the
 planned outcome: `pre-commit run --all-files` rewrote nothing.
@@ -521,6 +545,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 111 P04 | 34 min | 3 tasks | 8 files |
 | Phase 112 P01 | 70 min | 3 tasks | 51 files |
 | Phase 112 P02 | 40 min | 3 tasks | 8 files |
+| Phase 112 P04 | 42 min | 3 tasks | 9 files |
 
 ## Decisions
 
