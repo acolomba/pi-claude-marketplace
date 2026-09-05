@@ -100,8 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WINV-05 | Phase 109 | Complete |
 | WNAM-01, WNAM-02, WNAM-04, WNAM-05, WNAM-06 | Phase 110 | Complete (verified 20/20, 2026-09-05) |
 | WNAM-03 | Phase 110 -> Phase 111 | Partial - classification half done in 110-03; the warning and not-installed halves are Phase 111's |
-| WPTH-02 | Phase 110 -> Phase 111 | Partial - home-derivation half proved in 110-01; the never-written guarantee is Phase 111's |
-| WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Executed 4/4 plans - verification pending |
+| WPTH-02 | Phase 110 -> Phase 111 | Complete - home-derivation half proved in 110-01; the never-written guarantee closed in Phase 111 |
+| WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Complete (verified 9/9, 2026-09-05) |
 | WLIF-01..03 | Phase 112 | Pending (re-land) |
 | WLIF-04..06, WFLW-04 | Phase 113 | Pending (re-land) |
 | WDEP-01..04, WDOC-01..03 | Phase 114 | Pending (re-land) |

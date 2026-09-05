@@ -16,7 +16,7 @@
     {
       "number": "111",
       "name": "Workflows bridge",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "112",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 111)",
-    "reason": "Phase 111 of 9 — needs a plan"
+    "label": "Advance to the next step (plan phase 112)",
+    "reason": "Phase 112 of 9 — needs a plan"
   },
-  "updated_at": "2026-09-05T09:19:16.994Z"
+  "updated_at": "2026-09-05T13:58:00.286Z"
 }

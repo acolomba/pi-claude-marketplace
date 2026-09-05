@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 111
-current_phase_name: Workflows bridge
-current_plan: 111-04 (complete)
-status: In progress
-stopped_at: Completed 111-04-PLAN.md
-last_updated: "2026-09-05T11:50:00.000Z"
+current_phase: 112
+current_phase_name: Install and removal lifecycle
+current_plan: Not started
+status: planning
+stopped_at: Phase 111 complete, ready to plan Phase 112
+last_updated: "2026-09-05T13:58:00.207Z"
 last_activity: 2026-09-05
-last_activity_desc: 111-04 executed - version bumped to 0.19.0 at all six sites and the install-window assertion inverted to prove the envelope present
-state_head: a3939034
+last_activity_desc: Phase 111 complete, transitioned to Phase 112
+state_head: e097ad2fb4b790e98f83a7f71cb66b1cf1f50b43
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
   completed_plans: 12
-  percent: 22
+  percent: 33
 ---
 
 # Project State
@@ -35,9 +35,12 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 111 (Workflows bridge) — ALL PLANS EXECUTED, awaiting verification
-Plan: 4 of 4 complete (`111-01`, `111-02`, `111-03`, `111-04`)
-Status: `111-04` closed the phase's two standing obligations in two commits.
+Phase: 112 — Install and removal lifecycle
+Plan: none yet — Phase 112 is not planned
+Status: Ready to plan Phase 112. Phase 111 is complete and verified 9/9 against
+the ROADMAP's nine success criteria. The sixth bridge is on disk as a
+discover/stage/unstage triplet with owner tests, and the review loop ran two
+iterations over it.
 `b524524c` moved the version literal to `0.19.0` at all six sites — the
 manifest, both lockfile records, the `EXTENSION_VERSION` constant, the
 hard-coded literal in `tests/shared/extension-version.test.ts` (the site the
@@ -166,46 +169,42 @@ explicitly declines that mechanism, and main has since taught
 `generatedCommandName` nested-path and empty-head rules a flat workflow caller
 can never produce.
 
-Last activity: 2026-09-05 — `111-03` executed; the workflows bridge is
-complete and the next step is `111-04`
+Last activity: 2026-09-05 — Phase 111 verified 9/9 and marked complete; the
+next step is `/gsd-plan-phase 112`
 
-**The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
-workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
-brace, and materializes zero workflow commands.
-`tests/integration/workflow-kind-inversion.test.ts` asserts both halves, so the
-window is a fact under test rather than an undocumented gap. Cut no release from
-this branch, and do NOT bump `EXTENSION_VERSION` before Phase 111 (A-03: a bump
-would fire the `supportedSetGrew` backfill convergence while no bridge exists to
-materialize anything).
+**The D-109-06 window is CLOSED.** Phase 111 landed `bridges/workflows/` and
+bumped `EXTENSION_VERSION` to `0.19.0`, discharging both obligations Phase 109
+deferred forward. A workflow-bearing plugin still resolves `installable` and
+renders `● (installed)` with no brace, but the bridge now materializes its
+envelopes — `tests/integration/workflow-kind-inversion.test.ts` asserts the
+envelope IS written, with the old ENOENT assertion repositioned between the two
+acts so it proves the transition rather than the end state alone. The verifier
+reproduced the negative control: restoring the old fixture body turns the case
+red, so the inverted assertion is not vacuous.
 
-**Phase 111 must invert the no-artifact half** of that test — the single
-`assert.rejects(stat(<HOME>/.pi/workflows), { code: "ENOENT" })` line becomes an
-assertion that the envelopes ARE written. An assertion that quietly stays green
-while meaning the opposite is worse than no assertion. Recorded in
-`109-CONTEXT.md` §Deferred Ideas and `109-05-SUMMARY.md`.
+**The A-03 prohibition is spent.** It forbade bumping `EXTENSION_VERSION` *during*
+the window, because the bump fires the `supportedSetGrew` convergence and no
+bridge existed to materialize anything. The bridge exists now, so the bump was
+this phase's obligation rather than its hazard, and it landed at all six sites —
+including `tests/shared/extension-version.test.ts`, which the repository's own
+bump checklist does not name.
 
-**Phase 111 must also BUMP `EXTENSION_VERSION`** in the same change that lands
-`bridges/workflows/`. A-03 records only the prohibition — do not bump *during*
-the window — and its inverse is an obligation that was written nowhere.
-`orchestrators/reconcile/backfill.ts:76` returns early while
-`state.lastReconciledExtensionVersion === EXTENSION_VERSION`, so the bump is the
-only thing that opens the gate and lets `supportedSetGrew` (`backfill.ts:343`)
-re-materialize the records the released v0.18.1 wrote. Any user who
-`--partial`-installed a workflow-bearing plugin on 0.18.1 has
-`compatibility: { installable: false, unsupported: ["workflows"] }` on disk, and
-`list` / `info` / `enable` / reconcile read that PERSISTED array rather than a
-fresh resolution, so the row now renders
-`◉ helper (partially-installed) {unsupported component}` — a token naming a
-dropped component for a kind Pi supports. Without the bump those records stay
-that way permanently.
+**What the bump does NOT yet do.** `orchestrators/reconcile/backfill.ts:76`
+returns early while `state.lastReconciledExtensionVersion === EXTENSION_VERSION`,
+so the bump opens that gate — but `backfill.ts:343` re-materializes through
+`reinstallPlugin`, which gains no workflows phase until Phase 112. A user who
+`--partial`-installed a workflow-bearing plugin on the released 0.18.1 still
+carries `compatibility: { installable: false, unsupported: ["workflows"] }` on
+disk and still renders `◉ helper (partially-installed) {unsupported component}`.
+Phase 112 is what makes the repair actually run; the effect lands at release.
 
 ## Progress
 
-**Phases Complete:** 2/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** none — Phase 111 is 4/4 executed, verification pending.
+**Phases Complete:** 3/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started — Phase 112 needs planning.
 
 ```text
-[==--------] 22%
+[===-------] 33%
 ```
 
 | Phase | Name | Status |
@@ -322,7 +321,7 @@ implementation.
 
 **Last session:** 2026-09-05T11:50:00Z
 
-**Stopped At:** Completed 111-04-PLAN.md
+**Stopped At:** Phase 111 complete, ready to plan Phase 112
 **Resume File:** None
 **Next Action:** `/gsd-verify-work 111` — all four plans are executed and the
 phase gate is green. `111-04`'s two commits are `b524524c` (the version bump at
@@ -423,7 +422,6 @@ re-persists `harness-worktree` as a side effect.
   `Workflows (flujos de trabajo).` (parallel to the existing `Hooks (ganchos).`).
   Flip to `Flujos de trabajo (workflows).` if preferred — the link text changes
   with it.
-
 
 ## Performance Metrics
 
