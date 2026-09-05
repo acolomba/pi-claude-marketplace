@@ -5,8 +5,8 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-38-PLAN.md
-last_updated: "2026-09-05T01:18:34.000Z"
+stopped_at: Completed 01-39-PLAN.md
+last_updated: "2026-09-05T01:28:39.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
 state_head: 96df18ca8a57d2f72135dfcf4bf94da0cd149cce
@@ -14,7 +14,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 38
+  completed_plans: 39
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 39 of 69
+Plan: 40 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -222,6 +222,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P36 | 5min | 1 tasks | 2 files |
 | Phase 01-live-evidence-revalidation P37 | 10min | 2 tasks | 1 files |
 | Phase 01-live-evidence-revalidation P38 | 12min | 2 tasks | 1 files |
+| Phase 01-live-evidence-revalidation P39 | 15min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -502,6 +503,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Treat green owner tests as executability evidence only, never as confirmation of named mutation strength.
 - [Phase 01]: Keep mutation-dependent claims inconclusive when no isolated mutation was run, while confirming structural claims from current live evidence.
 - [Phase 01]: Preserve shared-notify report-local claims in one exclusive validated shard with isolated mutation evidence.
+- [Phase 01]: Preserve first-pass architecture-gate strengths as duplicate evidence without erasing later adversarial refinements.
+- [Phase 01]: Retain the fallow planted-cycle limitation as deferred gate-integrity work because the current case proves only package-script shape.
 
 ### Pending Todos
 
@@ -554,7 +557,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-38-PLAN.md
+**Stopped at:** Completed 01-39-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -563,7 +566,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T01:11:49.766Z
+Last session: 2026-09-05T01:28:39.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
