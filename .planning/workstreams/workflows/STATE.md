@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 111
 current_phase_name: Workflows bridge
-current_plan: 111-01 (not started)
-status: Ready to execute
-stopped_at: Phase 111 planned (4 plans), ready to execute
-last_updated: "2026-09-05T09:19:16.918Z"
+current_plan: 111-02 (not started)
+status: In progress
+stopped_at: Completed 111-01-PLAN.md
+last_updated: "2026-09-05T09:59:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 111 planned - 4 plans, checker passed clean
-state_head: 8bf926deb34d50a1e28bd277e072f0a1ae1d0a0f
+last_activity_desc: 111-01 executed - workflow path layer landed, 25/25 owner cases green
+state_head: 59ed276f
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
   percent: 22
 ---
 
@@ -35,9 +35,16 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 111 (Workflows bridge) — READY TO EXECUTE
-Plan: 4 plans, none started
-Status: Ready to execute. Phase 111 is planned and the checker passed with zero
+Phase: 111 (Workflows bridge) — IN PROGRESS
+Plan: 1 of 4 complete (`111-01`), `111-02` next
+Status: In progress. `111-01` landed the path layer the rest of the phase rests
+on: `persistence/locations.ts` gained `workflowsHomeDir`, `workflowsSavedDir`,
+`workflowsStagingDir` and the async `workflowArtifactPath` chokepoint, and
+`shared/errors-bridges.ts` gained `WorkflowTargetOccupiedError`. Both ported
+bodies landed whole with zero deleted lines, both pairs reach 100% direct
+coverage, and the tracer's predicted red was observed exactly (11 tests, 9 pass,
+2 fail on the two exhaustive `Object.keys` bundle assertions) before
+`LOCATION_KEYS` was extended to its 31 entries. The checker passed with zero
 issues across all seven phase-specific traps. Four serialized waves: `111-01`
 (the tracer — the `locations.ts` workflows members and `WorkflowTargetOccupiedError`,
 opening red on the two exhaustive `Object.keys` bundle assertions the port breaks),
@@ -165,7 +172,7 @@ that way permanently.
 ## Progress
 
 **Phases Complete:** 2/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started — Phase 111 needs planning.
+**Current Plan:** `111-02` — Phase 111 is 1/4 executed.
 
 ```text
 [==--------] 22%
@@ -175,7 +182,7 @@ that way permanently.
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
-| 111 | Workflows bridge | Not started |
+| 111 | Workflows bridge | In progress (1/4 plans executed) |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
@@ -283,18 +290,24 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T05:35:00Z
+**Last session:** 2026-09-05T09:57:16Z
 
-**Stopped At:** Phase 110 complete, ready to plan Phase 111
+**Stopped At:** Completed 111-01-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-verify-work 110`, then `/gsd-discuss-phase 111`. All
-three of Phase 110's plans are complete and all three SUMMARYs are on disk; the
-production commits are `df7b9be8` (storage root), `ed756b8f` (project key),
-`2152a2aa` (name generator plus collision error) and `d3c5be6f` (script
-admission, acorn, owner test). The phase mechanism held all three times:
-path-scoped checkout naming individual files, the blast-radius assertion
-immediately after, an owner test that imports every export by name, complete
-direct coverage per pair, and the full gate chain before each commit.
+**Next Action:** `/gsd-execute-phase 111` — `111-02` (types/discover/unstage,
+the `bridges-workflows` fallow zone, the criterion-4 stem-fallback warning row).
+`111-01`'s production commits are `de192221` (the four `locations.ts` workflows
+members) and `c7939ad4` (`WorkflowTargetOccupiedError`), with `06e3c88d` a
+deviation fix that landed first. The phase mechanism held again: path-scoped
+checkout naming individual files, the blast-radius assertion immediately after,
+an owner test importing every export by name, complete direct coverage per pair,
+and the full gate chain before each commit.
+
+Two things `111-02` inherits. `workflowArtifactPath` is **async**, so every call
+site awaits it — a forgotten await yields a leaf named `[object Promise]` rather
+than a throw. And `npm run fallow` will fail loudly with a `Boundary coverage`
+section from the moment the `bridges/workflows/` files land until the
+`bridges-workflows` zone is added in the same commit.
 
 Phase 109 remains verified 12/12 and marked complete in ROADMAP.md;
 `109-VERIFICATION.md` carries the evidence. The phase's two manual-only
@@ -384,6 +397,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 110 P01 | 21 min | 2 tasks | 4 files |
 | Phase 110 P02 | 22 min | 2 tasks | 4 files |
 | Phase 110 P03 | 47 min | 3 tasks | 4 files |
+| Phase 111 P01 | 35 min | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -394,6 +408,11 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 110]: The relocation seam was deleted outright rather than reshaped into a `homeDir` parameter. — `os.homedir()` re-reads `HOME` on every call and caches nothing, so `HOME` plus `t.after()` restoration is a working replacement; threading a home directory through every Phase 111 call site that does not otherwise need one would be a worse contract for a hazard the research measured absent.
 - [Phase 110]: The header sentence defending the seam was replaced, not merely orphaned. — A comment arguing for a mechanism you just deleted, from a premise measured false, is worse than no comment.
 - [Phase 110]: The relative-path parity case pins the working directory with `process.chdir("/")` instead of taking the spike's split pin. — The split pin computes half its expectation with production code; a pinned cwd makes the same row a transcribed literal that is deterministic on any machine.
+- [Phase 111]: WPTH-03 is read as SPLIT across two phases rather than re-proved at the composition site. — The derivation half closed in Phase 110 with a mutation-sensitive literal parity table; this plan owes only that the derived key lands as the middle segment of `workflowsSavedDir`, and a second copy of those literals here would give one derivation two sources of truth.
+- [Phase 111]: The WPTH-02 writing-half case passes a distinct temp directory as the `cwd` ARGUMENT instead of relocating `process.cwd()` as planned. — Nothing in `locationsFor`'s call graph reads the process global; `cwd` is a parameter, so mutating `process.cwd()` would prove nothing about the input the code consumes and the case would pass for a cwd-derived implementation too.
+- [Phase 111]: The two `path.basename` failure injectors in the marketplace-add owner test were scoped to the config path rather than moving `locationsFor` inside `addMarketplace`'s try block. — The port made `locationsFor` traverse `path.basename`, and `addMarketplace` calls it one line before the try, so an unconditional process-wide throw escaped the normalizer under test. The normalizer was never broken and `locationsFor` cannot throw in production; changing an orchestrator's error contract to accommodate a test injector would have been the wrong repair.
+- [Phase 111]: That repair landed as its own commit placed BEFORE the tracer commit. — It is green both with and without the port, so ordering it first is what lets the tracer commit carry exactly its two planned paths and still leave `npm test` green, instead of trading one verification clause for the other.
+- [Phase 111]: WPTH-05 is pinned by a cross-configuration invariant, not by a rename-fails-EXDEV assertion. — Whether two roots share a filesystem is a property of the machine, so a same-filesystem box records success as an expected result; two bundles under one `HOME` with differing `PI_CODING_AGENT_DIR` and differing project directories fail on exactly the refactor that reintroduces EXDEV.
 - [Phase 110]: WPTH-02 is recorded as carried forward rather than completed. — Phase 110 writes nothing, so it can prove only the home-derivation negative; the "never written" guarantee belongs to the Phase 111 modules that write.
 - [Phase 110]: The ported `assertSafeSavedWorkflowName` was completed to all six engine clauses rather than the gap being recorded and carried to the admission-gate hardening phase. — The wrapper is new code the port itself introduces, so completing it makes the bridge match the engine EXACTLY rather than exceed it; the alternative was a workflow whose author put a space in `meta.name` installing and never running, with no signal.
 - [Phase 110]: The docblock sentence claiming `assertSafeName` already enforced the separator/NUL screening was replaced, not annotated. — It was measured false against engine 3.10.1 for a plain space and the whole `\p{Cf}` category; a comment arguing a false premise is worse than none.
@@ -408,7 +427,7 @@ _Recorded per phase as the milestone proceeds._
 
 ## Operator Next Steps
 
-- Continue Phase 110 with `/gsd-execute-phase 110` — `110-02` is next
+- Continue Phase 111 with `/gsd-execute-phase 111` — `111-02` is next
 - Phase 109 is complete and verified 12/12; 110-114 run in order, each
   depending on the one before it
 - The hardening phases 115, 116 and 117 are mutually independent; the order

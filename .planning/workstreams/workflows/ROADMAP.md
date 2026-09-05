@@ -291,7 +291,7 @@ wave 2.
    (the fixture resolves `workflows` supported) stays as-is; only the ENOENT
    half moves.
 
-**Plans**: 4 plans in 4 waves, each wave one commit group. The waves are serialized
+**Plans**: 1/4 plans executed in 4 waves, each wave one commit group. The waves are serialized
 deliberately: `use_worktrees` is `false` here, so same-wave plans would share one working tree,
 and every gate this phase leans on (`typecheck`, `lint`, `fallow`, `format:check`,
 `test:corresponding`, `npm test`) scans the whole tree rather than the staged diff. Waves 2 and
@@ -305,7 +305,7 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 
 **Wave 1**
 
-- [ ] 111-01-PLAN.md — Tracer: land the `persistence/locations.ts` workflows members and
+- [x] 111-01-PLAN.md — Tracer: land the `persistence/locations.ts` workflows members and
   `WorkflowTargetOccupiedError` with their owner tests, proving the artifact-path chokepoint,
   the new writable root and the hermetic-`HOME` discipline before anything writes
 
@@ -493,7 +493,7 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
 | 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
-| 111. Workflows bridge | 0/4 | Planned     | - |
+| 111. Workflows bridge | 1/4 | In Progress | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
 | 114. Degradation and documentation | 0/? | Not started | - |
