@@ -607,7 +607,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -629,7 +634,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -807,7 +817,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -881,7 +896,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -896,7 +916,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-018"
       ],
       "evidenceStatus": "stale",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -922,7 +942,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-019"
       ],
       "evidenceStatus": "stale",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -978,10 +998,15 @@
       "duplicateOf": null,
       "sourceRefs": [
         {
+          "path": "N/A",
+          "reason": "Only test-side evidence was recorded at tests/orchestrators/reconcile/types.test.ts; no one-to-one production owner was asserted."
+        }
+      ],
+      "testRefs": [
+        {
           "path": "tests/orchestrators/reconcile/types.test.ts"
         }
       ],
-      "testRefs": [],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1003,7 +1028,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1025,7 +1055,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1066,7 +1101,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-025"
       ],
       "evidenceStatus": "confirmed",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -1125,7 +1160,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1192,14 +1232,19 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-030"
       ],
       "evidenceStatus": "stale",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Only test-side evidence was recorded at tests/orchestrators/reconcile/notify.test.ts; no one-to-one production owner was asserted."
+        }
+      ],
+      "testRefs": [
         {
           "path": "tests/orchestrators/reconcile/notify.test.ts"
         }
       ],
-      "testRefs": [],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1240,7 +1285,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-reconcile-notify.md#CLAIM-032"
       ],
       "evidenceStatus": "confirmed",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -1478,10 +1523,15 @@
       "duplicateOf": null,
       "sourceRefs": [
         {
+          "path": "N/A",
+          "reason": "Only test-side evidence was recorded at tests/orchestrators/discover.test.ts; no one-to-one production owner was asserted."
+        }
+      ],
+      "testRefs": [
+        {
           "path": "tests/orchestrators/discover.test.ts"
         }
       ],
-      "testRefs": [],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1555,7 +1605,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1726,7 +1781,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-019"
       ],
       "evidenceStatus": "confirmed",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -1752,7 +1807,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-020"
       ],
       "evidenceStatus": "confirmed",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -1778,14 +1833,19 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-021"
       ],
       "evidenceStatus": "stale",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Only test-side evidence was recorded at tests/orchestrators/discover.test.ts; no one-to-one production owner was asserted."
+        }
+      ],
+      "testRefs": [
         {
           "path": "tests/orchestrators/discover.test.ts"
         }
       ],
-      "testRefs": [],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1833,7 +1893,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1855,7 +1920,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1877,7 +1947,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/types.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1892,7 +1967,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-026"
       ],
       "evidenceStatus": "confirmed",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -1918,7 +1993,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-027"
       ],
       "evidenceStatus": "stale",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {
@@ -1977,7 +2052,12 @@
           "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
         }
       ],
-      "testRefs": [],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding records production or policy evidence without a distinct owner-test reference."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph explore plus current source/test/config inspection",
@@ -1992,7 +2072,7 @@
         ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-root.md#CLAIM-030"
       ],
       "evidenceStatus": "stale",
-      "route": "evidence-only",
+      "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
         {

@@ -42,204 +42,962 @@
     }
   ],
   "sourceClaims": [
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-001", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-001", "findingId": "HHD-001" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-002", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-002", "findingId": "HHD-002" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-003", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-003", "findingId": "HHD-003" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-004", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-004", "findingId": "HHD-004" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-005", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-005", "findingId": "HHD-005" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-006", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-006", "findingId": "HHD-006" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-007", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-007", "findingId": "HHD-007" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-008", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-008", "findingId": "HHD-008" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-009", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-009", "findingId": "HHD-009" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-010", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-010", "findingId": "HHD-010" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-011", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-011", "findingId": "HHD-011" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-012", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-012", "findingId": "HHD-012" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-013", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-013", "findingId": "HHD-013" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-014", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-014", "findingId": "HHD-014" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-015", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-015", "findingId": "HHD-015" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-016", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-016", "findingId": "HHD-016" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-017", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-017", "findingId": "HHD-017" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-018", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-018", "findingId": "HHD-018" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-019", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-019", "findingId": "HHD-019" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-020", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-020", "findingId": "HHD-020" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-021", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-021", "findingId": "HHD-021" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-022", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-022", "findingId": "HHD-022" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-023", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-023", "findingId": "HHD-023" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-024", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-024", "findingId": "HHD-024" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-025", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-025", "findingId": "HHD-025" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-026", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-026", "findingId": "HHD-026" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-027", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-027", "findingId": "HHD-027" },
-    { "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-028", "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md", "label": "HHD-028", "findingId": "HHD-028" }
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-001",
+      "findingId": "HHD-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-002",
+      "findingId": "HHD-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-003",
+      "findingId": "HHD-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-004",
+      "findingId": "HHD-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-005",
+      "findingId": "HHD-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-006",
+      "findingId": "HHD-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-007",
+      "findingId": "HHD-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-008",
+      "findingId": "HHD-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-009",
+      "findingId": "HHD-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-010",
+      "findingId": "HHD-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-011",
+      "findingId": "HHD-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-012",
+      "findingId": "HHD-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-013",
+      "findingId": "HHD-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-014",
+      "findingId": "HHD-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-015",
+      "findingId": "HHD-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-016",
+      "findingId": "HHD-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-017",
+      "findingId": "HHD-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-018",
+      "findingId": "HHD-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-019",
+      "findingId": "HHD-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-020",
+      "findingId": "HHD-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-021",
+      "findingId": "HHD-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-022",
+      "findingId": "HHD-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-023",
+      "findingId": "HHD-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-024",
+      "findingId": "HHD-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-025",
+      "findingId": "HHD-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-026",
+      "findingId": "HHD-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-027",
+      "findingId": "HHD-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md",
+      "label": "HHD-028",
+      "findingId": "HHD-028"
+    }
   ],
   "findings": [
     {
-      "id": "HHD-001", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-001"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts" }],
-      "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "codegraph explore plus current source comparison", "observed": "REQUIRED_EVENT_FIELDS still omits translator-read fields for SessionStart, PostToolUse, PostToolUseFailure, SessionEnd, Stop, and StopFailure; the test table still carries the same incomplete requiredFields values." },
-      "rationale": "The diagnostic table and independently readable translator contracts still disagree for six events.", "destination": "Correct the required-field table and replace the copied test oracle with independent per-translator expectations."
+      "id": "HHD-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source comparison",
+        "observed": "REQUIRED_EVENT_FIELDS still omits translator-read fields for SessionStart, PostToolUse, PostToolUseFailure, SessionEnd, Stop, and StopFailure; the test table still carries the same incomplete requiredFields values."
+      },
+      "rationale": "The diagnostic table and independently readable translator contracts still disagree for six events.",
+      "destination": "Correct the required-field table and replace the copied test oracle with independent per-translator expectations.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-002", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-002"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "CodeGraph call graph", "observed": "spawnAndCollect remains private, has one caller, and that caller always passes spawnImpl while the parameter still defaults to spawn." },
-      "rationale": "The default initializer remains unreachable production code.", "destination": "Remove the default initializer and require the parameter."
+      "id": "HHD-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call graph",
+        "observed": "spawnAndCollect remains private, has one caller, and that caller always passes spawnImpl while the parameter still defaults to spawn."
+      },
+      "rationale": "The default initializer remains unreachable production code.",
+      "destination": "Remove the default initializer and require the parameter.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-003", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-003"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns test support only." }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current source inspection", "observed": "isSpawnOptions still accepts every non-null object as SpawnOptions, and observeSpawn still wraps its Proxy with t.mock.fn while assertions consume the separate calls array." },
-      "rationale": "The current guard is unsound and the unused mock wrapper adds no observation.", "destination": "Narrow captured options to asserted fields and remove the unread wrapper or assert its log."
+      "id": "HHD-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test support only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "isSpawnOptions still accepts every non-null object as SpawnOptions, and observeSpawn still wraps its Proxy with t.mock.fn while assertions consume the separate calls array."
+      },
+      "rationale": "The current guard is unsound and the unused mock wrapper adds no observation.",
+      "destination": "Narrow captured options to asserted fields and remove the unread wrapper or assert its log.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-004", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-004"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }, { "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "surviving-mutation", "command": "node --test tests/bridges/hooks/dispatch.test.ts (repository-local isolated copy; both executor calls pass undefined for pi)", "exitCode": 0, "observed": "The owner passed after both dispatch executor call sites dropped pi; current tests still pass undefined or ignore the parameter, and live files were not changed." },
-      "rationale": "Async-rewake depends on non-undefined pi, but the dispatch owner cannot detect its loss.", "destination": "Pass and assert a distinguishable pi sentinel through both composite handler families."
+      "id": "HHD-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        },
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/dispatch.test.ts (repository-local isolated copy; both executor calls pass undefined for pi)",
+        "exitCode": 0,
+        "observed": "The owner passed after both dispatch executor call sites dropped pi; current tests still pass undefined or ignore the parameter, and live files were not changed."
+      },
+      "rationale": "Async-rewake depends on non-undefined pi, but the dispatch owner cannot detect its loss.",
+      "destination": "Pass and assert a distinguishable pi sentinel through both composite handler families.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-005", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-005"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "surviving-mutation", "command": "node --test tests/bridges/hooks/dispatch.test.ts (repository-local isolated copy; observation adapter returns a block object)", "exitCode": 0, "observed": "A compiled wrong return value from the SessionEnd/PreCompact/PostCompact arm survived because the three current cases still discard handler output; live files were not changed." },
-      "rationale": "The cases do not discriminate the observation handlers' undefined return contract.", "destination": "Capture and deep-compare undefined in all three cases."
+      "id": "HHD-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/dispatch.test.ts (repository-local isolated copy; observation adapter returns a block object)",
+        "exitCode": 0,
+        "observed": "A compiled wrong return value from the SessionEnd/PreCompact/PostCompact arm survived because the three current cases still discard handler output; live files were not changed."
+      },
+      "rationale": "The cases do not discriminate the observation handlers' undefined return contract.",
+      "destination": "Capture and deep-compare undefined in all three cases.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-006", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-006"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }, { "path": "extensions/pi-claude-marketplace/shared/debug-log.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }, { "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current source search", "observed": "collectBucketOutcomes still emits the async-rewake degradation log, while dispatch.test.ts still contains no debug observer; dispatch-exec.test.ts retains the working observer pattern." },
-      "rationale": "The documented observability promise has no owner assertion.", "destination": "Assert the degradation and observation-drop diagnostics through the existing debug seam."
+      "id": "HHD-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/debug-log.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        },
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source search",
+        "observed": "collectBucketOutcomes still emits the async-rewake degradation log, while dispatch.test.ts still contains no debug observer; dispatch-exec.test.ts retains the working observer pattern."
+      },
+      "rationale": "The documented observability promise has no owner assertion.",
+      "destination": "Assert the degradation and observation-drop diagnostics through the existing debug seam.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-007", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-007"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current source inspection", "observed": "The only populated collectBucketOutcomes case still supplies noop, block, and stop but no mutate result; production promises not to mutate its event." },
-      "rationale": "The no-in-place-mutation contract remains unexercised in this exported walker.", "destination": "Add a mutate outcome and assert the arranged event remains whole-value identical."
+      "id": "HHD-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The only populated collectBucketOutcomes case still supplies noop, block, and stop but no mutate result; production promises not to mutate its event."
+      },
+      "rationale": "The no-in-place-mutation contract remains unexercised in this exported walker.",
+      "destination": "Add a mutate outcome and assert the arranged event remains whole-value identical.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-008", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-008"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "CodeGraph data-flow inspection", "observed": "The synthetic provenance fallback and comment remain; attributedTo is set for mutate/block/stop and the adapter reads provenance only for SessionStart mutate, leaving fallback values unobservable." },
-      "rationale": "The fallback is dead semantic data and its comment still describes an impossible consumer.", "destination": "Make provenance optional where it is actually read and remove the synthetic object."
+      "id": "HHD-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph data-flow inspection",
+        "observed": "The synthetic provenance fallback and comment remain; attributedTo is set for mutate/block/stop and the adapter reads provenance only for SessionStart mutate, leaving fallback values unobservable."
+      },
+      "rationale": "The fallback is dead semantic data and its comment still describes an impossible consumer.",
+      "destination": "Make provenance optional where it is actually read and remove the synthetic object.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-009", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-009"], "evidenceStatus": "confirmed", "route": "deferred backlog",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }, { "path": "tsconfig.json" }], "testRefs": [{ "path": "N/A", "reason": "Compiler-enforced structural consistency claim." }],
-      "validation": { "method": "static-proof", "tool": "current source and compiler configuration inspection", "observed": "matcherFiresOnToolEvent, adaptForEvent, and entryFires still omit assertNever defaults, while noImplicitReturns remains enabled and reduceBucket retains the local idiom." },
-      "rationale": "This remains style consistency, not a silent union-extension blocker.", "destination": "Add assertNever arms during nearby cleanup; do not elevate to correctness work."
+      "id": "HHD-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        },
+        {
+          "path": "tsconfig.json"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Compiler-enforced structural consistency claim."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source and compiler configuration inspection",
+        "observed": "matcherFiresOnToolEvent, adaptForEvent, and entryFires still omit assertNever defaults, while noImplicitReturns remains enabled and reduceBucket retains the local idiom."
+      },
+      "rationale": "This remains style consistency, not a silent union-extension blocker.",
+      "destination": "Add assertNever arms during nearby cleanup; do not elevate to correctness work.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-010", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-010"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "CodeGraph export ownership inspection", "observed": "BucketOutcome and CompositeEventFor remain exported but absent from the paired test's type imports and explicit type evidence." },
-      "rationale": "Two exported contracts still lack owner evidence.", "destination": "Add satisfies and @ts-expect-error evidence and type the expected outcomes literal."
+      "id": "HHD-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph export ownership inspection",
+        "observed": "BucketOutcome and CompositeEventFor remain exported but absent from the paired test's type imports and explicit type evidence."
+      },
+      "rationale": "Two exported contracts still lack owner evidence.",
+      "destination": "Add satisfies and @ts-expect-error evidence and type the expected outcomes literal.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-011", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-011"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current source inspection", "observed": "The reload case still patches fs.promises.readFile, calls syncBuiltinESMExports twice, and derives operationLog from that global interception; registerHooksBridge still has no injected reader port." },
-      "rationale": "The process-wide builtin/ESM-binding mutation remains a banned non-hermetic loader technique.", "destination": "Inject a narrow reader into hydration and split the oversized integration case."
+      "id": "HHD-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The reload case still patches fs.promises.readFile, calls syncBuiltinESMExports twice, and derives operationLog from that global interception; registerHooksBridge still has no injected reader port."
+      },
+      "rationale": "The process-wide builtin/ESM-binding mutation remains a banned non-hermetic loader technique.",
+      "destination": "Inject a narrow reader into hydration and split the oversized integration case.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-012", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-012"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns the test file header." }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current test inspection", "observed": "The header still says the suite only pins synchronous primitives although the file retains reload, hydration, subprocess, and registration cases, plus authoring-event narration." },
-      "rationale": "The documentation materially understates current suite scope.", "destination": "Rewrite the header around current public behaviors."
+      "id": "HHD-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns the test file header."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The header still says the suite only pins synchronous primitives although the file retains reload, hydration, subprocess, and registration cases, plus authoring-event narration."
+      },
+      "rationale": "The documentation materially understates current suite scope.",
+      "destination": "Rewrite the header around current public behaviors.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-013", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-013"], "evidenceStatus": "stale", "route": "evidence-only closure",
-      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerned imports in the test file." }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current import-block inspection plus focused baseline rerun", "observed": "The original adjacent duplicate routing-state imports have been replaced by one value import and one separate type-only import, consistent with the repository's import grouping; the focused test passes." },
-      "rationale": "The duplicate value-import premise no longer exists in the current replacement layout.", "destination": "No implementation work."
+      "id": "HHD-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-013"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerned imports in the test file."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import-block inspection plus focused baseline rerun",
+        "observed": "The original adjacent duplicate routing-state imports have been replaced by one value import and one separate type-only import, consistent with the repository's import grouping; the focused test passes."
+      },
+      "rationale": "The duplicate value-import premise no longer exists in the current replacement layout.",
+      "destination": "No implementation work.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-014", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-014"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current call-site census", "observed": "dispatch.test.ts still resets the module-global routing state before and after every case across the file." },
-      "rationale": "The owner remains coupled to shared mutable production state.", "destination": "Replace module-global test setup with factory-owned routing state or an explicit injected boundary."
+      "id": "HHD-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current call-site census",
+        "observed": "dispatch.test.ts still resets the module-global routing state before and after every case across the file."
+      },
+      "rationale": "The owner remains coupled to shared mutable production state.",
+      "destination": "Replace module-global test setup with factory-owned routing state or an explicit injected boundary.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-015", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-015"], "evidenceStatus": "duplicate", "route": "Phase 3", "duplicateOf": "HHD-004",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current recorder comparison", "observed": "The loud-failing recorder remains appropriate, but its prevalent RecordedCall shape still omits context and pi; this is the same surviving pi-threading defect recorded by HHD-004." },
-      "rationale": "The historical broad objection to hand-rolled recording is overstated; only the incomplete tuple remains actionable.", "destination": "Canonical remediation is HHD-004."
+      "id": "HHD-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-004",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current recorder comparison",
+        "observed": "The loud-failing recorder remains appropriate, but its prevalent RecordedCall shape still omits context and pi; this is the same surviving pi-threading defect recorded by HHD-004."
+      },
+      "rationale": "The historical broad objection to hand-rolled recording is overstated; only the incomplete tuple remains actionable.",
+      "destination": "Canonical remediation is HHD-004."
     },
     {
-      "id": "HHD-016", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-016"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current describe census", "observed": "compositeHandlerFor and toolResultCompositeHandler evidence remains distributed across four scenario-category describe blocks rather than public-entrypoint ownership groups." },
-      "rationale": "The paired test still violates the one-level public-entrypoint grouping rule.", "destination": "Regroup cases by exported entrypoint without weakening assertions."
+      "id": "HHD-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current describe census",
+        "observed": "compositeHandlerFor and toolResultCompositeHandler evidence remains distributed across four scenario-category describe blocks rather than public-entrypoint ownership groups."
+      },
+      "rationale": "The paired test still violates the one-level public-entrypoint grouping rule.",
+      "destination": "Regroup cases by exported entrypoint without weakening assertions.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-017", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-017"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current case and dependency inspection", "observed": "The portability case remains the only real-child case and still wraps global timers manually; its shell-metacharacter behavior requires a real subprocess but the rationale is not documented at the boundary." },
-      "rationale": "The exceptional real boundary is justified but still obscured by bespoke timer observation.", "destination": "Document the subprocess necessity and use the standard timer mechanism where compatible."
+      "id": "HHD-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case and dependency inspection",
+        "observed": "The portability case remains the only real-child case and still wraps global timers manually; its shell-metacharacter behavior requires a real subprocess but the rationale is not documented at the boundary."
+      },
+      "rationale": "The exceptional real boundary is justified but still obscured by bespoke timer observation.",
+      "destination": "Document the subprocess necessity and use the standard timer mechanism where compatible.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-018", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-018"], "evidenceStatus": "duplicate", "route": "Phase 3", "duplicateOf": "HHD-003",
-      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns test support only." }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current observeSpawn inspection", "observed": "The Proxy recorder still makes exact assertions, so replacement with strong-mock is not required; the surviving residue is the unsound guard and unread wrapper in HHD-003." },
-      "rationale": "The historical tool-choice criticism remains overstated and collapses to HHD-003.", "destination": "Canonical remediation is HHD-003."
+      "id": "HHD-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-003",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns test support only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current observeSpawn inspection",
+        "observed": "The Proxy recorder still makes exact assertions, so replacement with strong-mock is not required; the surviving residue is the unsound guard and unread wrapper in HHD-003."
+      },
+      "rationale": "The historical tool-choice criticism remains overstated and collapses to HHD-003.",
+      "destination": "Canonical remediation is HHD-003."
     },
     {
-      "id": "HHD-019", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-019"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current setup and call-site census", "observed": "event-router.test.ts retains file-level beforeEach(resetRoutingState), concurrency suppression on reload, ownRoutingState helpers, and direct resets." },
-      "rationale": "The suite remains coupled to process-global routing state.", "destination": "Move state behind case-owned construction and remove shared reset dependence."
+      "id": "HHD-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current setup and call-site census",
+        "observed": "event-router.test.ts retains file-level beforeEach(resetRoutingState), concurrency suppression on reload, ownRoutingState helpers, and direct resets."
+      },
+      "rationale": "The suite remains coupled to process-global routing state.",
+      "destination": "Move state behind case-owned construction and remove shared reset dependence.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-020", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-020"], "evidenceStatus": "duplicate", "route": "Phase 3", "duplicateOf": "HHD-011",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current reload-case inspection", "observed": "The roughly 500-line multi-module reload case and its builtin interception both remain; HHD-011 records the sharper canonical defect." },
-      "rationale": "The first-pass integration-size claim is valid but incomplete and shares one remediation with HHD-011.", "destination": "Canonical remediation is HHD-011."
+      "id": "HHD-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-020"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-011",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current reload-case inspection",
+        "observed": "The roughly 500-line multi-module reload case and its builtin interception both remain; HHD-011 records the sharper canonical defect."
+      },
+      "rationale": "The first-pass integration-size claim is valid but incomplete and shares one remediation with HHD-011.",
+      "destination": "Canonical remediation is HHD-011."
     },
     {
-      "id": "HHD-021", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-021"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns a test double." }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current makeRecordingPi inspection", "observed": "makeRecordingPi still builds a two-method literal and casts it to the full ExtensionAPI." },
-      "rationale": "The cast hides an invalid and over-wide boundary double.", "destination": "Declare and inject a narrow consumer-owned registrar/message port."
+      "id": "HHD-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Claim concerns a test double."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current makeRecordingPi inspection",
+        "observed": "makeRecordingPi still builds a two-method literal and casts it to the full ExtensionAPI."
+      },
+      "rationale": "The cast hides an invalid and over-wide boundary double.",
+      "destination": "Declare and inject a narrow consumer-owned registrar/message port.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-022", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-022"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current import and call-site inspection", "observed": "event-router.test.ts still imports adaptObservationResultForEvent from a sibling production module to seed pending context despite appendPendingSessionStartContext being the direct state contract." },
-      "rationale": "Expected setup remains computed through another production behavior and broadens ownership.", "destination": "Seed through the owning routing-state contract."
+      "id": "HHD-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import and call-site inspection",
+        "observed": "event-router.test.ts still imports adaptObservationResultForEvent from a sibling production module to seed pending context despite appendPendingSessionStartContext being the direct state contract."
+      },
+      "rationale": "Expected setup remains computed through another production behavior and broadens ownership.",
+      "destination": "Seed through the owning routing-state contract.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-023", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-023"], "evidenceStatus": "confirmed", "route": "operator decision",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }, { "path": "tests/bridges/hooks/event-router.test.ts" }, { "path": "tests/bridges/hooks/routing-state.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "CodeGraph caller census plus current source inspection", "observed": "resetEpoch and resetRoutingState remain exported with only test callers apart from resetRoutingState's internal resetEpoch call; the comment still admits test-only use and still incorrectly says all composed clears are public although two are private." },
-      "rationale": "Removing the test-only reset exports requires a deliberate state-ownership redesign across many owners.", "destination": "Decide on factory-owned state versus a justified lifecycle reset API before Phase 3 implementation."
+      "id": "HHD-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        },
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        },
+        {
+          "path": "tests/bridges/hooks/routing-state.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph caller census plus current source inspection",
+        "observed": "resetEpoch and resetRoutingState remain exported with only test callers apart from resetRoutingState's internal resetEpoch call; the comment still admits test-only use and still incorrectly says all composed clears are public although two are private."
+      },
+      "rationale": "Removing the test-only reset exports requires a deliberate state-ownership redesign across many owners.",
+      "destination": "Decide on factory-owned state versus a justified lifecycle reset API before Phase 3 implementation.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-024", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-024"], "evidenceStatus": "confirmed", "route": "Phase 3",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "CodeGraph and current source inspection", "observed": "homedir() is still called inline in hook parsing and hydration logic, while tests still mutate HOME to control it." },
-      "rationale": "The hidden environment dependency forces process-global test mutation.", "destination": "Inject a clock-like home-directory dependency or resolved locations boundary."
+      "id": "HHD-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "homedir() is still called inline in hook parsing and hydration logic, while tests still mutate HOME to control it."
+      },
+      "rationale": "The hidden environment dependency forces process-global test mutation.",
+      "destination": "Inject a clock-like home-directory dependency or resolved locations boundary.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-025", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-025"], "evidenceStatus": "duplicate", "route": "Phase 3", "duplicateOf": "HHD-021",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "CodeGraph direct-use census", "observed": "registerHooksBridge still accepts ExtensionAPI and directly uses on plus downstream sendMessage needs; the local over-wide-double symptom is already captured by HHD-021." },
-      "rationale": "This is a local instance of the corpus-wide over-wide context cluster, not an independent fix.", "destination": "Canonical local remediation is HHD-021; preserve cluster linkage at merge."
+      "id": "HHD-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-025"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "HHD-021",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph direct-use census",
+        "observed": "registerHooksBridge still accepts ExtensionAPI and directly uses on plus downstream sendMessage needs; the local over-wide-double symptom is already captured by HHD-021."
+      },
+      "rationale": "This is a local instance of the corpus-wide over-wide context cluster, not an independent fix.",
+      "destination": "Canonical local remediation is HHD-021; preserve cluster linkage at merge."
     },
     {
-      "id": "HHD-026", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-026"], "evidenceStatus": "confirmed", "route": "operator decision",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current spawn return-type and planted-double inspection", "observed": "accumulateStream still accepts null, but production stdio configuration returns non-null streams; the current case reaches null by overriding a child shape contrary to the injected typeof spawn contract." },
-      "rationale": "The branch is defensive against a type-forbidden shape and should be retained or removed by explicit policy, not graded as ordinary coverage.", "destination": "Resolve the defensive-branch policy before changing production or tests."
+      "id": "HHD-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current spawn return-type and planted-double inspection",
+        "observed": "accumulateStream still accepts null, but production stdio configuration returns non-null streams; the current case reaches null by overriding a child shape contrary to the injected typeof spawn contract."
+      },
+      "rationale": "The branch is defensive against a type-forbidden shape and should be retained or removed by explicit policy, not graded as ordinary coverage.",
+      "destination": "Resolve the defensive-branch policy before changing production or tests.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-027", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-027"], "evidenceStatus": "confirmed", "route": "Phase 7",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch-exec.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current production/test table comparison", "observed": "The production Record and test rows still repeat the same closed event keys and incomplete expected field sets, demonstrating the copied-oracle class; no current gate identifies this relationship." },
-      "rationale": "A copied expected table can make mutation coverage appear strong while preserving a shared wrong premise.", "destination": "Add this concrete offender and a benign control to the unused/copied-contract gate design."
+      "id": "HHD-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 7",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current production/test table comparison",
+        "observed": "The production Record and test rows still repeat the same closed event keys and incomplete expected field sets, demonstrating the copied-oracle class; no current gate identifies this relationship."
+      },
+      "rationale": "A copied expected table can make mutation coverage appear strong while preserving a shared wrong premise.",
+      "destination": "Add this concrete offender and a benign control to the unused/copied-contract gate design.",
+      "duplicateOf": null
     },
     {
-      "id": "HHD-028", "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-028"], "evidenceStatus": "confirmed", "route": "Phase 7",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts" }, { "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts" }], "testRefs": [{ "path": "tests/bridges/hooks/dispatch.test.ts" }, { "path": "tests/bridges/hooks/event-router.test.ts" }],
-      "validation": { "method": "static-proof", "tool": "current parameter and call-site census", "observed": "Optional pi/executor-style parameters remain common and this owner still supplies undefined for pi throughout; the isolated HHD-004 mutation proves one live instance survives." },
-      "rationale": "Optional dependencies passed only as undefined remain a mechanically detectable weak-test class.", "destination": "Add a sentinel-threading architecture/review gate with offender and benign controls."
+      "id": "HHD-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-dispatch.md#HHD-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 7",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch.test.ts"
+        },
+        {
+          "path": "tests/bridges/hooks/event-router.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current parameter and call-site census",
+        "observed": "Optional pi/executor-style parameters remain common and this owner still supplies undefined for pi throughout; the isolated HHD-004 mutation proves one live instance survives."
+      },
+      "rationale": "Optional dependencies passed only as undefined remain a mechanically detectable weak-test class.",
+      "destination": "Add a sentinel-threading architecture/review gate with offender and benign controls.",
+      "duplicateOf": null
     }
   ],
   "decisions": [],

@@ -977,7 +977,7 @@
       ],
       "testRefs": [
         {
-          "path": "tests/architecture/"
+          "path": "tests/architecture/partial-vocabulary-guard.test.ts"
         }
       ],
       "validation": {

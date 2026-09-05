@@ -44,137 +44,1659 @@
       "category": "adversarial",
       "assignedPlan": "01-09",
       "claimIds": [
-        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-001"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-002"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-003"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-004"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-005"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-006"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-007"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-008"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-009"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-010"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-011"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-012"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-013"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-014"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-015"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-016"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-017"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-018"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-019"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-020"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-021"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-022"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-023"
-        ,".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-024"
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-024"
       ],
       "reviewStatus": "complete",
       "outcome": "live findings"
     }
   ],
   "sourceClaims": [
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-001","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-001","findingId":"BA-001"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-002","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-002","findingId":"BA-001"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-003","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-003","findingId":"BA-002"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-004","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-004","findingId":"BA-003"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-005","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-005","findingId":"BA-004"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-006","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-006","findingId":"BA-005"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-007","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-007","findingId":"BA-005"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-008","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-008","findingId":"BA-006"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-009","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-009","findingId":"BA-007"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-010","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-010","findingId":"BA-008"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-011","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-011","findingId":"BA-009"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-012","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-012","findingId":"BA-010"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-013","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-013","findingId":"BA-011"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-014","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-014","findingId":"BA-012"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-015","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-015","findingId":"BA-013"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-016","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-016","findingId":"BA-014"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-017","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-017","findingId":"BA-014"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-018","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-018","findingId":"BA-015"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-019","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-019","findingId":"BA-016"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-020","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-020","findingId":"BA-017"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-021","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-021","findingId":"BA-018"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-022","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-022","findingId":"BA-019"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-023","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-023","findingId":"BA-020"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-024","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-024","findingId":"BA-021"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-025","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-025","findingId":"BA-022"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-026","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-026","findingId":"BA-023"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-027","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md","label":"BA-027","findingId":"BA-024"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-001","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-001","findingId":"BC-001"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-002","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-002","findingId":"BC-002"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-003","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-003","findingId":"BC-003"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-004","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-004","findingId":"BC-004"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-005","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-005","findingId":"BC-005"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-006","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-006","findingId":"BC-006"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-007","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-007","findingId":"BC-007"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-008","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-008","findingId":"BC-008"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-009","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-009","findingId":"BC-009"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-010","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-010","findingId":"BC-010"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-011","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-011","findingId":"BC-011"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-012","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-012","findingId":"BC-012"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-013","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-013","findingId":"BC-013"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-014","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-014","findingId":"BC-014"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-015","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-015","findingId":"BC-015"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-016","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-016","findingId":"BC-016"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-017","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-017","findingId":"BC-017"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-018","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-018","findingId":"BC-018"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-019","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-019","findingId":"BC-019"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-020","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-020","findingId":"BC-020"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-021","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-021","findingId":"BC-021"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-022","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-022","findingId":"BC-022"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-023","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-023","findingId":"BC-023"},
-    {"id":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-024","filePath":".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md","label":"BC-024","findingId":"BC-024"}
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-001",
+      "findingId": "BA-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-002",
+      "findingId": "BA-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-003",
+      "findingId": "BA-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-004",
+      "findingId": "BA-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-005",
+      "findingId": "BA-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-006",
+      "findingId": "BA-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-007",
+      "findingId": "BA-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-008",
+      "findingId": "BA-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-009",
+      "findingId": "BA-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-010",
+      "findingId": "BA-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-011",
+      "findingId": "BA-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-012",
+      "findingId": "BA-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-013",
+      "findingId": "BA-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-014",
+      "findingId": "BA-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-015",
+      "findingId": "BA-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-016",
+      "findingId": "BA-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-017",
+      "findingId": "BA-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-018",
+      "findingId": "BA-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-019",
+      "findingId": "BA-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-020",
+      "findingId": "BA-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-021",
+      "findingId": "BA-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-022",
+      "findingId": "BA-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-023",
+      "findingId": "BA-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-024",
+      "findingId": "BA-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-025",
+      "findingId": "BA-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-026",
+      "findingId": "BA-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md",
+      "label": "BA-027",
+      "findingId": "BA-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-001",
+      "findingId": "BC-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-002",
+      "findingId": "BC-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-003",
+      "findingId": "BC-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-004",
+      "findingId": "BC-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-005",
+      "findingId": "BC-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-006",
+      "findingId": "BC-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-007",
+      "findingId": "BC-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-008",
+      "findingId": "BC-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-009",
+      "findingId": "BC-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-010",
+      "findingId": "BC-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-011",
+      "findingId": "BC-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-012",
+      "findingId": "BC-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-013",
+      "findingId": "BC-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-014",
+      "findingId": "BC-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-015",
+      "findingId": "BC-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-016",
+      "findingId": "BC-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-017",
+      "findingId": "BC-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-018",
+      "findingId": "BC-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-019",
+      "findingId": "BC-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-020",
+      "findingId": "BC-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-021",
+      "findingId": "BC-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-022",
+      "findingId": "BC-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-023",
+      "findingId": "BC-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md",
+      "label": "BC-024",
+      "findingId": "BC-024"
+    }
   ],
   "findings": [
-    {"id":"BA-001","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-001",".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-002"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"surviving-mutation","command":"node --test tests/bridges/agents/stage.test.ts (repository-local isolated copy; mapModel default inverted, knownSkills emptied, pluginDataDir replaced with pluginRoot)","exitCode":0,"observed":"The owner test stayed green with all three argument-threading defects applied together; the isolated copy was removed and the live pair remained unchanged."},"rationale":"The historical mapModel-default, knownSkills, pluginDataDir, and cross-bridge argument-threading claims remain live.","destination":"Add independent cases that make every threaded input and default observable."},
-    {"id":"BA-002","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-003"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph plus live source/test inspection","observed":"The finalize arrangement still derives the expected backup entry from the directory under assertion."},"rationale":"The expected-value independence violation remains present.","destination":"Build the expected staging entries independently before comparing the whole directory listing."},
-    {"id":"BA-003","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-004"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/shared/fs-utils.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"surviving-mutation","command":"static mutation analysis against rollback cases","exitCode":0,"observed":"Current rollback cases still assert the staging root but do not assert removal of the sibling backup root."},"rationale":"The backup-root cleanup effect remains unowned by agents rollback cases.","destination":"Assert the complete agents staging directory after every rollback path."},
-    {"id":"BA-004","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-005"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"Environment fragility is wholly in test setup."}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"},{"path":"tests/bridges/agents/unstage.test.ts"},{"path":"tests/bridges/agents/discover.test.ts"}],"validation":{"method":"static-proof","tool":"live test inspection","observed":"The chmod-based EACCES cases still lack a process.getuid root guard."},"rationale":"Root runs can bypass mode-bit denial and misreport an environment limitation as a product failure.","destination":"Add the existing explicit non-root precondition pattern to each chmod-based case."},
-    {"id":"BA-005","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-006",".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-007"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/unstage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/unstage.test.ts"},{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph plus branch/case inspection","observed":"Only one corruption-return arm is discriminated and unstage result freezing is not asserted in its owner."},"rationale":"Warning propagation and frozen result contracts remain incompletely owned.","destination":"Exercise corrupt-index warnings through each terminal arm and assert all promised frozen arrays."},
-    {"id":"BA-006","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-008"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/discover.ts"},{"path":"extensions/pi-claude-marketplace/domain/name.ts"}],"testRefs":[{"path":"tests/bridges/agents/discover.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph call-path inspection","observed":"The current empty-name case still throws in generatedAgentName before the labelled discover guard; no case owns the labelled source-path message."},"rationale":"The labelled assertion remains unexercised.","destination":"Add a traversal-name case that reaches and structurally asserts the discover-level error."},
-    {"id":"BA-007","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-009"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/discover.ts"}],"testRefs":[{"path":"tests/bridges/agents/discover.test.ts"}],"validation":{"method":"surviving-mutation","command":"current fixture census comparing byte and decoded-text hash inputs","exitCode":0,"observed":"All discovery fixtures are valid UTF-8; the binary bytes now present in marker.test.ts do not exercise discoverPluginAgents hashing."},"rationale":"The raw-byte digest promise is still not discriminated by the owner test.","destination":"Add an invalid-UTF-8 source fixture and pin its independently computed digest."},
-    {"id":"BA-008","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-010"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/types.ts"}],"testRefs":[{"path":"tests/bridges/agents/types.test.ts"}],"validation":{"method":"static-proof","tool":"live TypeScript inspection","observed":"The type owner still uses undefined! for branded locations/resolved fields, so those assignments contribute never rather than the declared field types."},"rationale":"The type checks still fail to discriminate mutations to five field types.","destination":"Use real satisfies-checked values and negative assignments for the branded fields."},
-    {"id":"BA-009","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-011"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts"}],"testRefs":[{"path":"tests/bridges/agents/frontmatter.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph and live branch inspection","observed":"The Object.prototype setter still exists solely to make an immediately written indexed property read as undefined under noUncheckedIndexedAccess."},"rationale":"The case still props up a compiler-forced branch through process-global surgery.","destination":"Choose removal of the artificial case or a FoldState value refactor that eliminates the indexed coalesce."},
-    {"id":"BA-010","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-012"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/marker.ts"}],"testRefs":[{"path":"tests/bridges/agents/marker.test.ts"}],"validation":{"method":"static-proof","tool":"live test structure inspection","observed":"The four-export marker owner still has bare top-level tests and no per-entrypoint describe groups."},"rationale":"The current structure still violates the project rule for multi-export modules.","destination":"Group cases one level deep by public entrypoint."},
-    {"id":"BA-011","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-013"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts"}],"testRefs":[{"path":"tests/bridges/agents/index-mutation.test.ts"}],"validation":{"method":"static-proof","tool":"live type-owner inspection","observed":"The expected partition still restates the shape inline instead of importing PartitionedIndex."},"rationale":"A public exported type can drift independently of its nominal owner test.","destination":"Type the independent expected value with PartitionedIndex."},
-    {"id":"BA-012","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-014"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/convert.ts"}],"testRefs":[{"path":"tests/bridges/agents/convert.test.ts"}],"validation":{"method":"static-proof","tool":"live source/test inspection","observed":"The mutating tools accessor and the raw.tools default-message coalesce remain; ordinary omitted tools cannot reach the throw because mapTools supplies defaults."},"rationale":"The case still makes a production input lie to cover an otherwise unreachable diagnostic branch.","destination":"Prefer a production sourceLabel result or remove the artificial case after the operator resolves the dead-branch policy."},
-    {"id":"BA-013","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-015"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/convert.ts"}],"testRefs":[{"path":"tests/bridges/agents/convert.test.ts"}],"validation":{"method":"surviving-mutation","command":"static mutation check deleting qualifier and remainder trim operations","exitCode":0,"observed":"Current fixtures still contain only tight skill qualifiers, so neither spacing-tolerance trim is discriminated."},"rationale":"The documented AGSK-02 tolerance remains unowned.","destination":"Add sibling data rows for both accepted spaced qualifier forms."},
-    {"id":"BA-014","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-016",".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-017"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts"}],"testRefs":[{"path":"tests/bridges/agents/frontmatter.test.ts"},{"path":"tests/integration/provenance-invisibility.test.ts"}],"validation":{"method":"static-proof","tool":"current import/export census","observed":"The re-export still has no production consumer or owner-unit assertion; an integration import is not the paired owner required by the rubric."},"rationale":"The comment and ownership claim remain unsupported.","destination":"Delete/repoint the re-export or add a same-binding owner case."},
-    {"id":"BA-015","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-018"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/discover.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts"},{"path":"extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"}],"testRefs":[{"path":"tests/bridges/agents/discover.test.ts"},{"path":"tests/orchestrators/plugin/shared.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph current call path","observed":"Production still flattens componentPaths.agents through pickAgentsSourceDir and supplies one element, while discoverPluginAgents retains multi-directory behavior and cases."},"rationale":"The public bridge contract and its only production feed remain asymmetric.","destination":"Decide whether to thread all resolved agent directories or narrow the bridge and remove unreachable multi-directory behavior."},
-    {"id":"BA-016","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-019"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current commit-case census","observed":"Preparation proves non-noop for an empty new set plus previous rows, but no commit case proves dropping the plugin's last agent end to end."},"rationale":"The historical BLOCKER mechanism was overstated, but its narrower missing commit-path case remains live.","destination":"Add the stale-last-agent commit case as a warning-level gap."},
-    {"id":"BA-017","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-020"],"evidenceStatus":"stale","route":"evidence-only closure","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"behavioral-probe","command":"node --test tests/bridges/agents/stage.test.ts","exitCode":0,"observed":"Current finalize logic is branch-free with respect to force/foreign preservation, and the owner case proves both staging and backup roots are removed."},"rationale":"The proposed force-plus-foreign combination has no distinct premise or surviving implementation mutation; current replacement lifecycle coverage supersedes it.","destination":"No implementation work; preserve as historical overstatement."},
-    {"id":"BA-018","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-021"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"The duplication is in test construction rather than production behavior."}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"live fixture census","observed":"Repeated installable resolved literals remain throughout the agents stage owner, tied to the unresolved resolved-field contract decision."},"rationale":"The duplication remains, although its correct fix depends on the multi-directory decision.","destination":"Resolve the input contract first, then remove or centralize the repeated construction in the owning concern."},
-    {"id":"BA-019","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-022"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"The claim concerns opaque failure injection in a test."}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"live test inspection","observed":"The indexed getter used to delete staging between loop iterations still has no explanatory comment."},"rationale":"The unusual but necessary technique remains undocumented.","destination":"Add a concise rationale naming the exact loop transition it targets."},
-    {"id":"BA-020","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-023"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/convert.ts"}],"testRefs":[{"path":"tests/bridges/agents/convert.test.ts"}],"validation":{"method":"static-proof","tool":"live assertion inspection","observed":"The named mapping cases still assert projections and regex fragments where independently authored whole fileContent values are available."},"rationale":"The partial-assertion drift remains live.","destination":"Use complete independent generated-file values for the singled-out cases."},
-    {"id":"BA-021","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-024"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph hidden-dependency inspection","observed":"prepare and replace still call imported randomUUID inline; tests discover rather than inject the generated roots."},"rationale":"The current design still violates the explicit dependency rule and matches sibling bridges.","destination":"Introduce one coherent ID seam across agents, commands, and skills staging."},
-    {"id":"BA-022","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-025"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/types.ts"},{"path":"extensions/pi-claude-marketplace/bridges/agents/stage.ts"}],"testRefs":[{"path":"tests/bridges/agents/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph input-to-call-site trace","observed":"StageAgentsInput still carries resolved but stage.ts consumes the flattened agentsSourceDir instead; resolved remains unused in the implementation."},"rationale":"The unused field remains the visible symptom of the unresolved multi-directory contract mismatch.","destination":"Resolve together with BA-015 rather than papering over the unused field."},
-    {"id":"BA-023","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-026"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/convert.ts"}],"testRefs":[{"path":"tests/bridges/agents/convert.test.ts"}],"validation":{"method":"static-proof","tool":"current throw/assertion inspection","observed":"AG-11 and AG-12 still throw bare Error values; owner tests pin full messages but no structured fields exist."},"rationale":"The design-quality claim remains accurate and warning-level.","destination":"Add typed errors only if the milestone elects to strengthen these public failure contracts."},
-    {"id":"BA-024","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-027"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/agents/convert.ts"}],"testRefs":[{"path":"N/A","reason":"The claim is a production readability finding, not a behavioral test gap."}],"validation":{"method":"static-proof","tool":"live source inspection","observed":"The IIFE nested in the tool-mapping ternary remains present."},"rationale":"The historical style warning is unchanged.","destination":"Refactor to straightforward statements during the paired convert cleanup."},
-    {"id":"BC-001","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-001"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph plus current owner-test census","observed":"All eight containment/name guards remain, while the stage owner still lacks traversal and symlink cases and does not import either structured containment error."},"rationale":"The NFR-10 staging guard gap remains live.","destination":"Add structured traversal, symlink, and unsafe previous-name cases through public staging behavior."},
-    {"id":"BC-002","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-002"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"live assertion inspection","observed":"The three-row degradation case still projects generatedName and discards parseError, unlike the complete sibling assertion."},"rationale":"Parse-error corruption remains undetected in that case.","destination":"Compare the complete independently authored degradation records."},
-    {"id":"BC-003","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-003"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/types.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"live test/source inspection","observed":"Two cases still delete and replace getters on _renamePairs even though the public barrel describes these internals as unavailable to consumers."},"rationale":"The tests still make returned production objects lie instead of using a real filesystem obstruction.","destination":"Replace object surgery with case-owned filesystem failures and reconcile the public/internal contract wording."},
-    {"id":"BC-004","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-004"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/discover.ts"},{"path":"extensions/pi-claude-marketplace/shared/errors.ts"}],"testRefs":[{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph current narrowing trace","observed":"The builtin namespace patch and counting code getter remain; isErrnoException already proves code is a string, so the coalesce still requires a lying accessor."},"rationale":"The hermeticity violation and unreachable branch remain live.","destination":"Drop the redundant coalesce and artificial process-global test, or inject a narrow filesystem collaborator if behavior is retained."},
-    {"id":"BC-005","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-005"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/discover.ts"}],"testRefs":[{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"live fixture/assertion inspection","observed":"The discovery owner still hashes three fixture literals into opaque SHA-256 constants instead of asserting the bytes directly."},"rationale":"The assertions remain sound but obscure the promised content preservation.","destination":"Compare the staged file bytes directly and remove test-only digest plumbing."},
-    {"id":"BC-006","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-006"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"The claim concerns test timing instrumentation."}],"testRefs":[{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"live async-hook inspection","observed":"Both filesystem-request ordinal hooks remain without comments identifying the targeted operations."},"rationale":"The race arrangements remain opaque and call-count coupled.","destination":"Document the exact filesystem operations each ordinal targets."},
-    {"id":"BC-007","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-007"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/index.ts"}],"testRefs":[{"path":"tests/bridges/commands/index.test.ts"}],"validation":{"method":"static-proof","tool":"current barrel/type surface comparison","observed":"Same-binding cases remain, but no keyof runtime export union or exact replacement-branch key pins exist."},"rationale":"Unexpected surface growth remains undetected.","destination":"Propagate the exact export/key surface pins from the skills owner."},
-    {"id":"BC-008","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-008"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/index.ts"}],"testRefs":[{"path":"tests/bridges/commands/index.test.ts"}],"validation":{"method":"static-proof","tool":"live comment/type inspection","observed":"The test still says the staged implementation type is private while reconstructing the same type through the public union nearby."},"rationale":"The assertion comment still overstates what the negative proves.","destination":"Correct the comment and barrel contract wording without weakening the type check."},
-    {"id":"BC-009","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-009"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/types.ts"}],"testRefs":[{"path":"tests/bridges/commands/types.test.ts"}],"validation":{"method":"static-proof","tool":"current type-negative census","observed":"The owner still checks readonly arrays only; it has no assignment negative for field-level readonly modifiers."},"rationale":"Dropping readonly from scalar/object fields remains a surviving type mutation.","destination":"Add one representative assignment negative per constructed public type."},
-    {"id":"BC-010","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-010"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/unstage.ts"}],"testRefs":[{"path":"tests/bridges/commands/types.test.ts"}],"validation":{"method":"static-proof","tool":"current return-path and sample inspection","observed":"unstage warnings remain permanently empty while the type sample still invents a preserved-foreign warning."},"rationale":"The type witness remains semantically impossible.","destination":"Use an empty sample and document intentional cross-bridge shape symmetry if retained."},
-    {"id":"BC-011","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-011"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"The defect is an order assumption in the test."}],"testRefs":[{"path":"tests/bridges/commands/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"live filesystem assertion inspection","observed":"The two-entry readdir result is still compared without sorting."},"rationale":"Filesystem enumeration order is not the public contract.","destination":"Sort the case-owned result before whole-value comparison."},
-    {"id":"BC-012","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-012"],"evidenceStatus":"duplicate","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/discover.ts"}],"testRefs":[{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"same current narrowing trace as BC-004","observed":"This production-side coalesce claim is the same defect proven by the paired test-side builtin patch claim."},"rationale":"Preserved separately because the corpus states both production and test symptoms.","destination":"Resolve through BC-004.","duplicateOf":"BC-004"},
-    {"id":"BC-013","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-013"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"},{"path":"extensions/pi-claude-marketplace/domain/name.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph discovery-to-stage call trace","observed":"generatedCommandName still validates the identical value before stage revalidates it, and the paired case still patches String.prototype to make the second check disagree."},"rationale":"The redundant guard and artificial coverage remain live.","destination":"Resolve under the dead-defensive-code policy."},
-    {"id":"BC-014","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-014"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current sibling-loop comparison","observed":"commitPreparedCommands still omits the previous-name assertion retained by replacePreparedCommands and the skills bridge."},"rationale":"The defense-in-depth sibling asymmetry remains.","destination":"Add the validation and cover it through an unsafe stored previous name."},
-    {"id":"BC-015","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-015"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"live error assertion census","observed":"Three rollback/staging errno cases still use message substring assertions despite deterministic structured cause chains."},"rationale":"The original two-site claim was understated and remains live at three sites.","destination":"Assert class and complete structured error/cause fields after public effects."},
-    {"id":"BC-016","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-016"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"live assertion inspection","observed":"The named failure case still checks only Error identity while deterministic structured fields/messages are available."},"rationale":"Public failure identity remains weakly asserted.","destination":"Pin the complete public error after side-effect assertions."},
-    {"id":"BC-017","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-017"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"},{"path":"extensions/pi-claude-marketplace/bridges/commands/discover.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"},{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"current prototype/getter/namespace-patch census","observed":"All six historical force-an-object-to-lie sites remain, including two internal rename-pair getters and the disappearing errno getter."},"rationale":"The class was understated historically and remains unresolved.","destination":"Classify each site as dead code, compiler narrowing, or reachable failure before rewriting cases."},
-    {"id":"BC-018","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-018"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"The duplication is in test setup."}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"},{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"current installable-fixture census","observed":"The two local builders remain part of the same repeated ResolvedPluginInstallable shape across eleven owner tests."},"rationale":"The duplication remains cross-cutting rather than commands-local.","destination":"Create a resolver-concern seed only if it preserves fresh case-owned values."},
-    {"id":"BC-019","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-019"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/discover.ts"}],"testRefs":[{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph error-flow trace","observed":"The CommandNameError instanceof check still narrows unknown for badNameWarning, while Symbol.hasInstance patching alone reaches its throw arm."},"rationale":"The arm is unreachable, but deleting the narrowing check without restructure still breaks typing.","destination":"Treat as compiler-forced narrowing, not removable production behavior."},
-    {"id":"BC-020","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-020"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"N/A","reason":"The finding is local test import consistency."}],"testRefs":[{"path":"tests/bridges/commands/unstage.test.ts"}],"validation":{"method":"static-proof","tool":"live sibling import census","observed":"unstage.test.ts still uses the default-plus-type import while its four command siblings use named test imports."},"rationale":"The local consistency warning remains; it is not a repository-wide convention.","destination":"Normalize this owner only."},
-    {"id":"BC-021","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-021"],"evidenceStatus":"confirmed","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"current source/vendor precondition comparison","observed":"neutralizeCommandFrontmatter still repeats the parser's guaranteed delimiter preconditions and the owner still reaches them through prototype patching."},"rationale":"The loop-level defensive checks remain unreachable by real input.","destination":"Resolve with the redundant generated-name guard under the same policy."},
-    {"id":"BC-022","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-022"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/stage.ts"}],"testRefs":[{"path":"tests/bridges/commands/stage.test.ts"}],"validation":{"method":"static-proof","tool":"CodeGraph hidden-dependency inspection","observed":"Both preparation and replacement still call imported randomUUID inline."},"rationale":"The explicit-dependency violation remains and matches agents/skills staging.","destination":"Introduce one coherent injected ID seam across the three bridges."},
-    {"id":"BC-023","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-023"],"evidenceStatus":"duplicate","route":"operator decision","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/discover.ts"}],"testRefs":[{"path":"tests/bridges/commands/discover.test.ts"}],"validation":{"method":"static-proof","tool":"same current narrowing trace as BC-019","observed":"The production fallback claim and the test-side Symbol.hasInstance claim describe the same compiler-forced arm."},"rationale":"Preserved as a separate historical production claim while canonicalized to BC-019.","destination":"Resolve through BC-019.","duplicateOf":"BC-019"},
-    {"id":"BC-024","claimIds":[".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-024"],"evidenceStatus":"confirmed","route":"Phase 3","sourceRefs":[{"path":"extensions/pi-claude-marketplace/bridges/commands/index.ts"},{"path":"extensions/pi-claude-marketplace/bridges/commands/types.ts"}],"testRefs":[{"path":"tests/bridges/commands/index.test.ts"},{"path":"tests/bridges/commands/types.test.ts"}],"validation":{"method":"static-proof","tool":"current cross-bridge owner comparison","observed":"Commands still lacks the runtime export-surface pin and field-level readonly negatives that existing sibling owners demonstrate."},"rationale":"The corpus cross-cutting propagation and sibling-drift conclusions remain live.","destination":"Propagate the proven sibling forms without creating generic shared test helpers."}
+    {
+      "id": "BA-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/agents/stage.test.ts (repository-local isolated copy; mapModel default inverted, knownSkills emptied, pluginDataDir replaced with pluginRoot)",
+        "exitCode": 0,
+        "observed": "The owner test stayed green with all three argument-threading defects applied together; the isolated copy was removed and the live pair remained unchanged."
+      },
+      "rationale": "The historical mapModel-default, knownSkills, pluginDataDir, and cross-bridge argument-threading claims remain live.",
+      "destination": "Add independent cases that make every threaded input and default observable.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus live source/test inspection",
+        "observed": "The finalize arrangement still derives the expected backup entry from the directory under assertion."
+      },
+      "rationale": "The expected-value independence violation remains present.",
+      "destination": "Build the expected staging entries independently before comparing the whole directory listing.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/fs-utils.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "static mutation analysis against rollback cases",
+        "exitCode": 0,
+        "observed": "Current rollback cases still assert the staging root but do not assert removal of the sibling backup root."
+      },
+      "rationale": "The backup-root cleanup effect remains unowned by agents rollback cases.",
+      "destination": "Assert the complete agents staging directory after every rollback path.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Environment fragility is wholly in test setup."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/agents/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/agents/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live test inspection",
+        "observed": "The chmod-based EACCES cases still lack a process.getuid root guard."
+      },
+      "rationale": "Root runs can bypass mode-bit denial and misreport an environment limitation as a product failure.",
+      "destination": "Add the existing explicit non-root precondition pattern to each chmod-based case.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/unstage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus branch/case inspection",
+        "observed": "Only one corruption-return arm is discriminated and unstage result freezing is not asserted in its owner."
+      },
+      "rationale": "Warning propagation and frozen result contracts remain incompletely owned.",
+      "destination": "Exercise corrupt-index warnings through each terminal arm and assert all promised frozen arrays.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/name.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "The current empty-name case still throws in generatedAgentName before the labelled discover guard; no case owns the labelled source-path message."
+      },
+      "rationale": "The labelled assertion remains unexercised.",
+      "destination": "Add a traversal-name case that reaches and structurally asserts the discover-level error.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "current fixture census comparing byte and decoded-text hash inputs",
+        "exitCode": 0,
+        "observed": "All discovery fixtures are valid UTF-8; the binary bytes now present in marker.test.ts do not exercise discoverPluginAgents hashing."
+      },
+      "rationale": "The raw-byte digest promise is still not discriminated by the owner test.",
+      "destination": "Add an invalid-UTF-8 source fixture and pin its independently computed digest.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live TypeScript inspection",
+        "observed": "The type owner still uses undefined! for branded locations/resolved fields, so those assignments contribute never rather than the declared field types."
+      },
+      "rationale": "The type checks still fail to discriminate mutations to five field types.",
+      "destination": "Use real satisfies-checked values and negative assignments for the branded fields.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/frontmatter.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and live branch inspection",
+        "observed": "The Object.prototype setter still exists solely to make an immediately written indexed property read as undefined under noUncheckedIndexedAccess."
+      },
+      "rationale": "The case still props up a compiler-forced branch through process-global surgery.",
+      "destination": "Choose removal of the artificial case or a FoldState value refactor that eliminates the indexed coalesce.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/marker.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/marker.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live test structure inspection",
+        "observed": "The four-export marker owner still has bare top-level tests and no per-entrypoint describe groups."
+      },
+      "rationale": "The current structure still violates the project rule for multi-export modules.",
+      "destination": "Group cases one level deep by public entrypoint.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/index-mutation.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live type-owner inspection",
+        "observed": "The expected partition still restates the shape inline instead of importing PartitionedIndex."
+      },
+      "rationale": "A public exported type can drift independently of its nominal owner test.",
+      "destination": "Type the independent expected value with PartitionedIndex.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/convert.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live source/test inspection",
+        "observed": "The mutating tools accessor and the raw.tools default-message coalesce remain; ordinary omitted tools cannot reach the throw because mapTools supplies defaults."
+      },
+      "rationale": "The case still makes a production input lie to cover an otherwise unreachable diagnostic branch.",
+      "destination": "Prefer a production sourceLabel result or remove the artificial case after the operator resolves the dead-branch policy.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/convert.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "static mutation check deleting qualifier and remainder trim operations",
+        "exitCode": 0,
+        "observed": "Current fixtures still contain only tight skill qualifiers, so neither spacing-tolerance trim is discriminated."
+      },
+      "rationale": "The documented AGSK-02 tolerance remains unowned.",
+      "destination": "Add sibling data rows for both accepted spaced qualifier forms.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/frontmatter.test.ts"
+        },
+        {
+          "path": "tests/integration/provenance-invisibility.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import/export census",
+        "observed": "The re-export still has no production consumer or owner-unit assertion; an integration import is not the paired owner required by the rubric."
+      },
+      "rationale": "The comment and ownership claim remain unsupported.",
+      "destination": "Delete/repoint the re-export or add a same-binding owner case.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/discover.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current call path",
+        "observed": "Production still flattens componentPaths.agents through pickAgentsSourceDir and supplies one element, while discoverPluginAgents retains multi-directory behavior and cases."
+      },
+      "rationale": "The public bridge contract and its only production feed remain asymmetric.",
+      "destination": "Decide whether to thread all resolved agent directories or narrow the bridge and remove unreachable multi-directory behavior.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current commit-case census",
+        "observed": "Preparation proves non-noop for an empty new set plus previous rows, but no commit case proves dropping the plugin's last agent end to end."
+      },
+      "rationale": "The historical BLOCKER mechanism was overstated, but its narrower missing commit-path case remains live.",
+      "destination": "Add the stale-last-agent commit case as a warning-level gap.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-020"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/agents/stage.test.ts",
+        "exitCode": 0,
+        "observed": "Current finalize logic is branch-free with respect to force/foreign preservation, and the owner case proves both staging and backup roots are removed."
+      },
+      "rationale": "The proposed force-plus-foreign combination has no distinct premise or surviving implementation mutation; current replacement lifecycle coverage supersedes it.",
+      "destination": "No implementation work; preserve as historical overstatement.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The duplication is in test construction rather than production behavior."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live fixture census",
+        "observed": "Repeated installable resolved literals remain throughout the agents stage owner, tied to the unresolved resolved-field contract decision."
+      },
+      "rationale": "The duplication remains, although its correct fix depends on the multi-directory decision.",
+      "destination": "Resolve the input contract first, then remove or centralize the repeated construction in the owning concern.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns opaque failure injection in a test."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live test inspection",
+        "observed": "The indexed getter used to delete staging between loop iterations still has no explanatory comment."
+      },
+      "rationale": "The unusual but necessary technique remains undocumented.",
+      "destination": "Add a concise rationale naming the exact loop transition it targets.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/convert.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live assertion inspection",
+        "observed": "The named mapping cases still assert projections and regex fragments where independently authored whole fileContent values are available."
+      },
+      "rationale": "The partial-assertion drift remains live.",
+      "destination": "Use complete independent generated-file values for the singled-out cases.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph hidden-dependency inspection",
+        "observed": "prepare and replace still call imported randomUUID inline; tests discover rather than inject the generated roots."
+      },
+      "rationale": "The current design still violates the explicit dependency rule and matches sibling bridges.",
+      "destination": "Introduce one coherent ID seam across agents, commands, and skills staging.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/types.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph input-to-call-site trace",
+        "observed": "StageAgentsInput still carries resolved but stage.ts consumes the flattened agentsSourceDir instead; resolved remains unused in the implementation."
+      },
+      "rationale": "The unused field remains the visible symptom of the unresolved multi-directory contract mismatch.",
+      "destination": "Resolve together with BA-015 rather than papering over the unused field.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/agents/convert.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current throw/assertion inspection",
+        "observed": "AG-11 and AG-12 still throw bare Error values; owner tests pin full messages but no structured fields exist."
+      },
+      "rationale": "The design-quality claim remains accurate and warning-level.",
+      "destination": "Add typed errors only if the milestone elects to strengthen these public failure contracts.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BA-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-agents.md#BA-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim is a production readability finding, not a behavioral test gap."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live source inspection",
+        "observed": "The IIFE nested in the tool-mapping ternary remains present."
+      },
+      "rationale": "The historical style warning is unchanged.",
+      "destination": "Refactor to straightforward statements during the paired convert cleanup.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current owner-test census",
+        "observed": "All eight containment/name guards remain, while the stage owner still lacks traversal and symlink cases and does not import either structured containment error."
+      },
+      "rationale": "The NFR-10 staging guard gap remains live.",
+      "destination": "Add structured traversal, symlink, and unsafe previous-name cases through public staging behavior.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live assertion inspection",
+        "observed": "The three-row degradation case still projects generatedName and discards parseError, unlike the complete sibling assertion."
+      },
+      "rationale": "Parse-error corruption remains undetected in that case.",
+      "destination": "Compare the complete independently authored degradation records.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live test/source inspection",
+        "observed": "Two cases still delete and replace getters on _renamePairs even though the public barrel describes these internals as unavailable to consumers."
+      },
+      "rationale": "The tests still make returned production objects lie instead of using a real filesystem obstruction.",
+      "destination": "Replace object surgery with case-owned filesystem failures and reconcile the public/internal contract wording.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/errors.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current narrowing trace",
+        "observed": "The builtin namespace patch and counting code getter remain; isErrnoException already proves code is a string, so the coalesce still requires a lying accessor."
+      },
+      "rationale": "The hermeticity violation and unreachable branch remain live.",
+      "destination": "Drop the redundant coalesce and artificial process-global test, or inject a narrow filesystem collaborator if behavior is retained.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live fixture/assertion inspection",
+        "observed": "The discovery owner still hashes three fixture literals into opaque SHA-256 constants instead of asserting the bytes directly."
+      },
+      "rationale": "The assertions remain sound but obscure the promised content preservation.",
+      "destination": "Compare the staged file bytes directly and remove test-only digest plumbing.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns test timing instrumentation."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live async-hook inspection",
+        "observed": "Both filesystem-request ordinal hooks remain without comments identifying the targeted operations."
+      },
+      "rationale": "The race arrangements remain opaque and call-count coupled.",
+      "destination": "Document the exact filesystem operations each ordinal targets.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current barrel/type surface comparison",
+        "observed": "Same-binding cases remain, but no keyof runtime export union or exact replacement-branch key pins exist."
+      },
+      "rationale": "Unexpected surface growth remains undetected.",
+      "destination": "Propagate the exact export/key surface pins from the skills owner.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live comment/type inspection",
+        "observed": "The test still says the staged implementation type is private while reconstructing the same type through the public union nearby."
+      },
+      "rationale": "The assertion comment still overstates what the negative proves.",
+      "destination": "Correct the comment and barrel contract wording without weakening the type check.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current type-negative census",
+        "observed": "The owner still checks readonly arrays only; it has no assignment negative for field-level readonly modifiers."
+      },
+      "rationale": "Dropping readonly from scalar/object fields remains a surviving type mutation.",
+      "destination": "Add one representative assignment negative per constructed public type.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current return-path and sample inspection",
+        "observed": "unstage warnings remain permanently empty while the type sample still invents a preserved-foreign warning."
+      },
+      "rationale": "The type witness remains semantically impossible.",
+      "destination": "Use an empty sample and document intentional cross-bridge shape symmetry if retained.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The defect is an order assumption in the test."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live filesystem assertion inspection",
+        "observed": "The two-entry readdir result is still compared without sorting."
+      },
+      "rationale": "Filesystem enumeration order is not the public contract.",
+      "destination": "Sort the case-owned result before whole-value comparison.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "same current narrowing trace as BC-004",
+        "observed": "This production-side coalesce claim is the same defect proven by the paired test-side builtin patch claim."
+      },
+      "rationale": "Preserved separately because the corpus states both production and test symptoms.",
+      "destination": "Resolve through BC-004.",
+      "duplicateOf": "BC-004"
+    },
+    {
+      "id": "BC-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/name.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph discovery-to-stage call trace",
+        "observed": "generatedCommandName still validates the identical value before stage revalidates it, and the paired case still patches String.prototype to make the second check disagree."
+      },
+      "rationale": "The redundant guard and artificial coverage remain live.",
+      "destination": "Resolve under the dead-defensive-code policy.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current sibling-loop comparison",
+        "observed": "commitPreparedCommands still omits the previous-name assertion retained by replacePreparedCommands and the skills bridge."
+      },
+      "rationale": "The defense-in-depth sibling asymmetry remains.",
+      "destination": "Add the validation and cover it through an unsafe stored previous name.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live error assertion census",
+        "observed": "Three rollback/staging errno cases still use message substring assertions despite deterministic structured cause chains."
+      },
+      "rationale": "The original two-site claim was understated and remains live at three sites.",
+      "destination": "Assert class and complete structured error/cause fields after public effects.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live assertion inspection",
+        "observed": "The named failure case still checks only Error identity while deterministic structured fields/messages are available."
+      },
+      "rationale": "Public failure identity remains weakly asserted.",
+      "destination": "Pin the complete public error after side-effect assertions.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current prototype/getter/namespace-patch census",
+        "observed": "All six historical force-an-object-to-lie sites remain, including two internal rename-pair getters and the disappearing errno getter."
+      },
+      "rationale": "The class was understated historically and remains unresolved.",
+      "destination": "Classify each site as dead code, compiler narrowing, or reachable failure before rewriting cases.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The duplication is in test setup."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current installable-fixture census",
+        "observed": "The two local builders remain part of the same repeated ResolvedPluginInstallable shape across eleven owner tests."
+      },
+      "rationale": "The duplication remains cross-cutting rather than commands-local.",
+      "destination": "Create a resolver-concern seed only if it preserves fresh case-owned values.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph error-flow trace",
+        "observed": "The CommandNameError instanceof check still narrows unknown for badNameWarning, while Symbol.hasInstance patching alone reaches its throw arm."
+      },
+      "rationale": "The arm is unreachable, but deleting the narrowing check without restructure still breaks typing.",
+      "destination": "Treat as compiler-forced narrowing, not removable production behavior.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding is local test import consistency."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "live sibling import census",
+        "observed": "unstage.test.ts still uses the default-plus-type import while its four command siblings use named test imports."
+      },
+      "rationale": "The local consistency warning remains; it is not a repository-wide convention.",
+      "destination": "Normalize this owner only.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/vendor precondition comparison",
+        "observed": "neutralizeCommandFrontmatter still repeats the parser's guaranteed delimiter preconditions and the owner still reaches them through prototype patching."
+      },
+      "rationale": "The loop-level defensive checks remain unreachable by real input.",
+      "destination": "Resolve with the redundant generated-name guard under the same policy.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph hidden-dependency inspection",
+        "observed": "Both preparation and replacement still call imported randomUUID inline."
+      },
+      "rationale": "The explicit-dependency violation remains and matches agents/skills staging.",
+      "destination": "Introduce one coherent injected ID seam across the three bridges.",
+      "duplicateOf": null
+    },
+    {
+      "id": "BC-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-023"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "same current narrowing trace as BC-019",
+        "observed": "The production fallback claim and the test-side Symbol.hasInstance claim describe the same compiler-forced arm."
+      },
+      "rationale": "Preserved as a separate historical production claim while canonicalized to BC-019.",
+      "destination": "Resolve through BC-019.",
+      "duplicateOf": "BC-019"
+    },
+    {
+      "id": "BC-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-commands.md#BC-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/index.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/commands/index.test.ts"
+        },
+        {
+          "path": "tests/bridges/commands/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current cross-bridge owner comparison",
+        "observed": "Commands still lacks the runtime export-surface pin and field-level readonly negatives that existing sibling owners demonstrate."
+      },
+      "rationale": "The corpus cross-cutting propagation and sibling-drift conclusions remain live.",
+      "destination": "Propagate the proven sibling forms without creating generic shared test helpers.",
+      "duplicateOf": null
+    }
   ],
   "decisions": [],
   "scopeChanges": []

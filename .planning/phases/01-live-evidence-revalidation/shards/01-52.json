@@ -94,369 +94,367 @@
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-001",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "The review covers six top-level orchestrator production modules and six mirrored owner tests.",
+      "label": "CLAIM-001",
       "findingId": "ORRFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-002",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "The six suites use strict mocks, whole-value assertions, hermetic filesystem cleanup, and an appropriate compile-only types test.",
+      "label": "CLAIM-002",
       "findingId": "ORRFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "authMemo is caller-owned and does not leak through module state.",
+      "label": "CLAIM-003",
       "findingId": "ORRFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "The historical review found no blocker in this area.",
+      "label": "CLAIM-004",
       "findingId": "ORRFP-F003"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "A fixing pass should prioritize discover catch narrowing, plugin-path environment cleanup, and discover assertion naming.",
+      "label": "CLAIM-005",
       "findingId": "ORRFP-F004"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "discover.test.ts uses strict-mode aliases whose names can be mistaken for loose comparisons.",
+      "label": "CLAIM-006",
       "findingId": "ORRFP-F005"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "plugin-path.test.ts restores environment state with try/finally instead of the local t.after convention.",
+      "label": "CLAIM-007",
       "findingId": "ORRFP-F006"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-008",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "auth-host, edge-deps, types, and scope-fanout owner tests are otherwise clean.",
+      "label": "CLAIM-008",
       "findingId": "ORRFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-009",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "discover.ts casts an unknown caught value to NodeJS.ErrnoException without a guard.",
+      "label": "CLAIM-009",
       "findingId": "ORRFP-F007"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-010",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "discover.ts lacks top-level documentation for its exported interface and aggregate function.",
+      "label": "CLAIM-010",
       "findingId": "ORRFP-F007"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-011",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "discover.ts collectForKind has six positional parameters including two mutated output arrays.",
+      "label": "CLAIM-011",
       "findingId": "ORRFP-F007"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-012",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "edge-deps classifyInstalledPluginRow has five required positional parameters.",
+      "label": "CLAIM-012",
       "findingId": "ORRFP-F008"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-013",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "edge-deps uses a verbose indexed-access installed-record type instead of PluginInstallRecord.",
+      "label": "CLAIM-013",
       "findingId": "ORRFP-F008"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-014",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "Two auth-host doc comments use imperative rather than third-person wording.",
+      "label": "CLAIM-014",
       "findingId": "ORRFP-F009"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-015",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "ReinstallOutcomeBase lacks a doc comment.",
+      "label": "CLAIM-015",
       "findingId": "ORRFP-F009"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "plugin-path.ts and scope-fanout.ts are otherwise clean.",
+      "label": "CLAIM-016",
       "findingId": "ORRFP-F010"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "External device-flow and credential fakes were explicitly outside the historical review scope.",
+      "label": "CLAIM-017",
       "findingId": "ORRFP-F011"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018",
       "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
-      "label": "The historical review did not run tests or coverage.",
+      "label": "CLAIM-018",
       "findingId": "ORRFP-F012"
     },
-
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-001",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "The review covers nine persistence production modules and nine mirrored owner tests.",
+      "label": "CLAIM-001",
       "findingId": "PERFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-002",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "Persistence cases use case-owned temporary roots, exact bytes, sibling row tests, and no forbidden runner or loader patterns.",
+      "label": "CLAIM-002",
       "findingId": "PERFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-003",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "Migration fixed points, prototype-shaped keys, and the sanctioned warning boundary are strongly exercised.",
+      "label": "CLAIM-003",
       "findingId": "PERFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-004",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "PathContainmentError identity and structured fields are incompletely asserted in two suites.",
+      "label": "CLAIM-004",
       "findingId": "PERFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-005",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "The ScopedLocations brand rejection is not pinned with a compile-time negative.",
+      "label": "CLAIM-005",
       "findingId": "PERFP-F003"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "A fixing pass should prioritize error identity, the brand negative, and independent expected JSON bytes.",
+      "label": "CLAIM-006",
       "findingId": "PERFP-F004"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-007",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "config-io.test.ts checks PathContainmentError by name rather than class.",
+      "label": "CLAIM-007",
       "findingId": "PERFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "locations.test.ts does not assert the containment-error row by class and structured fields.",
+      "label": "CLAIM-008",
       "findingId": "PERFP-F005"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-009",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "locations.test.ts never proves an unbranded hand-built ScopedLocations value fails type checking.",
+      "label": "CLAIM-009",
       "findingId": "PERFP-F003"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "Two state-io expected byte values repeat the production JSON serialization formula.",
+      "label": "CLAIM-010",
       "findingId": "PERFP-F006"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-011",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "agents-index-io tests hand-derive the index path instead of using ScopedLocations.agentsIndexPath.",
+      "label": "CLAIM-011",
       "findingId": "PERFP-F007"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "The config-write-back AST case is a justified structural proof of the documented single-write invariant.",
+      "label": "CLAIM-012",
       "findingId": "PERFP-F008"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-013",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "The remaining persistence owner tests are clean.",
+      "label": "CLAIM-013",
       "findingId": "PERFP-F009"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "Nine JSON fixtures under tests/persistence/fixtures are unreferenced dead support.",
+      "label": "CLAIM-014",
       "findingId": "PERFP-F010"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-015",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "agentsIndexPathFor duplicates ScopedLocations.agentsIndexPath.",
+      "label": "CLAIM-015",
       "findingId": "PERFP-F007"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-016",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "The remaining persistence production modules are clean within the review scope.",
+      "label": "CLAIM-016",
       "findingId": "PERFP-F009"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "The historical review did not execute the persistence suites.",
+      "label": "CLAIM-017",
       "findingId": "PERFP-F011"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018",
       "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
-      "label": "Supporting domain, shared, and platform modules were read only as context and not reviewed for their own quality.",
+      "label": "CLAIM-018",
       "findingId": "PERFP-F012"
     },
-
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The review covers eleven platform test/support files and three production modules.",
+      "label": "CLAIM-001",
       "findingId": "PLTFP-F001"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-002",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Git and credential shared contracts run against both fake and real participants with fresh instances and negative controls.",
+      "label": "CLAIM-002",
       "findingId": "PLTFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-003",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Real Git and credential adapter tests are hermetic and avoid network and subprocess access.",
+      "label": "CLAIM-003",
       "findingId": "PLTFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-004",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The shared GitOps fake crashes when clone, fetch, or resolveRemoteRef receives the auth bundle its type accepts.",
+      "label": "CLAIM-004",
       "findingId": "PLTFP-F003"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "A fixing pass should prioritize the Git fake auth crash, shared-contract documentation, Pi API narrowing, and small Git type-design issues.",
+      "label": "CLAIM-005",
       "findingId": "PLTFP-F004"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-006",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "A marketplace add test contains a strip-and-reattach workaround for the Git fake auth crash.",
+      "label": "CLAIM-006",
       "findingId": "PLTFP-F003"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-007",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "git-ops-contract does not explicitly cover or mark validation inapplicable.",
+      "label": "CLAIM-007",
       "findingId": "PLTFP-F005"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-008",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "git-ops-fake.test combines its case inventory and negative-control checks in one case.",
+      "label": "CLAIM-008",
       "findingId": "PLTFP-F006"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "git.test groups six exported entrypoints under one non-entrypoint describe label.",
+      "label": "CLAIM-009",
       "findingId": "PLTFP-F007"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "pi-api.test uses four double assertions to satisfy an over-wide ExtensionAPI dependency.",
+      "label": "CLAIM-010",
       "findingId": "PLTFP-F008"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-011",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The remaining credential and Git test-support files are clean.",
+      "label": "CLAIM-011",
       "findingId": "PLTFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-012",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Both shared contracts currently register fake and real participants with fresh state per case.",
+      "label": "CLAIM-012",
       "findingId": "PLTFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-013",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The current private negative controls have independently written expected failure lists.",
+      "label": "CLAIM-013",
       "findingId": "PLTFP-F002"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-014",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Git contract category documentation is weaker than the credential and device-flow model contracts.",
+      "label": "CLAIM-014",
       "findingId": "PLTFP-F005"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-015",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The Git fake negative control is not isolated from the contract case-name inventory assertion.",
+      "label": "CLAIM-015",
       "findingId": "PLTFP-F006"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "No shared contract has a typed or executable inventory requiring every real participant registration.",
+      "label": "CLAIM-016",
       "findingId": "PLTFP-F009"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Git auth option shapes repeat BuildAuthCallbacksOpts instead of reusing it.",
+      "label": "CLAIM-017",
       "findingId": "PLTFP-F010"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Two Git catch bindings use the local err spelling instead of the proposed explicit unknown style.",
+      "label": "CLAIM-018",
       "findingId": "PLTFP-F011"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Three Git option interfaces lack documentation.",
+      "label": "CLAIM-019",
       "findingId": "PLTFP-F012"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "CredentialProcess.on does not statically pair event names with listener shapes.",
+      "label": "CLAIM-020",
       "findingId": "PLTFP-F013"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "Pi soft-dependency probes accept the full ExtensionAPI although they only use getAllTools.",
+      "label": "CLAIM-021",
       "findingId": "PLTFP-F014"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "hasLoadedPiMcpAdapter retains an uncommented structural cast.",
+      "label": "CLAIM-022",
       "findingId": "PLTFP-F015"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The platform production modules are otherwise explicitly injected and testable without hidden side effects.",
+      "label": "CLAIM-023",
       "findingId": "PLTFP-F016"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The historical review did not execute the platform toolchain.",
+      "label": "CLAIM-024",
       "findingId": "PLTFP-F017"
     },
     {
       "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025",
       "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
-      "label": "The marketplace add test was inspected only as evidence for the shared fake defect and remains outside this report's ownership.",
+      "label": "CLAIM-025",
       "findingId": "PLTFP-F018"
     }
   ],
@@ -472,20 +470,44 @@
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F026",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/types.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/types.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/orchestrators/auth-host.test.ts" },
-        { "path": "tests/orchestrators/discover.test.ts" },
-        { "path": "tests/orchestrators/edge-deps.test.ts" },
-        { "path": "tests/orchestrators/plugin-path.test.ts" },
-        { "path": "tests/orchestrators/scope-fanout.test.ts" },
-        { "path": "tests/orchestrators/types.test.ts" }
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/scope-fanout.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/types.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -498,12 +520,22 @@
     },
     {
       "id": "ORRFP-F002",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003"
+      ],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F030",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" }],
-      "testRefs": [{ "path": "tests/orchestrators/auth-host.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        }
+      ],
       "validation": {
         "method": "behavioral-probe",
         "command": "node --test tests/orchestrators/auth-host.test.ts",
@@ -515,12 +547,22 @@
     },
     {
       "id": "ORRFP-F003",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004"
+      ],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F027",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" }],
-      "testRefs": [{ "path": "tests/orchestrators/discover.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph plus current shard comparison",
@@ -531,17 +573,27 @@
     },
     {
       "id": "ORRFP-F004",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "ORR-F031",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/orchestrators/discover.test.ts" },
-        { "path": "tests/orchestrators/plugin-path.test.ts" }
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -553,11 +605,17 @@
     },
     {
       "id": "ORRFP-F005",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006"
+      ],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F021",
-      "sourceRefs": [{ "path": "tests/orchestrators/discover.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
       "testRefs": [
         {
           "path": "N/A",
@@ -574,12 +632,22 @@
     },
     {
       "id": "ORRFP-F006",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007"
+      ],
       "evidenceStatus": "duplicate",
       "route": "operator decision",
       "duplicateOf": "ORR-F022",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" }],
-      "testRefs": [{ "path": "tests/orchestrators/plugin-path.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph plus current test inspection",
@@ -598,8 +666,16 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "ORR-F023",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" }],
-      "testRefs": [{ "path": "tests/orchestrators/discover.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current source inspection",
@@ -617,8 +693,16 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "ORR-F024",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts" }],
-      "testRefs": [{ "path": "tests/orchestrators/edge-deps.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current signature inspection",
@@ -637,11 +721,18 @@
       "route": "Phase 2",
       "duplicateOf": "ORR-F025",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/types.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/types.ts"
+        }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "These are production documentation-style observations." }
+        {
+          "path": "N/A",
+          "reason": "These are production documentation-style observations."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -653,17 +744,27 @@
     },
     {
       "id": "ORRFP-F010",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016"
+      ],
       "evidenceStatus": "duplicate",
       "route": "evidence-only closure",
       "duplicateOf": "ORR-F026",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" },
-        { "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/orchestrators/plugin-path.test.ts" },
-        { "path": "tests/orchestrators/scope-fanout.test.ts" }
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/scope-fanout.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -676,14 +777,24 @@
     },
     {
       "id": "ORRFP-F011",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/domain/device-flow-fake.ts" },
-        { "path": "tests/platform/credential-ops-fake.ts" }
+        {
+          "path": "tests/domain/device-flow-fake.ts"
+        },
+        {
+          "path": "tests/platform/credential-ops-fake.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -695,18 +806,36 @@
     },
     {
       "id": "ORRFP-F012",
-      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018"
+      ],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/orchestrators/auth-host.test.ts" },
-        { "path": "tests/orchestrators/discover.test.ts" },
-        { "path": "tests/orchestrators/edge-deps.test.ts" },
-        { "path": "tests/orchestrators/plugin-path.test.ts" },
-        { "path": "tests/orchestrators/scope-fanout.test.ts" },
-        { "path": "tests/orchestrators/types.test.ts" }
+        {
+          "path": "tests/orchestrators/auth-host.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/discover.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/edge-deps.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin-path.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/scope-fanout.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/types.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -717,7 +846,6 @@
       "rationale": "The historical review limitation no longer describes this revalidation; green tests remain executability evidence rather than mutation proof.",
       "destination": "Close the historical limitation with current rerun evidence."
     },
-
     {
       "id": "PERFP-F001",
       "claimIds": [
@@ -729,16 +857,32 @@
       "route": "evidence-only closure",
       "duplicateOf": "PER-F029",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/persistence/config-io.ts" },
-        { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" },
-        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" },
-        { "path": "extensions/pi-claude-marketplace/persistence/migrate.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/config-io.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/migrate.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/persistence/config-io.test.ts" },
-        { "path": "tests/persistence/locations.test.ts" },
-        { "path": "tests/persistence/state-io.test.ts" },
-        { "path": "tests/persistence/migrate.test.ts" }
+        {
+          "path": "tests/persistence/config-io.test.ts"
+        },
+        {
+          "path": "tests/persistence/locations.test.ts"
+        },
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        },
+        {
+          "path": "tests/persistence/migrate.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -759,10 +903,18 @@
       "route": "Phase 2",
       "duplicateOf": "PER-F021",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/persistence/config-io.ts" },
-        { "path": "extensions/pi-claude-marketplace/shared/path-safety.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/config-io.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
       ],
-      "testRefs": [{ "path": "tests/persistence/config-io.test.ts" }],
+      "testRefs": [
+        {
+          "path": "tests/persistence/config-io.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph plus current test inspection",
@@ -780,8 +932,16 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PER-F023",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }],
-      "testRefs": [{ "path": "tests/persistence/locations.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/locations.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph plus current type-test inspection",
@@ -792,15 +952,27 @@
     },
     {
       "id": "PERFP-F004",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006"
+      ],
       "evidenceStatus": "duplicate",
       "route": "deferred backlog",
       "duplicateOf": "PER-F031",
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/persistence.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/persistence.md"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/persistence/config-io.test.ts" },
-        { "path": "tests/persistence/locations.test.ts" },
-        { "path": "tests/persistence/state-io.test.ts" }
+        {
+          "path": "tests/persistence/config-io.test.ts"
+        },
+        {
+          "path": "tests/persistence/locations.test.ts"
+        },
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -812,15 +984,25 @@
     },
     {
       "id": "PERFP-F005",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PER-F022",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" },
-        { "path": "extensions/pi-claude-marketplace/shared/path-safety.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        }
       ],
-      "testRefs": [{ "path": "tests/persistence/locations.test.ts" }],
+      "testRefs": [
+        {
+          "path": "tests/persistence/locations.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph plus current row assertion inspection",
@@ -831,12 +1013,22 @@
     },
     {
       "id": "PERFP-F006",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PER-F024",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/atomic-json.ts" }],
-      "testRefs": [{ "path": "tests/persistence/state-io.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/atomic-json.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "Current serializer and expected-value comparison",
@@ -855,10 +1047,18 @@
       "route": "Phase 8",
       "duplicateOf": "PER-F028",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/persistence/agents-index-io.ts" },
-        { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/agents-index-io.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        }
       ],
-      "testRefs": [{ "path": "tests/persistence/agents-index-io.test.ts" }],
+      "testRefs": [
+        {
+          "path": "tests/persistence/agents-index-io.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current source/test inspection",
@@ -869,14 +1069,22 @@
     },
     {
       "id": "PERFP-F008",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PER-F026",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/persistence/config-write-back.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/config-write-back.ts"
+        }
       ],
-      "testRefs": [{ "path": "tests/persistence/config-write-back.test.ts" }],
+      "testRefs": [
+        {
+          "path": "tests/persistence/config-write-back.test.ts"
+        }
+      ],
       "validation": {
         "method": "behavioral-probe",
         "command": "node --test tests/persistence/config-write-back.test.ts",
@@ -896,14 +1104,26 @@
       "route": "evidence-only closure",
       "duplicateOf": "PER-F029",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/persistence/config-merge.ts" },
-        { "path": "extensions/pi-claude-marketplace/persistence/migrate.ts" },
-        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/config-merge.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/migrate.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/persistence/config-merge.test.ts" },
-        { "path": "tests/persistence/migrate.test.ts" },
-        { "path": "tests/persistence/state-io.test.ts" }
+        {
+          "path": "tests/persistence/config-merge.test.ts"
+        },
+        {
+          "path": "tests/persistence/migrate.test.ts"
+        },
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -916,16 +1136,25 @@
     },
     {
       "id": "PERFP-F010",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014"
+      ],
       "evidenceStatus": "duplicate",
       "route": "deferred backlog",
       "duplicateOf": "PER-F027",
       "sourceRefs": [
-        { "path": "tests/persistence/fixtures/agents-index/empty.json" },
-        { "path": "tests/persistence/fixtures/legacy/state-populated-mixed.json" }
+        {
+          "path": "tests/persistence/fixtures/agents-index/empty.json"
+        },
+        {
+          "path": "tests/persistence/fixtures/legacy/state-populated-mixed.json"
+        }
       ],
       "testRefs": [
-        { "path": "N/A", "reason": "The claim concerns unreferenced test-support fixture files." }
+        {
+          "path": "N/A",
+          "reason": "The claim concerns unreferenced test-support fixture files."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -937,15 +1166,27 @@
     },
     {
       "id": "PERFP-F011",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017"
+      ],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/persistence.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/persistence.md"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/persistence/state-io.test.ts" },
-        { "path": "tests/persistence/config-io.test.ts" },
-        { "path": "tests/persistence/locations.test.ts" }
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        },
+        {
+          "path": "tests/persistence/config-io.test.ts"
+        },
+        {
+          "path": "tests/persistence/locations.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -958,13 +1199,22 @@
     },
     {
       "id": "PERFP-F012",
-      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/persistence.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/persistence.md"
+        }
+      ],
       "testRefs": [
-        { "path": "N/A", "reason": "This is an explicit historical review ownership boundary." }
+        {
+          "path": "N/A",
+          "reason": "This is an explicit historical review ownership boundary."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -974,22 +1224,35 @@
       "rationale": "The scope boundary remains correct and preserves exclusive corpus ownership.",
       "destination": "No implementation action."
     },
-
     {
       "id": "PLTFP-F001",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/platform/git.ts" },
-        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" },
-        { "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/platform/pi-api.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/platform/git.test.ts" },
-        { "path": "tests/platform/git-credential.test.ts" },
-        { "path": "tests/platform/pi-api.test.ts" }
+        {
+          "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-credential.test.ts"
+        },
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1012,14 +1275,26 @@
       "route": "evidence-only closure",
       "duplicateOf": "PLT-F032",
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/platform/git.ts" },
-        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/platform/git.test.ts" },
-        { "path": "tests/platform/git-credential.test.ts" },
-        { "path": "tests/platform/git-ops-fake.test.ts" },
-        { "path": "tests/platform/credential-ops-fake.test.ts" }
+        {
+          "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-credential.test.ts"
+        },
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
+        },
+        {
+          "path": "tests/platform/credential-ops-fake.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -1040,10 +1315,18 @@
       "route": "Phase 2",
       "duplicateOf": "PLT-F020",
       "sourceRefs": [
-        { "path": "tests/platform/git-ops-fake.ts" },
-        { "path": "tests/orchestrators/marketplace/add.test.ts" }
+        {
+          "path": "tests/platform/git-ops-fake.ts"
+        },
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
       ],
-      "testRefs": [{ "path": "tests/platform/git-ops-fake.test.ts" }],
+      "testRefs": [
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
+        }
+      ],
       "validation": {
         "method": "behavioral-probe",
         "command": "cd <repository-local-isolated-copy> && node --input-type=module -e <invoke-createGitOpsFake-clone-with-auth>",
@@ -1055,14 +1338,24 @@
     },
     {
       "id": "PLTFP-F004",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005"
+      ],
       "evidenceStatus": "duplicate",
       "route": "deferred backlog",
       "duplicateOf": "PLT-F034",
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/platform.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/platform.md"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/platform/git-ops-fake.test.ts" },
-        { "path": "tests/platform/pi-api.test.ts" }
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
+        },
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1081,10 +1374,18 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F021",
-      "sourceRefs": [{ "path": "tests/platform/git-ops-contract.ts" }],
+      "sourceRefs": [
+        {
+          "path": "tests/platform/git-ops-contract.ts"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/platform/git-ops-fake.test.ts" },
-        { "path": "tests/platform/git.test.ts" }
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
+        },
+        {
+          "path": "tests/platform/git.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1103,9 +1404,16 @@
       "evidenceStatus": "duplicate",
       "route": "Phase 4",
       "duplicateOf": "PLT-F022",
-      "sourceRefs": [{ "path": "tests/platform/git-ops-fake.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
+        }
+      ],
       "testRefs": [
-        { "path": "N/A", "reason": "The claim concerns structure within the fake owner test." }
+        {
+          "path": "N/A",
+          "reason": "The claim concerns structure within the fake owner test."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1117,13 +1425,22 @@
     },
     {
       "id": "PLTFP-F007",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PLT-F023",
-      "sourceRefs": [{ "path": "tests/platform/git.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
       "testRefs": [
-        { "path": "N/A", "reason": "The claim concerns owner-test describe structure." }
+        {
+          "path": "N/A",
+          "reason": "The claim concerns owner-test describe structure."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1135,12 +1452,22 @@
     },
     {
       "id": "PLTFP-F008",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F024",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
-      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/pi-api.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current source/test inspection",
@@ -1151,18 +1478,30 @@
     },
     {
       "id": "PLTFP-F009",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 4",
       "duplicateOf": "PLT-F031",
       "sourceRefs": [
-        { "path": "tests/platform/git-ops-contract.ts" },
-        { "path": "tests/platform/credential-ops-contract.ts" },
-        { "path": "tests/domain/device-flow-contract.ts" }
+        {
+          "path": "tests/platform/git-ops-contract.ts"
+        },
+        {
+          "path": "tests/platform/credential-ops-contract.ts"
+        },
+        {
+          "path": "tests/domain/device-flow-contract.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/platform/git.test.ts" },
-        { "path": "tests/platform/git-credential.test.ts" }
+        {
+          "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-credential.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1174,12 +1513,22 @@
     },
     {
       "id": "PLTFP-F010",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PLT-F025",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
-      "testRefs": [{ "path": "tests/platform/git.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current type inspection",
@@ -1190,13 +1539,22 @@
     },
     {
       "id": "PLTFP-F011",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018"
+      ],
       "evidenceStatus": "duplicate",
       "route": "operator decision",
       "duplicateOf": "PLT-F026",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
       "testRefs": [
-        { "path": "N/A", "reason": "This is a repository-wide catch-binding style decision." }
+        {
+          "path": "N/A",
+          "reason": "This is a repository-wide catch-binding style decision."
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1208,12 +1566,23 @@
     },
     {
       "id": "PLTFP-F012",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 8",
       "duplicateOf": "PLT-F027",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
-      "testRefs": [{ "path": "N/A", "reason": "This is a production documentation observation." }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production documentation observation."
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current interface inspection",
@@ -1224,12 +1593,22 @@
     },
     {
       "id": "PLTFP-F013",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F028",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" }],
-      "testRefs": [{ "path": "tests/platform/git-credential.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git-credential.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current interface inspection",
@@ -1240,12 +1619,22 @@
     },
     {
       "id": "PLTFP-F014",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F029",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
-      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/pi-api.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current call and signature inspection",
@@ -1256,12 +1645,22 @@
     },
     {
       "id": "PLTFP-F015",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022"
+      ],
       "evidenceStatus": "duplicate",
       "route": "Phase 2",
       "duplicateOf": "PLT-F030",
-      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
-      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/pi-api.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
+      ],
       "validation": {
         "method": "static-proof",
         "tool": "CodeGraph current function inspection",
@@ -1272,19 +1671,33 @@
     },
     {
       "id": "PLTFP-F016",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
-        { "path": "extensions/pi-claude-marketplace/platform/git.ts" },
-        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" },
-        { "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git-credential.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/platform/pi-api.ts"
+        }
       ],
       "testRefs": [
-        { "path": "tests/platform/git.test.ts" },
-        { "path": "tests/platform/git-credential.test.ts" },
-        { "path": "tests/platform/pi-api.test.ts" }
+        {
+          "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-credential.test.ts"
+        },
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
       ],
       "validation": {
         "method": "static-proof",
@@ -1296,17 +1709,33 @@
     },
     {
       "id": "PLTFP-F017",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024"
+      ],
       "evidenceStatus": "stale",
       "route": "evidence-only closure",
       "duplicateOf": null,
-      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/platform.md" }],
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/platform.md"
+        }
+      ],
       "testRefs": [
-        { "path": "tests/platform/git.test.ts" },
-        { "path": "tests/platform/git-credential.test.ts" },
-        { "path": "tests/platform/git-ops-fake.test.ts" },
-        { "path": "tests/platform/credential-ops-fake.test.ts" },
-        { "path": "tests/platform/pi-api.test.ts" }
+        {
+          "path": "tests/platform/git.test.ts"
+        },
+        {
+          "path": "tests/platform/git-credential.test.ts"
+        },
+        {
+          "path": "tests/platform/git-ops-fake.test.ts"
+        },
+        {
+          "path": "tests/platform/credential-ops-fake.test.ts"
+        },
+        {
+          "path": "tests/platform/pi-api.test.ts"
+        }
       ],
       "validation": {
         "method": "behavioral-probe",
@@ -1319,13 +1748,19 @@
     },
     {
       "id": "PLTFP-F018",
-      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025"],
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025"
+      ],
       "evidenceStatus": "confirmed",
       "route": "evidence-only closure",
       "duplicateOf": null,
       "sourceRefs": [
-        { "path": ".planning/reviews/unit-test-adversarial/platform.md" },
-        { "path": "tests/orchestrators/marketplace/add.test.ts" }
+        {
+          "path": ".planning/reviews/unit-test-adversarial/platform.md"
+        },
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
       ],
       "testRefs": [
         {
