@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 112
 current_phase_name: Install and removal lifecycle
-current_plan: 112-01 (not started)
-status: Ready to execute
-stopped_at: Phase 112 planned (4 plans), ready to execute
-last_updated: "2026-09-05T15:05:21.804Z"
+current_plan: 112-02 (not started)
+status: In progress
+stopped_at: Completed 112-01-PLAN.md
+last_updated: "2026-09-05T17:05:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 112 planned - 4 plans, checker clean (0 blockers)
+last_activity_desc: 112-01 complete - resources.workflows schema, the sixth ledger phase, the closed-set widening
 state_head: 740da1cd7958d27ca26eb8a7c291c145e4b57e27
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
   percent: 33
 ---
 
@@ -35,14 +35,39 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 112 (Install and removal lifecycle) — READY TO EXECUTE
-Plan: 4 plans, none started
-Status: Ready to execute. Phase 112 is planned; the checker passed with 0
-blockers, tracing all nine phase-specific traps against the plan text. Three
-waves: `112-01` (the tracer — the `resources.workflows` record schema, then the
-sixth ledger phase and the three mirrored closed sets), `112-02` and `112-03` in
+Phase: 112 (Install and removal lifecycle) — IN PROGRESS, 1 of 4 plans done
+Plan: `112-01` complete; `112-02` and `112-03` are the next wave, in parallel
+Status: `112-01` landed the tracer in four commits — `a025d5b4` the
+`resources.workflows` record inventory, `d02db74b` the sixth ledger phase,
+`6d01ed99` the rollback evidence, `6f8e1c6a` the closed-set widening. `npm run
+check` is green end to end (unit 5400/0, integration 32/0) and every file the
+plan touched holds at 100% direct coverage. Remaining: `112-02` and `112-03` in
 parallel (the cascade slot with both compile-silent folds; reinstall's bespoke
-re-materialization), and `112-04` (the age-bounded staging sweep).
+re-materialization), then `112-04` (the age-bounded staging sweep).
+
+**Three facts `112-01` settled that the next plans depend on.** The record
+carries a REQUIRED `resources.workflows` with a migrate default-fill and no
+`schemaVersion` bump, so every removal path now has an inventory to read. The
+sixth phase's undo removes only the names `onPlaced` REPORTED, and
+`PathContainmentError` is not re-folded — it escapes `runPhases` by class and
+bypasses the `capture` assignment, so the failure row carries no version and no
+rollback-partial marker; a test pins that so a later reader does not repair it.
+And the fallow allow-list edge is in place, so `112-02` and `112-03` may import
+the bridge freely.
+
+**Two things the next plans should know.** The typecheck worklist after the
+schema edit was 67 errors across 30 files (the research predicted ~68), and the
+one production site the research expected in `state-io.ts` did not materialise.
+The complexity extraction the plan budgeted was needed — but on two TEST
+helpers (`seedMarketplace` in `list.test.ts`, `writePluginComponents` in
+`install.test.ts`), not on the install ledger body, which absorbed the sixth
+phase without breaching either ceiling. Expect the same pressure on any fixture
+that enumerates the record's resource axes by hand.
+
+**One interaction to budget for.** The sixth phase reads
+`stateSnapshot.marketplaces[mp].plugins[plugin]` once per install. Two existing
+tests pin proxy read counts and both needed their reveal threshold moved one
+read later so the sabotage still lands on `statePhase`.
 
 **Unlike Phases 110 and 111, nothing is ported here.** Those two checked
 production code out of `features/workflow-port-wip` verbatim and spent their
@@ -93,12 +118,14 @@ duplication remedy at pull-request time is a `sonar.cpd.exclusions` entry citing
 `port/README.md`, explicitly not a shared-helper refactor** — `fallow dupes`
 measures zero new duplicated lines for this bridge.
 
-Phase 112 inherits two carriers: replace the two explicit bridge calls in
-`tests/integration/workflow-kind-inversion.test.ts` with the install-driven path
-(the assertion itself does not change), and add `"bridges-workflows"` to the
-`orchestrators` zone's `allow` array in `.fallowrc.json` at its first
-orchestrator import. This phase left that array alone deliberately: nothing
-imports the bridge yet, so the edge would be unverifiable.
+Phase 112 inherited two carriers and `112-01` closed both. The two explicit
+bridge calls in `tests/integration/workflow-kind-inversion.test.ts` are gone,
+replaced by the install-driven path; the ENOENT assertion beside them, which
+claimed the install materialized nothing, became the assertion its own comment
+described. And `"bridges-workflows"` is in the `orchestrators` zone's `allow`
+array, landed in `d02db74b`, the commit that first imports the bridge —
+verified load-bearing by removing the string and watching `fallow dead-code`
+exit 1 naming both new edges by file and line.
 
 Earlier in the phase, `111-01` landed the path layer, `111-02` landed the
 bridge's read half — `bridges/workflows/{types,discover,unstage}.ts` with their
