@@ -1160,7 +1160,10 @@ tree at every boundary.
 | A4 | Option (a) for Q6b (completing `assertSafeSavedWorkflowName`) is within this phase's "do not rewrite the ported modules" boundary, on the reading that the function is new code the port introduces. | Q6b | If the operator reads it as a rewrite, the change must move to Phase 115. It is a discussion item, not a blocker — option (b) is available. |
 | A5 | `sonar.cpd.exclusions` will need `domain/name.ts` added at PR time. Measured only that `fallow dupes` reports a new clone family and that the file is absent from the exclusion list; SonarCloud's own duplication detector was not run. | Pitfall 6 | A red PR quality gate at `/babysit-pr` time, resolved by a one-line properties edit. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All four were resolved during planning and every recommendation was adopted. The
+resolution is recorded per question below and traced to the plan that carries it.
 
 1. **Q6b: complete `assertSafeSavedWorkflowName`, or defer to Phase 115?**
    - What we know: measured, against the real engine 3.10.1 validator, that
@@ -1172,6 +1175,9 @@ tree at every boundary.
      ROADMAP forbids.
    - Recommendation: complete it here (option a). Raise it as the phase's one
      confirmation item during planning.
+   - RESOLVED: adopted. `110-02` Task 1 writes the four engine-parity cases
+     red-first, then completes `assertSafeSavedWorkflowName` with the
+     `/[\s/\\\0]/u` and `/[\p{Cc}\p{Cf}]/u` clauses. Not deferred to Phase 115.
 
 2. **Q6a: `process.chdir` or the split pin for the relative-path key?**
    - What we know: `chdir` is already used in `tests/index.test.ts`, top-level
@@ -1182,6 +1188,8 @@ tree at every boundary.
      test on principle.
    - Recommendation: `chdir("/")`, restored on `t.after()`. Note the choice in
      the test's header comment so a later reader does not "fix" it back.
+   - RESOLVED: adopted. `110-01` Task 2 uses `chdir("/")` with a `t.after()`
+     restore. The split pin was not taken.
 
 3. **How much of the spike's 1089-line owner test survives the restructure?**
    - What we know: it reaches 32/32 functions and 106/107 branches against the
@@ -1191,6 +1199,8 @@ tree at every boundary.
      own or folds it into the writing task.
    - Recommendation: one task, explicitly titled as a restructure of an
      inherited draft, with the direct-coverage command as its verification.
+   - RESOLVED: adopted. `110-03` carries it as a single task verified by the
+     direct-coverage pair command.
 
 4. **Does `admitWorkflowScript` need a source-size cap?**
    - What we know: it hands unbounded third-party text to `acorn.parse`. A
@@ -1201,6 +1211,9 @@ tree at every boundary.
    - Recommendation: out of scope here; record as a Phase 115 candidate
      alongside the other admission-gate work. `[ASSUMED]` that the engine's
      absence of a cap is a deliberate posture rather than an oversight.
+   - RESOLVED: adopted as a deferral. `110-03` records it in its prohibitions
+     and as threat `T-110-17`, dispositioned `accept` with Phase 115 named as
+     its later home.
 
 ## Environment Availability
 
