@@ -441,7 +441,7 @@ A workflow-bearing plugin renders as an ordinary not-installed inventory row: th
 
 This state adds no workflow-specific glyph, heading, or wrapping rule.
 
-The workflow-specific half of that claim is enforced by `tests/integration/workflow-kind-inversion.test.ts`, not by this block's byte pairing. These bytes are identical to the generic `(available)` row by construction (D-109-04), and the paired fixture carries no workflow signal, so `catalog-uat` would stay green if a workflow reason token came back.
+**Nothing enforces the workflow-specific half of that claim.** These bytes are identical to the generic `(available)` row by construction (D-109-04), and the paired fixture carries no workflow signal, so `catalog-uat` would stay green if a workflow reason token came back on a `list` row. No test renders an inventory row for a workflow-bearing plugin -- `tests/integration/workflow-kind-inversion.test.ts` drives `install`, never `list`. The nearest guard is one layer down: the resolver owner tests in `tests/domain/resolver.test.ts` pin that such a plugin resolves `installable` with `workflows` supported, which is what would have to break first for this row to regress.
 
 ### Partially-installed inventory row -- partial-hook plugin (FSTAT-02 / PHOOK-04 / PHOOK-05 / D-71-04)
 

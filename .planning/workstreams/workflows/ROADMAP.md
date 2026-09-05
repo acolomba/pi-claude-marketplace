@@ -238,6 +238,23 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 5. Every file under `bridges/workflows/` has a mirrored owner test and
    `npm run test:corresponding` passes.
 6. `npm run check` is green.
+7. **`EXTENSION_VERSION` is bumped in this phase.** Phase 109 deliberately left it
+   at `0.18.1` (D-109-06 / A-03) because bumping it would have fired the
+   `supportedSetGrew` convergence with no bridge to materialize anything. That
+   prohibition inverts here. Records persisted under the released v0.18.1 by a
+   `--partial` install carry `unsupported: ["workflows"]` and today render
+   `{unsupported component}` -- a token naming a kind Pi now supports. The
+   backfill scan that repairs them returns early while
+   `state.lastReconciledExtensionVersion === EXTENSION_VERSION`
+   (`orchestrators/reconcile/backfill.ts:76`); the bump is what releases it, and
+   `backfill.ts:343` then re-materializes through `reinstallPlugin`. Without the
+   bump those records stay stale permanently.
+8. **The install-window assertion is inverted.**
+   `tests/integration/workflow-kind-inversion.test.ts` currently asserts
+   `~/.pi/workflows` does NOT exist -- the D-109-06 window. Once the bridge
+   lands it must assert the envelopes ARE written. Its positive precondition
+   (the fixture resolves `workflows` supported) stays as-is; only the ENOENT
+   half moves.
 
 **Plans**: TBD
 
@@ -305,7 +322,19 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
    and Spike 027.
 5. The engine's own peer floor (`pi-coding-agent >=0.80.8`) is documented as
    distinct from this project's (`>=0.80.5`).
-6. `npm run check` is green.
+6. **The path-bearing premise is confirmed against Claude Code's own
+   documentation, or the behavior resting on it is changed.** Phase 109 admitted
+   `workflows` to `SUPPORTED_COMPONENT_PATH_KINDS`, which routes a declared
+   `workflows` field through `validateComponentPath` and makes a non-string
+   declaration resolve `unavailable` rather than degrade to
+   `partially-available`. That is a harsher verdict than the pre-inversion one
+   and it rests on the premise that upstream's field is path-bearing. The
+   premise has lineage -- WFLW-02 states the `string | array` shape, Spike 021
+   recorded it as assumption A1 at risk grade Low -- but no upstream citation.
+   `tests/domain/resolver.test.ts` pins the consequence and names this as the
+   phase that settles the premise. Upstream absence is itself a decisive answer;
+   record whichever way it goes.
+7. `npm run check` is green.
 
 **Plans**: TBD
 

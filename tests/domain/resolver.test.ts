@@ -1800,6 +1800,12 @@ test("WINV-01 strict: workflows/ plus themes -> partially-available, unsupported
 // past. Pinned because the harsher verdict rests entirely on the premise that
 // upstream's `workflows` field is path-bearing; if that premise is ever
 // falsified this test is the first thing that has to move.
+//
+// The premise has lineage but no upstream citation: WFLW-02 states the
+// `string | array` shape, and Spike 021 recorded it as assumption A1 at risk
+// grade Low, naming this exact consequence. What is missing is confirmation
+// against Claude Code's own documentation. WDOC-01 owns that confirmation --
+// see the Phase 114 criteria in the workstream ROADMAP.
 test("WINV-01 strict: a non-string workflows declaration resolves unavailable", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, {
