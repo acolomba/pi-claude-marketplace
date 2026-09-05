@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0] - 2026-09-05
+
+- A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load.
+- The extension reports and skips a workflow script it cannot read, or one that declares no usable metadata, and installs the rest of the plugin.
+- A workflow script that declares no readable name still installs, and reports that it will not run until it declares a name and a description.
+- The extension now depends on `acorn` to read the metadata that a workflow script declares.
+
 ## [0.18.1] - 2026-08-29
 
 - Structurally valid plugins that declare `workflows` or contain a literal `workflows/` directory now report `(partially-available) {workflows}`.

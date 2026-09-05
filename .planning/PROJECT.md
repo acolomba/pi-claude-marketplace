@@ -231,9 +231,13 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 onto main, branch `features/workflow`). Phases 109-114 re-land the bridge that shipped on the
 never-merged `features/workflows-spike`; 115-117 harden it. Phase 109 of 9 is complete and
 verified 12/12: `workflows` has moved out of the unsupported kinds into both supported tuples,
-and the `{workflows}` reason is retired. Nothing is released from this branch -- `EXTENSION_VERSION`
-stays at 0.18.1 until Phase 111 lands the bridge (A-03), so a workflow-bearing plugin currently
-installs clean and materializes nothing. v1.19 closed 2026-09-04.
+and the `{workflows}` reason is retired. Nothing is released from this branch. Phase 111 landed
+the bridge and moved `EXTENSION_VERSION` to 0.19.0 (A-03), which opens the load-time backfill
+gate: a reload now re-resolves a stale record and clears its `{workflows}` reason token. That
+re-materialization runs through `reinstallPlugin`, which gains no workflows phase until Phase 112,
+so a workflow-bearing plugin still installs clean and materializes nothing through the install
+path, and envelopes for records written by the last released version do not appear yet. v1.19 closed
+2026-09-04.
 
 **Just shipped:** v1.19 Unit Test Refactor (2026-09-04, Phases 108-117, 220 plans, 317 tasks;
 archived to `.planning/milestones/v1.19-*`). All 204 production modules now have exactly one
