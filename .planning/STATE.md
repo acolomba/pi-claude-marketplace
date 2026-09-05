@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-67-PLAN.md
-last_updated: "2026-09-05T20:14:51.000Z"
+stopped_at: Completed 01-68-PLAN.md
+last_updated: "2026-09-05T20:24:03.000Z"
 last_activity: 2026-09-05
-last_activity_desc: Plan 01-67 derived the complete 40-row evidence-backed scope-impact crosswalk
-state_head: 00ef1a526827d54b6f957145d276d9098d5202a1
+last_activity_desc: Plan 01-68 applied the terminal crosswalk to requirements and Phase 2-9 roadmap contracts
+state_head: 926b39cd88d6b109c46882980648ec2bcd2cd5e4
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 67
+  completed_plans: 68
   percent: 0
 ---
 
@@ -33,17 +33,17 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 67 of 69
+Plan: 68 of 69
 Status: Ready to execute
-Last activity: 2026-09-05 — Plan 01-67 derived the complete 40-row evidence-backed scope-impact crosswalk
+Last activity: 2026-09-05 — Plan 01-68 applied the terminal crosswalk to requirements and Phase 2-9 roadmap contracts
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 168
+- Total plans completed: 169
 - Average recorded duration: 12.3 min
-- Total recorded execution time: 34 hr 30 min
+- Total recorded execution time: 34 hr 39 min
 
 **By Phase:**
 
@@ -250,6 +250,7 @@ Last activity: 2026-09-05 — Plan 01-67 derived the complete 40-row evidence-ba
 | Phase 01 P65 | 19min | 1 tasks | 3 files |
 | Phase 01 P66 | 23min | 1 tasks | 3 files |
 | Phase 01 P67 | 14min | 1 tasks | 3 files |
+| Phase 01 P68 | 9min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -598,6 +599,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Cover all 32 current requirement IDs and all eight stable Phase 2-9 routes exactly once in the terminal evidence-backed scope-impact crosswalk.
 - [Phase 01]: Narrow or split mixed scope in place, move unsupported AGCOL-01 and superseded standalone COV-01 work to evidence, and preserve every stable requirement ID and later phase number.
 - [Phase 01]: Do not activate the folded unused-type-member todo or named GAUTH-01 wiring without a dedicated terminal canonical finding inside the unit-test-quality boundary.
+- [Phase 01]: Keep 30 active or complete requirements mapped exactly once and retain GGAT-02 and RCOV-04 as explicit evidence/history identities rather than executable work.
+- [Phase 01]: Preserve Phase 2-9 numbering with active requirement counts 3/5/4/3/3/3/3/2 and round-trip every planning edit through one of 40 canonical before/after anchor pairs.
+- [Phase 01]: Keep the unused-type-member todo and named GAUTH-01 prescription historical until a dedicated terminal finding authorizes in-boundary work.
 
 ### Pending Todos
 
@@ -650,16 +654,17 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-67-PLAN.md
+**Stopped at:** Completed 01-68-PLAN.md
 
-Phase 01 remains active. Its terminal ledger now contains a validated 40-row scope-impact crosswalk covering all 32 requirements and all eight Phase 2-9 routes.
+Phase 01 remains active. Requirements and Phase 2-9 roadmap scope now match the validated 40-row terminal-evidence crosswalk, with 30 active or complete IDs and two explicit history-only IDs.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-67-SUMMARY.md` and
+**Read beside it:** `.planning/phases/01-live-evidence-revalidation/01-68-SUMMARY.md`,
+`.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and
 `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
 
-Last session: 2026-09-05T20:14:51.000Z
+Last session: 2026-09-05T20:24:03.000Z
 
-**Next:** Execute `01-68-PLAN.md` and apply the validated crosswalk to the active
-requirements and Phase 2-9 roadmap contracts without changing stable IDs or phase numbers.
+**Next:** Execute `01-69-PLAN.md` and seal Phase 1 with final validation of the
+terminal ledger and evidence-derived planning contracts before Phase 2 planning.
