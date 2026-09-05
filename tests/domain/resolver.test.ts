@@ -1753,6 +1753,45 @@ test("WINV-01 strict: implicit-by-convention workflows/ dir -> installable with 
   }
 });
 
+// WINV-01: a plugin carrying BOTH a `workflows/` directory and a
+// still-unsupported kind resolves `partially-available` on that other kind
+// ALONE. This is the proof behind the `workflow-plus-unsupported-rejection`
+// catalog state, whose brace names one token: `catalog-uat` pairs annotation
+// prose to rendered bytes only, so its renderer-level fixture carries no
+// plugin and cannot establish which kind drove the rejection.
+test("WINV-01 strict: workflows/ plus themes -> partially-available, unsupported names themes alone", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./local")]: "dir",
+    [path.join(pathUnderMarketplace("./local"), "workflows")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", themes: { dark: {} } }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "partially-available",
+    `notes if not: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "partially-available") {
+    assert.deepStrictEqual(resolvedPlugin.unsupported, ["themes"]);
+    assert.ok(
+      resolvedPlugin.supported.includes("workflows"),
+      `supported: ${resolvedPlugin.supported.join(" / ")}`,
+    );
+    assert.ok(
+      !resolvedPlugin.notes.some((n) => n.includes("workflows")),
+      `workflows must contribute no note; got: ${resolvedPlugin.notes.join(" / ")}`,
+    );
+  }
+});
+
 // WINV-01: admitting `workflows` to SUPPORTED_COMPONENT_PATH_KINDS routes a
 // declared `workflows` field through `validateComponentPath`, so a declaration
 // that is neither a string nor an array of strings -- an inline map in the

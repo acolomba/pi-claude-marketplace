@@ -629,6 +629,8 @@ A plugin operation has failed.
 
 The plugin carries a `workflows/` directory AND a second component kind Pi does not support (`themes`). The rejection is driven by that second kind, and the brace names it alone -- which is what shows the workflow kind contributes no token of its own. With `--partial`, the install admits the partial arm and materializes only its supported components. A rejected install uses the existing error summary and partial-install hint, with no reload trailer.
 
+That causal claim is enforced by `tests/domain/resolver.test.ts` ("WINV-01 strict: workflows/ plus themes -> partially-available, unsupported names themes alone"), not by this block's byte pairing. `catalog-uat` pairs annotation prose to rendered bytes only, and the fixture paired with the block above is a renderer-level `notify()` message carrying no plugin, no `workflows/` directory and no `themes` declaration.
+
 ### Failure -- structurally unavailable (`--partial` cannot help)
 
 <!-- catalog-state: failure-structural-unavailable -->
