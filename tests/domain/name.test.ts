@@ -446,6 +446,10 @@ describe("generatedWorkflowName", () => {
     // D-141-02: the elision would empty the head, so it does not fire and the
     // source stands verbatim. The bare "acme:" is never produced.
     { plugin: "acme", source: "acme-", expectedWorkflowName: "acme:acme-" },
+    // A WELL-FORMED astral character is one code point, not a surrogate, so the
+    // \p{Cs} screen below must not touch it. Written as a code-point escape
+    // (U+1F680 ROCKET) rather than pasted.
+    { plugin: "acme", source: "ship\u{1F680}", expectedWorkflowName: "acme:ship\u{1F680}" },
   ]) {
     test(`generates ${JSON.stringify(expectedWorkflowName)} from ${JSON.stringify(source)}`, () => {
       // arrange
@@ -567,6 +571,22 @@ describe("generatedWorkflowName", () => {
       sourceName: "bidi\u202Ex",
       errorMessage:
         'Generated workflow name "acme:bidi\u202Ex" must not contain control or format characters.',
+    },
+    {
+      // A lone HIGH surrogate (U+D800), written as an escape because it is not a
+      // character and cannot be pasted. The engine admits it -- its screen is
+      // \p{Cc} and \p{Cf} only -- but Node writes it to a path as U+FFFD, so this
+      // name and the one below would be the same file.
+      pluginName: "acme",
+      sourceName: "a\uD800b",
+      errorMessage: 'Generated workflow name "acme:a\uD800b" must not contain unpaired surrogates.',
+    },
+    {
+      // A lone LOW surrogate (U+DC00): distinct from the row above in memory,
+      // identical to it once either becomes a file name.
+      pluginName: "acme",
+      sourceName: "a\uDC00b",
+      errorMessage: 'Generated workflow name "acme:a\uDC00b" must not contain unpaired surrogates.',
     },
   ]) {
     test(`rejects plugin ${JSON.stringify(pluginName)} and source ${JSON.stringify(sourceName)}`, () => {

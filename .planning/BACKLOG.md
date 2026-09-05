@@ -2485,7 +2485,9 @@ reasons worth preserving here:
 - **Folding refuses installs that work.** On a case-sensitive volume -- Linux,
   which is the only platform CI runs -- `acme:Ship` and `acme:ship` are two
   distinct working files. A fold turns that into a hard install failure for the
-  whole plugin.
+  whole plugin. **This reason holds only for the case and normalization
+  variants. It is false for the lone-surrogate variant recorded below**, which
+  collapses on every platform.
 
 So the real question is a policy one, and it is repo-wide: does this extension
 promise that an install portable across volumes, or does it promise that an
@@ -2500,6 +2502,44 @@ install valid on THIS volume succeeds? Candidate directions:
 `tests/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
 explicitly NOT colliding, so whichever direction wins has a test to retitle.
 `.planning/WINDOWS.md` is the other document this touches.
+
+### Amended 2026-09-05: a third variant, which is not a policy question
+
+The Phase 110 iteration-2 review (WR-12) found a third way two distinct
+generated names name one file, and it does not belong to the policy question
+above: a name carrying a **lone surrogate**.
+
+A lone surrogate has no UTF-8 encoding, so Node substitutes U+FFFD when it turns
+the name into a path. Measured on Linux/ext4:
+
+```text
+writeFileSync(dir + "/acme:\uD800.json", "A");
+writeFileSync(dir + "/acme:\uDC00.json", "B");
+readdirSync(dir) -> [ "acme:<U+FFFD>.json" ]   // one entry
+readFileSync(a)  -> "B"                        // A silently overwritten
+```
+
+Two facts separate this from the case and normalization variants:
+
+- **The collapse is at the encoding layer, not the volume layer.** It happens on
+  every platform, so the "on Linux they are two distinct working files" reason
+  recorded above does not apply. Nothing is refused that would otherwise work.
+- **Nothing accepts such a name downstream.** The host engine screens only
+  `\p{Cc}` and `\p{Cf}`, so `isSafeSavedWorkflowName` admits it and
+  `sourcePath` writes `${name}.json` -- meaning the engine's own save/load pair
+  loses one of the two as well.
+
+**Closed for the workflows gate.** `domain/name.ts::generatedWorkflowName` now
+refuses a generated name matching `/\p{Cs}/u`, with the pair of lone-surrogate
+rows and a well-formed-astral acceptance row pinned in `tests/domain/name.test.ts`.
+The screen is documented at its site as the one place this gate deliberately
+exceeds the engine.
+
+**Still open for the sibling gates.** `assertNoAgentCollisions` and
+`assertNoCommandCollisions` compare exact strings over names that also become
+path basenames, and `assertSafeName` has no surrogate screen, so agents and
+commands keep this exposure. Whether it is worth a shared screen is the part of
+this entry that remains a decision.
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.

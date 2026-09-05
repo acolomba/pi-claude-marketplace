@@ -195,6 +195,11 @@ export function generatedAgentName(plugin: string, source: string): string {
  * instead of by an exact message string, which is the error contract every other
  * domain failure follows.
  *
+ * One screen deliberately EXCEEDS the engine: a name carrying a lone surrogate
+ * is refused. That is not a parity excess in any useful sense -- such a name
+ * cannot round-trip through a path at all, so the engine's own save/load pair
+ * silently collapses two of them onto one file. See the comment at the check.
+ *
  * The `plugin` check stays OUTSIDE that conversion and keeps its bare `Error`:
  * an unsafe plugin name disqualifies every script in the plugin at once, so it
  * is not one file's fault and must never be rendered as one file's refusal.
@@ -225,6 +230,24 @@ export function generatedWorkflowName(plugin: string, source: string): string {
 
   assertSafeSavedWorkflowName(generated);
 
+  // The one screen this gate adds to the engine's, kept OUT of the mirror above
+  // so that function stays a faithful replica. A lone surrogate has no UTF-8
+  // encoding, so Node substitutes U+FFFD when it turns a name into a path:
+  // "acme:\uD800.json" and "acme:\uDC00.json" are ONE file on disk, and the
+  // second write destroys the first without an error. The engine screens only
+  // \p{Cc} and \p{Cf}, so its own `sourcePath` -- which writes `${name}.json` --
+  // cannot keep the two apart either, and neither can
+  // `domain/workflow-script.ts`'s collision gate, which compares names as exact
+  // strings and correctly sees two. Refusing the name is the only point at
+  // which the collapse is visible. `/u` matches CODE POINTS, so a well-formed
+  // astral pair is a single non-surrogate code point and passes.
+  if (/\p{Cs}/u.test(generated)) {
+    throw new UnsafeGeneratedNameError(
+      generated,
+      `Generated workflow name "${generated}" must not contain unpaired surrogates.`,
+    );
+  }
+
   return generated;
 }
 
@@ -251,7 +274,10 @@ export function generatedWorkflowName(plugin: string, source: string): string {
  *
  * Matching the engine exactly is the goal, never exceeding it: a gate stricter
  * than the engine refuses a name the engine would accept, and only the lax
- * direction self-corrects when a later engine relaxes a rule.
+ * direction self-corrects when a later engine relaxes a rule. That is a rule
+ * about THIS function. `generatedWorkflowName` carries one deliberate screen
+ * the engine has no counterpart for, and keeps it out here so this stays a
+ * replica a reader can diff against `dist/workflow-saved.js`.
  *
  * This wraps rather than widens `assertSafeName`, which skills, commands and
  * agents all share and none of which wants a 128-character cap or a whitespace
