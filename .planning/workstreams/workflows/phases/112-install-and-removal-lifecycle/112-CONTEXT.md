@@ -36,8 +36,21 @@ The ROADMAP says "swept **or** reported", leaving the choice open. Settle it as
 `orchestrators/plugin/clone-gc.ts` already exports
 `garbageCollectPluginClones(locations): Promise<string[]>` for exactly this
 shape of problem — an accumulating cache directory the normal lifecycle does not
-reach. Mirror its structure, its return contract (the names it removed), and its
-call-site placement.
+reach. Mirror its structure and its call-site placement.
+
+**CORRECTION (from 112-RESEARCH.md, measured):** this paragraph originally said
+to mirror "its return contract (the names it removed)". That is wrong.
+`garbageCollectPluginClones` returns per-directory **rm-failure leak strings**
+(`return leaks;`, line 109), and every call site discards the value. Mirror the
+actual contract, not the one asserted here.
+
+Research also found the precedent transfers only **halfway**: `clone-gc`'s
+liveness signal derives from persisted `resolvedSha`/`resolvedSource`, and a
+staging root has no analogue — it is a `randomUUID()` that is never persisted,
+and `workflowsStagingDir` is scope-independent so the state lock does not
+serialize access to it. The age bound is therefore **the entire liveness
+mechanism**, not a refinement of the precedent, and no age/TTL constant exists
+anywhere in `extensions/`. Treat it as new design with a borrowed shape.
 
 Two constraints the ROADMAP states and the sweep must honor:
 - **Age-bounded.** A concurrent install's fresh staging root must never be

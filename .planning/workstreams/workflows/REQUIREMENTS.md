@@ -102,7 +102,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WNAM-03 | Phase 110 -> Phase 111 | Partial - classification half done in 110-03; the warning and not-installed halves are Phase 111's |
 | WPTH-02 | Phase 110 -> Phase 111 | Complete - home-derivation half proved in 110-01; the never-written guarantee closed in Phase 111 |
 | WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Complete (verified 9/9, 2026-09-05) |
-| WLIF-01..03 | Phase 112 | Pending (re-land) |
+| WLIF-01, WLIF-03 | Phase 112 | Pending (re-land) |
+| WLIF-02 | Phase 112 (type) -> Phase 113 (behavior) | Split - the archived milestone defines WLIF-02 as *update*, which the ROADMAP assigns to Phase 113. Phase 112 ships the widened ledger `phase` union; Phase 113 ships the update re-stage. Corrected 2026-09-05 from a row that booked all of WLIF-01..03 to Phase 112. |
 | WLIF-04..06, WFLW-04 | Phase 113 | Pending (re-land) |
 | WDEP-01..04, WDOC-01..03 | Phase 114 | Pending (re-land) |
 | WGATE-01 | Phase 115 | Pending |

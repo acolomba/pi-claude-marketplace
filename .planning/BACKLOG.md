@@ -2550,3 +2550,32 @@ Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
   (dedicated `marketplace-not-added` kind in shared/notify.ts; placeholder/sole-reason
   renderer carve-out removed).
 -->
+
+## CASCADEAX-01: the cascade `dropped` fold reads its axes structurally, so a new kind is silently ignored
+
+Surfaced by the Phase 112 research (2026-09-05), while measuring the blast radius
+of widening `UnstageOutcome.dropped` with a `workflows` axis.
+
+Widening the type produces 12 `tsc` errors — **none of them at the two sites that
+matter**:
+
+| site | file | why the compiler stays quiet |
+| --- | --- | --- |
+| `applyPartialCascadeFold` | `orchestrators/plugin/shared.ts:1188` | reads `dropped` structurally rather than by exhaustive destructuring |
+| hand-rolled duplicate | `orchestrators/marketplace/remove.ts:325-335` | same shape, independently written |
+
+Both therefore keep compiling and silently omit the new axis from the fold. This
+is the same defect class this project has already shipped repeatedly: adding a
+member to a closed set compiles clean at every derivation site that reads the set
+structurally instead of exhaustively.
+
+**Separately and pre-existing:** `remove.ts`'s filter is four-axis and already
+omits the `hooks` axis — a divergence that predates the workflows work entirely.
+Phase 112 adds only `workflows` and files this rather than fixing it, per
+CLAUDE.md's surgical-changes rule.
+
+**The durable fix** is not to add one more axis. It is to make the fold
+exhaustive so the compiler leads on the next kind — an exhaustive destructure, a
+`Record<UnstageAxis, …>` keyed on the union, or an `assertNever` arm. Any of the
+three converts a future silent omission into a build error. Doing this while
+touching `remove.ts` for an unrelated reason is the cheapest moment.
