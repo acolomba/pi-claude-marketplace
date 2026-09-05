@@ -329,14 +329,20 @@ export function fileStem(fileName: string): string {
  * plugin name is screened by `admitWorkflowScript` before this runs, for the
  * same reason, so what reaches this catch is always a defect of the name the
  * FILE supplies.
+ *
+ * `declaredName` is the text the name is BUILT FROM -- the declared `meta.name`
+ * or, for a stem fallback, the file stem. Everywhere else in this module
+ * `source` is the untrusted script TEXT, and both are `string`, so a swap would
+ * compile. In a module whose contract is that script text never becomes a name,
+ * the two must not share one parameter name.
  */
 function generateOrRefuse(
   pluginName: string,
   fileName: string,
-  source: string,
+  declaredName: string,
 ): string | RefusedWorkflow {
   try {
-    return generatedWorkflowName(pluginName, source);
+    return generatedWorkflowName(pluginName, declaredName);
   } catch (err) {
     return {
       outcome: "refused",
