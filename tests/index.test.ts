@@ -135,6 +135,17 @@ const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
   "    cause: state.json at state.json has an unsupported schema version\n\n" +
   "Reconcile: 2 failures";
 
+/** The cascade for unreadable install state in both project-first reconcile scopes. */
+const RECONCILE_CASCADE_FOR_TWO_UNREADABLE_STATES =
+  "Some operations have failed.\n\n" +
+  "⊘ state.json [project] (failed) {unreadable}\n" +
+  "  ⊘ state.json (failed) {unreadable}\n" +
+  "    cause: state.json at state.json has an unsupported schema version\n\n" +
+  "⊘ state.json [user] (failed) {unreadable}\n" +
+  "  ⊘ state.json (failed) {unreadable}\n" +
+  "    cause: state.json at state.json has an unsupported schema version\n\n" +
+  "Reconcile: 4 failures";
+
 /** The cascade the reconcile renders for a project scope whose config is invalid. */
 const RECONCILE_CASCADE_FOR_INVALID_CONFIG =
   "Some operations have failed.\n\n" +
@@ -539,6 +550,11 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
  */
 async function seedUnreadableState(cwd: string): Promise<string> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  return seedUnreadableStateAt(extensionRoot);
+}
+
+/** Record install state the loader refuses at the given extension root. */
+async function seedUnreadableStateAt(extensionRoot: string): Promise<string> {
   await mkdir(extensionRoot, { recursive: true });
   const statePath = path.join(extensionRoot, "state.json");
   await writeFile(statePath, JSON.stringify({ schemaVersion: 99, marketplaces: {} }), "utf8");
@@ -923,6 +939,69 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
 
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(attempted, expectedAttempts);
+  verifyBoundary();
+});
+
+test("attempts every skipped-scope PATH warning when every host notification throws", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "all-path-warnings-refused");
+  const projectStatePath = await seedUnreadableState(scope.cwd);
+  const userStatePath = await seedUnreadableStateAt(
+    path.join(scope.home, ".pi", "agent", "pi-claude-marketplace"),
+  );
+  const invalidStateBytes = JSON.stringify({ schemaVersion: 99, marketplaces: {} });
+  const validStateBytes = JSON.stringify({
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: "0.18.1",
+    marketplaces: {},
+  });
+  const staleUserBin = path.join(scope.home, "stale-user", "bin");
+  const staleProjectBin = path.join(scope.cwd, "stale-project", "bin");
+  process.env.PATH = ["/usr/bin", staleUserBin, staleProjectBin].join(path.delimiter);
+  process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const attempted: Notification[] = [];
+  const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
+  const expectedAttempts: readonly Notification[] = [
+    { message: RECONCILE_CASCADE_FOR_TWO_UNREADABLE_STATES, severity: "error" },
+    { message: "reconcile aborted: host notification refused", severity: "error" },
+    {
+      message:
+        "plugin PATH not refreshed for user scope (install state unreadable): " +
+        `state.json at ${userStatePath} has an unsupported schema version`,
+      severity: "warning",
+    },
+    {
+      message:
+        "plugin PATH not refreshed for project scope (install state unreadable): " +
+        `state.json at ${projectStatePath} has an unsupported schema version`,
+      severity: "warning",
+    },
+  ];
+
+  // act
+  const discovered = await discover(discoverEvent(scope.cwd), refusing);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(await readFile(projectStatePath, "utf8"), invalidStateBytes);
+  assert.deepStrictEqual(await readFile(userStatePath, "utf8"), invalidStateBytes);
+  assert.deepStrictEqual(process.env.PATH, "/usr/bin");
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, "");
+  assert.deepStrictEqual(attempted, expectedAttempts);
+  await writeFile(projectStatePath, validStateBytes, "utf8");
+  await writeFile(userStatePath, validStateBytes, "utf8");
+
+  // act
+  const followingDiscovery = await discover(discoverEvent(scope.cwd), refusing);
+
+  // assert
+  assert.deepStrictEqual(followingDiscovery, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(await readFile(projectStatePath, "utf8"), validStateBytes);
+  assert.deepStrictEqual(await readFile(userStatePath, "utf8"), validStateBytes);
+  assert.deepStrictEqual(process.env.PATH, "/usr/bin");
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, "");
   assert.deepStrictEqual(attempted, expectedAttempts);
   verifyBoundary();
 });
