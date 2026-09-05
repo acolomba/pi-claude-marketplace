@@ -345,7 +345,21 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 5. The wiring is written against the current `install.ts` / `uninstall.ts` /
    `reinstall.ts`, not transplanted from the spike branch, which predates their
    rewrite.
-6. `npm run check` is green.
+6. **An orphaned staging tree is swept or reported.** Carried from the Phase 111
+   code review (WR-08). `<workflowsStagingDir>/<uuid>/` is created before the
+   write loop and removed only by `commitPreparedWorkflows` or
+   `abortPreparedWorkflows`. A crash, a `SIGKILL`, or the deliberate retention
+   path a failed restore takes leaves it behind holding verbatim third-party
+   executable JavaScript. Because the staging root lives under
+   `~/.pi/workflows/` and not under any scope root, nothing sweeps it: it is
+   invisible to `uninstall` and to `/reload`, and it accumulates for the life of
+   the machine in the user's home. The retention path at least names its path in
+   a leak message; a crash-orphaned tree names nothing anywhere. Phase 111
+   declined to fix this in the leaf bridge: a sweep is a lifecycle concern, it
+   must be age-bounded so a concurrent install's fresh staging root is never
+   removed, and the bridge has no view of which trees belong to a live
+   transaction. This phase owns the ledger and is where that view exists.
+7. `npm run check` is green.
 
 **Plans**: TBD
 
@@ -365,7 +379,23 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 3. Load-time reconcile does not re-materialize envelopes on every load.
 4. `info` renders a `workflows:` line and `list` counts the kind, both under the
    project's byte-equality contract with paired fixtures.
-5. `npm run check` is green.
+5. **The discovery warning phrases stop asserting an install outcome on the
+   `info` surface.** Carried from the Phase 111 code review (WR-09). All four
+   soft-fail phrases in `bridges/workflows/discover.ts` are install-tense --
+   `"was installed but will not run"`, `"was not installed"`, `"was refused"`,
+   `"could not be read and was skipped"` -- yet `discoverPluginWorkflows` runs
+   before anything is staged, and both `types.ts` and the discovery module
+   header state that this read-only surface consumes the SAME discovery pass. On
+   `info` for a plugin that is not installed, every one of those rows is a false
+   statement, and `"was installed but will not run"` is the worst: it tells the
+   user an envelope exists that does not. The fix is to make the outcome phrase
+   a parameter of the discovery call rather than a constant of the module, so
+   the staging surface and the `info` surface each state their own tense. Phase
+   111 declined to choose the wording, because this phase is the one that builds
+   the `info` surface and the phrasing is shipped text that will be quoted back.
+   (`"could not be read and was skipped"` is also inaccurate at its `lstat` call
+   site, where nothing was read.)
+6. `npm run check` is green.
 
 **Plans**: TBD
 
