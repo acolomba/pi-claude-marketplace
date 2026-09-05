@@ -170,7 +170,10 @@ test("rejects raw lexical traversal before a symlink can redirect it", async (t)
     await fs.readFile(path.join(outsideRoot, "sentinel.txt")),
     outsideSentinelBefore,
   );
-  assert.deepStrictEqual(await fs.readFile(path.join(outsideNested, "child.txt")), outsideChildBefore);
+  assert.deepStrictEqual(
+    await fs.readFile(path.join(outsideNested, "child.txt")),
+    outsideChildBefore,
+  );
 });
 
 test("accepts a contained absolute child with redundant dot segments", async (t) => {
