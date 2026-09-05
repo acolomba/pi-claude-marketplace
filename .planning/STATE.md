@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-44-PLAN.md
-last_updated: "2026-09-05T02:24:32.000Z"
+stopped_at: Completed 01-45-PLAN.md
+last_updated: "2026-09-05T02:34:12.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: 7f3b137220eaef5b37d038af61b4ba8e710f071a
+state_head: 04a19675ae7979b44b816c7099c99adccd9edbae
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 44
+  completed_plans: 45
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 45 of 69
+Plan: 46 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -41,9 +41,9 @@ Last activity: 2026-09-04 — Phase 01 execution started
 
 **Velocity:**
 
-- Total plans completed: 156
+- Total plans completed: 157
 - Average recorded duration: 11.7 min
-- Total recorded execution time: 30 hr 32 min
+- Total recorded execution time: 30 hr 42 min
 
 **By Phase:**
 
@@ -228,6 +228,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P42 | 8min | 3 tasks | 5 files |
 | Phase 01 P43 | 8min | 3 tasks | 5 files |
 | Phase 01 P44 | 7min | 3 tasks | 5 files |
+| Phase 01 P45 | 10min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -524,6 +525,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Preserve all 68 first-pass MCP, skills, and hook-component claims while linking 50 overlaps to canonical adversarial findings.
 - [Phase 01]: Keep broad clean and no-blocker classifications traceable as superseded evidence instead of letting them override claim-level current findings.
 - [Phase 01]: Use failing public MCP null-shape probes and surviving test-strength mutations only in a removable repository-local isolated copy.
+- [Phase 01]: Preserve all 52 domain-component, core-domain, and resolver first-pass claims while linking 45 overlaps to canonical adversarial findings.
+- [Phase 01]: Keep broad clean and purity statements traceable while allowing later claim-level evidence to qualify or supersede them.
+- [Phase 01]: Reuse canonical operator-decision routes for the debug seam, Device Flow clock and readonly contracts, and resolver split.
 
 ### Pending Todos
 
@@ -576,7 +580,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-44-PLAN.md
+**Stopped at:** Completed 01-45-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -585,7 +589,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T02:24:32.000Z
+Last session: 2026-09-05T02:34:12.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
