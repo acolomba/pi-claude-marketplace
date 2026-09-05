@@ -5,8 +5,8 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-52-PLAN.md
-last_updated: "2026-09-05T04:09:55.000Z"
+stopped_at: Completed 01-53-PLAN.md
+last_updated: "2026-09-05T04:22:00.000Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
 state_head: 2e2ecb05e3cf3244235669b5dda197350af27a2c
@@ -14,7 +14,7 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 52
+  completed_plans: 53
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 52 of 69
+Plan: 53 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -41,7 +41,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 
 **Velocity:**
 
-- Total plans completed: 160
+- Total plans completed: 161
 - Average recorded duration: 11.7 min
 - Total recorded execution time: 31 hr 20 min
 
@@ -235,6 +235,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P49 | 16min | 3 tasks | 5 files |
 | Phase 01 P51 | 11min | 3 tasks | 5 files |
 | Phase 01 P52 | 7min | 3 tasks | 5 files |
+| Phase 01 P53 | 8min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -548,6 +549,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Treat the shared strict output literal and centralized network gate as valid test design, not defects.
 - [Phase 01]: Preserve all 61 orchestrator-root, persistence, and platform first-pass claims while linking overlaps to their existing canonical adversarial findings.
 - [Phase 01]: Treat the isolated GitOps fake auth DataCloneError as current behavioral proof for PLT-F020 while keeping green owner suites as executability evidence only.
+- [Phase 01]: Preserve all 58 entrypoint and shared first-pass claims while linking exact overlaps to existing canonical adversarial findings.
+- [Phase 01]: Treat focused green suites as executability evidence only and retain mutation-dependent clock and unlink claims under their existing inconclusive canonical records.
 
 ### Pending Todos
 
@@ -600,7 +603,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-52-PLAN.md
+**Stopped at:** Completed 01-53-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -609,7 +612,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T04:09:55.000Z
+Last session: 2026-09-05T04:22:00.000Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
