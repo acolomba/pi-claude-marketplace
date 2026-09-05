@@ -1059,6 +1059,56 @@ describe("commitPreparedWorkflows", () => {
     assert.strictEqual(survivingBytes, "previous bytes\n");
     assert.deepStrictEqual(placed, [[]]);
   });
+
+  test("refuses a displaced directory that has been replaced by a symbolic link", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-displaced-symlink-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-displaced-symlink-source-");
+    const outsideDir = await createPluginRoot(t, "workflows-commit-displaced-outside-");
+    const outsideFile = path.join(outsideDir, "keep.txt");
+    await writeFile(outsideFile, "outside bytes\n", "utf8");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_REVISED_SOURCE);
+    await mkdir(locations.workflowsSavedDir, { recursive: true });
+    const greetTarget = await locations.workflowArtifactPath("acme:greet");
+    await writeFile(greetTarget, GREET_ENVELOPE, "utf8");
+    const placed: (readonly string[])[] = [];
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({
+        locations,
+        pluginName: PLUGIN_NAME,
+        resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+        previousWorkflowNames: ["acme:greet"],
+      }),
+    );
+    // The displaced subdirectory carries a FIXED, predictable name inside a
+    // directory a concurrent same-user process can write, which makes it a
+    // softer target than the random staging root. `mkdir` with
+    // `recursive: true` follows a link planted at it rather than refusing, and
+    // a displaced envelope is the user's own script text.
+    const displacedRoot = path.join(prepared.stagingRoot, ".previous");
+    await symlink(outsideDir, displacedRoot, "dir");
+
+    // act
+    const error = await commitPreparedWorkflows(prepared, {
+      onPlaced: (names) => placed.push(names),
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    const outsideEntries = await readdir(outsideDir);
+    const greetBytes = await readFile(greetTarget, "utf8");
+
+    // assert
+    assert.ok(error instanceof SymlinkRefusedError);
+    assert.strictEqual(error.linkPath, displacedRoot);
+    // Nothing was written through the link, and the staging cleanup that
+    // follows the refusal removed the link rather than what it points at.
+    assert.deepStrictEqual(outsideEntries, ["keep.txt"]);
+    assert.strictEqual(await readFile(outsideFile, "utf8"), "outside bytes\n");
+    assert.strictEqual(greetBytes, GREET_ENVELOPE);
+    assert.deepStrictEqual(placed, [[]]);
+  });
 });
 
 describe("abortPreparedWorkflows", () => {

@@ -251,7 +251,15 @@ async function displacePreviousTargets(
     // defense-in-depth the staged-file join above takes.
     const target = await prepared.locations.workflowArtifactPath(name);
     const aside = path.join(displacedRoot, `${name}.json`);
-    await assertPathInside(displacedRoot, aside, "displaced previous workflow file");
+    // WPTH-04: anchored on the staging ROOT, not on `displacedRoot`. The same
+    // reasoning as the staging join above, one level further down:
+    // `assertPathInside` trusts its own boundary and starts the walk at it, so
+    // anchoring on `displacedRoot` would never lstat the `.previous` segment.
+    // That segment is a FIXED, predictable name -- a softer target than the
+    // random staging root -- and `mkdir` with `recursive: true` follows a link
+    // planted at it silently, which would send a displaced envelope to a
+    // directory of the planter's choosing.
+    await assertPathInside(prepared.stagingRoot, aside, "displaced previous workflow file");
 
     try {
       await rename(target, aside);
