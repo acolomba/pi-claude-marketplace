@@ -1,21 +1,26 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  commitPreparedWorkflows,
+  prepareStageWorkflows,
+} from "../../extensions/pi-claude-marketplace/bridges/workflows/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { ResolvedPluginInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // WINV-02 install-level proof: a plugin carrying a `workflows/` directory
 // installs on a plain `install`, with no partial opt-in, and renders the clean
-// installed row. D-109-06 pins the other half of the same install -- the host
-// engine's storage root is not written, because the kind resolves supported
-// while no bridge materializes it.
+// installed row. WBRG-01 and WPTH-01 pin the other half -- the plugin's
+// workflow script materializes as an envelope at the scope's canonical saved
+// path, carrying the script text verbatim.
 
 interface NotifyRecord {
   message: string;
@@ -93,7 +98,7 @@ async function seedWorkflowPlugin(opts: {
   await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
   await writeFile(
     path.join(pluginRoot, "workflows", "greet.js"),
-    `export default { name: "greet" };\n`,
+    `export const meta = { name: "greet", description: "greets" };\n`,
   );
 
   await mkdir(path.join(opts.marketplaceRoot, ".claude-plugin"), { recursive: true });
@@ -131,12 +136,15 @@ async function seedWorkflowPlugin(opts: {
   return { pluginRoot, manifestPath };
 }
 
-test("WINV-02 / D-109-06: a workflow-bearing plugin installs with no partial flag and writes no workflow artifact", async () => {
-  await withHermeticHome(async (home) => {
+test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag and its workflow script materializes as an envelope", async () => {
+  await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-inversion-"));
     try {
       // arrange
-      await seedWorkflowPlugin({ cwd, marketplaceRoot: path.join(cwd, "mp-src") });
+      const { pluginRoot } = await seedWorkflowPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+      });
       const { ctx, pi, notifications } = makeCtx();
 
       // act
@@ -161,9 +169,9 @@ test("WINV-02 / D-109-06: a workflow-bearing plugin installs with no partial fla
       assert.ok(!summary.includes("{workflows}"), `expected no reason brace; got: ${summary}`);
 
       // assert -- WINV-01 precondition: the fixture must actually engage the
-      // inverted kind. Without this the ENOENT assertion below is a tautology,
-      // green for a plugin carrying no `workflows/` directory at all and green
-      // for a resolver that dropped the kind entirely.
+      // inverted kind. This is what keeps the envelope assertion below from
+      // being green for the wrong reason: this block proves the resolver
+      // admitted the kind, and that one proves the bridge acted on it.
       const persisted = await loadState(locationsFor("project", cwd).extensionRoot);
       const record = persisted.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record, "expected an installed record for hello");
@@ -176,10 +184,40 @@ test("WINV-02 / D-109-06: a workflow-bearing plugin installs with no partial fla
         `workflows must not be recorded unsupported; got: ${record.compatibility.unsupported.join(" / ")}`,
       );
 
-      // assert -- D-109-06: the workflows kind resolves supported, and no bridge
-      // materializes it, so the host engine's storage root is never created.
-      await assert.rejects(stat(path.join(home, ".pi", "workflows")), {
-        code: "ENOENT",
+      // act -- WLIF-01 is not wired, so no orchestrator drives the bridge. The
+      // two calls below stand in for the install-driven path and are replaced
+      // by it, which leaves the assertion after them unchanged.
+      const locations = locationsFor("project", cwd);
+      // A hand-built installable arm is honest here: the resolver's own verdict
+      // for this exact fixture is asserted by the precondition above, which
+      // reads the record the real install wrote. This literal supplies only the
+      // plugin root and the declared component path, both seeded by this test.
+      const resolved: ResolvedPluginInstallable = {
+        installable: true,
+        state: "installable",
+        name: "hello",
+        pluginRoot,
+        supported: ["workflows"],
+        unsupported: [],
+        notes: [],
+        componentPaths: { skills: [], commands: [], agents: [], workflows: ["workflows"] },
+        mcpServers: {},
+        defaultEnabled: true,
+      };
+      const prepared = await prepareStageWorkflows({ locations, pluginName: "hello", resolved });
+
+      await commitPreparedWorkflows(prepared);
+
+      // assert -- WBRG-01 / WPTH-01: the script materializes as an envelope at
+      // the project scope's canonical saved path. The whole object is compared
+      // so a missing or extra field fails the case; the byte-level key order is
+      // pinned by the staging module's own owner test.
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+
+      assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+        name: "hello:greet",
+        description: "greets",
+        script: 'export const meta = { name: "greet", description: "greets" };\n',
       });
     } finally {
       await rm(cwd, { recursive: true, force: true });
