@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 111
 current_phase_name: Workflows bridge
-current_plan: 111-02 (not started)
+current_plan: 111-03 (not started)
 status: In progress
-stopped_at: Completed 111-01-PLAN.md
-last_updated: "2026-09-05T09:59:00.000Z"
+stopped_at: Completed 111-02-PLAN.md
+last_updated: "2026-09-05T11:03:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: 111-01 executed - workflow path layer landed, 25/25 owner cases green
-state_head: 59ed276f
+last_activity_desc: 111-02 executed - workflows bridge read side landed, criterion-4 row observed red first
+state_head: 55524e63
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 22
 ---
 
@@ -36,16 +36,19 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 111 (Workflows bridge) — IN PROGRESS
-Plan: 1 of 4 complete (`111-01`), `111-02` next
-Status: In progress. `111-01` landed the path layer the rest of the phase rests
-on: `persistence/locations.ts` gained `workflowsHomeDir`, `workflowsSavedDir`,
-`workflowsStagingDir` and the async `workflowArtifactPath` chokepoint, and
-`shared/errors-bridges.ts` gained `WorkflowTargetOccupiedError`. Both ported
-bodies landed whole with zero deleted lines, both pairs reach 100% direct
-coverage, and the tracer's predicted red was observed exactly (11 tests, 9 pass,
-2 fail on the two exhaustive `Object.keys` bundle assertions) before
-`LOCATION_KEYS` was extended to its 31 entries. The checker passed with zero
-issues across all seven phase-specific traps. Four serialized waves: `111-01`
+Plan: 2 of 4 complete (`111-01`, `111-02`), `111-03` next
+Status: In progress. `111-01` landed the path layer, and `111-02` landed the
+bridge's read half on top of it: `bridges/workflows/{types,discover,unstage}.ts`
+with their three owner tests, the `bridges-workflows` fallow zone triple, and
+the one behavior this phase authors — the criterion-4 admitted-but-caveated
+warning row for a stem-fallback script, emitted from `verdictWarning` through
+the existing `softFailWarning` composer. `types.ts` and `unstage.ts` are
+byte-identical to the port; `discover.ts` differs by exactly the two docblock
+lines the new arm makes false. Discovery and unstage each reach 100% direct
+coverage (56/56 and 8/8 branches), including the `pathDedupKey` darwin arm that
+is unreachable on Linux without relocating `process.platform`. The criterion-4
+assertions were observed failing (23 tests, 21 pass, 2 fail, both with an empty
+actual warnings array) before the arm existed. Four serialized waves: `111-01`
 (the tracer — the `locations.ts` workflows members and `WorkflowTargetOccupiedError`,
 opening red on the two exhaustive `Object.keys` bundle assertions the port breaks),
 `111-02` (types/discover/unstage, the `bridges-workflows` fallow zone, and the
@@ -172,7 +175,7 @@ that way permanently.
 ## Progress
 
 **Phases Complete:** 2/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** `111-02` — Phase 111 is 1/4 executed.
+**Current Plan:** `111-03` — Phase 111 is 2/4 executed.
 
 ```text
 [==--------] 22%
@@ -182,7 +185,7 @@ that way permanently.
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
-| 111 | Workflows bridge | In progress (1/4 plans executed) |
+| 111 | Workflows bridge | In progress (2/4 plans executed) |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
@@ -290,24 +293,27 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T09:57:16Z
+**Last session:** 2026-09-05T11:03:00Z
 
-**Stopped At:** Completed 111-01-PLAN.md
+**Stopped At:** Completed 111-02-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 111` — `111-02` (types/discover/unstage,
-the `bridges-workflows` fallow zone, the criterion-4 stem-fallback warning row).
-`111-01`'s production commits are `de192221` (the four `locations.ts` workflows
-members) and `c7939ad4` (`WorkflowTargetOccupiedError`), with `06e3c88d` a
-deviation fix that landed first. The phase mechanism held again: path-scoped
-checkout naming individual files, the blast-radius assertion immediately after,
-an owner test importing every export by name, complete direct coverage per pair,
-and the full gate chain before each commit.
+**Next Action:** `/gsd-execute-phase 111` — `111-03` (the staging triplet and
+the barrel, the WR-06 occupancy refusal, every rollback branch). `111-02`'s
+production commit is `fc893974`, carrying exactly its seven planned paths, with
+`55524e63` the metadata commit. The phase mechanism held again: path-scoped
+checkout naming individual files, the blast-radius assertion printing `0`
+immediately after, an owner test importing every export by name, complete direct
+coverage per pair, and the full gate chain before the commit.
 
-Two things `111-02` inherits. `workflowArtifactPath` is **async**, so every call
-site awaits it — a forgotten await yields a leaf named `[object Promise]` rather
-than a throw. And `npm run fallow` will fail loudly with a `Boundary coverage`
-section from the moment the `bridges/workflows/` files land until the
-`bridges-workflows` zone is added in the same commit.
+Three things `111-03` inherits. `workflowArtifactPath` is **async**, so every
+call site in `stage.ts` must await it — a forgotten await yields a leaf named
+`[object Promise]` rather than a throw. The `bridges-workflows` zone is now in
+`.fallowrc.json`, so `stage.ts` and `index.ts` land without a `Boundary
+coverage` failure. And `prepareStageWorkflows` re-exports the discovery warnings
+unchanged, so the criterion-4 row reaches `StageWorkflowsCommitResult.warnings`
+with no staging edit — `111-03`'s stage-side case should assert the same exact
+string while the envelope is still staged, so the row is not mistaken for a
+refusal.
 
 Phase 109 remains verified 12/12 and marked complete in ROADMAP.md;
 `109-VERIFICATION.md` carries the evidence. The phase's two manual-only
@@ -398,6 +404,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 110 P02 | 22 min | 2 tasks | 4 files |
 | Phase 110 P03 | 47 min | 3 tasks | 4 files |
 | Phase 111 P01 | 35 min | 2 tasks | 5 files |
+| Phase 111 P02 | 62 min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -422,12 +429,16 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 110]: Two coverage gaps the research did not predict were closed by adding public-behaviour cases, never a suppression directive. — The restructure changed which arms the case set reaches (Assumptions Log A2 warned of exactly this), leaving `metaPropertyKey`'s computed-key early return and `stemFallbackVerdict`'s refusal arm uncovered; reading the reported LCOV lines and adding one case each took the pair to 105/105 branches.
 - [Phase 110]: WNAM-03 is recorded as carried forward rather than completed. — Phase 110 delivers the `skipped`/`no-meta` classification but emits nothing to a user and installs nothing, so the requirement's warning and not-installed halves belong to Phase 111.
 - [Phase 110]: No parse size or depth cap was added (T-110-17, accepted). — The host engine has none either, and a cap stricter than the engine's would refuse a script the engine accepts; only the lax direction self-corrects across engine upgrades. Recorded as a Phase 115 candidate.
+- [Phase 111]: The criterion-4 row is emitted from `verdictWarning` in the discovery module, reusing `softFailWarning` with a fourth outcome phrase (`was installed but will not run`). — It is the single verdict-to-warning mapping in the bridge, staging already re-exports discovery's warnings unchanged, and the read-only surfaces that consume the same discovery pass get the row for free; emitting from staging would add a second warning-composing site and reach neither.
+- [Phase 111]: The row's reason names the missing NAME and states the description as the engine's OTHER requirement, never as a second observed absence. — Both measured stem-fallback shapes carry a description, so a row claiming otherwise would be a false statement about the file, which is worse than no row.
+- [Phase 111]: The case-fold dedup case plants two REAL directories differing only in case rather than declaring one directory under two spellings. — On a case-sensitive filesystem the plan's shape leaves the second directory non-existent, `readdir` returns nothing, and the case passes whether or not the key is folded; it would have covered the darwin arm while asserting nothing about it.
+- [Phase 111]: The three permission-mutating cases share ONE `t.after()` between the restoring `chmod` and the tree removal. — `node:test` runs after-hooks in registration order, so a removal registered by a shared root helper runs before the restoring chmod and fails with `EACCES`, turning two green assertions into two red cases whose summary line looks like a broken assertion.
 - [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps
 
-- Continue Phase 111 with `/gsd-execute-phase 111` — `111-02` is next
+- Continue Phase 111 with `/gsd-execute-phase 111` — `111-03` is next
 - Phase 109 is complete and verified 12/12; 110-114 run in order, each
   depending on the one before it
 - The hardening phases 115, 116 and 117 are mutually independent; the order

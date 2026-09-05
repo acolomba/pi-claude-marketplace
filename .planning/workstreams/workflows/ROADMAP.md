@@ -311,7 +311,7 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 111-02-PLAN.md — Land types, discovery and unstage with the `bridges-workflows` boundary
+- [x] 111-02-PLAN.md — Land types, discovery and unstage with the `bridges-workflows` boundary
   zone, and add the admitted-but-caveated stem-fallback warning row red-first
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -493,7 +493,7 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
 | 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
-| 111. Workflows bridge | 1/4 | In Progress | - |
+| 111. Workflows bridge | 2/4 | In Progress | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
 | 114. Degradation and documentation | 0/? | Not started | - |
