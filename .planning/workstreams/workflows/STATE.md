@@ -5,16 +5,16 @@ milestone_name: Workflow Bridge Replay onto main
 current_phase: 113
 current_phase_name: Update, enable/disable, reconcile
 current_plan: Not started
-status: planning
-stopped_at: Phase 112 complete, ready to plan Phase 113
-last_updated: "2026-09-05T21:32:21.955Z"
+status: ready_to_execute
+stopped_at: Phase 113 planned - 5 plans across 4 waves, checker passed with 0 blockers
+last_updated: "2026-09-05T22:49:08.588Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 112 complete, transitioned to Phase 113
-state_head: d568bf498e7ad607a519d5ba49a890416d236eb9
+last_activity_desc: Phase 113 planned and verified, ready to execute
+state_head: 7e1fa90921ea4c7700c37de2eebe05784155560d
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 16
+  total_plans: 21
   completed_plans: 16
   percent: 44
 ---
@@ -35,9 +35,31 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 113 — Update, enable/disable, reconcile
-Plan: none yet — Phase 113 is not planned
-Status: Ready to plan Phase 113. Phase 112 is complete and verified 7/7 against
+Phase: 113 (Update, enable/disable, reconcile) — READY TO EXECUTE
+Plan: 0/5 executed — 113-01 through 113-05, across 4 waves
+Status: Ready to execute Phase 113. Planning is complete and the plan checker
+returned 0 blockers.
+
+Research overturned a load-bearing claim: `shared/notify.ts`'s exact-length
+`COMPONENT_KINDS` tuple does NOT fail to typecheck when the component set gains
+a sixth key — that was compiled and measured, and the comment asserting it is
+false. Plan 01 lands a replacement forcing construct with a negative control.
+This is the same optional-field silent-omission class the milestone has hit
+before.
+
+Two scope decisions were taken after research and recorded as ROADMAP criteria
+so they cannot evaporate. Criterion 5 was amended: `info` must RENDER the
+preview-tense discovery warnings, not merely produce them, because `info` has no
+channel they can reach today and building the mechanism without a reader would
+ship the same defect criterion 6 exists to clean up. Criterion 8 is new: WLIF-06
+(the lingering-command reload remedy) was booked to this phase, implemented
+nowhere, and named by no criterion; it lands here as a closed-set token stamped
+by every retiring verb. Planning added a fifth stamp site, `enable`, because the
+staged workflow names have no other consumer — the token rides the
+module-private sentinel and stays off the exported union, so the load-time
+reconcile projection still cannot stamp it.
+
+Phase 112 is complete and verified 7/7 against
 the ROADMAP's seven success criteria. The install ledger now carries a sixth
 workflows phase that unwinds with the rest, all four removal verbs take the
 envelopes away again, and an age-bounded sweeper reclaims orphaned staging trees.
@@ -53,9 +75,10 @@ hand the tree to `rm -rf`) and probed through an unvalidated path before the
 containment check. All fixed, each proven non-vacuous by reverting the fix and
 observing red.
 
-Four items are carried rather than closed: ROADMAP Phase 113 criteria 6 and 7
-(update never re-stages workflows; retained trees are never enumerated), and
-`WARN-01` and `CASCADEAX-01` in `.planning/BACKLOG.md`.
+Four items were carried out of Phase 112 rather than closed. Two are now planned
+here: ROADMAP Phase 113 criteria 6 and 7 (update never re-stages workflows;
+retained trees are never enumerated), owned by plans 02 and 05. `WARN-01` and
+`CASCADEAX-01` remain open in `.planning/BACKLOG.md`.
 staging sweeper with its mirrored owner test, `b2c2b4af` the install-side and
 removal-side call sites, `85b0692b` the stale ledger and kind-count corrections.
 `npm run check` is green end to end (unit 5504/0, integration 32/0) and

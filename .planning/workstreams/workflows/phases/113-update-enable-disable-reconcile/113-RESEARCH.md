@@ -1046,9 +1046,18 @@ backfill gate open.
 | A5 | `tests/orchestrators/plugin/update.test.ts` (8519 lines) has a reusable seeding helper for a workflow-bearing plugin. Not verified. | Validation Architecture | Wave-0 test-fixture work is larger than budgeted. STATE.md flags "expect the same pressure on any fixture that enumerates the record's resource axes by hand." |
 | A6 | The `list` regression fixture (criterion 4's second half) can be added to the existing `list` catalog section without a new `catalog-state` block — i.e. an existing state already covers a workflow-bearing plugin's row. Not verified; the `list` section was not read. | criterion 4 | One extra paired fixture. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All four were settled before planning. Each carries its resolution
+inline below; do not re-open them during execution.
 
 ### 1. WLIF-06 is assigned to this phase, implemented nowhere, and named by no success criterion. (HIGH — resolve before planning.)
+
+**RESOLVED — route 1.** WLIF-06 lands in Phase 113 across all four retiring
+verbs. Recorded as ROADMAP criterion 8 and in `113-CONTEXT.md` §"WLIF-06";
+implemented by `113-04-PLAN.md` tasks 1-2. Planning added a fifth stamp site
+(`enable`) on the module-private sentinel, because the staged workflow names
+have no other consumer.
 
 **What we know.** WLIF-06 reads: *"When a removed workflow's command lingers for
 the session, the user is told the reload remedy. Pi has no `unregisterCommand`,
@@ -1115,6 +1124,13 @@ CONTEXT's Deferred Ideas or STATE's Current Position, both of which evaporate.
 
 ### 2. Where do the `preview`-tense phrases actually render? (MEDIUM — resolve before the criterion-5 slice.)
 
+**RESOLVED — `info` renders them.** A warnings channel is added to the `info`
+surface rather than shipping strings with no reader. Recorded as an amendment to
+ROADMAP criterion 5 and in `113-CONTEXT.md` §criterion 5; implemented by
+`113-01-PLAN.md` task 3, routed through the existing `redactAbsolutePaths` so
+the rendered bytes stay pinnable. The `pending` middle path was considered and
+rejected: a plugin the user has not installed never appears there.
+
 **What we know.** CONTEXT locks the mechanism (a `tense` discriminant) and the
 exact wording. Criterion 5's stated harm is that on `info` for a not-installed
 plugin, the install-tense rows "are a false statement".
@@ -1141,6 +1157,11 @@ row — but it is out of scope as written.
 
 ### 3. WLIF-04 (reinstall) appears already satisfied by Phase 112. (LOW — a traceability correction.)
 
+**RESOLVED — verify, then correct.** `113-04-PLAN.md` task 3 writes the case
+first and moves the traceability row in the same commit as the evidence; if the
+verification finds a real gap, the executor implements the missing half instead
+of editing the row.
+
 `reinstall.ts` imports the workflows bridge and composes workflow names into its
 outcome (`reinstall.ts:94, 151, 1634-1635`), and STATE.md records `112-03` as
 landing "reinstall's bespoke re-materialization" in three commits. The
@@ -1152,6 +1173,11 @@ then correct the traceability row in the same commit. A verify-then-correct cost
 one test; assuming costs a requirement marked complete on someone else's evidence.
 
 ### 4. What does the enable row DO with `stagedWorkflowNames`? (MEDIUM, subsumed by Q1.)
+
+**RESOLVED — closed by Q1.** WLIF-06's enable stamp is the consumer, so the
+field is not added and discarded. The token rides the module-private sentinel
+only and stays off the exported enable/disable outcome union, which is what
+keeps the load-time reconcile projection from stamping it.
 
 Criterion 2 requires the names to ride the projection. The two sibling members
 exist to drive soft-dep markers that are Phase 114's. If WLIF-06 lands here
