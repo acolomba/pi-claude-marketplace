@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 110
-current_phase_name: Domain and platform modules
-current_plan: 110-03 (complete) - all 3 plans executed, verification pending
-status: In progress
-stopped_at: Completed 110-03-PLAN.md
-last_updated: "2026-09-05T05:35:00Z"
+current_phase: 111
+current_phase_name: Workflows bridge
+current_plan: Not started
+status: planning
+stopped_at: Phase 110 complete, ready to plan Phase 111
+last_updated: "2026-09-05T08:15:55.028Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 110 plan 03 executed - script admission module, acorn dependency and owner test landed; all 3 plans executed, verification pending
-state_head: 8c880217892c9ddb182e55dd5ab4a910796be9c8
+last_activity_desc: Phase 110 complete, transitioned to Phase 111
+state_head: 7489ba97d3fe2c295a700842eead23f204be930a
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
   completed_plans: 8
-  percent: 11
+  percent: 22
 ---
 
 # Project State
@@ -35,10 +35,10 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 110 (Domain and platform modules) — ALL PLANS EXECUTED, NOT YET VERIFIED
-Plan: 3 of 3 complete (`110-01`, `110-02`, `110-03`)
-Status: All three plans executed; `/gsd-verify-work 110` has not run, so the
-phase is not closed. `110-01` landed the tracer: `platform/workflow-home.ts` with
+Phase: 111 — Workflows bridge
+Plan: none yet — Phase 111 is not planned
+Status: Ready to plan Phase 111. Phase 110 is complete and verified 20/20.
+`110-01` landed the tracer: `platform/workflow-home.ts` with
 its relocation seam deleted, `domain/workflow-project-key.ts` unedited, and both
 owner tests, in two commits (`df7b9be8`, `ed756b8f`). `110-02` landed
 `generatedWorkflowName` and `WorkflowNameCollisionError` in one commit
@@ -47,7 +47,10 @@ to six. `110-03` landed `acorn` at `^8.16.0`, `domain/workflow-script.ts` and
 its 51-case owner test as one atomic commit of exactly four paths (`d3c5be6f`).
 The whole gate chain is green, all five pairs the phase touched are at complete
 direct coverage, and Phase 109's five inverted files plus all Phase 111
-territory are provably untouched. Next: verify the phase, then Phase 111 (the
+territory are provably untouched. Then thirteen code-review fix commits followed across two review iterations
+(`101478f3`..`af1634ea`), and the verifier re-ran the whole chain live: typecheck
+0, ESLint 0, all three fallow sub-gates, Prettier, both corresponding-test
+gates, `npm test` at 5303/0, `npm run test:integration` at 32/0. Next: Phase 111 (the
 workflows bridge).
 
 **The phase mechanism is proved and reusable.** `110-01` ran it end to end:
@@ -107,8 +110,8 @@ explicitly declines that mechanism, and main has since taught
 `generatedCommandName` nested-path and empty-head rules a flat workflow caller
 can never produce.
 
-Last activity: 2026-09-05 — `110-03` executed and Phase 110 closed; the next
-step is `/gsd-verify-work 110`, then `/gsd-discuss-phase 111`
+Last activity: 2026-09-05 — Phase 110 verified 20/20 and marked complete; the
+next step is `/gsd-plan-phase 111`
 
 **The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
 workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
@@ -142,12 +145,11 @@ that way permanently.
 
 ## Progress
 
-**Phases Complete:** 1/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Phase 110 has all 3 plans executed (110-01, 110-02, 110-03);
-the phase is not verified yet, so it still reads In Progress.
+**Phases Complete:** 2/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started — Phase 111 needs planning.
 
 ```text
-[=---------] 11%
+[==--------] 22%
 ```
 
 | Phase | Name | Status |
@@ -264,7 +266,7 @@ implementation.
 
 **Last session:** 2026-09-05T05:35:00Z
 
-**Stopped At:** Completed 110-03-PLAN.md
+**Stopped At:** Phase 110 complete, ready to plan Phase 111
 **Resume File:** None
 **Next Action:** `/gsd-verify-work 110`, then `/gsd-discuss-phase 111`. All
 three of Phase 110's plans are complete and all three SUMMARYs are on disk; the

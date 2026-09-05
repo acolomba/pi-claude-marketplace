@@ -45,7 +45,7 @@ surfaces and conflict nowhere except `persistence/locations.ts`.
 test — against the owner-test convention rather than the deleted helpers.
 
 - [x] **Phase 109: Kind inversion** — `workflows` moves from `UNSUPPORTED_COMPONENT_KINDS` to both supported tuples, and every closed set, classifier arm, doc, and locking test that #154 wrote is turned with it (WINV-01..05) (completed 2026-09-04)
-- [ ] **Phase 110: Domain and platform modules** — `workflow-script.ts`, `workflow-project-key.ts`, `workflow-home.ts`, the `name.ts` addition, and the `acorn` dependency land with owner tests and no test-only seams (WNAM-01..06, WPTH-02)
+- [x] **Phase 110: Domain and platform modules** — `workflow-script.ts`, `workflow-project-key.ts`, `workflow-home.ts`, the `name.ts` addition, and the `acorn` dependency land with owner tests and no test-only seams (WNAM-01..06, WPTH-02) (completed 2026-09-05)
 - [ ] **Phase 111: Workflows bridge** — `bridges/workflows/` discover / stage / unstage / types and the `locations.ts` additions land with owner tests (WBRG-01..04, WPTH-01, WPTH-03..05)
 - [ ] **Phase 112: Install and removal lifecycle** — the sixth ledger phase, cascade unstage, and reinstall re-materialization, wired against the rewritten `install.ts` / `uninstall.ts` / `reinstall.ts` (WLIF-01..03)
 - [ ] **Phase 113: Update, enable/disable, reconcile** — the remaining lifecycle verbs plus the `info` and `list` read surfaces, wired against the rewritten orchestrators (WLIF-04..06, WFLW-04)
@@ -461,7 +461,7 @@ wave 2.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
-| 110. Domain and platform modules | 3/3 | In Progress | - |
+| 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
 | 111. Workflows bridge | 0/? | Not started | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
