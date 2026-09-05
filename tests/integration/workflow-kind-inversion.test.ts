@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -21,6 +21,12 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 // installed row. WBRG-01 and WPTH-01 pin the other half -- the plugin's
 // workflow script materializes as an envelope at the scope's canonical saved
 // path, carrying the script text verbatim.
+//
+// Those two halves are proved by DIFFERENT actors, and the case keeps them
+// apart. `installPlugin` performs the first. The second is performed by the
+// bridge, driven directly here: WLIF-01 is not wired, so the install still
+// writes nothing under the engine's storage root, and the case asserts that
+// window between the two acts rather than dropping it.
 
 interface NotifyRecord {
   message: string;
@@ -136,8 +142,8 @@ async function seedWorkflowPlugin(opts: {
   return { pluginRoot, manifestPath };
 }
 
-test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag and its workflow script materializes as an envelope", async () => {
-  await withHermeticHome(async () => {
+test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag, and the bridge materializes its script as an envelope", async () => {
+  await withHermeticHome(async (home) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-inversion-"));
     try {
       // arrange
@@ -183,6 +189,13 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
         !record.compatibility.unsupported.includes("workflows"),
         `workflows must not be recorded unsupported; got: ${record.compatibility.unsupported.join(" / ")}`,
       );
+
+      // assert -- the install itself materializes nothing yet: no orchestrator
+      // drives the bridge, so the engine's storage root must still be absent at
+      // this point. When WLIF-01 wires the install, this becomes the assertion
+      // that the install writes exactly the envelopes it recorded; either way
+      // the install's reach over that root is stated rather than assumed.
+      await assert.rejects(stat(path.join(home, ".pi", "workflows")), { code: "ENOENT" });
 
       // act -- WLIF-01 is not wired, so no orchestrator drives the bridge. The
       // two calls below stand in for the install-driven path and are replaced
