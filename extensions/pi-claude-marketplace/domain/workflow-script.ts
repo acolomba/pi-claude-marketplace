@@ -50,7 +50,8 @@ export interface StemFallbackWorkflow {
 }
 
 /** WNAM-03: nothing to install -- the script declares no usable metadata. */
-export type SkippedCause = "no-meta" | "meta-not-object-literal" | "meta-spread";
+export type SkippedCause =
+  "no-meta" | "meta-not-object-literal" | "meta-spread" | "meta-computed-key";
 
 /** WNAM-04 / WVAL-01: the script is installable-shaped but must not be admitted. */
 export type RefusedCause =
@@ -148,7 +149,7 @@ export function admitWorkflowScript(
   const metaName = readMetaString(meta.elements, "name");
 
   if (metaName.kind === "opaque") {
-    return skippedVerdict(fileName, "meta-spread");
+    return skippedVerdict(fileName, metaName.cause);
   }
 
   const violation = findDeterminismViolation(fileName, source, parsed);
@@ -216,7 +217,7 @@ function isAdmitted(verdict: WorkflowVerdict): verdict is AdmittedWorkflow {
 }
 
 /**
- * WNAM-03: the three unreadable-`meta` shapes carry distinct causes because they
+ * WNAM-03: the four unreadable-`meta` shapes carry distinct causes because they
  * are distinct facts about the script, but they share one argument for skipping
  * rather than stem-naming: the declared name cannot be read, and a stem fallback
  * would install a possibly-wrong command name -- the precise failure WNAM-01
@@ -236,6 +237,7 @@ const SKIPPED_REASONS: Readonly<Record<SkippedCause, (fileName: string) => strin
   "no-meta": noMetaReason,
   "meta-not-object-literal": metaNotObjectLiteralReason,
   "meta-spread": metaSpreadReason,
+  "meta-computed-key": metaComputedKeyReason,
 };
 
 function namedVerdict(
@@ -625,15 +627,12 @@ function bindMeta(found: MetaLookup, declarator: VariableDeclarator): MetaLookup
 }
 
 /**
- * The property key as written. A computed key (`{ [k]: v }`) is not statically
- * knowable, so it is no key at all here; the bare identifier form and the
- * quoted-string form are the same key.
+ * The property key as written, for a property whose key IS written -- the bare
+ * identifier form and the quoted-string form are the same key. A computed key
+ * never reaches here: `readMetaString` settles it before asking, because a key
+ * that is not statically knowable is not a missing key but an unknowable one.
  */
 function metaPropertyKey(p: Property): string | undefined {
-  if (p.computed) {
-    return undefined;
-  }
-
   if (p.key.type === "Identifier") {
     return p.key.name;
   }
@@ -655,7 +654,7 @@ function metaPropertyKey(p: Property): string | undefined {
 type MetaRead =
   | { readonly kind: "literal"; readonly value: string }
   | { readonly kind: "no-literal" }
-  | { readonly kind: "opaque" };
+  | { readonly kind: "opaque"; readonly cause: "meta-spread" | "meta-computed-key" };
 
 /**
  * WNAM-01: read one `meta` key the way JavaScript reads it -- in order, LAST
@@ -674,13 +673,25 @@ type MetaRead =
  * unknown-shape situation as `meta = someFactory()`, which WNAM-03 skips. A
  * spread BEFORE the last literal occurrence is harmless, because last-wins means
  * the literal overwrites whatever the spread contributed.
+ *
+ * A computed key does the same thing on the same terms -- `{ name: "x",
+ * ["na" + "me"]: "y" }` leaves `meta.name` as "y" -- so it gets the same
+ * `opaque` disposition, under its own cause because it is a different fact
+ * about the script. Reading past it as though the property were not there
+ * would let the element with the STRONGEST claim on the key be the one form
+ * the scan ignores, and mint a name the evaluated object never carries.
  */
 function readMetaString(elements: readonly MetaElement[], key: string): MetaRead {
   let read: MetaRead = { kind: "no-literal" };
 
   for (const element of elements) {
     if (element.type === "SpreadElement") {
-      read = { kind: "opaque" };
+      read = { kind: "opaque", cause: "meta-spread" };
+      continue;
+    }
+
+    if (element.computed) {
+      read = { kind: "opaque", cause: "meta-computed-key" };
       continue;
     }
 
@@ -778,6 +789,10 @@ function metaNotObjectLiteralReason(fileName: string): string {
 
 function metaSpreadReason(fileName: string): string {
   return `${forMessage(fileName)} declares \`meta\` with a spread that can supply or overwrite its \`name\`, so the name cannot be read without running the script`;
+}
+
+function metaComputedKeyReason(fileName: string): string {
+  return `${forMessage(fileName)} declares \`meta\` with a computed key that can supply or overwrite its \`name\`, so the name cannot be read without running the script`;
 }
 
 function unsafeNameReason(fileName: string, message: string): string {

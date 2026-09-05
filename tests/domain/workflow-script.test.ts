@@ -217,8 +217,11 @@ return 1;
     assert.deepStrictEqual(admission(verdict), expectedVerdict);
   });
 
-  test("reads past a computed meta key, which is not statically knowable", () => {
+  test("lets a literal name that follows a computed key win, because the read is last-wins", () => {
     // arrange
+    // A computed key can supply or overwrite `name`, but a literal `name` AFTER
+    // it is the value the evaluated object ends up with -- the same argument the
+    // spread row below makes.
     const source = `export const meta = { [chosenKey]: "x", name: "ship" };\n`;
     const expectedVerdict = {
       outcome: "named",
@@ -334,6 +337,14 @@ export const meta = { ...extra, name: "ship" };
 export const meta = { name: "ship", ...extra };
 `,
       cause: "meta-spread",
+    },
+    {
+      // A computed key is the element with the STRONGEST claim on `name`:
+      // `{ name: "x", ["na" + "me"]: "y" }` leaves `meta.name` as "y". Reading
+      // past it would mint "acme:x", a name the evaluated object never carries.
+      shape: "carries a computed key after its last literal name",
+      source: `export const meta = { name: "ship", ["na" + "me"]: "other" };\n`,
+      cause: "meta-computed-key",
     },
   ] satisfies readonly SkipRow[]) {
     test(`skips a script that ${shape}`, () => {
