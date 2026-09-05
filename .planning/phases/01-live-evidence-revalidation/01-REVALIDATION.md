@@ -2563,7 +2563,7 @@
 
 ## Decisions
 
-- `MF-DEC-01` — pending
+- `MF-DEC-01` — resolved
 - `MF-DEC-02` — pending
 - `MF-DEC-03` — pending
 - `MF-DEC-04` — pending
