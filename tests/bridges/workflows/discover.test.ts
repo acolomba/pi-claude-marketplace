@@ -461,47 +461,49 @@ test("discovers a script once when two declared spellings resolve to one directo
   assert.deepStrictEqual(discovery.warnings, []);
 });
 
-test(
-  "folds case when deduping declared paths on a case-insensitive platform",
-  { concurrency: false },
-  async (t) => {
-    // arrange
-    const pluginRoot = await createPluginRoot(t, "workflow-discover-case-dedup-");
-    // Two real directories differing only in case, each holding a script of the
-    // same name: on a case-insensitive filesystem these are one directory, and
-    // the folded key is what collapses them. Without the fold both scripts are
-    // discovered and collide on one generated name.
-    const lowerDir = path.join(pluginRoot, "workflows");
-    const upperDir = path.join(pluginRoot, "WORKFLOWS");
-    const scriptFile = path.join(lowerDir, "greet.js");
-    await mkdir(lowerDir);
-    await mkdir(upperDir);
-    await writeFile(scriptFile, NAMED_GREET);
-    await writeFile(path.join(upperDir, "greet.js"), NAMED_GREET);
-    const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
+// This case redefines `process.platform`, so it must not overlap another case
+// that reads it. Isolation comes from `node:test` running the top-level cases
+// of one file in sequence, which is a property of the runner rather than
+// anything stated here -- a `concurrency` option would not supply it, because
+// that setting governs a case's SUBTESTS and this case has none. Grouping the
+// file's cases under a `describe` would end the guarantee.
+test("folds case when deduping declared paths on a case-insensitive platform", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-case-dedup-");
+  // Two real directories differing only in case, each holding a script of the
+  // same name: on a case-insensitive filesystem these are one directory, and
+  // the folded key is what collapses them. Without the fold both scripts are
+  // discovered and collide on one generated name.
+  const lowerDir = path.join(pluginRoot, "workflows");
+  const upperDir = path.join(pluginRoot, "WORKFLOWS");
+  const scriptFile = path.join(lowerDir, "greet.js");
+  await mkdir(lowerDir);
+  await mkdir(upperDir);
+  await writeFile(scriptFile, NAMED_GREET);
+  await writeFile(path.join(upperDir, "greet.js"), NAMED_GREET);
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
 
-    if (platformDescriptor === undefined) {
-      throw new Error("process.platform descriptor is unavailable");
-    }
+  if (platformDescriptor === undefined) {
+    throw new Error("process.platform descriptor is unavailable");
+  }
 
-    t.after(() => {
-      Object.defineProperty(process, "platform", platformDescriptor);
-    });
-    Object.defineProperty(process, "platform", { ...platformDescriptor, value: "darwin" });
+  t.after(() => {
+    Object.defineProperty(process, "platform", platformDescriptor);
+  });
+  Object.defineProperty(process, "platform", { ...platformDescriptor, value: "darwin" });
 
-    const resolved = resolvedPlugin(pluginRoot, ["workflows", "WORKFLOWS"]);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows", "WORKFLOWS"]);
 
-    // act
-    const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
+  // act
+  const discovery = await discoverPluginWorkflows({ pluginName: "acme", resolved });
 
-    // assert
-    assert.deepStrictEqual(
-      discovery.discovered.map((record) => record.scriptFile),
-      [scriptFile],
-    );
-    assert.deepStrictEqual(discovery.warnings, []);
-  },
-);
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.scriptFile),
+    [scriptFile],
+  );
+  assert.deepStrictEqual(discovery.warnings, []);
+});
 
 test("rejects a declared workflows path that climbs out of the plugin root", async (t) => {
   // arrange
