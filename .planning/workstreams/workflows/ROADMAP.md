@@ -409,7 +409,15 @@ Plans:
    111 declined to choose the wording, because this phase is the one that builds
    the `info` surface and the phrasing is shipped text that will be quoted back.
    (`"could not be read and was skipped"` is also inaccurate at its `lstat` call
-   site, where nothing was read.)
+   site, where nothing was read.) **Amended after Phase 113 research:** `info`
+   today has no channel these phrases can reach -- `PluginInfoRow` carries only
+   closed-set `reasons`, and the archived discovery helper discarded `warnings`
+   outright. So this criterion also requires `info` to RENDER the preview
+   warnings for the plugin it describes. Building the tense parameter and
+   rendering nothing would ship a set of strings nothing produces a reader for,
+   which is the same defect criterion 6 below exists to clean up. `info`
+   already carries free-text (`description`, the resolver notes), so the
+   channel is a shape the surface has, not a new kind of output.
 6. **The `workflows` failure-phase widenings stop being inert.** Carried from
    the Phase 112 code review (WR-03). Three closed sets -- `update.ts`'s two
    failure-phase arrays, `orchestrators/types.ts`, and `shared/errors.ts` --
@@ -445,7 +453,24 @@ Plans:
    carrying the staging path and the envelope count — rendered once from `info`
    or `pending`. Returning it before a renderer exists would add a member both
    call sites discard.
-8. `npm run check` is green.
+8. **A removed workflow's lingering command names the reload remedy (WLIF-06).**
+   Added after Phase 113 research: WLIF-06 is booked to this phase in the
+   traceability table, exists nowhere in the tree, and was named by none of the
+   seven criteria above. Pi has no `unregisterCommand`, so a workflow command
+   whose envelope has just been removed stays live and runnable for the rest of
+   the session. The existing `/reload to pick up changes` trailer does not state
+   this: that trailer is about picking up NEW things, and this is a REMOVED
+   command that still runs. It therefore needs a token of its own rather than a
+   trailer. All FOUR user-typed verbs that can retire a workflow stamp it --
+   `uninstall`, `disable`, `reinstall` and `update` -- because three of them
+   shipped their workflow removal in Phase 112 without it, and a fact reported
+   by two verbs and not by two others is a worse outcome than not reporting it.
+   The gate is previous-names minus staged-names, so a RENAME retires a command
+   exactly as a deletion does. The token stays OFF the exported enable/disable
+   outcome union, so the load-time reconcile projection cannot stamp it. This is
+   also what gives criterion 2's staged workflow names a consumer; without it
+   they would be a field every reader discards.
+9. `npm run check` is green.
 
 **Plans**: TBD
 

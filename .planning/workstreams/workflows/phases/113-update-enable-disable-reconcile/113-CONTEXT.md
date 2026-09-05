@@ -67,6 +67,47 @@ as its owner, because `info` is built here and the phrasing is shipped text.
   above. Phase 111 fixtures pin them; retuning the other three is churn outside
   this criterion.
 
+- **`info` RENDERS the preview warnings** (decided after research). Research
+  measured that `info` has no channel these phrases can reach: `PluginInfoRow`
+  carries only closed-set `reasons`, and the archived discovery helper discarded
+  `warnings` outright. Implementing the tense parameter and rendering nothing
+  would ship five strings with no reader -- the same "widened set nothing
+  produces" defect criterion 6 exists to clean up. Add the channel on `info`,
+  with paired catalog fixtures. `info` already emits free text (`description`,
+  the resolver notes), so this is a shape the surface has rather than a new kind
+  of output. Do NOT put the preview rows on `pending` instead: a plugin the user
+  has not installed never appears there, which is criterion 5's stated case.
+
+### WLIF-06 — the lingering-command reload remedy (criterion 8)
+
+Added after research found WLIF-06 booked to this phase, implemented nowhere,
+and named by none of the original seven criteria. It is now ROADMAP criterion 8.
+
+- **All FOUR verbs stamp it** -- `uninstall`, `disable`, `reinstall`, `update`.
+  Three of them shipped their workflow removal in Phase 112 without it, so
+  scoping the stamp to the two verbs this phase otherwise touches would ship the
+  same fact reported by two verbs and withheld by two others.
+- **It is a token of its own, not the existing `/reload to pick up changes`
+  trailer.** That trailer is about picking up NEW things; this is a REMOVED
+  command that is still live and still runnable for the rest of the session.
+- **The gate is previous-names minus staged-names**, so a RENAME retires a
+  command exactly as a deletion does.
+- **Keep it OFF the exported enable/disable outcome union**, so the load-time
+  reconcile projection cannot stamp it. A reload is what clears the condition;
+  reporting it from the reload path would be self-contradictory.
+- This is what gives criterion 2's staged workflow names a consumer. Without it
+  the field is added and every reader discards it -- the exact shape Phase 112
+  refused.
+
+### WLIF-04 — verify, then correct the traceability row
+
+Research found `reinstall.ts` already imports the workflows bridge and composes
+workflow names into its outcome, and STATE.md records `112-03` as landing
+reinstall's re-materialization, while `REQUIREMENTS.md` still books WLIF-04 to
+Phase 113. Do not assume either way: write the case (reinstall replaces a
+workflow artifact -- old envelope gone, new envelope present, record rewritten),
+then correct the traceability row in the same commit as the evidence.
+
 ### Criterion 7 — the retained staging tree read surface (WR-06)
 
 The ROADMAP proposes `{ leaks, retained }` as a second channel off the sweep.
@@ -175,10 +216,13 @@ artifacts, and the codebase conventions.
   `    <kind>: <name>, <name>` per kind from the deliberately exact-length
   `COMPONENT_KINDS` tuple (`notify.ts:3522`, 5 entries) keyed off
   `PluginInfoComponentsResolved["components"]` (`notify.ts:1511`). Both the
-  interface and the tuple need a sixth member. Treat the tuple's
-  "adding a 6th key breaks the typecheck" comment as a claim to VERIFY, not a
-  guarantee to lean on — a widened closed set compiling clean at its derivation
-  sites is a repeat failure mode in this codebase.
+  interface and the tuple need a sixth member. **The tuple's "adding a 6th key
+  breaks the typecheck" comment is FALSE — research compiled it under the
+  project's strict flags and it exits 0.** The tuple guards the opposite
+  direction (too many elements). A replacement forcing construct is required;
+  research verified two that do error, and the `Exclude`-based coverage
+  assertion matches the house `_AssertNever` idiom at
+  `shared/notify-reasons.ts:266-270`. Fix the comment along with the guard.
 - All user-visible output goes through `shared/notify.ts` (IL-2), and `info` /
   `pending` output is under the project's byte-equality fixture contract.
 
