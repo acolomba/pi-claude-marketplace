@@ -62,6 +62,7 @@ import {
   resolveCrossScopePluginTarget,
 } from "./shared.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
+import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -405,6 +406,10 @@ async function sweepPluginFromConfigLayers(
  * it. NFR-3: a crash before this leaves an orphan the next idempotent pass
  * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
  * returned string[] rather than throwing; the try/catch is belt and braces.
+ *
+ * WLIF-01: the workflow staging sweep runs last. Its trees live under the home
+ * directory rather than under any scope root, so no other arm of this cleanup
+ * reaches them.
  */
 async function runPostUninstallCleanup(
   locations: ScopedLocations,
@@ -433,6 +438,15 @@ async function runPostUninstallCleanup(
 
   try {
     await garbageCollectPluginClones(locations);
+  } catch {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+  }
+
+  // WLIF-01: workflow staging trees live under the home directory rather than
+  // under any scope root, so nothing else in this cleanup reaches them. Silent
+  // like the clone collector beside it -- the leak strings are discarded.
+  try {
+    await garbageCollectWorkflowsStaging(locations);
   } catch {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }

@@ -9,6 +9,7 @@ import {
   stat,
   symlink,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
@@ -27,6 +28,7 @@ import {
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { uninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import { WORKFLOWS_STAGING_MAX_AGE_MS } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -4534,6 +4536,73 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       restoreSchedule?.();
       await rm(escape, { force: true, recursive: true });
       await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WLIF-01: the removal-side staging sweep, beside the clone collector.
+//
+// Workflow staging trees live under the home directory rather than under any
+// scope root, so nothing else in the post-uninstall cleanup reaches them. The
+// sweep is silent and its failure is swallowed, so both cases assert on disk
+// state and on the notification staying exactly what it would have been.
+// ---------------------------------------------------------------------------
+
+test("WLIF-01: uninstalling removes an abandoned staging tree and spares a live one", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const abandoned = path.join(locations.workflowsStagingDir, "abandoned");
+      await mkdir(abandoned, { recursive: true });
+      await writeFile(path.join(abandoned, "hello_greet.json"), "{}\n");
+      const backdated = new Date(Date.now() - WORKFLOWS_STAGING_MAX_AGE_MS - 60 * 60 * 1000);
+      await utimes(abandoned, backdated, backdated);
+      await mkdir(path.join(locations.workflowsStagingDir, "in-flight"), { recursive: true });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual((await readdir(locations.workflowsStagingDir)).sort(), ["in-flight"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-throws-"));
+    try {
+      // arrange -- a regular file where the staging directory belongs makes the
+      // sweeper's enumeration fail with an errno that is not ENOENT, which it
+      // rethrows into the cleanup block's swallow.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+      await rm(locations.workflowsStagingDir, { recursive: true, force: true });
+      await mkdir(locations.workflowsHomeDir, { recursive: true });
+      await writeFile(locations.workflowsStagingDir, "not a directory");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert -- the swallow is the point: the sweep failure is invisible.
+      assert.equal(await pathExists(seeded.workflowEnvelope), false, "envelope removed");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+      );
+      assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 });

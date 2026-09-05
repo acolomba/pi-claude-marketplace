@@ -172,6 +172,7 @@ import {
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
 } from "./shared.ts";
+import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -1682,6 +1683,17 @@ async function collectPostCommitWarnings(
   // aggregated during the staged phases).
   for (const w of installCtx.bridgeWarnings) {
     push(w);
+  }
+
+  // WLIF-01: sweep workflow staging trees a previous run abandoned. Installing
+  // is what creates them, so the install side has to sweep or a machine that
+  // never uninstalls never would. Silent by design (D-19-01): the leak strings
+  // are discarded and no row is pushed, because a cleanup the user did not ask
+  // for does not narrate itself.
+  try {
+    await garbageCollectWorkflowsStaging(locations);
+  } catch {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }
 
   return warnings;

@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -29,6 +39,7 @@ import {
   type InstallCloneCacheSeam,
   type InstallFailureCapture,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { WORKFLOWS_STAGING_MAX_AGE_MS } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -10234,6 +10245,97 @@ test("PI-14: a containment refusal from the workflows undo propagates verbatim",
     } finally {
       renameMock?.mock.restore();
       syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WLIF-01: the install-side staging sweep.
+//
+// Installing is what CREATES an orphaned staging tree, so the install side has
+// to sweep or a machine that never uninstalls never would. The sweep is silent
+// and its failure is swallowed, so both cases assert on disk state and on the
+// notification staying exactly what it would have been.
+// ---------------------------------------------------------------------------
+
+test("WLIF-01: installing removes an abandoned staging tree and spares a live one", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-sweep-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      const abandoned = path.join(locations.workflowsStagingDir, "abandoned");
+      await mkdir(abandoned, { recursive: true });
+      await writeFile(path.join(abandoned, "hello_greet.json"), "{}\n");
+      const backdated = new Date(Date.now() - WORKFLOWS_STAGING_MAX_AGE_MS - 60 * 60 * 1000);
+      await utimes(abandoned, backdated, backdated);
+      await mkdir(path.join(locations.workflowsStagingDir, "in-flight"), { recursive: true });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), ["in-flight"]);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: an install succeeds unchanged when the staging sweep throws", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-sweep-throws-"));
+    try {
+      // arrange -- a regular file where the staging directory belongs makes the
+      // sweeper's enumeration fail with an errno that is not ENOENT, which it
+      // rethrows. The plugin ships no workflows, so nothing else touches it.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      await mkdir(locations.workflowsHomeDir, { recursive: true });
+      await writeFile(locations.workflowsStagingDir, "not a directory");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert -- the swallow is the point: the sweep failure is invisible.
+      assert.equal(outcome.status, "installed");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+      );
+      assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
+    } finally {
       await rm(cwd, { force: true, recursive: true });
     }
   });
