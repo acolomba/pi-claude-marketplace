@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: Live Evidence Revalidation
 status: executing
-stopped_at: Completed 01-28-PLAN.md
-last_updated: "2026-09-05T00:31:00.000Z"
+stopped_at: Completed 01-29-PLAN.md
+last_updated: "2026-09-05T00:18:20.959Z"
 last_activity: 2026-09-04
 last_activity_desc: Phase 01 execution started
-state_head: cc4082fb31599a65e5c8908c7a98424d75aacaa4
+state_head: 1b66ae2ed323dfd24a3178d7a30593021ad5ec61
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 69
-  completed_plans: 28
+  completed_plans: 29
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ against the post-v1.19 tree before authorizing implementation work.
 ## Current Position
 
 Phase: 01 (Live Evidence Revalidation) — EXECUTING
-Plan: 29 of 69
+Plan: 30 of 69
 Status: Ready to execute
 Last activity: 2026-09-04 — Phase 01 execution started
 
@@ -212,6 +212,7 @@ Last activity: 2026-09-04 — Phase 01 execution started
 | Phase 01 P26 | 27min | 2 tasks | 2 files |
 | Phase 01 P27 | 18min | 2 tasks | 1 files |
 | Phase 01 P28 | 25min | 2 tasks | 1 files |
+| Phase 01 P29 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -477,6 +478,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 01]: Plan 01-27 closes claims only with positive current replacement or removal proof and routes surviving findings by concern.
 - [Phase 01]: Plan 01-28 keeps direct owner-pair gaps live when related edge-handler coverage does not kill the focused mutation.
 - [Phase 01]: Plan 01-28 routes the cross-suite filesystem injection seam to an operator decision and localized defects to their owning remediation phases.
+- [Phase 01]: Preserve each actionable plugin-reinstall review statement as its own namespaced claim even when claims concern the same underlying defect.
+- [Phase 01]: Route still-live plugin-reinstall findings to Phase 2 independently of evidence status.
 
 ### Pending Todos
 
@@ -529,7 +532,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 01-28-PLAN.md
+**Stopped at:** Completed 01-29-PLAN.md
 phase are complete.
 
 **Resume file:** None
@@ -538,7 +541,7 @@ phase are complete.
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-05T00:06:09.863Z
+Last session: 2026-09-05T00:18:20.847Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
