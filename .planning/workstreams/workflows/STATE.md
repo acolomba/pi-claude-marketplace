@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 110
 current_phase_name: Domain and platform modules
-current_plan: 110-03 (not started)
+current_plan: 110-03 (complete) - all 3 plans executed, verification pending
 status: In progress
-stopped_at: Completed 110-02-PLAN.md
-last_updated: "2026-09-05T05:06:00Z"
+stopped_at: Completed 110-03-PLAN.md
+last_updated: "2026-09-05T05:35:00Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 110 plan 02 executed - workflow name generator and collision error landed
+last_activity_desc: Phase 110 plan 03 executed - script admission module, acorn dependency and owner test landed; all 3 plans executed, verification pending
 state_head: 8c880217892c9ddb182e55dd5ab4a910796be9c8
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 11
 ---
 
@@ -35,20 +35,20 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 110 (Domain and platform modules) — IN PROGRESS
-Plan: 2 of 3 complete (`110-01`, `110-02`), `110-03` next
-Status: In progress. `110-01` landed the tracer: `platform/workflow-home.ts`
-with its relocation seam deleted, `domain/workflow-project-key.ts` unedited,
-and both owner tests, in two commits (`df7b9be8`, `ed756b8f`). `110-02` landed
+Phase: 110 (Domain and platform modules) — ALL PLANS EXECUTED, NOT YET VERIFIED
+Plan: 3 of 3 complete (`110-01`, `110-02`, `110-03`)
+Status: All three plans executed; `/gsd-verify-work 110` has not run, so the
+phase is not closed. `110-01` landed the tracer: `platform/workflow-home.ts` with
+its relocation seam deleted, `domain/workflow-project-key.ts` unedited, and both
+owner tests, in two commits (`df7b9be8`, `ed756b8f`). `110-02` landed
 `generatedWorkflowName` and `WorkflowNameCollisionError` in one commit
 (`2152a2aa`), with the ported engine-parity wrapper completed from two clauses
-to six. The whole gate chain is green and Phase 109's five inverted files are
-provably untouched. Remaining: `110-03` (`acorn`,
-`domain/workflow-script.ts` and its owner test as one atomic commit). The plans
-are serialized on the *gate*, not on the code: `use_worktrees` is false and
-`typecheck`/`fallow`/`format:check`/`npm test` all scan the whole tree, so a
-half-finished sibling makes a green run read red. `110-03` also carries a real
-import dependency on `110-02`, which is now satisfied.
+to six. `110-03` landed `acorn` at `^8.16.0`, `domain/workflow-script.ts` and
+its 51-case owner test as one atomic commit of exactly four paths (`d3c5be6f`).
+The whole gate chain is green, all five pairs the phase touched are at complete
+direct coverage, and Phase 109's five inverted files plus all Phase 111
+territory are provably untouched. Next: verify the phase, then Phase 111 (the
+workflows bridge).
 
 **The phase mechanism is proved and reusable.** `110-01` ran it end to end:
 path-scoped `git checkout features/workflow-port-wip -- <one file>` (never a
@@ -64,6 +64,22 @@ Phase 111 property of `persistence/locations.ts` and
 `bridges/workflows/stage.ts`. `110-01-SUMMARY.md` §WPTH-02 carry-forward has
 the detail; the requirement should be re-scoped or split rather than marked
 satisfied on Phase 110's evidence.
+
+**WNAM-03 does not close in this phase either.** `110-03` delivered its
+classification half — a script with no `meta` is `skipped` with cause
+`no-meta`, pinned by three cases and by the case that keeps it apart from
+`refused`/`unparseable`. The *warning* half (surfacing that skip to the user)
+and the "and not installed" half are both Phase 111's: nothing in Phase 110
+emits anything to a user and nothing in it installs. `110-03-SUMMARY.md`
+§WNAM-03 carry-forward has the detail; `requirements-completed` there lists
+WNAM-01, WNAM-02, WNAM-04 and WNAM-05 and deliberately omits WNAM-03.
+
+**T-110-17 is accepted, not mitigated.** `admitWorkflowScript` places no size
+or depth cap on the source it hands to acorn. The host engine has none either,
+and matching its posture is the current decision — a cap stricter than the
+engine's would refuse a script the engine accepts, and only the lax direction
+self-corrects across engine upgrades. Recorded as a candidate for Phase 115
+(admission-gate hardening), not as a Phase 110 gap.
 
 Phase 109 remains complete and verified 12/12; the inversion is live, the whole
 test tree agrees with it, and `npm run check` was green end to end at its close.
@@ -91,8 +107,8 @@ explicitly declines that mechanism, and main has since taught
 `generatedCommandName` nested-path and empty-head rules a flat workflow caller
 can never produce.
 
-Last activity: 2026-09-05 — `110-02` executed; the next step is
-`/gsd-execute-phase 110` for `110-03`
+Last activity: 2026-09-05 — `110-03` executed and Phase 110 closed; the next
+step is `/gsd-verify-work 110`, then `/gsd-discuss-phase 111`
 
 **The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
 workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
@@ -126,8 +142,9 @@ that way permanently.
 
 ## Progress
 
-**Phases Complete:** 1/9 (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 110-03, not started (110-01 and 110-02 complete)
+**Phases Complete:** 1/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Phase 110 has all 3 plans executed (110-01, 110-02, 110-03);
+the phase is not verified yet, so it still reads In Progress.
 
 ```text
 [=---------] 11%
@@ -136,7 +153,7 @@ that way permanently.
 | Phase | Name | Status |
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
-| 110 | Domain and platform modules | In progress (2/3 plans) |
+| 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
 | 111 | Workflows bridge | Not started |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
@@ -245,19 +262,18 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T05:06:00Z
+**Last session:** 2026-09-05T05:35:00Z
 
-**Stopped At:** Completed 110-02-PLAN.md
+**Stopped At:** Completed 110-03-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 110` to run `110-03`. `110-01` and `110-02`
-are complete and both SUMMARYs are on disk; the production commits are
-`df7b9be8` (storage root), `ed756b8f` (project key) and `2152a2aa` (name
-generator plus collision error). Reuse the proved mechanism verbatim:
-path-scoped checkout naming individual files, the five-file blast-radius
-assertion immediately after, an owner test that imports every export by name,
-and the full gate chain before each commit. `110-03` must land `acorn`,
-`domain/workflow-script.ts` and its owner test in **one** commit or
-`fallow dead-code` reports an unused dependency.
+**Next Action:** `/gsd-verify-work 110`, then `/gsd-discuss-phase 111`. All
+three of Phase 110's plans are complete and all three SUMMARYs are on disk; the
+production commits are `df7b9be8` (storage root), `ed756b8f` (project key),
+`2152a2aa` (name generator plus collision error) and `d3c5be6f` (script
+admission, acorn, owner test). The phase mechanism held all three times:
+path-scoped checkout naming individual files, the blast-radius assertion
+immediately after, an owner test that imports every export by name, complete
+direct coverage per pair, and the full gate chain before each commit.
 
 Phase 109 remains verified 12/12 and marked complete in ROADMAP.md;
 `109-VERIFICATION.md` carries the evidence. The phase's two manual-only
@@ -346,6 +362,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 109 P05 | 15 min | 2 tasks | 1 file |
 | Phase 110 P01 | 21 min | 2 tasks | 4 files |
 | Phase 110 P02 | 22 min | 2 tasks | 4 files |
+| Phase 110 P03 | 47 min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -360,6 +377,11 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 110]: The ported `assertSafeSavedWorkflowName` was completed to all six engine clauses rather than the gap being recorded and carried to the admission-gate hardening phase. — The wrapper is new code the port itself introduces, so completing it makes the bridge match the engine EXACTLY rather than exceed it; the alternative was a workflow whose author put a space in `meta.name` installing and never running, with no signal.
 - [Phase 110]: The docblock sentence claiming `assertSafeName` already enforced the separator/NUL screening was replaced, not annotated. — It was measured false against engine 3.10.1 for a plain space and the whole `\p{Cf}` category; a comment arguing a false premise is worse than none.
 - [Phase 110]: `CrossPluginConflictError`'s reference-identity assertion was INVERTED for `WorkflowNameCollisionError` rather than copied as `110-PATTERNS.md` instructs. — The analog assigns its argument array directly; this class assigns `Object.freeze([...collisions])`, so the owner test pins `notStrictEqual` + `Object.isFrozen` + a post-construction push into the caller's array, which is what proves the copy defensive rather than incidental.
+- [Phase 110]: The dependency, the module and its owner test landed as ONE commit of four paths. — `fallow dead-code` reports `unused-dependency` for a declared-but-unimported package and `unused-export` for a module no test imports, and both the `npm-fallow` hook and `npm run check` scan the whole working tree, so every intermediate split publishes a red tree.
+- [Phase 110]: Verdicts are asserted through a projection that drops `reason`. — `reason` is the only field that changes when wording is edited, and discriminating a verdict by message text is the exact failure the literal-tagged union exists to remove; the projection plus one `deepStrictEqual` plus `satisfies` pins the discriminant at run time and the arm at compile time.
+- [Phase 110]: Two coverage gaps the research did not predict were closed by adding public-behaviour cases, never a suppression directive. — The restructure changed which arms the case set reaches (Assumptions Log A2 warned of exactly this), leaving `metaPropertyKey`'s computed-key early return and `stemFallbackVerdict`'s refusal arm uncovered; reading the reported LCOV lines and adding one case each took the pair to 105/105 branches.
+- [Phase 110]: WNAM-03 is recorded as carried forward rather than completed. — Phase 110 delivers the `skipped`/`no-meta` classification but emits nothing to a user and installs nothing, so the requirement's warning and not-installed halves belong to Phase 111.
+- [Phase 110]: No parse size or depth cap was added (T-110-17, accepted). — The host engine has none either, and a cap stricter than the engine's would refuse a script the engine accepts; only the lax direction self-corrects across engine upgrades. Recorded as a Phase 115 candidate.
 - [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 

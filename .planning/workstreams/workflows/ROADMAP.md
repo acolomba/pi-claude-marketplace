@@ -216,7 +216,7 @@ Audit: [`milestones/workflows-MILESTONE-AUDIT.md`](milestones/workflows-MILESTON
 6. The project-key derivation reproduces the engine's across the Spike 025 case
    set, proved by a test that fails when the hash width is changed.
 
-**Plans**: 2/3 plans executed in 3 waves, one per commit boundary. The waves are serialized
+**Plans**: 3/3 plans executed in 3 waves, one per commit boundary. The waves are serialized
 deliberately: `use_worktrees` is `false` here, so same-wave plans share one
 working tree, and every gate this phase leans on (`typecheck`, `fallow`,
 `format:check`, `npm test`) scans the whole tree rather than the staged diff.
@@ -238,7 +238,7 @@ wave 2.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 110-03-PLAN.md — Declare `acorn`, land `domain/workflow-script.ts` with the
+- [x] 110-03-PLAN.md — Declare `acorn`, land `domain/workflow-script.ts` with the
   owner test that is also its only consumer, and take the phase through the full
   gate in one atomic commit
 
@@ -450,7 +450,7 @@ wave 2.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 109. Kind inversion | 5/5 | Complete    | 2026-09-04 |
-| 110. Domain and platform modules | 2/3 | In Progress | - |
+| 110. Domain and platform modules | 3/3 | In Progress | - |
 | 111. Workflows bridge | 0/? | Not started | - |
 | 112. Install and removal lifecycle | 0/? | Not started | - |
 | 113. Update, enable/disable, reconcile | 0/? | Not started | - |
