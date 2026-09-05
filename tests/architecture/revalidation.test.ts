@@ -97,6 +97,7 @@ interface RevalidationApi {
       allowIncomplete?: boolean;
       allowInconclusive?: boolean;
       allowPendingDecisions?: boolean;
+      decisionId?: string;
     },
   ) => Violation[];
   validateShard: (shard: Ledger & { plan: string }, assignment: Assignment[]) => Violation[];
@@ -188,6 +189,18 @@ function pendingDecisions(): Ledger["decisions"] {
     recommendation: "",
     downstreamConsequences: "",
   }));
+}
+
+function resolveDecision(decision: Ledger["decisions"][number]): void {
+  decision.status = "resolved";
+  decision.premiseFindingIds = ["FINDING-1"];
+  decision.proof = "The current premise is terminal.";
+  decision.options = ["remove", "retain"];
+  decision.selectedOption = "remove";
+  decision.rejectedOptions = ["retain"];
+  decision.affectedIds = ["FINDING-1"];
+  decision.recommendation = "Remove the unnecessary surface.";
+  decision.downstreamConsequences = "Phase 2 removes the surface.";
 }
 
 function runCli(projectRoot: string, args: readonly string[]): CliExecution {
@@ -715,6 +728,57 @@ test("other transition allowances do not hide an incomplete file", async (t) => 
   assert.strictEqual(execution.status, 1);
   assert.match(execution.stderr, /^incomplete-file:/m);
   assert.doesNotMatch(execution.stderr, /^inconclusive-finding:|^pending-decision:/m);
+});
+
+test("decision validation accepts one resolved dossier while the others remain pending", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const ledger = benignLedger(fixture.corpusPath);
+  ledger.decisions = pendingDecisions();
+  resolveDecision(ledger.decisions[0]!);
+  await writeCanonical(fixture.projectRoot, ledger);
+
+  // act
+  const execution = runCli(fixture.projectRoot, ["validate", "--decision", "MF-DEC-01"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 0,
+    stdout: "Revalidation ledger valid.\n",
+    stderr: "",
+  });
+});
+
+test("decision validation rejects the selected dossier when it remains pending", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const ledger = benignLedger(fixture.corpusPath);
+  ledger.decisions = pendingDecisions();
+  await writeCanonical(fixture.projectRoot, ledger);
+
+  // act
+  const execution = runCli(fixture.projectRoot, ["validate", "--decision", "MF-DEC-01"]);
+
+  // assert
+  assert.strictEqual(execution.status, 1);
+  assert.match(execution.stderr, /^pending-decision: MF-DEC-01:/m);
+  assert.doesNotMatch(execution.stderr, /^pending-decision: MF-DEC-0[2-9]:/m);
+});
+
+test("decision validation rejects an unknown dossier", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const ledger = benignLedger(fixture.corpusPath);
+  ledger.decisions = pendingDecisions();
+  await writeCanonical(fixture.projectRoot, ledger);
+
+  // act
+  const execution = runCli(fixture.projectRoot, ["validate", "--decision", "MF-DEC-10"]);
+
+  // assert
+  assert.strictEqual(execution.status, 1);
+  assert.match(execution.stderr, /^unknown-decision: MF-DEC-10:/m);
+  assert.doesNotMatch(execution.stderr, /^pending-decision:/m);
 });
 
 for (const row of [

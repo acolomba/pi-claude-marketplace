@@ -186,6 +186,7 @@ export function validateLedger(ledger, context = {}) {
   const allowIncomplete = context.allowIncomplete ?? false;
   const allowInconclusive = context.allowInconclusive ?? false;
   const allowPendingDecisions = context.allowPendingDecisions ?? false;
+  const decisionId = context.decisionId;
   const violations = [];
   for (const collection of ["files", "sourceClaims", "findings", "decisions", "scopeChanges"]) {
     if (!Array.isArray(ledger[collection])) {
@@ -472,6 +473,13 @@ export function validateLedger(ledger, context = {}) {
     );
   }
 
+  if (
+    decisionId !== undefined &&
+    !ledger.decisions.some((decision) => decision.id === decisionId)
+  ) {
+    violations.push(violation("unknown-decision", decisionId, "decision is not in the ledger"));
+  }
+
   if (allowPendingDecisions) {
     const pendingDecisionIds = ledger.decisions
       .filter((decision) => decision.status === "pending")
@@ -539,7 +547,11 @@ export function validateLedger(ledger, context = {}) {
       violations.push(violation("invalid-decision-status", decision.id, String(decision.status)));
     }
 
-    if (!allowPendingDecisions && decision.status !== "resolved") {
+    if (
+      !allowPendingDecisions &&
+      decision.status !== "resolved" &&
+      (decisionId === undefined || decision.id === decisionId)
+    ) {
       violations.push(
         violation("pending-decision", decision.id, "operator decision is unresolved"),
       );
@@ -784,6 +796,7 @@ function validationContext(projectRoot, options) {
     allowIncomplete: options["allow-incomplete"] === true,
     allowInconclusive: options["allow-inconclusive"] === true,
     allowPendingDecisions: options["allow-pending-decisions"] === true,
+    decisionId: typeof options.decision === "string" ? options.decision : undefined,
   };
 }
 
