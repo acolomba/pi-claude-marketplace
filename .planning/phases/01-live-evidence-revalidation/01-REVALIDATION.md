@@ -115,11 +115,11 @@
 - `.planning/reviews/unit-test-adversarial/persistence.md` — live findings (complete; 18 claims)
 - `.planning/reviews/unit-test-adversarial/platform.md` — live findings (complete; 25 claims)
 - `.planning/reviews/unit-test-adversarial/README.md` — live findings (complete; 5 claims)
-- `.planning/reviews/unit-test-adversarial/root-index.md` — no live findings (complete; 17 claims)
-- `.planning/reviews/unit-test-adversarial/shared-concerns.md` — no live findings (complete; 16 claims)
-- `.planning/reviews/unit-test-adversarial/shared-core.md` — no live findings (complete; 25 claims)
+- `.planning/reviews/unit-test-adversarial/root-index.md` — live findings (complete; 17 claims)
+- `.planning/reviews/unit-test-adversarial/shared-concerns.md` — live findings (complete; 16 claims)
+- `.planning/reviews/unit-test-adversarial/shared-core.md` — live findings (complete; 25 claims)
 - `.planning/reviews/unit-test-adversarial/shared-notify.md` — live findings (complete; 31 claims)
-- `.planning/reviews/unit-test-adversarial/transaction.md` — no live findings (complete; 29 claims)
+- `.planning/reviews/unit-test-adversarial/transaction.md` — live findings (complete; 29 claims)
 
 ## Findings
 
@@ -2258,7 +2258,7 @@
 - `PLT-F017` — confirmed → Phase 2
 - `PLT-F018` — confirmed → Phase 8
 - `PLT-F019` — confirmed → Phase 2
-- `PLT-F020` — inconclusive → Phase 2
+- `PLT-F020` — confirmed → Phase 2
 - `PLT-F021` — inconclusive → Phase 2
 - `PLT-F022` — inconclusive → Phase 4
 - `PLT-F023` — confirmed → Phase 8
