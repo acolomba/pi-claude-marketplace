@@ -1,12 +1,18 @@
 ---
 phase: 112-install-and-removal-lifecycle
-fixed_at: 2026-09-05T20:05:00Z
+fixed_at: 2026-09-05T21:10:00Z
 review_path: .planning/workstreams/workflows/phases/112-install-and-removal-lifecycle/112-REVIEW.md
-iteration: 1
-findings_in_scope: 10
-fixed: 9
-skipped: 1
+iteration: 2
+findings_in_scope: 5
+fixed: 4
+skipped: 0
+deferred: 1
 status: partial
+cumulative:
+  findings_in_scope: 15
+  fixed: 13
+  deferred: 2
+  skipped: 0
 ---
 
 # Phase 112: Code Review Fix Report
@@ -233,3 +239,200 @@ unmodified.
 _Fixed: 2026-09-05T20:05:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+______________________________________________________________________
+
+# Phase 112: Code Review Fix Report (iteration 2)
+
+**Fixed at:** 2026-09-05T21:10:00Z
+**Source review:** `112-REVIEW.md` (iteration 2, narrow regression scope)
+**Iteration:** 2
+
+**Summary:**
+
+- Findings in scope: 5 (WR-04, WR-05, WR-06, WR-07, WR-08)
+- Fixed: 4
+- Deferred with a carrier: 1 (WR-06)
+- Skipped: 0
+
+`npm run check` exits 0. All four files this phase has touched remain at 100%
+line **and** branch direct coverage. The sweeper gained one branch (the second
+errno operand) and it is covered:
+
+| File | LF/LH | BRF/BRH |
+|---|---|---|
+| `orchestrators/plugin/workflows-staging-gc.ts` | 214/214 | 30/30 |
+| `orchestrators/plugin/reinstall.ts` | 1806/1806 | 255/255 |
+| `orchestrators/plugin/install.ts` | 2574/2574 | 262/262 |
+| `bridges/workflows/stage.ts` | 456/456 | 68/68 |
+
+Verification ran in the **main checkout**, not an isolated worktree:
+`.planning/config.json` sets `workflow.use_worktrees: false`, so per that opt-out
+no worktree was created and the numbers above are reproducible from the tree as
+it stands.
+
+Both blockers were left alone, as instructed. Nothing in `scope_boundaries` was
+touched.
+
+## Fixed Issues
+
+### WR-05: the retention predicate read every errno as "nothing displaced"
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts`,
+`tests/orchestrators/plugin/workflows-staging-gc.test.ts`
+**Commit:** `01faf6a5`
+
+Applied as suggested. Only `ENOENT` and `ENOTDIR` prove the directory holds no
+envelope; everything else leaves the question open, and an open question here is
+answered the way `WORKFLOWS_STAGING_MAX_AGE_MS`'s own comment already names — one
+orphan surviving another pass rather than a recursive `rm` over what may be the
+only copy.
+
+`ENOTDIR` is included on its own reasoning, not just because the review offered
+it: the commit only ever creates `.previous/` as a directory, so a plain file at
+that name cannot be a displaced envelope.
+
+**Non-vacuity, observed.** Two cases, and they are not equal:
+
+- `WR-05: keeps an aged staging tree whose .previous cannot be read` is the
+  proof. With the bare `catch { return false; }` restored it goes **red** (the
+  tree is swept and the assertion on the surviving bytes fails); restored, green.
+  `chmod 0o000` stands in for the transient `EMFILE`/`EIO` window that cannot be
+  provoked deterministically.
+- `WR-05: sweeps an aged staging tree whose .previous is a plain file` passes
+  against both old and new code **by construction** — both answer "sweep". It
+  earns its place as branch coverage for the second operand and as a pin on the
+  carve-out, and it is recorded here as proving nothing about the fix. Saying so
+  is the point; a passing case on already-correct behavior is not evidence.
+
+### WR-07: the retention probe read through the candidate before the refusal
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts`,
+`tests/orchestrators/plugin/workflows-staging-gc.test.ts`
+**Commit:** `eafb3c11`
+
+Moved `assertPathInside` above `holdsDisplacedEnvelopes`, so the containment
+refusal is now the first thing the loop does with the candidate rather than the
+last thing before the `rm`. The assertion has no dependency on the probe, so this
+is a pure reorder; the numbered flow comment was renumbered to match.
+
+**Non-vacuity, observed.** `WR-07: refuses a symlinked staging segment before
+reading through it` plants a non-empty `.previous/` behind a symlinked staging
+segment. With the two blocks swapped back it goes **red**: the probe answers
+"keep this" from bytes outside the boundary and the entry never reaches the
+refusal, so no leak is recorded. Restored, green. This is the ordering assertion,
+not another refusal assertion — the WR-01 case already covers refusal itself.
+
+I got the fixture wrong on the first run (asserted an envelope the arrangement
+never wrote) and the case failed for that reason before it failed for the right
+one; corrected and re-observed.
+
+**Declined the optional unfollowed `lstat` of `.previous`.** After the reorder,
+reaching it requires write access already inside the containment boundary, and
+the outcome there is retention — the safe direction. It would cost a branch and a
+fixture without reducing the loss this file exists to prevent, so per the
+standing instruction I left it out and say so rather than adding it.
+
+### WR-04: the reorder was inert, and the comment claimed otherwise
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`,
+`.planning/BACKLOG.md`
+**Commit:** `f39d4825`
+
+The review is right that `240a63d1` changed no behavior. I did **not** take
+either option it offered verbatim, and the reasoning matters.
+
+**I kept the reorder.** It is not churn. `agentsPhase` (`install.ts:1051`) already
+pushes `prep.result.warnings` before its commit — it is the other bridge whose
+warnings come off the prepare rather than off the commit's return, and it is the
+shape the workflows phase follows. (`mcpPhase` pushes after its commit only
+because its warnings are a member of the commit's result.) So the reorder made
+workflows consistent with its true sibling.
+
+**What I removed is the lie.** The comment asserted that a commit throw must not
+discard the warnings, and that reinstall reads the same warnings independently of
+the commit's outcome. Neither is true, and I confirmed the second directly:
+`reinstall.ts:1052` composes `bridgeWarnings` only on the success path, after
+`replaceAll` returned. The comment now states what the position buys (ordering
+consistency) and what it does not (survival), and names the reason: a phase throw
+discards the whole `InstallCtx`, so the push's position is irrelevant on that
+path.
+
+**I did not apply the suggested `appendLeaks` channel.** Two reasons. It routes
+discovery warnings through a carrier whose documented meaning is a manual-cleanup
+hint ("additionally: …"), which is the wrong register for "this script was
+refused". And the defect is not the workflows bridge's — `bridgeWarnings` is
+discarded on a throw for all six bridges alike, so repairing one makes it the odd
+one out for a hole they share.
+
+**Carrier:** `.planning/BACKLOG.md`, `WARN-01`. Filed there rather than as a
+Phase 113/114 criterion because it is not workflows-specific and cannot honestly
+be closed inside a workflows phase. The entry records the mechanism, what the
+user loses, that the loss is bounded (the warnings describe the source, so a
+retry re-derives them), why the narrow fix was rejected, and the durable fix — a
+warnings member on `InstallLedgerSummary`, or `runPhases` surfacing the context's
+warnings alongside its `RollbackPartial[]`, either of which fixes all six at once.
+
+This is the one place I substituted my judgment for the review's menu, so it is
+the item most worth a second opinion.
+
+### WR-08: the header's enumeration was stale
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts`
+**Commit:** `72a12955`
+
+Added the bridge import to the list and marked the list as closed and
+load-bearing, so the next addition has somewhere obvious to go.
+
+Checked the review's suggested wording before using it and **did not** use it
+verbatim. It proposes calling the workflows bridge "fs-only"; `stage.ts` also
+imports `domain/workflow-script.ts` and its own `discover.ts`, so that would
+replace one false enumeration with another. The header now rests the claim on
+what the gate actually does — `no-orchestrator-network.test.ts` greps named files
+for git tokens, and `install.ts` is both gated and already importing the same
+bridge module directly.
+
+## Deferred
+
+### WR-06: a retained tree is retained forever with no read surface
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts`
+**Carrier commit:** `6b8cc976`
+**Disposition:** deferred to Phase 113 with a named carrier — not skipped, not
+rejected.
+
+The finding is real and the review's description of the crash case is right: a
+kill signal between the displacement and the rename loop leaves the targets empty
+and the only copies inside `.previous/`, with no error thrown and therefore not
+even the one-shot leak line. Retention still beats what it replaced (a silent
+24-hour expiry on the recovery copy), but it is not finished.
+
+Deferred on scope, and the carrier says why rather than leaving it implicit. The
+missing half is a **read surface**, and Phase 113 criterion 4 is the one that
+builds the surfaces that would render it (`info` gets a `workflows:` line, `list`
+counts the kind). Adding `{ leaks, retained }` now would return a member both
+call sites discard inside their D-19-01 `catch {}` — dead until a renderer
+exists, and the kind of unread export the dead-code gate is right to dislike.
+
+Carried as ROADMAP Phase 113 success criterion 7, following the WR-03 precedent
+from iteration 1. The criterion records the mechanism, the crash case, the shape
+of the fix, and the reason it was not built in 112.
+
+## Notes for the human reviewer
+
+1. **WR-04 is the judgment call.** I kept a commit the review called inert, on
+   the ground that its *position* is correct by sibling precedent and only its
+   *comment* was false. If you disagree, the revert is one line and `WARN-01`
+   already carries the substance either way.
+2. **One of the two WR-05 cases proves nothing about the fix**, and is labelled
+   as such above rather than counted as evidence. It exists for the branch and
+   the carve-out.
+3. **Two suggested snippets were not applied as written** — the WR-08 wording
+   (it overclaims the bridge as fs-only) and the WR-07 optional `lstat` (declined
+   on the branch-cost rule). Both are argued at their entries.
+
+______________________________________________________________________
+
+*Fixed: 2026-09-05T21:10:00Z*
+*Fixer: Claude (gsd-code-fixer)*
+*Iteration: 2*
